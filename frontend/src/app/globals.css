@@ -34,8 +34,36 @@
   --bad-soft: #f6ddd8;
   --info: #2950d8;
   --info-soft: #dce3fb;
-  --shadow: 0 1px 2px rgba(25, 22, 15, 0.05), 0 8px 24px -12px rgba(25, 22, 15, 0.16);
+  --shadow:
+    0 1px 2px rgba(25, 22, 15, 0.05), 0 8px 24px -12px rgba(25, 22, 15, 0.16);
   --shadow-lg: 0 24px 60px -20px rgba(25, 22, 15, 0.32);
+
+  /*
+   * shadcn/ui token bridge. shadcn components read --background, --foreground,
+   * --primary, etc.; here they alias the Acre brand tokens above so shadcn
+   * inherits the current palette (and white-label accent) instead of overriding
+   * it. tailwind.config maps these to colour utilities with `<alpha-value>`.
+   */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+  --shadcn-accent: var(--accent-soft);
+  --shadcn-accent-foreground: var(--accent-2);
+  --destructive: var(--bad);
+  --destructive-foreground: var(--on-accent);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --radius: 0.75rem;
 }
 
 .dark {
@@ -73,7 +101,9 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
-  transition: background 0.35s ease, color 0.35s ease;
+  transition:
+    background 0.35s ease,
+    color 0.35s ease;
 }
 
 @keyframes acreUp {

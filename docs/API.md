@@ -2,6 +2,21 @@
 
 Base URL (dev): `http://localhost:8000`
 
+## Interactive / machine-readable docs
+
+The spec below is also **auto-generated from the Rust code** with `rocket_okapi`
+(`#[openapi]` routes + `JsonSchema`-deriving DTOs). When the server is running:
+
+| URL | What |
+|-----|------|
+| `GET /openapi.json` | The full OpenAPI 3.0 document (generated, always in sync with the routes) |
+| `/swagger-ui/` | Swagger UI explorer |
+| `/rapidoc/` | RapiDoc explorer |
+
+This hand-written reference mirrors it for convenience; the generated
+`openapi.json` is the source of truth (security schemes `jwt` / `api_key`,
+request/response schemas, and tags per area are all derived from the handlers).
+
 All responses are JSON. Errors use a consistent envelope:
 
 ```json

@@ -14,7 +14,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct TenantSummary {
     pub id: Uuid,
     pub slug: String,
@@ -27,8 +27,12 @@ pub struct TenantSummary {
 }
 
 /// `GET /platform/tenants` — every client company on the platform.
+#[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/tenants")]
-pub async fn tenants(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<Vec<TenantSummary>>> {
+pub async fn tenants(
+    state: &State<AppState>,
+    user: AuthUser,
+) -> ApiResult<Json<Vec<TenantSummary>>> {
     user.require(Permission::PlatformAdmin)?;
     let all = Tenant::find()
         .order_by_asc(entity::tenant::Column::Name)
@@ -56,7 +60,7 @@ pub async fn tenants(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<
     Ok(Json(out))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct PlatformMetrics {
     pub tenant_count: i64,
     pub active_tenants: i64,
@@ -65,6 +69,7 @@ pub struct PlatformMetrics {
 }
 
 /// `GET /platform/metrics` — top-line platform metrics (MRR-style overview).
+#[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/metrics")]
 pub async fn metrics(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<PlatformMetrics>> {
     user.require(Permission::PlatformAdmin)?;

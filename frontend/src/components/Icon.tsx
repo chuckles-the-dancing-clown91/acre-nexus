@@ -46,9 +46,12 @@ export function Icon({
       className={className}
       aria-hidden="true"
     >
-      {d.split("M").filter(Boolean).map((seg, i) => (
-        <path key={i} d={`M${seg}`} />
-      ))}
+      {d
+        .split("M")
+        .filter(Boolean)
+        .map((seg, i) => (
+          <path key={i} d={`M${seg}`} />
+        ))}
     </svg>
   );
 }

@@ -10,7 +10,10 @@ export default function ApplicationsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.applications().then(setApps).catch((e) => setError(e.message));
+    api
+      .applications()
+      .then(setApps)
+      .catch((e) => setError(e.message));
   }, []);
 
   return (

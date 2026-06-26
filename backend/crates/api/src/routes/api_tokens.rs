@@ -15,7 +15,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrde
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct TokenSummary {
     pub id: Uuid,
     pub name: String,
@@ -41,6 +41,7 @@ impl From<entity::api_token::Model> for TokenSummary {
 }
 
 /// `GET /api-tokens` — list the active tenant's API tokens (no secrets).
+#[rocket_okapi::openapi(tag = "API Tokens")]
 #[get("/api-tokens")]
 pub async fn list(
     state: &State<AppState>,
@@ -56,14 +57,14 @@ pub async fn list(
     Ok(Json(rows.into_iter().map(TokenSummary::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct CreateTokenReq {
     pub name: String,
     /// Permission scopes, e.g. `["listing:read","property:read"]`.
     pub scopes: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct CreateTokenResp {
     #[serde(flatten)]
     pub summary: TokenSummary,
@@ -72,6 +73,7 @@ pub struct CreateTokenResp {
 }
 
 /// `POST /api-tokens` — mint a new scoped API token.
+#[rocket_okapi::openapi(tag = "API Tokens")]
 #[post("/api-tokens", data = "<body>")]
 pub async fn create(
     state: &State<AppState>,
@@ -103,6 +105,7 @@ pub async fn create(
 }
 
 /// `DELETE /api-tokens/<id>` — revoke a token immediately.
+#[rocket_okapi::openapi(tag = "API Tokens")]
 #[delete("/api-tokens/<id>")]
 pub async fn revoke(
     state: &State<AppState>,

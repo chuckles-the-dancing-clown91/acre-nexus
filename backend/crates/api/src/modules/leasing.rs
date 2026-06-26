@@ -5,7 +5,9 @@
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{applications, public};
-use rocket::{routes, Route};
+use rocket::Route;
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 use serde_json::json;
 
 pub struct LeasingModule;
@@ -17,15 +19,19 @@ impl PlatformModule for LeasingModule {
             key: "leasing",
             name: "Leasing & Listings",
             description: "Public listings website, applications, and tenant screening.",
-            permissions: &[Permission::ListingRead, Permission::ApplicationRead, Permission::ApplicationWrite],
+            permissions: &[
+                Permission::ListingRead,
+                Permission::ApplicationRead,
+                Permission::ApplicationWrite,
+            ],
             job_kinds: &["background_check", "screening", "auto_email"],
             default_enabled: true,
             preview: false,
         }
     }
 
-    fn routes(&self) -> Vec<Route> {
-        routes![
+    fn api(&self) -> (Vec<Route>, OpenApi) {
+        openapi_get_routes_spec![
             public::listings,
             public::listing_detail,
             public::public_theme,

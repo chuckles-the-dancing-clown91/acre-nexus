@@ -4,9 +4,9 @@
 
 use crate::dto::usd;
 use crate::error::ApiResult;
+use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tokens::ApiPrincipal;
-use crate::rbac::Permission;
 use entity::prelude::{Listing, Property};
 use rocket::serde::json::Json;
 use rocket::{get, State};
@@ -14,7 +14,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct VendorListing {
     pub id: Uuid,
     pub title: String,
@@ -26,6 +26,7 @@ pub struct VendorListing {
 }
 
 /// `GET /api/v1/listings` — listings for the token's tenant. Scope: `listing:read`.
+#[rocket_okapi::openapi(tag = "Vendor API")]
 #[get("/api/v1/listings")]
 pub async fn listings(
     state: &State<AppState>,
@@ -52,7 +53,7 @@ pub async fn listings(
     ))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct VendorProperty {
     pub id: Uuid,
     pub name: String,
@@ -64,6 +65,7 @@ pub struct VendorProperty {
 }
 
 /// `GET /api/v1/properties` — portfolio for the token's tenant. Scope: `property:read`.
+#[rocket_okapi::openapi(tag = "Vendor API")]
 #[get("/api/v1/properties")]
 pub async fn properties(
     state: &State<AppState>,

@@ -33,9 +33,8 @@ interface ModulesCtx {
 const Ctx = createContext<ModulesCtx | null>(null);
 
 export function ModulesProvider({ children }: { children: React.ReactNode }) {
-  const [enabled, setEnabledMap] = useState<Record<string, boolean>>(
-    defaultEnablement
-  );
+  const [enabled, setEnabledMap] =
+    useState<Record<string, boolean>>(defaultEnablement);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {

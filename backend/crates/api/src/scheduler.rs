@@ -62,10 +62,11 @@ async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     let now = Utc::now();
     let due = BackgroundJob::find()
         .filter(entity::background_job::Column::RunAt.lte(now))
-        .filter(
-            entity::background_job::Column::Status
-                .is_in(["pending", "running", "awaiting_callback"]),
-        )
+        .filter(entity::background_job::Column::Status.is_in([
+            "pending",
+            "running",
+            "awaiting_callback",
+        ]))
         .order_by_asc(entity::background_job::Column::RunAt)
         .limit(25)
         .all(db)

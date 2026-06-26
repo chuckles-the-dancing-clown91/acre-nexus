@@ -35,6 +35,12 @@ pattern the remaining roles plug into:
   `docs/MODULES.md`.
 - **Token-based vendor API** — scoped, revocable API keys powering `/api/v1`, so
   services can be sold à la carte.
+- **Auto-generated API docs** — `rocket_okapi` produces the OpenAPI 3.0 spec from
+  the `#[openapi]` routes + `JsonSchema` DTOs, served at `/openapi.json` with
+  Swagger UI (`/swagger-ui/`) and RapiDoc (`/rapidoc/`).
+- **Hardened frontend framework** — TanStack Query, React Hook Form + Zod,
+  Zustand, shadcn/ui, Vitest + Playwright, Prettier/Husky, and a GitHub Actions
+  CI pipeline that lints, typechecks, tests, and builds both stacks.
 - **Theming / white-label** — per-tenant branding (logo, colours, legal
   boilerplate templates) driven from the DB; the frontend re-themes at runtime
   plus a dark-mode toggle.
@@ -65,6 +71,9 @@ cp .env.example .env                       # adjust DATABASE_URL if needed
 createdb acre                              # or use the .env connection
 cargo run -p api                           # migrates + seeds + serves :8000
 ```
+
+API docs (generated from the code) are then at `http://localhost:8000/swagger-ui/`
+and `http://localhost:8000/rapidoc/`; the raw spec is at `/openapi.json`.
 
 Seed creates two demo tenants and three logins (password: `password`):
 

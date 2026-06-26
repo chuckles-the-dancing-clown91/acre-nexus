@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct ApplicationResp {
     pub id: Uuid,
     pub listing_id: Option<Uuid>,
@@ -45,6 +45,7 @@ impl From<entity::application::Model> for ApplicationResp {
 }
 
 /// `GET /applications` — applications for the active tenant.
+#[rocket_okapi::openapi(tag = "Applications")]
 #[get("/applications")]
 pub async fn list(
     state: &State<AppState>,
@@ -60,7 +61,7 @@ pub async fn list(
     Ok(Json(rows.into_iter().map(ApplicationResp::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct UpdateApplicationReq {
     /// `New` | `Screening` | `Approved` | `Declined`.
     pub status: String,
@@ -69,6 +70,7 @@ pub struct UpdateApplicationReq {
 /// `PATCH /applications/<id>` — advance an application's status.
 ///
 /// Approving an application enqueues an automated welcome email via the scheduler.
+#[rocket_okapi::openapi(tag = "Applications")]
 #[patch("/applications/<id>", data = "<body>")]
 pub async fn update_status(
     state: &State<AppState>,

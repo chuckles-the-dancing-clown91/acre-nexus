@@ -4,7 +4,9 @@
 use crate::error::ApiError;
 use crate::rbac::{Grants, Permission};
 use crate::state::AppState;
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use argon2::Argon2;
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -63,7 +65,7 @@ pub fn hash_secret(secret: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Claims embedded in the signed JWT access token.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Claims {
     /// Subject — the user id.
     pub sub: Uuid,

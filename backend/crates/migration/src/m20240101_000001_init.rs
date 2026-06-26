@@ -31,7 +31,7 @@ async fn index(manager: &SchemaManager<'_>, table: &str, column: &str) -> Result
         .create_index(
             Index::create()
                 .if_not_exists()
-                .name(&format!("idx_{table}_{column}"))
+                .name(format!("idx_{table}_{column}"))
                 .table(Alias::new(table))
                 .col(Alias::new(column))
                 .to_owned(),
@@ -99,7 +99,13 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Alias::new("role_permission"))
                     .if_not_exists()
-                    .col(col("id").big_integer().not_null().auto_increment().primary_key())
+                    .col(
+                        col("id")
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
                     .col(col("role_id").uuid().not_null())
                     .col(col("permission").string().not_null())
                     .to_owned(),
@@ -113,7 +119,13 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Alias::new("user_role"))
                     .if_not_exists()
-                    .col(col("id").big_integer().not_null().auto_increment().primary_key())
+                    .col(
+                        col("id")
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
                     .col(col("user_id").uuid().not_null())
                     .col(col("role_id").uuid().not_null())
                     .col(col("tenant_id").uuid().null())
@@ -153,7 +165,12 @@ impl MigrationTrait for Migration {
                     .col(col("city").string().not_null().default(""))
                     .col(col("units").integer().not_null().default(0))
                     .col(col("occupied_units").integer().not_null().default(0))
-                    .col(col("monthly_rent_cents").big_integer().not_null().default(0))
+                    .col(
+                        col("monthly_rent_cents")
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(col("status").string().not_null().default("Stabilized"))
                     .col(col("year_built").integer().not_null().default(0))
                     .col(col("manager").string().not_null().default(""))
@@ -201,7 +218,12 @@ impl MigrationTrait for Migration {
                     .col(col("applicant_name").string().not_null())
                     .col(col("email").string().not_null().default(""))
                     .col(col("phone").string().not_null().default(""))
-                    .col(col("annual_income_cents").big_integer().not_null().default(0))
+                    .col(
+                        col("annual_income_cents")
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(col("credit_score").integer().null())
                     .col(col("status").string().not_null().default("New"))
                     .col(col("move_in").string().not_null().default(""))

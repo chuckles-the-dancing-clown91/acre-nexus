@@ -15,10 +15,14 @@ export default function PropertyProfilePage() {
 
   useEffect(() => {
     if (!params.id) return;
-    api.property(params.id).then(setP).catch((e) => setError(e.message));
+    api
+      .property(params.id)
+      .then(setP)
+      .catch((e) => setError(e.message));
   }, [params.id]);
 
-  if (error) return <p className="text-bad">Couldn&apos;t load property: {error}</p>;
+  if (error)
+    return <p className="text-bad">Couldn&apos;t load property: {error}</p>;
   if (!p) return <p className="text-ink-3">Loading…</p>;
 
   return (
@@ -43,7 +47,12 @@ export default function PropertyProfilePage() {
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {p.kpis.map((k) => (
-          <StatTile key={k.label} label={k.label} value={k.amount_label} icon="dollar" />
+          <StatTile
+            key={k.label}
+            label={k.label}
+            value={k.amount_label}
+            icon="dollar"
+          />
         ))}
       </div>
 

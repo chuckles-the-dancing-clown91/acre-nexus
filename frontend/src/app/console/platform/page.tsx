@@ -38,15 +38,25 @@ export default function PlatformPage() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight">
           Platform admin
         </h1>
-        <p className="text-ink-3">Acre HQ — every client company on the platform.</p>
+        <p className="text-ink-3">
+          Acre HQ — every client company on the platform.
+        </p>
       </div>
 
       {error && <p className="text-bad">{error}</p>}
 
       {metrics && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile label="Tenants" value={`${metrics.tenant_count}`} icon="globe" />
-          <StatTile label="Active" value={`${metrics.active_tenants}`} icon="check" />
+          <StatTile
+            label="Tenants"
+            value={`${metrics.tenant_count}`}
+            icon="globe"
+          />
+          <StatTile
+            label="Active"
+            value={`${metrics.active_tenants}`}
+            icon="check"
+          />
           <StatTile
             label="Properties"
             value={`${metrics.total_properties}`}

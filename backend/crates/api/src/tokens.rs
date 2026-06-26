@@ -38,6 +38,8 @@ pub fn mint() -> MintedToken {
 /// An authenticated vendor principal derived from a valid API token.
 #[derive(Clone, Debug)]
 pub struct ApiPrincipal {
+    /// Identifies the presented token; consumed by the upcoming token-usage audit.
+    #[allow(dead_code)]
     pub token_id: Uuid,
     pub tenant_id: Uuid,
     pub scopes: Vec<String>,

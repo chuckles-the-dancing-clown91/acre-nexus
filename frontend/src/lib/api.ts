@@ -35,7 +35,9 @@ const ACTING_KEY = "acre.acting_tenant";
  */
 export const actingTenant = {
   get(): string | null {
-    return typeof window === "undefined" ? null : localStorage.getItem(ACTING_KEY);
+    return typeof window === "undefined"
+      ? null
+      : localStorage.getItem(ACTING_KEY);
   },
   set(slug: string) {
     localStorage.setItem(ACTING_KEY, slug);
@@ -47,10 +49,14 @@ export const actingTenant = {
 
 export const tokenStore = {
   get access() {
-    return typeof window === "undefined" ? null : localStorage.getItem(ACCESS_KEY);
+    return typeof window === "undefined"
+      ? null
+      : localStorage.getItem(ACCESS_KEY);
   },
   get refresh() {
-    return typeof window === "undefined" ? null : localStorage.getItem(REFRESH_KEY);
+    return typeof window === "undefined"
+      ? null
+      : localStorage.getItem(REFRESH_KEY);
   },
   set(tokens: { access_token: string; refresh_token: string }) {
     localStorage.setItem(ACCESS_KEY, tokens.access_token);
@@ -63,7 +69,11 @@ export const tokenStore = {
 };
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string
+  ) {
     super(message);
   }
 }
@@ -76,7 +86,9 @@ interface RequestOpts {
 }
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (opts.tenant) headers["X-Tenant"] = opts.tenant;
   if (opts.auth) {
     const token = tokenStore.access;

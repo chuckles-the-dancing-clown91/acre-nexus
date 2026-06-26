@@ -18,7 +18,10 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    api.publicListing(id).then(setListing).catch((e) => setError(e.message));
+    api
+      .publicListing(id)
+      .then(setListing)
+      .catch((e) => setError(e.message));
   }, [id]);
 
   return (
@@ -32,7 +35,9 @@ export default function ListingDetailPage() {
           <Icon name="back" size={16} /> All listings
         </Link>
 
-        {error && <p className="text-bad">Couldn&apos;t load listing: {error}</p>}
+        {error && (
+          <p className="text-bad">Couldn&apos;t load listing: {error}</p>
+        )}
 
         {listing && (
           <div className="grid gap-7 md:grid-cols-[1.6fr_1fr]">
@@ -42,7 +47,9 @@ export default function ListingDetailPage() {
                 style={{ background: gradFor(0) }}
               >
                 <div className="absolute left-4 top-4">
-                  <Badge tone={statusTone(listing.status)}>{listing.status}</Badge>
+                  <Badge tone={statusTone(listing.status)}>
+                    {listing.status}
+                  </Badge>
                 </div>
               </div>
               <h1 className="mb-1 font-display text-3xl font-extrabold tracking-tight">
@@ -52,19 +59,25 @@ export default function ListingDetailPage() {
                 {listing.address} · {listing.city}
               </p>
               <div className="mb-6 flex gap-6 text-sm font-semibold text-ink-2">
-                <span>{listing.beds === 0 ? "Studio" : `${listing.beds} beds`}</span>
+                <span>
+                  {listing.beds === 0 ? "Studio" : `${listing.beds} beds`}
+                </span>
                 <span>{listing.baths} baths</span>
                 <span>{listing.sqft.toLocaleString()} sqft</span>
                 <span>Available {listing.available_on}</span>
               </div>
-              <p className="leading-relaxed text-ink-2">{listing.description}</p>
+              <p className="leading-relaxed text-ink-2">
+                {listing.description}
+              </p>
             </div>
 
             <div>
               <Card className="sticky top-20 p-5">
                 <div className="font-display text-3xl font-extrabold">
                   {listing.rent_label}
-                  <span className="text-base font-semibold text-ink-3">/mo</span>
+                  <span className="text-base font-semibold text-ink-3">
+                    /mo
+                  </span>
                 </div>
                 <p className="mb-4 mt-1 text-sm text-ink-3">
                   Apply once — screening runs automatically.
@@ -91,8 +104,9 @@ function ApplyForm({ listingId }: { listingId: string }) {
     move_in: "",
   });
 
-  const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const update =
+    (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,8 +122,8 @@ function ApplyForm({ listingId }: { listingId: string }) {
         move_in: form.move_in,
       });
       setResult(res);
-    } catch (e: any) {
-      setError(e.message ?? "Submission failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Submission failed");
     } finally {
       setSubmitting(false);
     }

@@ -10,7 +10,10 @@ export default function LlcsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.llcGroups().then(setGroups).catch((e) => setError(e.message));
+    api
+      .llcGroups()
+      .then(setGroups)
+      .catch((e) => setError(e.message));
   }, []);
 
   return (
@@ -19,7 +22,9 @@ export default function LlcsPage() {
         <h1 className="font-display text-3xl font-extrabold tracking-tight">
           LLCs &amp; properties
         </h1>
-        <p className="text-ink-3">Your holding entities and the assets they own.</p>
+        <p className="text-ink-3">
+          Your holding entities and the assets they own.
+        </p>
       </div>
 
       {error && <p className="text-bad">{error}</p>}
@@ -34,7 +39,9 @@ export default function LlcsPage() {
                   EIN {g.ein} · {g.state}
                 </div>
               </div>
-              <div className="text-sm text-ink-2">{g.property_count} properties</div>
+              <div className="text-sm text-ink-2">
+                {g.property_count} properties
+              </div>
               <div className="text-sm text-ink-2">{g.units} units</div>
               <div className="font-mono text-sm font-bold">
                 {g.monthly_rent_label}/mo

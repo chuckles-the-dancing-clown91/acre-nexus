@@ -7,14 +7,7 @@
 // variables at runtime from the tenant's theme, so a client can rebrand the
 // entire experience (logo + colours + company name) without a rebuild.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { api, DEFAULT_TENANT } from "./api";
 import type { PublicTheme } from "./types";
 

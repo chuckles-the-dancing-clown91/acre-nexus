@@ -4,7 +4,13 @@ import { gradFor } from "@/lib/gradients";
 import { Badge, statusTone } from "@/components/ui";
 
 /** Pluggable listing card used on the public website grid. */
-export function ListingCard({ listing, index }: { listing: Listing; index: number }) {
+export function ListingCard({
+  listing,
+  index,
+}: {
+  listing: Listing;
+  index: number;
+}) {
   const bedsLabel = listing.beds === 0 ? "Studio" : `${listing.beds} bd`;
   return (
     <Link
@@ -24,7 +30,9 @@ export function ListingCard({ listing, index }: { listing: Listing; index: numbe
         </div>
       </div>
       <div className="p-4">
-        <div className="text-base font-bold tracking-tight">{listing.title}</div>
+        <div className="text-base font-bold tracking-tight">
+          {listing.title}
+        </div>
         <div className="mb-3 mt-0.5 text-sm text-ink-3">
           {listing.address} · {listing.city}
         </div>

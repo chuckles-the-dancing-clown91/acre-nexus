@@ -28,8 +28,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push("/console");
-    } catch (e: any) {
-      setError(e.message ?? "Login failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed");
     } finally {
       setBusy(false);
     }
@@ -53,7 +53,9 @@ export default function LoginPage() {
           </span>
           <span className="font-display text-xl font-bold">Acre Console</span>
         </div>
-        <h1 className="mb-1 font-display text-2xl font-extrabold">Welcome back</h1>
+        <h1 className="mb-1 font-display text-2xl font-extrabold">
+          Welcome back
+        </h1>
         <p className="mb-6 text-sm text-ink-3">Sign in to your workspace.</p>
 
         <form onSubmit={submit} className="space-y-3">

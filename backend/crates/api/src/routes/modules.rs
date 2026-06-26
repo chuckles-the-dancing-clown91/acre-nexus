@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A module plus its resolved enablement for the active tenant.
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct ModuleInfo {
     pub key: String,
     pub name: String,
@@ -29,6 +29,7 @@ pub struct ModuleInfo {
 }
 
 /// `GET /modules` — every module with its enabled state for this tenant.
+#[rocket_okapi::openapi(tag = "Modules")]
 #[get("/modules")]
 pub async fn list(
     state: &State<AppState>,
@@ -45,7 +46,11 @@ pub async fn list(
             key: man.key.to_string(),
             name: man.name.to_string(),
             description: man.description.to_string(),
-            permissions: man.permissions.iter().map(|p| p.as_str().to_string()).collect(),
+            permissions: man
+                .permissions
+                .iter()
+                .map(|p| p.as_str().to_string())
+                .collect(),
             enabled,
             default_enabled: man.default_enabled,
             preview: man.preview,
@@ -54,13 +59,14 @@ pub async fn list(
     Ok(Json(out))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct ToggleModule {
     pub enabled: bool,
 }
 
 /// `PATCH /modules/<key>` — enable or disable a module for the active tenant.
 /// Upserts the `tenant_module` override row.
+#[rocket_okapi::openapi(tag = "Modules")]
 #[patch("/modules/<key>", data = "<body>")]
 pub async fn set(
     state: &State<AppState>,
@@ -108,7 +114,11 @@ pub async fn set(
         key: manifest.key.to_string(),
         name: manifest.name.to_string(),
         description: manifest.description.to_string(),
-        permissions: manifest.permissions.iter().map(|p| p.as_str().to_string()).collect(),
+        permissions: manifest
+            .permissions
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
         enabled: body.enabled,
         default_enabled: manifest.default_enabled,
         preview: manifest.preview,

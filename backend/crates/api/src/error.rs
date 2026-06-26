@@ -16,6 +16,8 @@ pub enum ApiError {
     Forbidden(String),
     #[error("{0}")]
     NotFound(String),
+    // Part of the error surface used by upcoming write endpoints (unique-constraint hits).
+    #[allow(dead_code)]
     #[error("{0}")]
     Conflict(String),
     #[error("internal error")]

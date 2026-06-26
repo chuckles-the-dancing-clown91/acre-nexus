@@ -22,8 +22,18 @@ impl MigrationTrait for Migration {
                             .primary_key()
                             .take(),
                     )
-                    .col(ColumnDef::new(Alias::new("tenant_id")).uuid().not_null().take())
-                    .col(ColumnDef::new(Alias::new("module_key")).string().not_null().take())
+                    .col(
+                        ColumnDef::new(Alias::new("tenant_id"))
+                            .uuid()
+                            .not_null()
+                            .take(),
+                    )
+                    .col(
+                        ColumnDef::new(Alias::new("module_key"))
+                            .string()
+                            .not_null()
+                            .take(),
+                    )
                     .col(
                         ColumnDef::new(Alias::new("enabled"))
                             .boolean()

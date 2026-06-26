@@ -39,8 +39,18 @@ export const MODULES: ModuleDef[] = [
     description: "Portfolio, property profiles, and LLC holding entities.",
     defaultEnabled: true,
     nav: [
-      { href: "/console/properties", label: "Properties", icon: "building", permission: "property:read" },
-      { href: "/console/llcs", label: "LLCs", icon: "shield", permission: "property:read" },
+      {
+        href: "/console/properties",
+        label: "Properties",
+        icon: "building",
+        permission: "property:read",
+      },
+      {
+        href: "/console/llcs",
+        label: "LLCs",
+        icon: "shield",
+        permission: "property:read",
+      },
     ],
   },
   {
@@ -49,16 +59,27 @@ export const MODULES: ModuleDef[] = [
     description: "Public listings website, applications, and tenant screening.",
     defaultEnabled: true,
     nav: [
-      { href: "/console/applications", label: "Applications", icon: "user", permission: "application:read" },
+      {
+        href: "/console/applications",
+        label: "Applications",
+        icon: "user",
+        permission: "application:read",
+      },
     ],
   },
   {
     key: "vendor_api",
     label: "Vendor API",
-    description: "Scoped, revocable API tokens and the public /api/v1 endpoints.",
+    description:
+      "Scoped, revocable API tokens and the public /api/v1 endpoints.",
     defaultEnabled: true,
     nav: [
-      { href: "/console/tokens", label: "API tokens", icon: "key", permission: "apitoken:manage" },
+      {
+        href: "/console/tokens",
+        label: "API tokens",
+        icon: "key",
+        permission: "apitoken:manage",
+      },
     ],
   },
   {
@@ -75,7 +96,12 @@ export const MODULES: ModuleDef[] = [
     defaultEnabled: false,
     preview: true,
     nav: [
-      { href: "/console/flips", label: "Flips", icon: "dollar", permission: "property:read" },
+      {
+        href: "/console/flips",
+        label: "Flips",
+        icon: "dollar",
+        permission: "property:read",
+      },
     ],
   },
 ];

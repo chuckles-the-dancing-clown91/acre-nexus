@@ -13,7 +13,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrde
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct LlcResp {
     pub id: Uuid,
     pub name: String,
@@ -33,6 +33,7 @@ impl From<entity::llc::Model> for LlcResp {
 }
 
 /// `GET /llcs` — list holding entities for the active tenant.
+#[rocket_okapi::openapi(tag = "LLCs")]
 #[get("/llcs")]
 pub async fn list(
     state: &State<AppState>,
@@ -48,7 +49,7 @@ pub async fn list(
     Ok(Json(rows.into_iter().map(LlcResp::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct CreateLlcReq {
     pub name: String,
     pub ein: Option<String>,
@@ -56,6 +57,7 @@ pub struct CreateLlcReq {
 }
 
 /// `POST /llcs` — create a holding entity.
+#[rocket_okapi::openapi(tag = "LLCs")]
 #[post("/llcs", data = "<body>")]
 pub async fn create(
     state: &State<AppState>,

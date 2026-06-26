@@ -12,7 +12,7 @@ use rocket::{get, put, State};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct ThemeResp {
     pub company_name: String,
     pub logo_url: Option<String>,
@@ -36,6 +36,7 @@ impl From<entity::theme::Model> for ThemeResp {
 }
 
 /// `GET /theme` — the active tenant's theme configuration.
+#[rocket_okapi::openapi(tag = "Theming")]
 #[get("/theme")]
 pub async fn get_theme(
     state: &State<AppState>,
@@ -50,7 +51,7 @@ pub async fn get_theme(
     Ok(Json(ThemeResp::from(t)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct UpdateThemeReq {
     pub company_name: Option<String>,
     pub logo_url: Option<String>,
@@ -61,6 +62,7 @@ pub struct UpdateThemeReq {
 }
 
 /// `PUT /theme` — update branding, colours and legal boilerplate templates.
+#[rocket_okapi::openapi(tag = "Theming")]
 #[put("/theme", data = "<body>")]
 pub async fn update_theme(
     state: &State<AppState>,

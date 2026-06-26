@@ -61,6 +61,9 @@ pub struct ModuleManifest {
 
 /// Context handed to a module when the scheduler asks it to advance a job.
 pub struct JobContext<'a> {
+    /// Connection for handlers that need to touch other tables while advancing a
+    /// job (none do yet, but it's part of the handler contract).
+    #[allow(dead_code)]
     pub db: &'a DatabaseConnection,
     pub job: &'a background_job::Model,
 }
@@ -78,7 +81,11 @@ pub struct JobOutcome {
 impl JobOutcome {
     /// Terminal success with a result payload.
     pub fn completed(result: serde_json::Value) -> Self {
-        JobOutcome { status: "completed".into(), run_at: None, result: Some(result) }
+        JobOutcome {
+            status: "completed".into(),
+            run_at: None,
+            result: Some(result),
+        }
     }
 
     /// Move to `status` and try again after `delay_secs`.
@@ -97,9 +104,11 @@ pub trait PlatformModule: Send + Sync {
     /// Static metadata describing the module.
     fn manifest(&self) -> ModuleManifest;
 
-    /// Rocket routes contributed by this module. Mounted at the API root.
-    fn routes(&self) -> Vec<Route> {
-        vec![]
+    /// Rocket routes contributed by this module, paired with the OpenAPI spec
+    /// fragment describing them. Build both at once with
+    /// `openapi_get_routes_spec![route_a, route_b]`. Mounted at the API root.
+    fn api(&self) -> (Vec<Route>, rocket_okapi::okapi::openapi3::OpenApi) {
+        (vec![], rocket_okapi::okapi::openapi3::OpenApi::new())
     }
 
     /// Advance one background job that this module owns (matched by

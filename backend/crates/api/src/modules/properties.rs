@@ -5,7 +5,9 @@
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{llcs, portfolio, properties};
-use rocket::{routes, Route};
+use rocket::Route;
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 
 pub struct PropertiesModule;
 
@@ -22,8 +24,8 @@ impl PlatformModule for PropertiesModule {
         }
     }
 
-    fn routes(&self) -> Vec<Route> {
-        routes![
+    fn api(&self) -> (Vec<Route>, OpenApi) {
+        openapi_get_routes_spec![
             properties::list,
             properties::create,
             properties::profile,

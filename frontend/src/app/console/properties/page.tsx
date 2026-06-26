@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import type { Property } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
+import { useProperties } from "@/lib/queries";
 
 export default function PropertiesPage() {
-  const [properties, setProperties] = useState<Property[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.properties().then(setProperties).catch((e) => setError(e.message));
-  }, []);
+  // Reference pattern: server state via a TanStack Query hook instead of
+  // useEffect + useState. Caching, retry, and stale handling come for free.
+  const { data: properties, error } = useProperties();
 
   return (
     <div className="space-y-6">
@@ -23,7 +18,7 @@ export default function PropertiesPage() {
         <p className="text-ink-3">Every asset in your portfolio.</p>
       </div>
 
-      {error && <p className="text-bad">{error}</p>}
+      {error && <p className="text-bad">{error.message}</p>}
 
       <Card className="overflow-hidden">
         <div className="grid grid-cols-[1.5fr_.7fr_.8fr_.6fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">

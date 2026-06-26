@@ -27,7 +27,9 @@ export default function HomePage() {
           <div className="acre-fade">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-accent-soft px-3 py-1.5 text-xs font-bold text-accent-2">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              {listings ? `${listings.length} homes available` : "Loading homes…"}
+              {listings
+                ? `${listings.length} homes available`
+                : "Loading homes…"}
             </div>
             <h1 className="mb-4 font-display text-[clamp(40px,5.2vw,68px)] font-extrabold leading-[.98] tracking-[-.035em]">
               Find a place
@@ -56,7 +58,9 @@ export default function HomePage() {
             }}
           >
             <div className="absolute left-4 top-4 rounded-2xl bg-black/40 px-3.5 py-2.5 text-white backdrop-blur">
-              <div className="font-mono text-[11px] opacity-80">AVG MOVE-IN</div>
+              <div className="font-mono text-[11px] opacity-80">
+                AVG MOVE-IN
+              </div>
               <div className="font-display text-2xl font-bold">6 days</div>
             </div>
           </div>

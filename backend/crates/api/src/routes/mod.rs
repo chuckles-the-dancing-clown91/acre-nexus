@@ -23,18 +23,21 @@ pub mod theme;
 pub mod vendor;
 
 use rocket::serde::json::Json;
-use rocket::{get, routes, Route};
+use rocket::{get, Route};
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 
 /// `GET /health` — liveness probe.
+#[rocket_okapi::openapi(tag = "System")]
 #[get("/health")]
 pub fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok", "service": "acre-api" }))
 }
 
-/// Always-on routes, independent of any module. Feature routes are added
-/// separately by [`crate::modules::registry`] at boot.
-pub fn core() -> Vec<Route> {
-    routes![
+/// Always-on routes, independent of any module, paired with their OpenAPI spec.
+/// Feature routes are added separately by [`crate::modules::registry`] at boot.
+pub fn core_api() -> (Vec<Route>, OpenApi) {
+    openapi_get_routes_spec![
         health,
         // auth
         auth::login,

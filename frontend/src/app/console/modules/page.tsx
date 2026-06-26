@@ -21,7 +21,10 @@ export default function ModulesPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    api.modules().then(setList).catch((e) => setError(e.message));
+    api
+      .modules()
+      .then(setList)
+      .catch((e) => setError(e.message));
   }, []);
 
   if (!can("tenant:manage")) {
@@ -37,8 +40,10 @@ export default function ModulesPage() {
     setError(null);
     try {
       await setEnabled(key, next);
-      setList((prev) =>
-        prev?.map((m) => (m.key === key ? { ...m, enabled: next } : m)) ?? prev
+      setList(
+        (prev) =>
+          prev?.map((m) => (m.key === key ? { ...m, enabled: next } : m)) ??
+          prev
       );
     } catch (e) {
       setError((e as Error).message);

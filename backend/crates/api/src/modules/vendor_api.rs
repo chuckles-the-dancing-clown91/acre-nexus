@@ -5,7 +5,9 @@
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{api_tokens, vendor};
-use rocket::{routes, Route};
+use rocket::Route;
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 
 pub struct VendorApiModule;
 
@@ -22,8 +24,8 @@ impl PlatformModule for VendorApiModule {
         }
     }
 
-    fn routes(&self) -> Vec<Route> {
-        routes![
+    fn api(&self) -> (Vec<Route>, OpenApi) {
+        openapi_get_routes_spec![
             api_tokens::list,
             api_tokens::create,
             api_tokens::revoke,

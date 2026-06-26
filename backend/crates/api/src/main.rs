@@ -10,10 +10,13 @@
 //! * [`tokens`] — scoped, revocable API tokens for the vendor API
 //! * [`scheduler`] — Tokio background job engine (screening, automated emails)
 //! * [`routes`] — HTTP handlers, grouped by audience
+//! * [`modules`] — pluggable feature modules; each contributes routes + OpenAPI
+//! * [`openapi`] — trait impls that let `rocket_okapi` document our guards/errors
 //!
 //! ## Boot sequence
 //! Connect to Postgres → (optionally) migrate + seed → spawn the scheduler →
-//! launch Rocket with all routes mounted at `/`.
+//! launch Rocket with core + module routes, the merged OpenAPI doc, and the
+//! Swagger UI / RapiDoc explorers mounted.
 
 #[macro_use]
 extern crate rocket;
@@ -24,6 +27,7 @@ mod cors;
 mod dto;
 mod error;
 mod modules;
+mod openapi;
 mod rbac;
 mod routes;
 mod scheduler;
@@ -34,6 +38,11 @@ mod tokens;
 
 use config::Config;
 use migration::{Migrator, MigratorTrait};
+use rocket_okapi::okapi::merge::merge_specs;
+use rocket_okapi::okapi::openapi3::{Info, OpenApi};
+use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
+use rocket_okapi::settings::OpenApiSettings;
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use sea_orm::Database;
 use state::AppState;
 
@@ -64,21 +73,78 @@ async fn rocket() -> _ {
 
     let state = AppState { db, config };
 
-    // Always-on core routes, then every pluggable module's routes. Each module
-    // is mounted at the API root; collisions surface loudly at boot.
-    let mut app = rocket::build()
-        .manage(state)
-        .attach(cors::Cors)
-        .mount("/", routes::core());
+    // Accumulate the merged OpenAPI document as we mount routes. Core routes
+    // first, then every pluggable module's routes — each module contributes both
+    // its routes and a matching spec fragment.
+    let mut spec = OpenApi::new();
+    let mut app = rocket::build().manage(state).attach(cors::Cors);
+
+    let (core_routes, core_spec) = routes::core_api();
+    if let Err(e) = merge_specs(&mut spec, &"", &core_spec) {
+        tracing::error!("failed to merge core OpenAPI spec: {e}");
+    }
+    app = app.mount("/", core_routes);
 
     for module in modules::registry() {
         let manifest = module.manifest();
-        let routes = module.routes();
-        if !routes.is_empty() {
-            tracing::info!(module = manifest.key, routes = routes.len(), "mounting module");
-            app = app.mount("/", routes);
+        let (routes, module_spec) = module.api();
+        if routes.is_empty() {
+            continue;
         }
+        if let Err(e) = merge_specs(&mut spec, &"", &module_spec) {
+            tracing::error!(module = manifest.key, "failed to merge OpenAPI spec: {e}");
+        }
+        tracing::info!(
+            module = manifest.key,
+            routes = routes.len(),
+            "mounting module"
+        );
+        app = app.mount("/", routes);
     }
+
+    // Top-level API metadata (set after merging so module fragments don't clobber it).
+    spec.info = Info {
+        title: "Acre Nexus API".to_owned(),
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+        description: Some(
+            "Multi-tenant property-management & investment platform API.\n\n\
+             Auth: humans send a JWT (`Authorization: Bearer <access_token>` from \
+             POST /auth/login); vendors send a scoped API key (`acre_live_…`). \
+             Tenant context comes from the JWT, the `X-Tenant` header (staff / \
+             public site), or the API token. See docs/API.md and docs/MODULES.md."
+                .to_owned(),
+        ),
+        ..Default::default()
+    };
+
+    // Serve the spec + interactive explorers.
+    let settings = OpenApiSettings::new();
+    app = app.mount("/", vec![rocket_okapi::get_openapi_route(spec, &settings)]);
+    app = app.mount(
+        "/swagger-ui/",
+        make_swagger_ui(&SwaggerUIConfig {
+            url: "/openapi.json".to_owned(),
+            ..Default::default()
+        }),
+    );
+    app = app.mount(
+        "/rapidoc/",
+        make_rapidoc(&RapiDocConfig {
+            general: GeneralConfig {
+                spec_urls: vec![rocket_okapi::settings::UrlObject::new(
+                    "API",
+                    "/openapi.json",
+                )],
+                ..Default::default()
+            },
+            hide_show: HideShowConfig {
+                allow_spec_url_load: false,
+                allow_spec_file_load: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        }),
+    );
 
     app.mount("/", routes![cors::preflight])
 }

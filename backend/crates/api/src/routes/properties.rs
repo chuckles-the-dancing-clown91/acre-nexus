@@ -10,13 +10,11 @@ use chrono::Utc;
 use entity::prelude::Property;
 use rocket::serde::json::Json;
 use rocket::{get, patch, post, State};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct PropertyResp {
     pub id: Uuid,
     pub name: String,
@@ -54,6 +52,7 @@ impl From<entity::property::Model> for PropertyResp {
 }
 
 /// `GET /properties` — every property in the active tenant's portfolio.
+#[rocket_okapi::openapi(tag = "Properties")]
 #[get("/properties")]
 pub async fn list(
     state: &State<AppState>,
@@ -69,7 +68,7 @@ pub async fn list(
     Ok(Json(rows.into_iter().map(PropertyResp::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct CreatePropertyReq {
     pub name: String,
     pub address: String,
@@ -84,6 +83,7 @@ pub struct CreatePropertyReq {
 }
 
 /// `POST /properties` — add a property to the portfolio.
+#[rocket_okapi::openapi(tag = "Properties")]
 #[post("/properties", data = "<body>")]
 pub async fn create(
     state: &State<AppState>,
@@ -112,14 +112,14 @@ pub async fn create(
     Ok(Json(PropertyResp::from(saved)))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct CostLine {
     pub label: String,
     pub amount_cents: i64,
     pub amount_label: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct PropertyProfileResp {
     #[serde(flatten)]
     pub property: PropertyResp,
@@ -133,6 +133,7 @@ pub struct PropertyProfileResp {
 ///
 /// Economics mirror the design prototype: maintenance ≈ 9% of rent, taxes &
 /// insurance ≈ 12%, management fee 8%; net = rent − those.
+#[rocket_okapi::openapi(tag = "Properties")]
 #[get("/properties/<id>")]
 pub async fn profile(
     state: &State<AppState>,
@@ -187,7 +188,7 @@ pub async fn profile(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct UpdatePropertyReq {
     pub name: Option<String>,
     pub status: Option<String>,
@@ -197,6 +198,7 @@ pub struct UpdatePropertyReq {
 }
 
 /// `PATCH /properties/<id>` — update mutable property fields.
+#[rocket_okapi::openapi(tag = "Properties")]
 #[patch("/properties/<id>", data = "<body>")]
 pub async fn update(
     state: &State<AppState>,

@@ -89,26 +89,208 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let elm = seed_llc(db, northwind, "Elm Equity LLC", "45-6789012", "OR").await?;
     let alder = seed_llc(db, northwind, "Alder LLC", "33-2211009", "OR").await?;
 
-    seed_property(db, northwind, maple, "The Maple Court", "123 Maple Ct", "Portland, OR", 8, 8, 1_480_000, "Stabilized", 2016, "Dana K.").await?;
-    seed_property(db, northwind, maple, "Birchwood Lofts", "88 Birch Ave", "Portland, OR", 12, 11, 1_790_000, "Vacant", 2019, "Dana K.").await?;
-    seed_property(db, northwind, harbor, "Harbor View", "700 Harbor Dr", "Portland, OR", 24, 23, 5_060_000, "Vacant", 2014, "Marcus R.").await?;
-    seed_property(db, northwind, alder, "The Aldercroft", "15 Alder St", "Portland, OR", 6, 6, 777_000, "Stabilized", 2011, "Marcus R.").await?;
-    seed_property(db, northwind, elm, "Elmwood Residences", "230 Elm Blvd", "Lake Oswego, OR", 10, 9, 2_227_500, "Vacant", 2021, "Dana K.").await?;
+    seed_property(
+        db,
+        northwind,
+        maple,
+        "The Maple Court",
+        "123 Maple Ct",
+        "Portland, OR",
+        8,
+        8,
+        1_480_000,
+        "Stabilized",
+        2016,
+        "Dana K.",
+    )
+    .await?;
+    seed_property(
+        db,
+        northwind,
+        maple,
+        "Birchwood Lofts",
+        "88 Birch Ave",
+        "Portland, OR",
+        12,
+        11,
+        1_790_000,
+        "Vacant",
+        2019,
+        "Dana K.",
+    )
+    .await?;
+    seed_property(
+        db,
+        northwind,
+        harbor,
+        "Harbor View",
+        "700 Harbor Dr",
+        "Portland, OR",
+        24,
+        23,
+        5_060_000,
+        "Vacant",
+        2014,
+        "Marcus R.",
+    )
+    .await?;
+    seed_property(
+        db,
+        northwind,
+        alder,
+        "The Aldercroft",
+        "15 Alder St",
+        "Portland, OR",
+        6,
+        6,
+        777_000,
+        "Stabilized",
+        2011,
+        "Marcus R.",
+    )
+    .await?;
+    seed_property(
+        db,
+        northwind,
+        elm,
+        "Elmwood Residences",
+        "230 Elm Blvd",
+        "Lake Oswego, OR",
+        10,
+        9,
+        2_227_500,
+        "Vacant",
+        2021,
+        "Dana K.",
+    )
+    .await?;
 
     // ---- Cascade LLCs + properties ----
     let riverside = seed_llc(db, cascade, "Riverside Holdings LLC", "77-1230988", "WA").await?;
     let cnorth = seed_llc(db, cascade, "Cascade North LLC", "77-4567321", "WA").await?;
-    seed_property(db, cascade, riverside, "Riverside Flats", "12 River Rd", "Seattle, WA", 40, 38, 6_200_000, "Stabilized", 2018, "Lena T.").await?;
-    seed_property(db, cascade, cnorth, "Cascade North Apartments", "400 North Ave", "Bellevue, WA", 60, 57, 9_600_000, "Vacant", 2020, "Lena T.").await?;
-    seed_property(db, cascade, cnorth, "Birch & Main", "88 Main St", "Tacoma, WA", 24, 24, 4_100_000, "Stabilized", 2015, "Omar D.").await?;
+    seed_property(
+        db,
+        cascade,
+        riverside,
+        "Riverside Flats",
+        "12 River Rd",
+        "Seattle, WA",
+        40,
+        38,
+        6_200_000,
+        "Stabilized",
+        2018,
+        "Lena T.",
+    )
+    .await?;
+    seed_property(
+        db,
+        cascade,
+        cnorth,
+        "Cascade North Apartments",
+        "400 North Ave",
+        "Bellevue, WA",
+        60,
+        57,
+        9_600_000,
+        "Vacant",
+        2020,
+        "Lena T.",
+    )
+    .await?;
+    seed_property(
+        db,
+        cascade,
+        cnorth,
+        "Birch & Main",
+        "88 Main St",
+        "Tacoma, WA",
+        24,
+        24,
+        4_100_000,
+        "Stabilized",
+        2015,
+        "Omar D.",
+    )
+    .await?;
 
     // ---- Northwind public listings (the website slice) ----
     seed_listing(db, northwind, "The Maple Court", "123 Maple Ct", "Portland, OR", 2, 1, 880, 185_000, "Available", "Now", "A bright 2-bed in a quiet, tree-lined court — hardwood floors, in-unit laundry, and a dedicated parking space.").await?;
-    seed_listing(db, northwind, "Birchwood Lofts 5C", "88 Birch Ave", "Portland, OR", 1, 1, 640, 149_500, "Available", "Jul 15", "Open-plan loft with exposed brick and oversized windows, steps from the Birch Ave shops.").await?;
-    seed_listing(db, northwind, "Cedar Park Townhome", "42 Cedar Park", "Beaverton, OR", 3, 2, 1420, 265_000, "New", "Aug 1", "Spacious three-bedroom townhome with an attached garage and private back patio.").await?;
-    seed_listing(db, northwind, "Harbor View 12A", "700 Harbor Dr", "Portland, OR", 2, 2, 1050, 220_000, "Available", "Now", "Corner unit with river views, floor-to-ceiling glass, and a chef's kitchen.").await?;
-    seed_listing(db, northwind, "The Aldercroft Studio", "15 Alder St", "Portland, OR", 0, 1, 520, 129_500, "Available", "Now", "Efficient studio in a classic 1911 building with original detailing and modern updates.").await?;
-    seed_listing(db, northwind, "Elmwood Residences 3B", "230 Elm Blvd", "Lake Oswego, OR", 2, 2, 1180, 247_500, "New", "Jul 1", "Brand-new construction with a balcony, smart-home package, and resort-style amenities.").await?;
+    seed_listing(
+        db,
+        northwind,
+        "Birchwood Lofts 5C",
+        "88 Birch Ave",
+        "Portland, OR",
+        1,
+        1,
+        640,
+        149_500,
+        "Available",
+        "Jul 15",
+        "Open-plan loft with exposed brick and oversized windows, steps from the Birch Ave shops.",
+    )
+    .await?;
+    seed_listing(
+        db,
+        northwind,
+        "Cedar Park Townhome",
+        "42 Cedar Park",
+        "Beaverton, OR",
+        3,
+        2,
+        1420,
+        265_000,
+        "New",
+        "Aug 1",
+        "Spacious three-bedroom townhome with an attached garage and private back patio.",
+    )
+    .await?;
+    seed_listing(
+        db,
+        northwind,
+        "Harbor View 12A",
+        "700 Harbor Dr",
+        "Portland, OR",
+        2,
+        2,
+        1050,
+        220_000,
+        "Available",
+        "Now",
+        "Corner unit with river views, floor-to-ceiling glass, and a chef's kitchen.",
+    )
+    .await?;
+    seed_listing(
+        db,
+        northwind,
+        "The Aldercroft Studio",
+        "15 Alder St",
+        "Portland, OR",
+        0,
+        1,
+        520,
+        129_500,
+        "Available",
+        "Now",
+        "Efficient studio in a classic 1911 building with original detailing and modern updates.",
+    )
+    .await?;
+    seed_listing(
+        db,
+        northwind,
+        "Elmwood Residences 3B",
+        "230 Elm Blvd",
+        "Lake Oswego, OR",
+        2,
+        2,
+        1180,
+        247_500,
+        "New",
+        "Jul 1",
+        "Brand-new construction with a balcony, smart-home package, and resort-style amenities.",
+    )
+    .await?;
 
     tracing::info!("seed: complete");
     Ok(())

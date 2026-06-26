@@ -16,7 +16,9 @@ export default function FlipsPage() {
   return (
     <div className="space-y-5">
       <header className="flex items-center gap-3">
-        <h1 className="font-display text-2xl font-bold">Acquisitions &amp; Flips</h1>
+        <h1 className="font-display text-2xl font-bold">
+          Acquisitions &amp; Flips
+        </h1>
         <Badge tone="info">Preview</Badge>
       </header>
       <p className="max-w-2xl text-sm text-ink-3">

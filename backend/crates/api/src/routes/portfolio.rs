@@ -13,13 +13,13 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct Kpi {
     pub label: String,
     pub value: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct PortfolioSummary {
     pub properties: i64,
     pub units: i64,
@@ -30,6 +30,7 @@ pub struct PortfolioSummary {
 }
 
 /// `GET /portfolio/summary` — top-line KPIs for the active tenant.
+#[rocket_okapi::openapi(tag = "Portfolio")]
 #[get("/portfolio/summary")]
 pub async fn summary(
     state: &State<AppState>,
@@ -77,7 +78,7 @@ pub async fn summary(
     }))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct LlcGroup {
     pub id: Uuid,
     pub name: String,
@@ -91,6 +92,7 @@ pub struct LlcGroup {
 }
 
 /// `GET /portfolio/llcs` — properties grouped by holding entity.
+#[rocket_okapi::openapi(tag = "Portfolio")]
 #[get("/portfolio/llcs")]
 pub async fn llc_groups(
     state: &State<AppState>,

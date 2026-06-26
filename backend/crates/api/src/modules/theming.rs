@@ -4,7 +4,9 @@
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::theme;
-use rocket::{routes, Route};
+use rocket::Route;
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 
 pub struct ThemingModule;
 
@@ -21,7 +23,7 @@ impl PlatformModule for ThemingModule {
         }
     }
 
-    fn routes(&self) -> Vec<Route> {
-        routes![theme::get_theme, theme::update_theme]
+    fn api(&self) -> (Vec<Route>, OpenApi) {
+        openapi_get_routes_spec![theme::get_theme, theme::update_theme]
     }
 }

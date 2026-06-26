@@ -16,7 +16,9 @@ use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use rocket::serde::json::Json;
-use rocket::{get, routes, Route, State};
+use rocket::{get, Route, State};
+use rocket_okapi::okapi::openapi3::OpenApi;
+use rocket_okapi::openapi_get_routes_spec;
 use serde_json::json;
 
 pub struct FlipsModule;
@@ -34,13 +36,14 @@ impl PlatformModule for FlipsModule {
         }
     }
 
-    fn routes(&self) -> Vec<Route> {
-        routes![pipeline]
+    fn api(&self) -> (Vec<Route>, OpenApi) {
+        openapi_get_routes_spec![pipeline]
     }
 }
 
 /// `GET /modules/flips/pipeline` — the flip deal board. Requires `property:read`
 /// **and** the flips module to be enabled for the active tenant.
+#[rocket_okapi::openapi(tag = "Flips")]
 #[get("/modules/flips/pipeline")]
 pub async fn pipeline(
     state: &State<AppState>,

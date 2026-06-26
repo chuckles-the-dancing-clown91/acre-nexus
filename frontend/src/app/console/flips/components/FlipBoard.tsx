@@ -14,7 +14,10 @@ export default function FlipBoard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.flipPipeline().then(setData).catch((e) => setError(e.message));
+    api
+      .flipPipeline()
+      .then(setData)
+      .catch((e) => setError(e.message));
   }, []);
 
   if (error) {

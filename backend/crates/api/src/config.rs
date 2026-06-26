@@ -22,8 +22,7 @@ impl Config {
         Config {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://localhost:5432/acre".into()),
-            jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "dev-insecure-change-me".into()),
+            jwt_secret: env::var("JWT_SECRET").unwrap_or_else(|_| "dev-insecure-change-me".into()),
             access_ttl_secs: env::var("ACCESS_TTL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())

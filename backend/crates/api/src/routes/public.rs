@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct ListingResp {
     pub id: Uuid,
     pub title: String,
@@ -52,6 +52,7 @@ impl From<entity::listing::Model> for ListingResp {
 }
 
 /// `GET /public/listings` — public, available listings for a tenant.
+#[rocket_okapi::openapi(tag = "Public Website")]
 #[get("/public/listings")]
 pub async fn listings(
     state: &State<AppState>,
@@ -67,6 +68,7 @@ pub async fn listings(
 }
 
 /// `GET /public/listings/<id>` — a single public listing.
+#[rocket_okapi::openapi(tag = "Public Website")]
 #[get("/public/listings/<id>")]
 pub async fn listing_detail(
     state: &State<AppState>,
@@ -84,7 +86,7 @@ pub async fn listing_detail(
 }
 
 /// Public branding so a white-label site can theme itself before login.
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct PublicTheme {
     pub company_name: String,
     pub logo_url: Option<String>,
@@ -94,6 +96,7 @@ pub struct PublicTheme {
 }
 
 /// `GET /public/theme` — branding for the resolved tenant.
+#[rocket_okapi::openapi(tag = "Public Website")]
 #[get("/public/theme")]
 pub async fn public_theme(
     state: &State<AppState>,
@@ -113,7 +116,7 @@ pub async fn public_theme(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct ApplyReq {
     pub listing_id: Option<Uuid>,
     pub applicant_name: String,
@@ -124,7 +127,7 @@ pub struct ApplyReq {
     pub move_in: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct ApplyResp {
     pub application_id: Uuid,
     pub status: String,
@@ -137,6 +140,7 @@ pub struct ApplyResp {
 ///
 /// Persists the application and enqueues a background-screening job that the
 /// Tokio scheduler advances asynchronously (submit → await callback → completed).
+#[rocket_okapi::openapi(tag = "Public Website")]
 #[post("/public/applications", data = "<body>")]
 pub async fn apply(
     state: &State<AppState>,

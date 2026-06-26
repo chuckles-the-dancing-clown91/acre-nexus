@@ -46,12 +46,19 @@ export default function DashboardPage() {
         <p className="text-ink-3">Live KPIs across your managed properties.</p>
       </div>
 
-      {error && <p className="text-bad">Couldn&apos;t load portfolio: {error}</p>}
+      {error && (
+        <p className="text-bad">Couldn&apos;t load portfolio: {error}</p>
+      )}
 
       {summary && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {summary.kpis.map((k) => (
-            <StatTile key={k.label} label={k.label} value={k.value} icon="dollar" />
+            <StatTile
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              icon="dollar"
+            />
           ))}
         </div>
       )}

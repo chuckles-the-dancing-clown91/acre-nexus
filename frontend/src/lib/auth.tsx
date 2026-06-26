@@ -23,6 +23,21 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+/**
+ * Pure permission check (exported for reuse + unit testing). A user is allowed
+ * if they hold the exact permission, or the `platform:admin` super-permission.
+ */
+export function hasPermission(
+  user: Pick<User, "permissions"> | null | undefined,
+  perm: string
+): boolean {
+  return (
+    !!user &&
+    (user.permissions.includes("platform:admin") ||
+      user.permissions.includes(perm))
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,13 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const can = useCallback(
-    (perm: string) =>
-      !!user &&
-      (user.permissions.includes("platform:admin") ||
-        user.permissions.includes(perm)),
-    [user]
-  );
+  const can = useCallback((perm: string) => hasPermission(user, perm), [user]);
 
   return (
     <Ctx.Provider value={{ user, loading, login, logout, can }}>

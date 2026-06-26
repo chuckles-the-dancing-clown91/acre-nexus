@@ -58,6 +58,10 @@ A Cargo workspace under `backend/`:
     `PlatformModule` that contributes its routes, the permissions it needs, and
     the background-job kinds it handles. See `docs/MODULES.md`.
   - `routes/*` — handlers grouped by audience (see `docs/API.md`).
+  - `openapi` — `rocket_okapi` integration: routes are `#[openapi]`-annotated and
+    DTOs derive `JsonSchema`, so the OpenAPI 3.0 doc is **generated from the code**
+    and served at `/openapi.json`, with Swagger UI (`/swagger-ui/`) and RapiDoc
+    (`/rapidoc/`). Each module contributes its own spec fragment, merged at boot.
   - `error` — one `ApiError` type that serialises to a consistent JSON envelope.
 
 ### Why these choices
@@ -111,6 +115,13 @@ settings. Adding a module is a new file plus one registry line — see
 ## Frontend (Next.js / React)
 
 - **App Router** + TypeScript + Tailwind.
+- **Framework stack** (see `frontend/README.md`): TanStack Query for server
+  state/caching, React Hook Form + Zod for typed/validated forms, Zustand for
+  lightweight global UI state, and **shadcn/ui** (Radix) layered on top of the
+  existing design tokens (its CSS variables are bridged to the brand palette, so
+  components inherit dark-mode + white-label). Tested with Vitest + Testing
+  Library (unit/component) and Playwright (e2e); formatted with Prettier and
+  guarded by a Husky + lint-staged pre-commit hook.
 - **Design tokens** ported verbatim from the prototype into CSS variables
   (`globals.css`); Tailwind colours reference those variables so the whole palette
   re-themes for dark mode and white-label without a rebuild.

@@ -8,20 +8,18 @@ use crate::state::AppState;
 use chrono::{Duration, Utc};
 use entity::prelude::{RefreshToken, Role, RolePermission, User, UserRole};
 use rocket::serde::json::Json;
-use rocket::{post, get, State};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set,
-};
+use rocket::{get, post, State};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct LoginReq {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct TokenResp {
     pub access_token: String,
     pub refresh_token: String,
@@ -30,7 +28,7 @@ pub struct TokenResp {
     pub user: UserResp,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, schemars::JsonSchema)]
 pub struct UserResp {
     pub id: Uuid,
     pub email: String,
@@ -74,6 +72,7 @@ pub async fn permissions_for(
 }
 
 /// `POST /auth/login` — exchange email + password for an access/refresh token pair.
+#[rocket_okapi::openapi(tag = "Auth")]
 #[post("/auth/login", data = "<body>")]
 pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<Json<TokenResp>> {
     let user = User::find()
@@ -129,14 +128,18 @@ async fn issue_refresh_token(state: &AppState, user_id: Uuid) -> ApiResult<Strin
     Ok(secret)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct RefreshReq {
     pub refresh_token: String,
 }
 
 /// `POST /auth/refresh` — rotate a refresh token for a fresh access/refresh pair.
+#[rocket_okapi::openapi(tag = "Auth")]
 #[post("/auth/refresh", data = "<body>")]
-pub async fn refresh(state: &State<AppState>, body: Json<RefreshReq>) -> ApiResult<Json<TokenResp>> {
+pub async fn refresh(
+    state: &State<AppState>,
+    body: Json<RefreshReq>,
+) -> ApiResult<Json<TokenResp>> {
     let hash = hash_secret(&body.refresh_token);
     let token = RefreshToken::find()
         .filter(entity::refresh_token::Column::TokenHash.eq(hash))
@@ -186,6 +189,7 @@ pub async fn refresh(state: &State<AppState>, body: Json<RefreshReq>) -> ApiResu
 }
 
 /// `GET /auth/me` — the currently authenticated principal.
+#[rocket_okapi::openapi(tag = "Auth")]
 #[get("/auth/me")]
 pub async fn me(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<UserResp>> {
     let u = User::find_by_id(user.user_id)
@@ -203,12 +207,13 @@ pub async fn me(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<UserR
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 pub struct LogoutReq {
     pub refresh_token: String,
 }
 
 /// `POST /auth/logout` — revoke a refresh token. Access tokens expire naturally.
+#[rocket_okapi::openapi(tag = "Auth")]
 #[post("/auth/logout", data = "<body>")]
 pub async fn logout(
     state: &State<AppState>,

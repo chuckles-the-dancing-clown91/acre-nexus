@@ -10,6 +10,7 @@ import { MODULES } from "@/modules/registry";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Icon } from "@/components/Icon";
 import { clsx } from "@/lib/clsx";
+import { useUiStore } from "@/lib/store";
 
 /** Wraps the console in the module-enablement context. */
 export default function ConsoleLayout({
@@ -30,6 +31,9 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
   const { isEnabled } = useModules();
   const router = useRouter();
   const pathname = usePathname();
+  // Global UI state (Zustand): persisted sidebar collapse.
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -70,6 +74,14 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
+        <button
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label="Toggle sidebar"
+          className="hidden h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface-2 text-ink-2 hover:text-ink sm:flex"
+        >
+          <Icon name="wrench" size={16} />
+        </button>
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
           <div className="flex items-center gap-2">
@@ -97,9 +109,21 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex">
-        <aside className="hidden w-56 shrink-0 border-r border-line p-3 sm:block">
+        <aside
+          className={clsx(
+            "hidden shrink-0 border-r border-line p-3 transition-all sm:block",
+            sidebarCollapsed ? "w-16" : "w-56"
+          )}
+        >
           <nav className="space-y-1">
-            <NavLink href="/console" label="Dashboard" icon="chart" pathname={pathname} exact />
+            <NavLink
+              href="/console"
+              label="Dashboard"
+              icon="chart"
+              pathname={pathname}
+              exact
+              collapsed={sidebarCollapsed}
+            />
             {moduleNav.map((item) => (
               <NavLink
                 key={item.href}
@@ -108,6 +132,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 icon={item.icon}
                 pathname={pathname}
                 badge={item.preview ? "Preview" : undefined}
+                collapsed={sidebarCollapsed}
               />
             ))}
           </nav>
@@ -155,6 +180,7 @@ function NavLink({
   pathname,
   exact,
   badge,
+  collapsed,
 }: {
   href: string;
   label: string;
@@ -162,6 +188,7 @@ function NavLink({
   pathname: string;
   exact?: boolean;
   badge?: string;
+  collapsed?: boolean;
 }) {
   const active = exact
     ? pathname === href
@@ -169,14 +196,18 @@ function NavLink({
   return (
     <Link
       href={href}
+      title={collapsed ? label : undefined}
       className={clsx(
         "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-        active ? "bg-accent-soft text-accent-2" : "text-ink-2 hover:bg-surface-2"
+        collapsed && "justify-center",
+        active
+          ? "bg-accent-soft text-accent-2"
+          : "text-ink-2 hover:bg-surface-2"
       )}
     >
       <Icon name={icon} size={17} />
-      <span className="flex-1">{label}</span>
-      {badge && (
+      {!collapsed && <span className="flex-1">{label}</span>}
+      {!collapsed && badge && (
         <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-3">
           {badge}
         </span>

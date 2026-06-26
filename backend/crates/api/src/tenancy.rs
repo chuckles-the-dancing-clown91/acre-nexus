@@ -22,7 +22,9 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug)]
 pub struct TenantScope {
     pub tenant_id: Uuid,
-    /// True when a staff user is impersonating this tenant.
+    /// True when a staff user is impersonating this tenant. Surfaced for audit
+    /// logging / "viewing as" banners that consume it.
+    #[allow(dead_code)]
     pub impersonated: bool,
 }
 
@@ -101,13 +103,11 @@ impl<'r> FromRequest<'r> for PublicTenant {
             .get_one("X-Tenant")
             .map(|s| s.to_string())
             .or_else(|| {
-                req.uri()
-                    .query()
-                    .and_then(|q| {
-                        q.segments()
-                            .find(|(k, _)| *k == "tenant")
-                            .map(|(_, v)| v.to_string())
-                    })
+                req.uri().query().and_then(|q| {
+                    q.segments()
+                        .find(|(k, _)| *k == "tenant")
+                        .map(|(_, v)| v.to_string())
+                })
             });
         match reference {
             Some(r) => match resolve_tenant_ref(state, &r).await {
@@ -120,8 +120,7 @@ impl<'r> FromRequest<'r> for PublicTenant {
 }
 
 /// Helper for handlers that need to turn a guard failure into a JSON error.
+#[allow(dead_code)]
 pub fn tenant_required() -> ApiError {
-    ApiError::BadRequest(
-        "tenant context required — pass X-Tenant header or ?tenant=<slug>".into(),
-    )
+    ApiError::BadRequest("tenant context required — pass X-Tenant header or ?tenant=<slug>".into())
 }
