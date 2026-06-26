@@ -27,6 +27,7 @@ pub mod refresh_token;
 pub mod role;
 pub mod role_permission;
 pub mod tenant;
+pub mod tenant_module;
 pub mod theme;
 pub mod user;
 pub mod user_role;

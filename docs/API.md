@@ -99,6 +99,25 @@ taxes − management`.
 
 ---
 
+## Modules (JWT; tenant-scoped; `tenant:manage`)
+
+Manage which pluggable modules are enabled for the tenant. See `docs/MODULES.md`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/modules` | Every module with its resolved `enabled` state for the active tenant |
+| PATCH | `/modules/{key}` | `{ "enabled": bool }` — toggle a module (404 for unknown keys) |
+| GET | `/modules/flips/pipeline` | Flip deal board (preview; requires `property:read` **and** the `flips` module enabled, else `403`) |
+
+`GET /modules` item shape:
+```json
+{ "key": "flips", "name": "Acquisitions & Flips", "description": "…",
+  "permissions": ["property:read","property:write"],
+  "enabled": false, "default_enabled": false, "preview": true }
+```
+
+---
+
 ## Platform admin (JWT; **staff only**, `platform:admin`)
 
 | Method | Path | Description |

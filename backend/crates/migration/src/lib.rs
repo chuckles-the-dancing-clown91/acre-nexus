@@ -7,6 +7,7 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20240101_000001_init;
 mod m20240101_000002_rls;
+mod m20240101_000003_modules;
 
 pub struct Migrator;
 
@@ -16,6 +17,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20240101_000001_init::Migration),
             Box::new(m20240101_000002_rls::Migration),
+            Box::new(m20240101_000003_modules::Migration),
         ]
     }
 }

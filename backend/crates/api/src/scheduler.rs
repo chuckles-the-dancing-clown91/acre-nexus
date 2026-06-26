@@ -78,6 +78,12 @@ async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
 }
 
 /// Advance a single job by one state transition.
+///
+/// Dispatch is **pluggable**: the job's `kind` is routed to the owning module
+/// (see [`crate::modules`]). If the owning tenant has disabled that module, the
+/// job is parked (`run_at` pushed out, no attempt consumed) rather than
+/// processed — re-enabling the module resumes it. Jobs with no owning module
+/// fall back to "completed".
 async fn advance(
     db: &DatabaseConnection,
     job: entity::background_job::Model,
@@ -87,37 +93,37 @@ async fn advance(
     am.attempts = Set(job.attempts + 1);
     am.updated_at = Set(now.into());
 
-    match (job.kind.as_str(), job.status.as_str()) {
-        // Background check / screening: pending -> awaiting external callback -> done.
-        ("background_check" | "screening", "pending") => {
-            am.status = Set("awaiting_callback".into());
-            // Simulate provider latency before the callback "arrives".
-            am.run_at = Set((now + Duration::seconds(6)).into());
-            tracing::info!(job = %job.id, "screening submitted, awaiting callback");
+    match crate::modules::module_for_job_kind(&job.kind) {
+        Some(module) => {
+            let manifest = module.manifest();
+            // Respect per-tenant module enablement for background work too.
+            if !crate::modules::is_enabled(db, job.tenant_id, manifest.key).await {
+                tracing::debug!(job = %job.id, module = manifest.key, "module disabled; parking job");
+                am.run_at = Set((now + Duration::seconds(30)).into());
+                am.attempts = Set(job.attempts); // parking doesn't consume an attempt
+                am.update(db).await?;
+                return Ok(());
+            }
+
+            let ctx = crate::modules::JobContext { db, job: &job };
+            match module.handle_job(&ctx).await {
+                Some(outcome) => {
+                    am.status = Set(outcome.status.clone());
+                    if let Some(run_at) = outcome.run_at {
+                        am.run_at = Set(run_at.into());
+                    }
+                    if let Some(result) = outcome.result {
+                        am.result = Set(Some(result));
+                    }
+                    tracing::info!(job = %job.id, module = manifest.key, status = %outcome.status, "job advanced");
+                }
+                None => am.status = Set("completed".into()),
+            }
         }
-        ("background_check" | "screening", "awaiting_callback") => {
-            am.status = Set("completed".into());
-            am.result = Set(Some(json!({
-                "cleared": true,
-                "credit_band": "good",
-                "eviction_records": 0,
-                "completed_at": now.to_rfc3339(),
-            })));
-            tracing::info!(job = %job.id, "screening completed");
-        }
-        // Automated email: fire-and-complete.
-        ("auto_email", _) => {
-            am.status = Set("completed".into());
-            am.result = Set(Some(json!({ "sent": true, "sent_at": now.to_rfc3339() })));
-            tracing::info!(job = %job.id, "auto email sent");
-        }
-        // Generic webhook wait resolves on first pickup past run_at.
-        ("webhook_wait", _) => {
+        None => {
+            tracing::debug!(job = %job.id, kind = %job.kind, "no module owns job kind; completing");
             am.status = Set("completed".into());
             am.result = Set(Some(json!({ "resolved": true })));
-        }
-        _ => {
-            am.status = Set("completed".into());
         }
     }
 

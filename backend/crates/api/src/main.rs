@@ -23,6 +23,7 @@ mod config;
 mod cors;
 mod dto;
 mod error;
+mod modules;
 mod rbac;
 mod routes;
 mod scheduler;
@@ -63,9 +64,21 @@ async fn rocket() -> _ {
 
     let state = AppState { db, config };
 
-    rocket::build()
+    // Always-on core routes, then every pluggable module's routes. Each module
+    // is mounted at the API root; collisions surface loudly at boot.
+    let mut app = rocket::build()
         .manage(state)
         .attach(cors::Cors)
-        .mount("/", routes::all())
-        .mount("/", routes![cors::preflight])
+        .mount("/", routes::core());
+
+    for module in modules::registry() {
+        let manifest = module.manifest();
+        let routes = module.routes();
+        if !routes.is_empty() {
+            tracing::info!(module = manifest.key, routes = routes.len(), "mounting module");
+            app = app.mount("/", routes);
+        }
+    }
+
+    app.mount("/", routes![cors::preflight])
 }

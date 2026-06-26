@@ -159,6 +159,19 @@ export const api = {
     request<TenantSummary[]>("/platform/tenants", { auth: true }),
   platformMetrics: () =>
     request<PlatformMetrics>("/platform/metrics", { auth: true }),
+
+  // ---- modules (tenant software settings) ----
+  modules: () => request<ModuleInfo[]>("/modules", { auth: true }),
+  setModule: (key: string, enabled: boolean) =>
+    request<ModuleInfo>(`/modules/${key}`, {
+      method: "PATCH",
+      auth: true,
+      body: { enabled },
+    }),
+
+  // ---- flips module (preview) ----
+  flipPipeline: () =>
+    request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
 };
 
 export interface TokenSummary {
@@ -191,4 +204,26 @@ export interface PlatformMetrics {
   active_tenants: number;
   total_properties: number;
   total_managed_revenue_label: string;
+}
+
+/** A pluggable module plus its enablement for the active tenant. */
+export interface ModuleInfo {
+  key: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  enabled: boolean;
+  default_enabled: boolean;
+  preview: boolean;
+}
+
+export interface FlipStage {
+  key: string;
+  label: string;
+}
+
+export interface FlipPipeline {
+  preview: boolean;
+  stages: FlipStage[];
+  deals: unknown[];
 }

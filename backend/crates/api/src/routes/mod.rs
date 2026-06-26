@@ -1,15 +1,20 @@
-//! HTTP route modules, grouped by audience:
-//! * [`auth`] — login / refresh / me / logout
-//! * [`public`] — unauthenticated white-label website (listings, applications)
-//! * [`properties`], [`llcs`], [`portfolio`], [`applications`], [`theme`],
-//!   [`api_tokens`] — authenticated, tenant-scoped landlord/PM console
-//! * [`platform`] — staff-only cross-tenant admin
-//! * [`vendor`] — token-authenticated `/api/v1` vendor API
+//! HTTP route modules.
+//!
+//! Routes split into two tiers:
+//! * **Core routes** ([`core`]) are always mounted — health, auth, the
+//!   staff-only platform admin, and module management.
+//! * **Feature routes** are owned by pluggable modules (see [`crate::modules`])
+//!   and mounted per module at boot, so a tenant's enabled feature set is
+//!   composable rather than hard-wired here.
+//!
+//! The audience-specific handlers below remain organised by area; modules
+//! reference them (e.g. [`properties`] is wrapped by `modules::properties`).
 
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
 pub mod llcs;
+pub mod modules;
 pub mod platform;
 pub mod portfolio;
 pub mod properties;
@@ -26,8 +31,9 @@ pub fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok", "service": "acre-api" }))
 }
 
-/// All routes mounted under the API root.
-pub fn all() -> Vec<Route> {
+/// Always-on routes, independent of any module. Feature routes are added
+/// separately by [`crate::modules::registry`] at boot.
+pub fn core() -> Vec<Route> {
     routes![
         health,
         // auth
@@ -35,32 +41,11 @@ pub fn all() -> Vec<Route> {
         auth::refresh,
         auth::me,
         auth::logout,
-        // public website
-        public::listings,
-        public::listing_detail,
-        public::public_theme,
-        public::apply,
-        // landlord / PM console
-        properties::list,
-        properties::create,
-        properties::profile,
-        properties::update,
-        llcs::list,
-        llcs::create,
-        portfolio::summary,
-        portfolio::llc_groups,
-        applications::list,
-        applications::update_status,
-        theme::get_theme,
-        theme::update_theme,
-        api_tokens::list,
-        api_tokens::create,
-        api_tokens::revoke,
-        // platform (staff)
+        // platform (staff, cross-tenant)
         platform::tenants,
         platform::metrics,
-        // vendor API
-        vendor::listings,
-        vendor::properties,
+        // module management (tenant software settings)
+        modules::list,
+        modules::set,
     ]
 }

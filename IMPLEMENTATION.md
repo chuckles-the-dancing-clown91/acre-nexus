@@ -26,6 +26,13 @@ pattern the remaining roles plug into:
 - **AuthN/Z** — JWT access/refresh tokens (Argon2 passwords) for humans, and a
   full **RBAC** system (fine-grained permissions + system roles mirroring the six
   prototype perspectives).
+- **Pluggable modules** — the platform is assembled from `PlatformModule`s
+  (`properties`, `leasing`, `vendor_api`, `theming`, `flips`) that each own their
+  routes, permissions, and background-job kinds. Tenants enable/disable modules
+  from settings (`tenant_module` overrides), the scheduler dispatches jobs to the
+  owning module, and the frontend renders navigation dynamically from a shared
+  registry. Adding a feature is one file + one registry line. See
+  `docs/MODULES.md`.
 - **Token-based vendor API** — scoped, revocable API keys powering `/api/v1`, so
   services can be sold à la carte.
 - **Theming / white-label** — per-tenant branding (logo, colours, legal

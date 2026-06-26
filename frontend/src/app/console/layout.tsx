@@ -5,25 +5,29 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { ModulesProvider, useModules } from "@/lib/modules";
+import { MODULES } from "@/modules/registry";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Icon } from "@/components/Icon";
 import { clsx } from "@/lib/clsx";
 
-const NAV = [
-  { href: "/console", label: "Dashboard", icon: "chart" },
-  { href: "/console/properties", label: "Properties", icon: "building" },
-  { href: "/console/llcs", label: "LLCs", icon: "shield" },
-  { href: "/console/applications", label: "Applications", icon: "user" },
-  { href: "/console/tokens", label: "API tokens", icon: "key" },
-];
-
+/** Wraps the console in the module-enablement context. */
 export default function ConsoleLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, logout } = useAuth();
+  return (
+    <ModulesProvider>
+      <ConsoleShell>{children}</ConsoleShell>
+    </ModulesProvider>
+  );
+}
+
+function ConsoleShell({ children }: { children: React.ReactNode }) {
+  const { user, loading, logout, can } = useAuth();
   const { brand } = useTheme();
+  const { isEnabled } = useModules();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -38,6 +42,14 @@ export default function ConsoleLayout({
       </div>
     );
   }
+
+  // Build the sidebar from the module registry: a module's nav appears only when
+  // the module is enabled for this tenant AND the user holds the permission.
+  const moduleNav = MODULES.filter((m) => isEnabled(m.key)).flatMap((m) =>
+    m.nav
+      .filter((item) => !item.permission || can(item.permission))
+      .map((item) => ({ ...item, preview: m.preview }))
+  );
 
   return (
     <div className="min-h-screen">
@@ -87,27 +99,34 @@ export default function ConsoleLayout({
       <div className="flex">
         <aside className="hidden w-56 shrink-0 border-r border-line p-3 sm:block">
           <nav className="space-y-1">
-            {NAV.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/console" && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={clsx(
-                    "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                    active
-                      ? "bg-accent-soft text-accent-2"
-                      : "text-ink-2 hover:bg-surface-2"
-                  )}
-                >
-                  <Icon name={item.icon} size={17} />
-                  {item.label}
-                </Link>
-              );
-            })}
+            <NavLink href="/console" label="Dashboard" icon="chart" pathname={pathname} exact />
+            {moduleNav.map((item) => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                pathname={pathname}
+                badge={item.preview ? "Preview" : undefined}
+              />
+            ))}
           </nav>
+
+          {can("tenant:manage") && (
+            <Link
+              href="/console/modules"
+              className={clsx(
+                "mt-3 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+                pathname.startsWith("/console/modules")
+                  ? "bg-accent-soft text-accent-2"
+                  : "text-ink-2 hover:bg-surface-2"
+              )}
+            >
+              <Icon name="wrench" size={17} />
+              Modules
+            </Link>
+          )}
+
           {user.is_platform_staff && (
             <Link
               href="/console/platform"
@@ -125,5 +144,43 @@ export default function ConsoleLayout({
         <main className="min-w-0 flex-1 p-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+/** A single sidebar link with active-state styling and an optional badge. */
+function NavLink({
+  href,
+  label,
+  icon,
+  pathname,
+  exact,
+  badge,
+}: {
+  href: string;
+  label: string;
+  icon: string;
+  pathname: string;
+  exact?: boolean;
+  badge?: string;
+}) {
+  const active = exact
+    ? pathname === href
+    : pathname === href || pathname.startsWith(href);
+  return (
+    <Link
+      href={href}
+      className={clsx(
+        "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+        active ? "bg-accent-soft text-accent-2" : "text-ink-2 hover:bg-surface-2"
+      )}
+    >
+      <Icon name={icon} size={17} />
+      <span className="flex-1">{label}</span>
+      {badge && (
+        <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-3">
+          {badge}
+        </span>
+      )}
+    </Link>
   );
 }

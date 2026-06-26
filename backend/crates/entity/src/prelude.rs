@@ -10,6 +10,7 @@ pub use super::refresh_token::Entity as RefreshToken;
 pub use super::role::Entity as Role;
 pub use super::role_permission::Entity as RolePermission;
 pub use super::tenant::Entity as Tenant;
+pub use super::tenant_module::Entity as TenantModule;
 pub use super::theme::Entity as Theme;
 pub use super::user::Entity as User;
 pub use super::user_role::Entity as UserRole;

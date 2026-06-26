@@ -53,7 +53,10 @@ A Cargo workspace under `backend/`:
     vendor API.
   - `scheduler` — a Tokio task that polls the `background_job` table and advances
     durable state machines (e.g. screening: `pending → awaiting_callback →
-    completed`; automated emails).
+    completed`; automated emails). Dispatch is delegated to the owning module.
+  - `modules/*` — the **pluggable module system**: each feature area is a
+    `PlatformModule` that contributes its routes, the permissions it needs, and
+    the background-job kinds it handles. See `docs/MODULES.md`.
   - `routes/*` — handlers grouped by audience (see `docs/API.md`).
   - `error` — one `ApiError` type that serialises to a consistent JSON envelope.
 
@@ -66,6 +69,18 @@ A Cargo workspace under `backend/`:
 - **Tokio** for the background automation the brief calls for (awaiting
   background-check callbacks, scheduled emails) — jobs are persisted so they
   survive restarts.
+
+## Modularity
+
+The platform is composed of **pluggable modules** so that capabilities can be
+shipped, gated, and sold independently. A module declares a stable key, the
+permissions it owns, the routes it contributes, and the background-job kinds it
+handles; a single `registry()` is the source of truth. The server mounts every
+module's routes at boot, the scheduler dispatches jobs to the owning module, and
+a `tenant_module` table records per-tenant on/off overrides (falling back to each
+module's default). The frontend mirrors the same keys to drive navigation and
+settings. Adding a module is a new file plus one registry line — see
+`docs/MODULES.md`.
 
 ## Multi-tenancy
 
