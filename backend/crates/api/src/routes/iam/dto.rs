@@ -33,6 +33,15 @@ pub struct AuditEntry {
     pub target_id: Option<String>,
     pub tenant_id: Option<Uuid>,
     pub metadata: Option<serde_json::Value>,
+    /// Kind of principal: `user`, `api_token`, `public`, or `system`.
+    pub principal_kind: Option<String>,
+    // ---- Request context (present on per-request entries) ----
+    pub method: Option<String>,
+    pub path: Option<String>,
+    pub status_code: Option<i32>,
+    pub ip: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub request_id: Option<Uuid>,
     pub created_at: String,
 }
 

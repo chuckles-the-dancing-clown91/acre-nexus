@@ -41,6 +41,20 @@ Two independent auth schemes:
 | Public website | `X-Tenant` header or `?tenant=<slug>` |
 | Vendor | the API token's tenant |
 
+### Auditing
+
+**Every** request is audited. A server-side fairing records each call (method,
+path, status, latency, resolved principal) to the audit trail and returns a
+correlation id on every response:
+
+```
+X-Request-Id: 7f3c…   # echo this when reporting an issue
+```
+
+State-changing calls additionally emit a rich **domain event** (e.g.
+`property.create`, `role.update`). The trail is read via `GET /admin/audit`
+(permission `audit:read`). Full design: **`docs/AUDIT.md`**.
+
 ---
 
 ## Auth endpoints

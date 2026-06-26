@@ -23,6 +23,14 @@ function formatTimestamp(iso: string): string {
   });
 }
 
+/** Badge tone for an HTTP status code (2xx ok, 3xx info, 4xx warn, 5xx bad). */
+function statusTone(code: number): "good" | "info" | "warn" | "bad" {
+  if (code >= 500) return "bad";
+  if (code >= 400) return "warn";
+  if (code >= 300) return "info";
+  return "good";
+}
+
 /** Platform audit-log viewer. */
 export default function AuditPage() {
   const { can } = useAuth();
@@ -97,7 +105,7 @@ export default function AuditPage() {
                 <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-3">
                   <th className="px-5 py-3">Action</th>
                   <th className="px-5 py-3">Actor</th>
-                  <th className="px-5 py-3">Target</th>
+                  <th className="px-5 py-3">Target / request</th>
                   <th className="px-5 py-3 text-right">When</th>
                 </tr>
               </thead>
@@ -109,11 +117,31 @@ export default function AuditPage() {
                     </td>
                     <td className="px-5 py-3">
                       {e.actor_name ?? (
-                        <span className="text-ink-3">System</span>
+                        <span className="text-ink-3">
+                          {e.principal_kind === "api_token"
+                            ? "API token"
+                            : e.principal_kind === "public"
+                              ? "Public"
+                              : "System"}
+                        </span>
                       )}
                     </td>
                     <td className="px-5 py-3 text-ink-2">
-                      {e.target_type ? (
+                      {e.method && e.path ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-ink-3">
+                            {e.method}
+                          </span>
+                          <span className="font-mono text-xs text-ink-2">
+                            {e.path}
+                          </span>
+                          {e.status_code != null && (
+                            <Badge tone={statusTone(e.status_code)}>
+                              {e.status_code}
+                            </Badge>
+                          )}
+                        </span>
+                      ) : e.target_type ? (
                         <span>
                           {humanizeKey(e.target_type)}
                           {e.target_id && (

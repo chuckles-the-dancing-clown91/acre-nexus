@@ -43,6 +43,13 @@ pub async fn list_audit(
             target_id: r.target_id,
             tenant_id: r.tenant_id,
             metadata: r.metadata,
+            principal_kind: r.principal_kind,
+            method: r.method,
+            path: r.path,
+            status_code: r.status_code,
+            ip: r.ip,
+            duration_ms: r.duration_ms,
+            request_id: r.request_id,
             created_at: r.created_at.to_rfc3339(),
         });
     }

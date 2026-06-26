@@ -119,12 +119,15 @@ active workspace can still impersonate via the legacy `X-Tenant` header.
 
 ## Audit log
 
-Security-relevant actions are recorded in `audit_log` (best-effort; an audit
-write never fails the underlying request): `pii.reveal`, `user.create`,
-`role.create`, `role.update`, `role.delete`. Each row captures the actor, action,
-target, workspace, and optional metadata.
+`audit_log` now captures activity at two levels (best-effort; an audit write
+never fails the underlying request): **every request** is recorded by a fairing
+(`http.request`, with method/path/status/latency/principal + an `X-Request-Id`),
+and every state change emits a semantic **domain event** (`pii.reveal`,
+`user.create`, `role.{create,update,delete}`, plus property/llc/application/theme/
+module/token/auth events across the rest of the platform). Each row captures the
+actor, action, target, workspace, and optional metadata.
 
 `GET /admin/audit?limit=&action=` returns recent entries (newest first, actor
 name resolved), gated by the `audit:read` permission (held by Acre admin,
 account-manager, and read-only roles). Ship this table to an external,
-append-only audit sink in production.
+append-only audit sink in production. Full design lives in **`docs/AUDIT.md`**.

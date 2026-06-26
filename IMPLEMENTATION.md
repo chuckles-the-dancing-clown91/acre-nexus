@@ -13,6 +13,7 @@ This repository contains:
 | `frontend/` | **Next.js / React** app (App Router, TypeScript, Tailwind). |
 | `ARCHITECTURE.md` | How the system is put together and why. |
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |
+| `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
 
 ## What's implemented (this pass)
 
@@ -35,6 +36,11 @@ pattern the remaining roles plug into:
   `docs/MODULES.md`.
 - **Token-based vendor API** — scoped, revocable API keys powering `/api/v1`, so
   services can be sold à la carte.
+- **Audit logging** — a Rocket fairing audits **every request** (reads included)
+  with an `X-Request-Id`, and handlers emit rich **domain events** on every state
+  change, all to one queryable `audit_log` surfaced at `GET /admin/audit` and the
+  platform audit viewer. Built as a modular, single-responsibility subsystem
+  (`api/src/audit/*`). See `docs/AUDIT.md`.
 - **Auto-generated API docs** — `rocket_okapi` produces the OpenAPI 3.0 spec from
   the `#[openapi]` routes + `JsonSchema` DTOs, served at `/openapi.json` with
   Swagger UI (`/swagger-ui/`) and RapiDoc (`/rapidoc/`).

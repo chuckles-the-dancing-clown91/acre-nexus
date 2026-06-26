@@ -329,6 +329,15 @@ export interface AuditEntry {
   target_id: string | null;
   tenant_id: string | null;
   metadata: unknown | null;
+  /** Kind of principal: "user" | "api_token" | "public" | "system". */
+  principal_kind: string | null;
+  // Request context — present on per-request ("http.request") entries.
+  method: string | null;
+  path: string | null;
+  status_code: number | null;
+  ip: string | null;
+  duration_ms: number | null;
+  request_id: string | null;
   created_at: string;
 }
 
