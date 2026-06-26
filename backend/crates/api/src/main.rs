@@ -28,6 +28,7 @@ mod dto;
 mod error;
 mod modules;
 mod openapi;
+mod pii;
 mod rbac;
 mod routes;
 mod scheduler;

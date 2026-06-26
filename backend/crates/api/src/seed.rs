@@ -4,7 +4,7 @@
 //! `password`.
 
 use crate::auth::hash_password;
-use crate::rbac::SYSTEM_ROLES;
+use crate::rbac::{PERMISSION_CATALOG, PROFILE_TYPES, SYSTEM_ROLES};
 use chrono::Utc;
 use entity::prelude::*;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
@@ -13,10 +13,14 @@ use uuid::Uuid;
 
 const DEMO_PASSWORD: &str = "password";
 
-/// Seed the database if it's empty. Safe to call on every boot.
+/// Seed the database. The permission/persona catalogs are ensured (idempotently)
+/// on every boot so they stay current; the heavier demo data is only created
+/// when the database is empty.
 pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
+    ensure_catalogs(db).await?;
+
     if Tenant::find().count(db).await? > 0 {
-        tracing::info!("seed: tenants already present, skipping");
+        tracing::info!("seed: tenants already present, skipping demo data");
         return Ok(());
     }
     tracing::info!("seed: populating demo data");
@@ -29,6 +33,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         entity::role::ActiveModel {
             id: Set(rid),
             tenant_id: Set(None),
+            scope: Set(sr.scope.into()),
             key: Set(sr.key.into()),
             name: Set(sr.name.into()),
             description: Set(sr.description.into()),
@@ -51,12 +56,36 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let northwind = seed_tenant(db, "northwind", "Northwind Property Group", "growth").await?;
     let cascade = seed_tenant(db, "cascade", "Cascade Living LLC", "starter").await?;
 
-    // ---- users ----
+    // ---- users, profiles, memberships ----
     let pw = hash_password(DEMO_PASSWORD)?;
-    // Platform staff (Acre HQ).
+
+    // Acre HQ (platform staff).
     let avery = seed_user(db, None, "avery@acrehq.com", "Avery Stone", &pw, true).await?;
-    assign_role(db, avery, role_ids["platform_admin"], None).await?;
-    // Northwind admin.
+    seed_membership(
+        db,
+        &role_ids,
+        avery,
+        "platform",
+        None,
+        "acre_admin",
+        Some("Founder"),
+    )
+    .await?;
+    seed_profile(db, avery, "Avery", "Stone").await?;
+
+    let sam = seed_user(db, None, "sam@acrehq.com", "Sam Okafor", &pw, true).await?;
+    seed_membership(
+        db,
+        &role_ids,
+        sam,
+        "platform",
+        None,
+        "acre_support",
+        Some("Support Lead"),
+    )
+    .await?;
+
+    // Northwind (client workspace) — owner, back-office, and a landlord.
     let jordan = seed_user(
         db,
         Some(northwind),
@@ -66,8 +95,60 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         false,
     )
     .await?;
-    assign_role(db, jordan, role_ids["pm_admin"], Some(northwind)).await?;
-    // Cascade admin.
+    seed_membership(
+        db,
+        &role_ids,
+        jordan,
+        "tenant",
+        Some(northwind),
+        "tenant_owner",
+        Some("Principal"),
+    )
+    .await?;
+    seed_profile(db, jordan, "Jordan", "Mills").await?;
+
+    let morgan = seed_user(
+        db,
+        Some(northwind),
+        "morgan@northwind.com",
+        "Morgan Lee",
+        &pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        &role_ids,
+        morgan,
+        "tenant",
+        Some(northwind),
+        "back_office",
+        Some("Operations"),
+    )
+    .await?;
+
+    let lee = seed_user(
+        db,
+        Some(northwind),
+        "lee@northwind.com",
+        "Lee Carter",
+        &pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        &role_ids,
+        lee,
+        "tenant",
+        Some(northwind),
+        "landlord",
+        Some("Owner — Maple Holdings"),
+    )
+    .await?;
+    seed_profile(db, lee, "Lee", "Carter").await?;
+
+    // Cascade (client workspace) — owner.
     let priya = seed_user(
         db,
         Some(cascade),
@@ -77,7 +158,16 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         false,
     )
     .await?;
-    assign_role(db, priya, role_ids["pm_admin"], Some(cascade)).await?;
+    seed_membership(
+        db,
+        &role_ids,
+        priya,
+        "tenant",
+        Some(cascade),
+        "tenant_owner",
+        Some("Principal"),
+    )
+    .await?;
 
     // ---- themes ----
     seed_theme(db, northwind, "Northwind Property Group", "#F5451F").await?;
@@ -330,14 +420,128 @@ async fn seed_user(
         id: Set(id),
         tenant_id: Set(tenant_id),
         email: Set(email.to_lowercase()),
+        username: Set(None),
         password_hash: Set(pw_hash.into()),
         name: Set(name.into()),
         is_platform_staff: Set(staff),
+        status: Set("active".into()),
+        last_login_at: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
     .await?;
     Ok(id)
+}
+
+/// Idempotently ensure the permission and persona catalogs match the code. Safe
+/// to run on every boot — inserts missing rows by primary key, leaves the rest.
+async fn ensure_catalogs(db: &DatabaseConnection) -> anyhow::Result<()> {
+    for p in PERMISSION_CATALOG {
+        if entity::permission::Entity::find_by_id(p.key.to_string())
+            .one(db)
+            .await?
+            .is_none()
+        {
+            entity::permission::ActiveModel {
+                key: Set(p.key.into()),
+                category: Set(p.category.into()),
+                label: Set(p.label.into()),
+                description: Set(p.description.into()),
+                scope: Set(p.scope.into()),
+                is_system: Set(true),
+            }
+            .insert(db)
+            .await?;
+        }
+    }
+    for t in PROFILE_TYPES {
+        if entity::profile_type::Entity::find_by_id(t.key.to_string())
+            .one(db)
+            .await?
+            .is_none()
+        {
+            entity::profile_type::ActiveModel {
+                key: Set(t.key.into()),
+                scope: Set(t.scope.into()),
+                label: Set(t.label.into()),
+                description: Set(t.description.into()),
+                default_role: Set(t.default_role.into()),
+                is_system: Set(true),
+            }
+            .insert(db)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Insert a membership and grant the persona's default system role.
+async fn seed_membership(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    user_id: Uuid,
+    scope: &str,
+    tenant_id: Option<Uuid>,
+    persona: &str,
+    title: Option<&str>,
+) -> anyhow::Result<()> {
+    entity::membership::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        user_id: Set(user_id),
+        scope: Set(scope.into()),
+        tenant_id: Set(tenant_id),
+        profile_type: Set(persona.into()),
+        title: Set(title.map(|s| s.to_string())),
+        status: Set("active".into()),
+        is_primary: Set(true),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    if let Some(role_key) = crate::rbac::default_role_for_persona(persona) {
+        if let Some(rid) = role_ids.get(role_key) {
+            assign_role(db, user_id, *rid, tenant_id).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Seed a minimal demo profile (no sensitive PII).
+async fn seed_profile(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    first: &str,
+    last: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::user_profile::ActiveModel {
+        user_id: Set(user_id),
+        legal_first_name: Set(Some(first.into())),
+        legal_middle_name: Set(None),
+        legal_last_name: Set(Some(last.into())),
+        preferred_name: Set(Some(first.into())),
+        date_of_birth: Set(None),
+        phone: Set(None),
+        address_line1: Set(None),
+        address_line2: Set(None),
+        city: Set(None),
+        region: Set(None),
+        postal_code: Set(None),
+        country: Set(Some("US".into())),
+        ssn_ciphertext: Set(None),
+        ssn_nonce: Set(None),
+        ssn_last4: Set(None),
+        gov_id_type: Set(None),
+        gov_id_ciphertext: Set(None),
+        gov_id_nonce: Set(None),
+        gov_id_last4: Set(None),
+        photo_url: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
 }
 
 async fn assign_role(

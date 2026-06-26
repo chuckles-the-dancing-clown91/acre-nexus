@@ -12,7 +12,9 @@ pub struct Model {
     pub id: Uuid,
     /// `NULL` for built-in system roles shared across all tenants.
     pub tenant_id: Option<Uuid>,
-    /// Stable machine key, e.g. `pm_admin`.
+    /// `platform` or `tenant` — which surface the role governs.
+    pub scope: String,
+    /// Stable machine key, e.g. `property_manager`.
     pub key: String,
     pub name: String,
     pub description: String,

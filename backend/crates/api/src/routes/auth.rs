@@ -85,6 +85,23 @@ pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<J
         return Err(ApiError::Unauthorized);
     }
 
+    // Only active accounts may sign in (invited / suspended / disabled cannot).
+    if user.status != "active" {
+        return Err(ApiError::Forbidden(format!(
+            "account is {} — contact an administrator",
+            user.status
+        )));
+    }
+
+    // Record the sign-in timestamp (best-effort).
+    {
+        let mut am: entity::user::ActiveModel = user.clone().into();
+        am.last_login_at = Set(Some(Utc::now().into()));
+        if let Err(e) = am.update(&state.db).await {
+            tracing::warn!("failed to update last_login_at: {e}");
+        }
+    }
+
     let perms = permissions_for(&state.db, user.id).await?;
     let access = issue_access_token(
         &state.config,

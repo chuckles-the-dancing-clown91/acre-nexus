@@ -106,8 +106,13 @@ settings. Adding a module is a new file plus one registry line — see
   hashes of refresh tokens are stored.
 - **RBAC**: roles bundle fine-grained `resource:action` permissions. The JWT
   embeds the resolved permission set; handlers call `user.require(Permission::…)`.
-  System roles (`platform_admin`, `pm_admin`, `landlord`, `maintenance`,
-  `tenant`) are seeded; tenants may add custom roles.
+  Roles → permissions live in the DB, so the Acre dashboard creates roles and
+  edits grants at runtime (no redeploy). See **`docs/IAM.md`**.
+- **Identity model**: login identity (`app_user`) is separate from the person's
+  **profile** (`user_profile`, with SSN/gov-ID encrypted via AES-256-GCM). Users
+  hold **memberships** that give them a **persona** (Acre employee vs client
+  landlord/back-office/renter…) at platform or tenant scope. Personas, roles, and
+  the permission catalog are seeded and editable.
 - **Vendors**: long-lived, **scoped**, revocable API keys (`acre_live_…`). Only a
   SHA-256 hash is stored; each `/api/v1` endpoint requires a specific scope so
   services can be sold individually.
