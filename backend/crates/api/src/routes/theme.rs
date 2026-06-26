@@ -98,5 +98,15 @@ pub async fn update_theme(
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::THEME_UPDATE,
+        Some("theme"),
+        None,
+        Some(scope.tenant_id),
+        None,
+    )
+    .await;
     Ok(Json(ThemeResp::from(saved)))
 }

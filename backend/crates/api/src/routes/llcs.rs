@@ -76,5 +76,15 @@ pub async fn create(
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::LLC_CREATE,
+        Some("llc"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "name": saved.name })),
+    )
+    .await;
     Ok(Json(LlcResp::from(saved)))
 }

@@ -10,6 +10,7 @@ mod m20240101_000002_rls;
 mod m20240101_000003_modules;
 mod m20240101_000004_users_rbac;
 mod m20240101_000005_audit;
+mod m20240101_000006_audit_request;
 
 pub struct Migrator;
 
@@ -22,6 +23,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000003_modules::Migration),
             Box::new(m20240101_000004_users_rbac::Migration),
             Box::new(m20240101_000005_audit::Migration),
+            Box::new(m20240101_000006_audit_request::Migration),
         ]
     }
 }

@@ -164,6 +164,17 @@ pub async fn apply(
     };
     model.insert(&state.db).await?;
 
+    crate::audit::record(
+        &state.db,
+        None,
+        crate::audit::actions::APPLICATION_SUBMIT,
+        Some("application"),
+        Some(app_id.to_string()),
+        Some(tenant.tenant_id),
+        Some(serde_json::json!({ "applicant": b.applicant_name })),
+    )
+    .await;
+
     let job_id = scheduler::enqueue(
         &state.db,
         tenant.tenant_id,

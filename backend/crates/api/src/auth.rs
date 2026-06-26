@@ -107,7 +107,9 @@ pub fn issue_access_token(
     Ok(token)
 }
 
-fn decode_access_token(cfg: &crate::config::Config, token: &str) -> Option<Claims> {
+/// Decode + verify a JWT access token into its [`Claims`]. Returns `None` for an
+/// invalid/expired signature. Used by the `AuthUser` guard and the audit fairing.
+pub(crate) fn decode_access_token(cfg: &crate::config::Config, token: &str) -> Option<Claims> {
     decode::<Claims>(
         token,
         &DecodingKey::from_secret(cfg.jwt_secret.as_bytes()),

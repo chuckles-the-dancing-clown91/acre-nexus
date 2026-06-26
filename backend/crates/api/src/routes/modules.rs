@@ -110,6 +110,17 @@ pub async fn set(
         }
     }
 
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::MODULE_TOGGLE,
+        Some("module"),
+        Some(key.to_string()),
+        Some(tenant.tenant_id),
+        Some(serde_json::json!({ "enabled": body.enabled })),
+    )
+    .await;
+
     Ok(Json(ModuleInfo {
         key: manifest.key.to_string(),
         name: manifest.name.to_string(),

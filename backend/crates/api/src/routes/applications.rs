@@ -88,9 +88,21 @@ pub async fn update_status(
         .ok_or_else(|| ApiError::NotFound("application not found".into()))?;
 
     let new_status = body.into_inner().status;
+    let previous_status = a.status.clone();
     let mut am: entity::application::ActiveModel = a.clone().into();
     am.status = Set(new_status.clone());
     let saved = am.update(&state.db).await?;
+
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::APPLICATION_UPDATE,
+        Some("application"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "from": previous_status, "to": new_status })),
+    )
+    .await;
 
     if new_status == "Approved" {
         let _ = scheduler::enqueue(

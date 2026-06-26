@@ -98,6 +98,16 @@ pub async fn create(
         created_at: Set(now.into()),
     };
     let saved = model.insert(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::TOKEN_CREATE,
+        Some("api_token"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "name": saved.name, "scopes": saved.scopes })),
+    )
+    .await;
     Ok(Json(CreateTokenResp {
         summary: TokenSummary::from(saved),
         token: minted.raw,
@@ -123,5 +133,15 @@ pub async fn revoke(
     let mut am: entity::api_token::ActiveModel = t.into();
     am.revoked_at = Set(Some(Utc::now().into()));
     am.update(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::TOKEN_REVOKE,
+        Some("api_token"),
+        Some(tid.to_string()),
+        Some(scope.tenant_id),
+        None,
+    )
+    .await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

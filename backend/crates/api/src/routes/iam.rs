@@ -292,7 +292,7 @@ pub async fn create_role(
     crate::audit::record(
         &state.db,
         Some(user.user_id),
-        "role.create",
+        crate::audit::actions::ROLE_CREATE,
         Some("role"),
         Some(id.to_string()),
         body.tenant_id,
@@ -353,7 +353,7 @@ pub async fn update_role(
     crate::audit::record(
         &state.db,
         Some(user.user_id),
-        "role.update",
+        crate::audit::actions::ROLE_UPDATE,
         Some("role"),
         Some(rid.to_string()),
         role.tenant_id,
@@ -403,7 +403,7 @@ pub async fn delete_role(
     crate::audit::record(
         &state.db,
         Some(user.user_id),
-        "role.delete",
+        crate::audit::actions::ROLE_DELETE,
         Some("role"),
         Some(rid.to_string()),
         role.tenant_id,
@@ -595,7 +595,7 @@ pub async fn create_user(
     crate::audit::record(
         &state.db,
         Some(user.user_id),
-        "user.create",
+        crate::audit::actions::USER_CREATE,
         Some("user"),
         Some(uid.to_string()),
         primary_tenant,
@@ -747,7 +747,7 @@ pub async fn reveal_pii(
     crate::audit::record(
         &state.db,
         Some(user.user_id),
-        "pii.reveal",
+        crate::audit::actions::PII_REVEAL,
         Some("user"),
         Some(uid.to_string()),
         None,

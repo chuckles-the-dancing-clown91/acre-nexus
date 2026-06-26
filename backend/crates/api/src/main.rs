@@ -79,7 +79,10 @@ async fn rocket() -> _ {
     // first, then every pluggable module's routes — each module contributes both
     // its routes and a matching spec fragment.
     let mut spec = OpenApi::new();
-    let mut app = rocket::build().manage(state).attach(cors::Cors);
+    let mut app = rocket::build()
+        .manage(state)
+        .attach(cors::Cors)
+        .attach(audit::AuditFairing);
 
     let (core_routes, core_spec) = routes::core_api();
     if let Err(e) = merge_specs(&mut spec, &"", &core_spec) {

@@ -109,6 +109,16 @@ pub async fn create(
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::PROPERTY_CREATE,
+        Some("property"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "name": saved.name, "city": saved.city })),
+    )
+    .await;
     Ok(Json(PropertyResp::from(saved)))
 }
 
@@ -232,5 +242,15 @@ pub async fn update(
         am.manager = Set(v);
     }
     let saved = am.update(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::PROPERTY_UPDATE,
+        Some("property"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        None,
+    )
+    .await;
     Ok(Json(PropertyResp::from(saved)))
 }

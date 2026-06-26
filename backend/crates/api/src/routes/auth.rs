@@ -232,6 +232,17 @@ pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<J
     let refresh = issue_refresh_token(state, user.id).await?;
     let user_resp = build_user_resp(&state.db, &user, active, perms).await?;
 
+    crate::audit::record(
+        &state.db,
+        Some(user.id),
+        crate::audit::actions::AUTH_LOGIN,
+        Some("user"),
+        Some(user.id.to_string()),
+        active,
+        None,
+    )
+    .await;
+
     Ok(Json(TokenResp {
         access_token: access,
         refresh_token: refresh,
@@ -301,6 +312,17 @@ pub async fn refresh(
     .map_err(ApiError::Internal)?;
     let new_refresh = issue_refresh_token(state, user.id).await?;
     let user_resp = build_user_resp(&state.db, &user, active, perms).await?;
+
+    crate::audit::record(
+        &state.db,
+        Some(user.id),
+        crate::audit::actions::AUTH_REFRESH,
+        Some("user"),
+        Some(user.id.to_string()),
+        active,
+        None,
+    )
+    .await;
 
     Ok(Json(TokenResp {
         access_token: access,
@@ -402,6 +424,17 @@ pub async fn switch_workspace(
     .map_err(ApiError::Internal)?;
     let user_resp = build_user_resp(&state.db, &u, target, perms).await?;
 
+    crate::audit::record(
+        &state.db,
+        Some(u.id),
+        crate::audit::actions::AUTH_SWITCH_WORKSPACE,
+        Some("workspace"),
+        target.map(|t| t.to_string()),
+        target,
+        None,
+    )
+    .await;
+
     Ok(Json(SwitchResp {
         access_token: access,
         token_type: "Bearer",
@@ -420,7 +453,7 @@ pub struct LogoutReq {
 #[post("/auth/logout", data = "<body>")]
 pub async fn logout(
     state: &State<AppState>,
-    _user: AuthUser,
+    user: AuthUser,
     body: Json<LogoutReq>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let hash = auth::hash_secret(&body.refresh_token);
@@ -433,5 +466,15 @@ pub async fn logout(
         am.revoked_at = Set(Some(Utc::now().into()));
         am.update(&state.db).await?;
     }
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        crate::audit::actions::AUTH_LOGOUT,
+        Some("user"),
+        Some(user.user_id.to_string()),
+        user.tenant_id,
+        None,
+    )
+    .await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
