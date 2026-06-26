@@ -15,6 +15,7 @@ import type {
   PublicTheme,
   TokenResponse,
   User,
+  Workspace,
 } from "./types";
 
 export const API_BASE =
@@ -61,6 +62,14 @@ export const tokenStore = {
   set(tokens: { access_token: string; refresh_token: string }) {
     localStorage.setItem(ACCESS_KEY, tokens.access_token);
     localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+  },
+  /**
+   * Update ONLY the access token, leaving the refresh token intact. Used by
+   * workspace switching, which mints a fresh access token without rotating the
+   * refresh token.
+   */
+  setAccess(token: string) {
+    localStorage.setItem(ACCESS_KEY, token);
   },
   clear() {
     localStorage.removeItem(ACCESS_KEY);
@@ -145,6 +154,18 @@ export const api = {
       body: { email, password },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
+  /** Workspaces the current user can switch between (Acre HQ + tenants). */
+  workspaces: () => request<Workspace[]>("/auth/workspaces", { auth: true }),
+  /**
+   * Switch the active workspace. `null` selects Acre HQ / platform. Returns a
+   * fresh access token (refresh token unchanged) plus the updated user.
+   */
+  switchWorkspace: (tenantId: string | null) =>
+    request<SwitchWorkspaceResponse>("/auth/switch", {
+      method: "POST",
+      auth: true,
+      body: { tenant_id: tenantId },
+    }),
 
   // ---- landlord / PM console ----
   portfolioSummary: () =>
@@ -272,11 +293,44 @@ export const iam = {
       auth: true,
     }),
 
+  // ---- audit log ----
+  audit: (params: { limit?: number; action?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    if (params.action) qs.set("action", params.action);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<AuditEntry[]>(`/admin/audit${suffix}`, { auth: true });
+  },
+
   // ---- tenant-scoped members (client admin) ----
   members: () => request<Member[]>("/members", { auth: true }),
   inviteMember: (body: InviteMemberInput) =>
     request<Member>("/members", { method: "POST", auth: true, body }),
 };
+
+/**
+ * Response from `POST /auth/switch`. Unlike login, this returns only a fresh
+ * access token (the refresh token is unchanged) plus the updated user.
+ */
+export interface SwitchWorkspaceResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: User;
+}
+
+/** A single audit-log entry from `GET /admin/audit`. */
+export interface AuditEntry {
+  id: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  tenant_id: string | null;
+  metadata: unknown | null;
+  created_at: string;
+}
 
 // ---- IAM types ---------------------------------------------------------------
 

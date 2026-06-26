@@ -9,8 +9,11 @@ import { ModulesProvider, useModules } from "@/lib/modules";
 import { MODULES } from "@/modules/registry";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Icon } from "@/components/Icon";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { clsx } from "@/lib/clsx";
 import { useUiStore } from "@/lib/store";
+import { activeMembership } from "@/lib/workspaces";
+import { humanizeKey } from "@/lib/iam";
 
 /** Wraps the console in the module-enablement context. */
 export default function ConsoleLayout({
@@ -55,6 +58,17 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
       .map((item) => ({ ...item, preview: m.preview }))
   );
 
+  // Persona shown under the brand: the active workspace's membership persona +
+  // title, falling back to the generic platform/client label.
+  const membership = activeMembership(user);
+  const personaLabel = membership
+    ? [humanizeKey(membership.profile_type), membership.title]
+        .filter(Boolean)
+        .join(" · ")
+    : user.is_platform_staff
+      ? "Platform staff"
+      : "Client workspace";
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 flex h-[60px] items-center gap-4 border-b border-line bg-surface/80 px-5 backdrop-blur">
@@ -69,11 +83,10 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             <div className="font-display text-[15px] font-bold">
               {brand.company_name}
             </div>
-            <div className="text-[11px] text-ink-3">
-              {user.is_platform_staff ? "Platform staff" : "Client workspace"}
-            </div>
+            <div className="text-[11px] text-ink-3">{personaLabel}</div>
           </div>
         </div>
+        <WorkspaceSwitcher />
         <button
           onClick={toggleSidebar}
           title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -187,6 +200,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                   href="/console/platform/roles"
                   label="Roles"
                   icon="shield"
+                  pathname={pathname}
+                  collapsed={sidebarCollapsed}
+                />
+              )}
+              {can("audit:read") && (
+                <NavLink
+                  href="/console/platform/audit"
+                  label="Audit"
+                  icon="key"
                   pathname={pathname}
                   collapsed={sidebarCollapsed}
                 />

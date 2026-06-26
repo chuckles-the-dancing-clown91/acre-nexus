@@ -14,6 +14,7 @@ import {
 import {
   api,
   iam,
+  type AuditEntry,
   type CreateRoleInput,
   type CreateTokenResponse,
   type CreateUserInput,
@@ -53,6 +54,8 @@ export const queryKeys = {
   users: (q?: string) => ["iam", "users", q ?? ""] as const,
   user: (id: string) => ["iam", "users", "detail", id] as const,
   members: ["iam", "members"] as const,
+  audit: (params?: { limit?: number; action?: string }) =>
+    ["iam", "audit", params ?? {}] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -189,6 +192,19 @@ export function useUser(id: string, opts?: QueryOpts<UserDetail>) {
     queryKey: queryKeys.user(id),
     queryFn: () => iam.user(id),
     enabled: isAuthed() && !!id,
+    ...opts,
+  });
+}
+
+/** Recent audit-log entries, optionally filtered by limit / action. */
+export function useAudit(
+  params?: { limit?: number; action?: string },
+  opts?: QueryOpts<AuditEntry[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.audit(params),
+    queryFn: () => iam.audit(params ?? {}),
+    enabled: isAuthed(),
     ...opts,
   });
 }

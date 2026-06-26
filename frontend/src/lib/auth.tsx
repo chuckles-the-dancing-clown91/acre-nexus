@@ -10,6 +10,8 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api, tokenStore } from "./api";
 import type { User } from "./types";
 
@@ -18,6 +20,7 @@ interface AuthCtx {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  switchWorkspace: (tenantId: string | null) => Promise<void>;
   can: (perm: string) => boolean;
 }
 
@@ -41,6 +44,7 @@ export function hasPermission(
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!tokenStore.access) {
@@ -65,10 +69,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  /**
+   * Switch the active workspace (Acre HQ when `tenantId` is null). Mints a fresh
+   * access token in place (refresh token unchanged), updates the user, and clears
+   * cached query data so every page refetches for the new workspace.
+   */
+  const switchWorkspace = useCallback(
+    async (tenantId: string | null) => {
+      try {
+        const res = await api.switchWorkspace(tenantId);
+        tokenStore.setAccess(res.access_token);
+        setUser(res.user);
+        // Drop all cached data so reads reflect the new workspace's scope.
+        queryClient.clear();
+        const target = res.user.workspaces.find((w) =>
+          tenantId === null ? w.kind === "platform" : w.tenant_id === tenantId
+        );
+        toast.success(`Switched to ${target?.name ?? "workspace"}`);
+      } catch (e) {
+        toast.error("Couldn't switch workspace", {
+          description: e instanceof Error ? e.message : undefined,
+        });
+        throw e;
+      }
+    },
+    [queryClient]
+  );
+
   const can = useCallback((perm: string) => hasPermission(user, perm), [user]);
 
   return (
-    <Ctx.Provider value={{ user, loading, login, logout, can }}>
+    <Ctx.Provider
+      value={{ user, loading, login, logout, switchWorkspace, can }}
+    >
       {children}
     </Ctx.Provider>
   );
