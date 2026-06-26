@@ -37,3 +37,70 @@ export const applicationSchema = z.object({
 });
 
 export type ApplicationInput = z.infer<typeof applicationSchema>;
+
+// ---- IAM forms ---------------------------------------------------------------
+
+const optionalText = z.string().trim().optional().or(z.literal(""));
+
+/** "New user" form (console/platform/users). */
+export const createUserSchema = z.object({
+  email: z.string().trim().email("Enter a valid email address."),
+  name: z.string().trim().min(2, "Enter the user's full name."),
+  username: optionalText,
+  password: optionalText,
+  scope: z.enum(["platform", "tenant"]),
+  tenant_id: optionalText,
+  profile_type: optionalText,
+  title: optionalText,
+  legal_first_name: optionalText,
+  legal_last_name: optionalText,
+  phone: optionalText,
+});
+
+export type CreateUserInputForm = z.infer<typeof createUserSchema>;
+
+/** "Edit profile" form (console/platform/users/[id]). */
+export const profileFormSchema = z.object({
+  legal_first_name: optionalText,
+  legal_middle_name: optionalText,
+  legal_last_name: optionalText,
+  preferred_name: optionalText,
+  date_of_birth: optionalText,
+  phone: optionalText,
+  address_line1: optionalText,
+  address_line2: optionalText,
+  city: optionalText,
+  region: optionalText,
+  postal_code: optionalText,
+  country: optionalText,
+  ssn: optionalText,
+  gov_id_type: optionalText,
+  gov_id_number: optionalText,
+});
+
+export type ProfileFormInput = z.infer<typeof profileFormSchema>;
+
+/** "New role" form (console/platform/roles). */
+export const createRoleSchema = z.object({
+  scope: z.enum(["platform", "tenant"]),
+  tenant_id: optionalText,
+  key: z
+    .string()
+    .trim()
+    .min(2, "Give the role a key (2+ characters).")
+    .regex(/^[a-z0-9_]+$/, "Use lowercase letters, digits and underscores."),
+  name: z.string().trim().min(2, "Give the role a name."),
+  description: optionalText,
+});
+
+export type CreateRoleInputForm = z.infer<typeof createRoleSchema>;
+
+/** "Invite member" form (console/members). */
+export const inviteMemberSchema = z.object({
+  email: z.string().trim().email("Enter a valid email address."),
+  name: z.string().trim().min(2, "Enter the member's full name."),
+  profile_type: z.string().trim().min(1, "Pick a persona."),
+  title: optionalText,
+});
+
+export type InviteMemberInputForm = z.infer<typeof inviteMemberSchema>;

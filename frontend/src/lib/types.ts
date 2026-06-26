@@ -23,6 +23,29 @@ export interface PublicTheme {
   default_mode: string;
 }
 
+/**
+ * A user's membership in a scope/tenant under a given persona, as returned by
+ * `/auth/me`. Mirrors the membership rows surfaced for the active session.
+ */
+export interface Membership {
+  scope: "platform" | "tenant";
+  tenant_id: string | null;
+  tenant_slug: string | null;
+  tenant_name: string | null;
+  profile_type: string;
+  title: string | null;
+  status: string;
+  is_primary: boolean;
+}
+
+/** A workspace the current user can switch into (Acre HQ or a client tenant). */
+export interface Workspace {
+  kind: "platform" | "tenant";
+  tenant_id: string | null;
+  slug: string | null;
+  name: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -30,6 +53,12 @@ export interface User {
   tenant_id: string | null;
   is_platform_staff: boolean;
   permissions: string[];
+  /** The tenant the session is currently acting in; null = Acre HQ / platform. */
+  active_tenant_id: string | null;
+  /** Every membership the user holds across platform + tenants. */
+  memberships: Membership[];
+  /** Workspaces the user can switch between. */
+  workspaces: Workspace[];
 }
 
 export interface TokenResponse {

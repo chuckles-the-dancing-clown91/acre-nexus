@@ -133,13 +133,15 @@ pub struct AuthUser {
 impl AuthUser {
     /// Assert the principal holds a permission, else `403`.
     pub fn require(&self, p: Permission) -> Result<(), ApiError> {
-        if self.grants.has(p) {
+        self.require_key(p.as_str())
+    }
+
+    /// Assert the principal holds a string-keyed permission (built-in or custom).
+    pub fn require_key(&self, key: &str) -> Result<(), ApiError> {
+        if self.grants.has_key(key) {
             Ok(())
         } else {
-            Err(ApiError::Forbidden(format!(
-                "missing permission: {}",
-                p.as_str()
-            )))
+            Err(ApiError::Forbidden(format!("missing permission: {key}")))
         }
     }
 }

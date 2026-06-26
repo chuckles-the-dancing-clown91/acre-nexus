@@ -13,6 +13,7 @@
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
+pub mod iam;
 pub mod llcs;
 pub mod modules;
 pub mod platform;
@@ -44,11 +45,34 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::refresh,
         auth::me,
         auth::logout,
+        auth::workspaces,
+        auth::switch_workspace,
         // platform (staff, cross-tenant)
         platform::tenants,
         platform::metrics,
         // module management (tenant software settings)
         modules::list,
         modules::set,
+        // IAM — Acre admin: users, profiles/PII, roles, permissions, memberships
+        iam::permissions,
+        iam::profile_types,
+        iam::list_audit,
+        iam::list_roles,
+        iam::create_role,
+        iam::update_role,
+        iam::delete_role,
+        iam::list_users,
+        iam::create_user,
+        iam::get_user,
+        iam::update_user,
+        iam::put_profile,
+        iam::reveal_pii,
+        iam::add_membership,
+        iam::remove_membership,
+        iam::assign_role,
+        iam::revoke_role,
+        // IAM — tenant member management (client admins)
+        iam::list_members,
+        iam::invite_member,
     ]
 }

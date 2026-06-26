@@ -14,10 +14,16 @@ pub struct Model {
     pub tenant_id: Option<Uuid>,
     #[sea_orm(unique)]
     pub email: String,
+    /// Optional unique username (alternative login handle).
+    #[sea_orm(unique)]
+    pub username: Option<String>,
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub name: String,
     pub is_platform_staff: bool,
+    /// `active` | `invited` | `suspended` | `disabled`. Non-active blocks login.
+    pub status: String,
+    pub last_login_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
 }
 

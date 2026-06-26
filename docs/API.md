@@ -160,18 +160,25 @@ A token missing the required scope receives `403`; revoked/expired tokens `401`.
 
 ---
 
+## Identity & Access Management
+
+User accounts, profiles (with encrypted SSN/gov-ID), personas, roles, and
+permissions are managed under the **IAM** routes (`/admin/*`, `/members`). The
+full model, persona list, permission catalog, and endpoint table live in
+**`docs/IAM.md`**.
+
 ## Permissions
 
-`property:read` · `property:write` · `listing:read` · `listing:write` ·
+Domain: `property:read` · `property:write` · `listing:read` · `listing:write` ·
 `application:read` · `application:write` · `tenant:manage` · `billing:read` ·
-`theme:write` · `apitoken:manage` · `platform:admin` (super-permission).
+`theme:write` · `apitoken:manage`.
+IAM: `user:read` · `user:manage` · `profile:read` · `profile:write` ·
+`profile:read_pii` · `member:read` · `member:manage` · `role:read` ·
+`role:manage`. Plus `platform:admin` (super-permission, implies all).
 
-### System roles
-
-| Role | Permissions |
-|------|-------------|
-| `platform_admin` | all (Acre HQ staff) |
-| `pm_admin` | everything within a tenant |
-| `landlord` | property/listing/application read+write |
-| `maintenance` | `property:read` |
-| `tenant` | `listing:read` |
+Roles → permissions are stored in the DB and edited at runtime from the Acre
+dashboard. Seeded system roles map to personas — Acre HQ
+(`acre_admin`, `acre_account_manager`, `acre_support`, `acre_billing`,
+`acre_read_only`) and client workspaces (`tenant_owner`, `property_manager`,
+`back_office`, `leasing_agent`, `maintenance`, `landlord`, `renter`). See
+`docs/IAM.md`.
