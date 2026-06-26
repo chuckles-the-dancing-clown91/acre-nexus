@@ -135,6 +135,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 collapsed={sidebarCollapsed}
               />
             ))}
+            {can("member:read") && (
+              <NavLink
+                href="/console/members"
+                label="Members"
+                icon="user"
+                pathname={pathname}
+                collapsed={sidebarCollapsed}
+              />
+            )}
           </nav>
 
           {can("tenant:manage") && (
@@ -153,16 +162,36 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
           )}
 
           {user.is_platform_staff && (
-            <Link
-              href="/console/platform"
-              className={clsx(
-                "mt-3 flex items-center gap-2.5 rounded-xl border border-info-soft px-3 py-2.5 text-sm font-semibold text-info",
-                pathname.startsWith("/console/platform") && "bg-info-soft"
+            <div className="mt-3 space-y-1">
+              <Link
+                href="/console/platform"
+                className={clsx(
+                  "flex items-center gap-2.5 rounded-xl border border-info-soft px-3 py-2.5 text-sm font-semibold text-info",
+                  pathname === "/console/platform" && "bg-info-soft"
+                )}
+              >
+                <Icon name="globe" size={17} />
+                {!sidebarCollapsed && "Platform admin"}
+              </Link>
+              {can("user:read") && (
+                <NavLink
+                  href="/console/platform/users"
+                  label="Users"
+                  icon="user"
+                  pathname={pathname}
+                  collapsed={sidebarCollapsed}
+                />
               )}
-            >
-              <Icon name="globe" size={17} />
-              Platform admin
-            </Link>
+              {can("role:read") && (
+                <NavLink
+                  href="/console/platform/roles"
+                  label="Roles"
+                  icon="shield"
+                  pathname={pathname}
+                  collapsed={sidebarCollapsed}
+                />
+              )}
+            </div>
           )}
         </aside>
 
