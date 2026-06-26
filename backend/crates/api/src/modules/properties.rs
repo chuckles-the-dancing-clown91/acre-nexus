@@ -26,14 +26,14 @@ impl PlatformModule for PropertiesModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
-            properties::list,
-            properties::create,
-            properties::profile,
-            properties::update,
-            portfolio::summary,
-            portfolio::llc_groups,
-            llcs::list,
-            llcs::create,
+            properties::list::list,
+            properties::create::create,
+            properties::profile::profile,
+            properties::update::update,
+            portfolio::summary::summary,
+            portfolio::llc_groups::llc_groups,
+            llcs::list::list,
+            llcs::create::create,
         ]
     }
 }

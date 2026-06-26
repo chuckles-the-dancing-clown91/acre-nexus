@@ -26,11 +26,11 @@ impl PlatformModule for VendorApiModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
-            api_tokens::list,
-            api_tokens::create,
-            api_tokens::revoke,
-            vendor::listings,
-            vendor::properties,
+            api_tokens::list::list,
+            api_tokens::create::create,
+            api_tokens::revoke::revoke,
+            vendor::listings::listings,
+            vendor::properties::properties,
         ]
     }
 }
