@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @keyframes dcuSpin { to { transform:rotate(360deg); } }
+    @keyframes dcuBar { 0%{ transform:translateX(-100%); } 100%{ transform:translateX(200%); } }
+    @keyframes dcuPop { 0%{ transform:scale(.96); opacity:0; } 100%{ transform:scale(1); opacity:1; } }
+    .dcu-spin { animation:dcuSpin .9s linear infinite; display:inline-block; }
+    .dcu-pop { animation:dcuPop .35s cubic-bezier(.2,.8,.3,1.1) both; }
+  </style>
+</helmet>
+<div style="font-family:'Hanken Grotesk',system-ui,sans-serif;">
+
+  <!-- BOX VARIANT -->
+  <sc-if value="{{ isBox }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ start }}" style="width:100%; text-align:left; border:2px dashed var(--line-2,#d9d2c4); border-radius:14px; padding:18px; background:var(--surface-2,#f4efe6); display:flex; align-items:center; gap:14px; cursor:pointer;" style-hover="border-color:var(--accent,#c2410c)">
+        <span style="flex-shrink:0; width:44px; height:44px; border-radius:12px; background:var(--surface,#fff); border:1px solid var(--line,#e7e0d3); display:flex; align-items:center; justify-content:center; color:var(--ink-3,#8a8275);"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></span>
+        <span style="flex:1; min-width:0;"><span style="display:block; font-weight:700; font-size:14px; color:var(--ink,#2b2922);">{{ label }}</span><span style="display:block; font-size:12px; color:var(--ink-3,#8a8275); margin-top:1px;">{{ hint }}</span></span>
+        <span style="flex-shrink:0; height:36px; padding:0 15px; border-radius:10px; background:var(--ink,#2b2922); color:var(--bg,#fbf8f1); font-weight:700; font-size:12.5px; display:flex; align-items:center;">{{ cta }}</span>
+      </button>
+    </sc-if>
+    <sc-if value="{{ uploading }}" hint-placeholder-val="{{ false }}">
+      <div style="width:100%; border:1px solid var(--line,#e7e0d3); border-radius:14px; padding:18px; background:var(--surface,#fff); display:flex; align-items:center; gap:14px;">
+        <span style="flex-shrink:0; width:44px; height:44px; border-radius:12px; background:var(--surface-2,#f4efe6); display:flex; align-items:center; justify-content:center;"><span style="width:20px; height:20px; border:3px solid var(--line-2,#d9d2c4); border-top-color:var(--accent,#c2410c); border-radius:50%;" class="dcu-spin"></span></span>
+        <div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:14px; color:var(--ink,#2b2922);">Uploading {{ fileName }}…</div><div style="height:6px; border-radius:6px; background:var(--surface-2,#f4efe6); overflow:hidden; margin-top:8px;"><div style="height:100%; width:60%; border-radius:6px; background:var(--accent,#c2410c); animation:dcuBar 1.4s ease-in-out infinite;"></div></div></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
+      <div class="dcu-pop" style="width:100%; border:1px solid var(--good,#3f7d4e); border-radius:14px; padding:16px 18px; background:var(--good-soft,#e6f0e8); display:flex; align-items:center; gap:14px;">
+        <span style="flex-shrink:0; width:44px; height:44px; border-radius:12px; background:var(--good,#3f7d4e); color:#fff; display:flex; align-items:center; justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span>
+        <div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:14px; color:var(--ink,#2b2922);">{{ fileName }}</div><div style="font-size:12px; color:var(--good,#3f7d4e); font-weight:600; display:flex; align-items:center; gap:5px; margin-top:1px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Uploaded &amp; attached</div></div>
+        <button onClick="{{ start }}" style="flex-shrink:0; font-size:12.5px; font-weight:700; color:var(--ink-3,#8a8275);">Replace</button>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- ROW VARIANT -->
+  <sc-if value="{{ isRow }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex; align-items:center; gap:12px; padding:11px 13px; border-radius:12px; border:1px solid var(--line,#e7e0d3); background:var(--surface,#fff);">
+      <span style="flex-shrink:0; width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; background:var(--surface-2,#f4efe6); color:var(--ink-3,#8a8275);">
+        <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}"><span style="color:var(--good,#3f7d4e);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></sc-if>
+        <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></sc-if>
+      </span>
+      <div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:13px; color:var(--ink,#2b2922);">{{ label }}</div><div style="font-size:11.5px; color:var(--ink-3,#8a8275);">{{ rowStatus }}</div></div>
+      <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}"><button onClick="{{ start }}" style="flex-shrink:0; height:32px; padding:0 13px; border-radius:9px; background:var(--surface-2,#f4efe6); border:1px solid var(--line-2,#d9d2c4); font-weight:700; font-size:12px; color:var(--ink-2,#5a564c);">{{ cta }}</button></sc-if>
+      <sc-if value="{{ uploading }}" hint-placeholder-val="{{ false }}"><span style="width:16px; height:16px; border:2.5px solid var(--line-2,#d9d2c4); border-top-color:var(--accent,#c2410c); border-radius:50%;" class="dcu-spin"></span></sc-if>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:440,&quot;height&quot;:92},&quot;label&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Vaccination records&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;hint&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;PDF or image · up to 10MB&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;cta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Choose file&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;box&quot;,&quot;row&quot;],&quot;default&quot;:&quot;box&quot;,&quot;tsType&quot;:&quot;'box'|'row'&quot;},&quot;docName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;vaccination_records.pdf&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;onDone&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(name: string) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { status: 'idle' };
+  start(){
+    this.setState({ status:'uploading' });
+    clearTimeout(this.t);
+    this.t = setTimeout(()=>{
+      this.setState({ status:'done' });
+      const cb = this.props.onDone;
+      if(typeof cb === 'function') cb(this.props.docName || this.props.label || 'Document');
+    }, 1500);
+  }
+  componentWillUnmount(){ clearTimeout(this.t); }
+  renderVals(){
+    const st = this.state.status;
+    const variant = this.props.variant || 'box';
+    const done = st==='done';
+    const fileName = this.props.docName || (this.props.label ? this.props.label.replace(/\s+/g,'_').toLowerCase()+'.pdf' : 'document.pdf');
+    return {
+      isBox: variant==='box',
+      isRow: variant==='row',
+      idle: st==='idle',
+      uploading: st==='uploading',
+      done,
+      notDone: !done,
+      label: this.props.label || 'Upload document',
+      hint: this.props.hint || 'PDF or image · up to 10MB',
+      cta: this.props.cta || 'Choose file',
+      rowStatus: done ? 'Uploaded · attached' : (st==='uploading' ? 'Uploading…' : (this.props.hint || 'Required')),
+      fileName,
+      start: ()=>this.start()
+    };
+  }
+}
+</script>
+</body>
+</html>

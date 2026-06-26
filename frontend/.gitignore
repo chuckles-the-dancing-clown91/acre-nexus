@@ -1,0 +1,14 @@
+/node_modules
+/.next
+/out
+/build
+next-env.d.ts
+*.tsbuildinfo
+.env.local
+.env*.local
+
+# testing
+/coverage
+/playwright-report
+/test-results
+/.husky/_

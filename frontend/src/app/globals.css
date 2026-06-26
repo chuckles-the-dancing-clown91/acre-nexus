@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Acre design tokens — ported verbatim from the Claude Design prototype
+ * (project/Acre.dc.html). Light is the default; `.dark` on <html> flips the
+ * palette. Per-tenant white-label branding overrides --accent / --accent-2 at
+ * runtime via the ThemeProvider (inline style on <html>).
+ */
+:root {
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-body: "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono: "Space Mono", monospace;
+
+  --bg: #f1ece1;
+  --surface: #fbf8f1;
+  --surface-2: #f5f0e5;
+  --raised: #ffffff;
+  --ink: #19160f;
+  --ink-2: #5e584a;
+  --ink-3: #938c7b;
+  --line: #e2daca;
+  --line-2: #d2c8b4;
+  --accent: #f5451f;
+  --accent-2: #d63a18;
+  --on-accent: #fff6f2;
+  --accent-soft: #fce3da;
+  --good: #1c7c53;
+  --good-soft: #d7ecdf;
+  --warn: #b5751a;
+  --warn-soft: #f4e6c8;
+  --bad: #c5392b;
+  --bad-soft: #f6ddd8;
+  --info: #2950d8;
+  --info-soft: #dce3fb;
+  --shadow:
+    0 1px 2px rgba(25, 22, 15, 0.05), 0 8px 24px -12px rgba(25, 22, 15, 0.16);
+  --shadow-lg: 0 24px 60px -20px rgba(25, 22, 15, 0.32);
+
+  /*
+   * shadcn/ui token bridge. shadcn components read --background, --foreground,
+   * --primary, etc.; here they alias the Acre brand tokens above so shadcn
+   * inherits the current palette (and white-label accent) instead of overriding
+   * it. tailwind.config maps these to colour utilities with `<alpha-value>`.
+   */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+  --shadcn-accent: var(--accent-soft);
+  --shadcn-accent-foreground: var(--accent-2);
+  --destructive: var(--bad);
+  --destructive-foreground: var(--on-accent);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --radius: 0.75rem;
+}
+
+.dark {
+  --bg: #100f0c;
+  --surface: #1a1814;
+  --surface-2: #211e18;
+  --raised: #26221b;
+  --ink: #f4efe4;
+  --ink-2: #ada593;
+  --ink-3: #736c5c;
+  --line: #2c2820;
+  --line-2: #3a352b;
+  --accent: #ff5a38;
+  --accent-2: #ff7355;
+  --on-accent: #16110d;
+  --accent-soft: #3a201a;
+  --good: #3dba86;
+  --good-soft: #16302a;
+  --warn: #d69b45;
+  --warn-soft: #332817;
+  --bad: #e76a5c;
+  --bad-soft: #33211e;
+  --info: #6e8bff;
+  --info-soft: #1c2440;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.8);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background 0.35s ease,
+    color 0.35s ease;
+}
+
+@keyframes acreUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.acre-fade {
+  animation: acreUp 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
