@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = ["crates/entity", "crates/migration", "crates/api"]
+
+# Shared dependency versions for the whole workspace. Pinned to recent
+# major versions so the stack compiles reproducibly on Rust 2021/1.94+.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Proprietary"
+authors = ["Acre Platform"]
+
+[workspace.dependencies]
+sea-orm = { version = "1.1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+    "with-chrono",
+    "with-uuid",
+    "with-json",
+] }
+sea-orm-migration = { version = "1.1", features = [
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+] }
+rocket = { version = "0.5", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+jsonwebtoken = "9"
+argon2 = "0.5"
+rand = "0.8"
+sha2 = "0.10"
+thiserror = "1"
+anyhow = "1"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Faster, smaller release builds.
+[profile.release]
+lto = "thin"
+codegen-units = 1

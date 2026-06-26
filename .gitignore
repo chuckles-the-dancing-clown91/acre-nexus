@@ -1,0 +1,23 @@
+# Rust
+/backend/target/
+**/target/
+
+# Node / Next.js
+/frontend/node_modules/
+**/node_modules/
+/frontend/.next/
+**/.next/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.local
+.env*.local
+!.env.example
+!.env.local.example
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,121 @@
+# Architecture
+
+## Overview
+
+```
+                    ┌──────────────────────────────────────────┐
+   Public visitors  │  Next.js / React frontend (App Router)    │
+   Client admins ──▶│  - public website (white-label)           │
+   Platform staff   │  - landlord/PM console                    │
+                    │  - theming (dark mode + per-tenant brand)  │
+                    └───────────────┬──────────────────────────┘
+                                    │ HTTPS (JSON)
+   Third-party  ───── API key ─────▶│
+   vendors                          ▼
+                    ┌──────────────────────────────────────────┐
+                    │  Rust API — Rocket                         │
+                    │  ┌──────────┬───────────┬───────────────┐ │
+                    │  │  auth    │  rbac      │  tenancy      │ │
+                    │  │ (JWT)    │ (perms)    │ (X-Tenant)    │ │
+                    │  ├──────────┴───────────┴───────────────┤ │
+                    │  │  routes (public / console / vendor)   │ │
+                    │  ├───────────────────────────────────────┤ │
+                    │  │  Tokio scheduler (background jobs)     │ │
+                    │  └───────────────────────────────────────┘ │
+                    └───────────────┬──────────────────────────┘
+                                    │ SeaORM
+                                    ▼
+                          ┌──────────────────┐
+                          │   PostgreSQL     │
+                          │ shared schema +  │
+                          │ tenant_id (+RLS) │
+                          └──────────────────┘
+```
+
+## Backend (Rust)
+
+A Cargo workspace under `backend/`:
+
+- **`crates/entity`** — SeaORM models. One module per table. Documented; money is
+  stored as integer cents (`i64`).
+- **`crates/migration`** — schema migrations. `m...init` creates all tables;
+  `m...rls` adds Postgres row-level-security policies (defence in depth).
+- **`crates/api`** — the Rocket application. Key modules:
+  - `config` — env-driven config.
+  - `auth` — Argon2 password hashing, JWT issue/verify, the `AuthUser` guard,
+    opaque secret hashing for refresh/API tokens.
+  - `rbac` — `Permission` enum, the seeded system roles, and a `Grants` set with
+    a `platform:admin` super-permission.
+  - `tenancy` — `TenantScope` (authenticated; staff can impersonate via
+    `X-Tenant`) and `PublicTenant` (resolves a tenant from header/query for the
+    unauthenticated website) request guards.
+  - `tokens` — minting, hashing, and the `ApiPrincipal` guard for the scoped
+    vendor API.
+  - `scheduler` — a Tokio task that polls the `background_job` table and advances
+    durable state machines (e.g. screening: `pending → awaiting_callback →
+    completed`; automated emails).
+  - `routes/*` — handlers grouped by audience (see `docs/API.md`).
+  - `error` — one `ApiError` type that serialises to a consistent JSON envelope.
+
+### Why these choices
+
+- **Rocket** for ergonomic, typed request guards — auth, RBAC, and tenant
+  resolution compose cleanly as `FromRequest` guards, so every handler signature
+  documents its own security requirements.
+- **SeaORM** for async, type-safe Postgres access with first-class migrations.
+- **Tokio** for the background automation the brief calls for (awaiting
+  background-check callbacks, scheduled emails) — jobs are persisted so they
+  survive restarts.
+
+## Multi-tenancy
+
+**Shared schema, `tenant_id` on every scoped row.**
+
+- The application layer is the primary enforcement: every tenant-scoped query
+  filters by the active `tenant_id` from the `TenantScope`/`PublicTenant` guard.
+- The active tenant comes from: the JWT (`tid`) for client users; the `X-Tenant`
+  header for staff impersonation and for the public website; the API token for
+  vendor calls.
+- Postgres **row-level-security** policies provide a second wall (keyed on a
+  `app.tenant_id` session variable). To make RLS bite in production, connect as a
+  non-owner DB role and `SET app.tenant_id` per transaction.
+
+## AuthN / AuthZ
+
+- **Humans**: `POST /auth/login` → short-lived JWT **access** token + opaque
+  **refresh** token (rotated on `POST /auth/refresh`, revoked on logout). Only
+  hashes of refresh tokens are stored.
+- **RBAC**: roles bundle fine-grained `resource:action` permissions. The JWT
+  embeds the resolved permission set; handlers call `user.require(Permission::…)`.
+  System roles (`platform_admin`, `pm_admin`, `landlord`, `maintenance`,
+  `tenant`) are seeded; tenants may add custom roles.
+- **Vendors**: long-lived, **scoped**, revocable API keys (`acre_live_…`). Only a
+  SHA-256 hash is stored; each `/api/v1` endpoint requires a specific scope so
+  services can be sold individually.
+
+## Frontend (Next.js / React)
+
+- **App Router** + TypeScript + Tailwind.
+- **Design tokens** ported verbatim from the prototype into CSS variables
+  (`globals.css`); Tailwind colours reference those variables so the whole palette
+  re-themes for dark mode and white-label without a rebuild.
+- **`ThemeProvider`** — dark-mode toggle (`.dark` on `<html>`) + per-tenant brand
+  (overrides `--accent` at runtime from the tenant theme).
+- **`AuthProvider`** — holds the session, hydrates from a stored token, exposes
+  `can(permission)` for client-side gating.
+- **Modular components** (`components/ui`, `components/*`) — `Card`, `Badge`,
+  `Button`, `StatTile`, `ListingCard`, icons, headers — presentational and
+  pluggable so new pages compose them.
+- **Routes**: `/` (public website), `/listings/[id]` (detail + apply),
+  `/login`, and `/console/*` (dashboard, properties + profile, LLCs,
+  applications, API tokens, platform admin).
+
+## Extending to the other roles
+
+Each remaining prototype role is additive and follows the established pattern:
+
+1. Add entities + a migration (tenant-scoped).
+2. Add tenant-scoped, RBAC-gated routes under `routes/`.
+3. Add a console section under `frontend/src/app/console/` reusing `components/ui`.
+4. Long-running steps (screening, contract callbacks) become `background_job`s
+   advanced by the Tokio scheduler.
