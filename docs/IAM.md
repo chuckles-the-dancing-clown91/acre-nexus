@@ -96,3 +96,35 @@ Client admins (tenant-scoped, `/members`):
 | `morgan@northwind.com` | Back-office | Northwind |
 | `lee@northwind.com` | Landlord | Northwind |
 | `priya@cascade.com` | Workspace Owner | Cascade |
+
+## Workspaces & switching (multi-membership users)
+
+Because a user can hold memberships in several workspaces, the session is scoped
+to one **active workspace** at a time, and permissions are resolved for it:
+
+- The JWT carries the active `tid`; `permissions_for(user, active_tenant)`
+  includes a role assignment when it is platform-scoped (`tenant_id IS NULL`,
+  always) **or** matches the active workspace. So switching workspace changes the
+  effective permission set.
+- `GET /auth/me` returns the user's `memberships` (with resolved tenant
+  name/slug), the `workspaces` they can enter, and the `active_tenant_id`.
+- `GET /auth/workspaces` lists switchable workspaces.
+- `POST /auth/switch { tenant_id? }` re-issues an access token scoped to the
+  chosen workspace (`null` = Acre HQ / platform). Non-staff must hold an active
+  membership in the target; staff may enter any (the `TenantScope` guard treats a
+  switched staff session as impersonation). The refresh token is unchanged.
+
+The `TenantScope` request guard honors the active `tid` first; staff with no
+active workspace can still impersonate via the legacy `X-Tenant` header.
+
+## Audit log
+
+Security-relevant actions are recorded in `audit_log` (best-effort; an audit
+write never fails the underlying request): `pii.reveal`, `user.create`,
+`role.create`, `role.update`, `role.delete`. Each row captures the actor, action,
+target, workspace, and optional metadata.
+
+`GET /admin/audit?limit=&action=` returns recent entries (newest first, actor
+name resolved), gated by the `audit:read` permission (held by Acre admin,
+account-manager, and read-only roles). Ship this table to an external,
+append-only audit sink in production.

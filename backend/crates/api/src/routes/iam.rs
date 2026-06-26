@@ -24,7 +24,8 @@ use entity::prelude::*;
 use rocket::serde::json::Json;
 use rocket::{delete, get, patch, post, put, State};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -100,6 +101,59 @@ pub async fn profile_types(
             })
             .collect(),
     ))
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct AuditEntry {
+    pub id: Uuid,
+    pub actor_user_id: Option<Uuid>,
+    pub actor_name: Option<String>,
+    pub action: String,
+    pub target_type: Option<String>,
+    pub target_id: Option<String>,
+    pub tenant_id: Option<Uuid>,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: String,
+}
+
+/// `GET /admin/audit?limit=&action=` — recent security audit entries, newest
+/// first, with the actor's display name resolved.
+#[rocket_okapi::openapi(tag = "IAM")]
+#[get("/admin/audit?<limit>&<action>")]
+pub async fn list_audit(
+    state: &State<AppState>,
+    user: AuthUser,
+    limit: Option<u64>,
+    action: Option<String>,
+) -> ApiResult<Json<Vec<AuditEntry>>> {
+    user.require(Permission::AuditRead)?;
+    let mut q = AuditLog::find().order_by_desc(entity::audit_log::Column::CreatedAt);
+    if let Some(a) = action.filter(|s| !s.is_empty()) {
+        q = q.filter(entity::audit_log::Column::Action.eq(a));
+    }
+    let rows = q
+        .limit(limit.unwrap_or(100).min(500))
+        .all(&state.db)
+        .await?;
+    let mut out = Vec::new();
+    for r in rows {
+        let actor_name = match r.actor_user_id {
+            Some(aid) => User::find_by_id(aid).one(&state.db).await?.map(|u| u.name),
+            None => None,
+        };
+        out.push(AuditEntry {
+            id: r.id,
+            actor_user_id: r.actor_user_id,
+            actor_name,
+            action: r.action,
+            target_type: r.target_type,
+            target_id: r.target_id,
+            tenant_id: r.tenant_id,
+            metadata: r.metadata,
+            created_at: r.created_at.to_rfc3339(),
+        });
+    }
+    Ok(Json(out))
 }
 
 // ===========================================================================
@@ -235,6 +289,16 @@ pub async fn create_role(
     .insert(&state.db)
     .await?;
     replace_role_permissions(&state.db, id, &body.permissions).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        "role.create",
+        Some("role"),
+        Some(id.to_string()),
+        body.tenant_id,
+        Some(serde_json::json!({ "key": body.key, "permissions": body.permissions.len() })),
+    )
+    .await;
     Ok(Json(RoleDto {
         id,
         scope: body.scope,
@@ -286,6 +350,16 @@ pub async fn update_role(
         replace_role_permissions(&state.db, rid, perms).await?;
     }
 
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        "role.update",
+        Some("role"),
+        Some(rid.to_string()),
+        role.tenant_id,
+        None,
+    )
+    .await;
     let updated = Role::find_by_id(rid).one(&state.db).await?.unwrap();
     let perms = role_permissions(&state.db, rid).await?;
     Ok(Json(RoleDto {
@@ -326,6 +400,16 @@ pub async fn delete_role(
         .exec(&state.db)
         .await?;
     Role::delete_by_id(rid).exec(&state.db).await?;
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        "role.delete",
+        Some("role"),
+        Some(rid.to_string()),
+        role.tenant_id,
+        None,
+    )
+    .await;
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
@@ -508,6 +592,17 @@ pub async fn create_user(
     }
     txn.commit().await?;
 
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        "user.create",
+        Some("user"),
+        Some(uid.to_string()),
+        primary_tenant,
+        None,
+    )
+    .await;
+
     load_user_detail(state, uid).await
 }
 
@@ -649,6 +744,16 @@ pub async fn reveal_pii(
         _ => None,
     };
     tracing::warn!(actor = %user.user_id, subject = %uid, "PII revealed (SSN/gov-id)");
+    crate::audit::record(
+        &state.db,
+        Some(user.user_id),
+        "pii.reveal",
+        Some("user"),
+        Some(uid.to_string()),
+        None,
+        Some(serde_json::json!({ "fields": ["ssn", "gov_id"] })),
+    )
+    .await;
     Ok(Json(PiiReveal {
         ssn,
         gov_id_number: gov,

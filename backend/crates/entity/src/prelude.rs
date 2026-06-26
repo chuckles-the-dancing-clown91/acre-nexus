@@ -2,6 +2,7 @@
 
 pub use super::api_token::Entity as ApiToken;
 pub use super::application::Entity as Application;
+pub use super::audit_log::Entity as AuditLog;
 pub use super::background_job::Entity as BackgroundJob;
 pub use super::listing::Entity as Listing;
 pub use super::llc::Entity as Llc;

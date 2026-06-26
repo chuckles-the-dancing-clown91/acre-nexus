@@ -56,11 +56,19 @@ impl<'r> FromRequest<'r> for TenantScope {
             _ => return Outcome::Error((Status::Unauthorized, ())),
         };
 
-        let header_tenant = req.headers().get_one("X-Tenant");
+        // The workspace the token is scoped to (set at login or by /auth/switch)
+        // always wins. For staff this is their chosen "view as" workspace.
+        if let Some(id) = user.tenant_id {
+            return Outcome::Success(TenantScope {
+                tenant_id: id,
+                impersonated: user.is_staff,
+            });
+        }
 
-        // Staff may impersonate a tenant via header; clients are pinned to theirs.
+        // Staff with no active workspace may impersonate one via the X-Tenant
+        // header (the legacy "view as client" path used before switching).
         if user.is_staff {
-            if let Some(reference) = header_tenant {
+            if let Some(reference) = req.headers().get_one("X-Tenant") {
                 if let Some(id) = resolve_tenant_ref(state, reference).await {
                     return Outcome::Success(TenantScope {
                         tenant_id: id,
@@ -69,17 +77,11 @@ impl<'r> FromRequest<'r> for TenantScope {
                 }
                 return Outcome::Error((Status::BadRequest, ()));
             }
-            // Staff without an X-Tenant header have no single tenant scope.
             return Outcome::Error((Status::BadRequest, ()));
         }
 
-        match user.tenant_id {
-            Some(id) => Outcome::Success(TenantScope {
-                tenant_id: id,
-                impersonated: false,
-            }),
-            None => Outcome::Error((Status::Unauthorized, ())),
-        }
+        // A non-staff user with no tenant context cannot resolve a workspace.
+        Outcome::Error((Status::Unauthorized, ()))
     }
 }
 

@@ -19,6 +19,7 @@ pub mod prelude;
 
 pub mod api_token;
 pub mod application;
+pub mod audit_log;
 pub mod background_job;
 pub mod listing;
 pub mod llc;

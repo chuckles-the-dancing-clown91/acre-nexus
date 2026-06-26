@@ -48,6 +48,8 @@ pub enum Permission {
     MemberManage,
     RoleRead,
     RoleManage,
+    /// View the security audit log.
+    AuditRead,
     /// Cross-tenant platform administration (Acre HQ staff only) — implies all.
     PlatformAdmin,
 }
@@ -74,6 +76,7 @@ impl Permission {
             Permission::MemberManage => "member:manage",
             Permission::RoleRead => "role:read",
             Permission::RoleManage => "role:manage",
+            Permission::AuditRead => "audit:read",
             Permission::PlatformAdmin => "platform:admin",
         }
     }
@@ -102,6 +105,7 @@ pub const ALL_PERMS: &[Permission] = &[
     MemberManage,
     RoleRead,
     RoleManage,
+    AuditRead,
     PlatformAdmin,
 ];
 
@@ -257,6 +261,13 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         category: "Access",
         label: "Manage roles",
         description: "Create roles and edit their permissions.",
+        scope: "both",
+    },
+    PermissionMeta {
+        key: "audit:read",
+        category: "Access",
+        label: "View audit log",
+        description: "View the security audit trail (PII reveals, role/user changes).",
         scope: "both",
     },
     PermissionMeta {
@@ -440,6 +451,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             BillingRead,
             PropertyRead,
             ApplicationRead,
+            AuditRead,
         ],
     },
     SystemRole {
@@ -479,6 +491,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ListingRead,
             ApplicationRead,
             BillingRead,
+            AuditRead,
         ],
     },
     // ---- Tenant (client workspace) ----

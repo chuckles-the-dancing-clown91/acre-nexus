@@ -45,6 +45,8 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::refresh,
         auth::me,
         auth::logout,
+        auth::workspaces,
+        auth::switch_workspace,
         // platform (staff, cross-tenant)
         platform::tenants,
         platform::metrics,
@@ -54,6 +56,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // IAM — Acre admin: users, profiles/PII, roles, permissions, memberships
         iam::permissions,
         iam::profile_types,
+        iam::list_audit,
         iam::list_roles,
         iam::create_role,
         iam::update_role,
