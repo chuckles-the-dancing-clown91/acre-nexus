@@ -46,10 +46,31 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/properties/onboard",
+        label: "Onboard",
+        icon: "check",
+        permission: "property:write",
+      },
+      {
         href: "/console/llcs",
         label: "LLCs",
         icon: "shield",
         permission: "property:read",
+      },
+    ],
+  },
+  {
+    key: "entities",
+    label: "Entities & Contacts",
+    description:
+      "Registry of banks, lenders, contractors and other counterparties, with notes.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/entities",
+        label: "Entities",
+        icon: "globe",
+        permission: "entity:read",
       },
     ],
   },

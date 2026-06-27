@@ -1,21 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { Badge, Card, statusTone } from "@/components/ui";
+import { Badge, Button, Card, statusTone } from "@/components/ui";
+import { useAuth } from "@/lib/auth";
 import { useProperties } from "@/lib/queries";
 
 export default function PropertiesPage() {
   // Reference pattern: server state via a TanStack Query hook instead of
   // useEffect + useState. Caching, retry, and stale handling come for free.
   const { data: properties, error } = useProperties();
+  const { can } = useAuth();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">
-          Properties
-        </h1>
-        <p className="text-ink-3">Every asset in your portfolio.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">
+            Properties
+          </h1>
+          <p className="text-ink-3">Every asset in your portfolio.</p>
+        </div>
+        {can("property:write") && (
+          <Link href="/console/properties/onboard">
+            <Button>Onboard a property</Button>
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}

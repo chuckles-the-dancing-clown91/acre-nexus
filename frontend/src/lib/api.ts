@@ -7,10 +7,18 @@
 import type {
   Application,
   ApplyResponse,
+  Counterparty,
+  CounterpartyDetail,
+  CounterpartyNote,
+  CreateCounterpartyInput,
+  CreateMortgageInput,
   EnrichmentRun,
   EnrichResponse,
   Listing,
   LlcGroup,
+  Mortgage,
+  OnboardInput,
+  OnboardResponse,
   PortfolioSummary,
   Property,
   PropertyIntel,
@@ -18,6 +26,7 @@ import type {
   PublicTheme,
   TokenResponse,
   User,
+  Workflow,
   Workspace,
 } from "./types";
 
@@ -188,6 +197,49 @@ export const api = {
     }),
   propertyEnrichment: (id: string) =>
     request<EnrichmentRun[]>(`/properties/${id}/enrichment`, { auth: true }),
+  // ---- onboarding ----
+  onboardProperty: (body: OnboardInput) =>
+    request<OnboardResponse>("/properties/onboard", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  // ---- financing (mortgages) ----
+  mortgages: (propertyId: string) =>
+    request<Mortgage[]>(`/properties/${propertyId}/mortgages`, { auth: true }),
+  createMortgage: (propertyId: string, body: CreateMortgageInput) =>
+    request<Mortgage>(`/properties/${propertyId}/mortgages`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteMortgage: (id: string) =>
+    request<void>(`/mortgages/${id}`, { method: "DELETE", auth: true }),
+  // ---- investment workflow ----
+  workflow: (propertyId: string) =>
+    request<Workflow>(`/properties/${propertyId}/workflow`, { auth: true }),
+  advanceWorkflow: (propertyId: string, to_stage: string, note?: string) =>
+    request<Workflow>(`/properties/${propertyId}/workflow/advance`, {
+      method: "POST",
+      auth: true,
+      body: { to_stage, note },
+    }),
+  // ---- entities registry (counterparties) ----
+  entities: (kind?: string) =>
+    request<Counterparty[]>(
+      `/entities${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`,
+      { auth: true }
+    ),
+  entity: (id: string) =>
+    request<CounterpartyDetail>(`/entities/${id}`, { auth: true }),
+  createEntity: (body: CreateCounterpartyInput) =>
+    request<Counterparty>("/entities", { method: "POST", auth: true, body }),
+  addEntityNote: (id: string, body: string) =>
+    request<CounterpartyNote>(`/entities/${id}/notes`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
   applications: () => request<Application[]>("/applications", { auth: true }),
 
   // ---- API tokens ----

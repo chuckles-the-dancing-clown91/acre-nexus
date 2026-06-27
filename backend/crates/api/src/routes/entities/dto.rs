@@ -59,7 +59,8 @@ impl From<entity::counterparty_note::Model> for NoteDto {
 pub struct CounterpartyDetailDto {
     #[serde(flatten)]
     pub entity: CounterpartyDto,
-    pub notes: Vec<NoteDto>,
+    /// Timestamped note history (the inline `notes` field is a short summary).
+    pub notes_log: Vec<NoteDto>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

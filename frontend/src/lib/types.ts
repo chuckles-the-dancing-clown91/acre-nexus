@@ -83,6 +83,11 @@ export interface Property {
   status: string;
   year_built: number;
   manager: string;
+  property_type: string;
+  strategy: string;
+  workflow_stage: string;
+  purchase_price_cents: number | null;
+  acquired_on: string | null;
 }
 
 export interface CostLine {
@@ -96,6 +101,15 @@ export interface PropertyProfile extends Property {
   cost_breakdown: CostLine[];
   net_revenue_cents: number;
   net_revenue_label: string;
+  financed: boolean;
+  debt_service_cents: number;
+  debt_service_label: string;
+  cash_flow_cents: number;
+  cash_flow_label: string;
+  total_loan_balance_cents: number;
+  total_loan_balance_label: string;
+  equity_cents: number;
+  equity_label: string;
 }
 
 export interface Kpi {
@@ -216,6 +230,162 @@ export interface EnrichmentRun {
 export interface EnrichResponse {
   job_id: string;
   scheduled: string[];
+}
+
+// ---- Entities registry (counterparties) ------------------------------------
+
+export interface Counterparty {
+  id: string;
+  kind: string;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CounterpartyNote {
+  id: string;
+  counterparty_id: string;
+  author_user_id: string | null;
+  body: string;
+  created_at: string;
+}
+
+export interface CounterpartyDetail extends Counterparty {
+  notes_log: CounterpartyNote[];
+}
+
+export interface CreateCounterpartyInput {
+  kind: string;
+  name: string;
+  contact_name?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  notes?: string;
+}
+
+// ---- Financing (mortgages) -------------------------------------------------
+
+export interface Mortgage {
+  id: string;
+  property_id: string;
+  lender_id: string | null;
+  kind: string;
+  position: number;
+  original_amount_cents: number | null;
+  original_amount_label: string | null;
+  current_balance_cents: number | null;
+  current_balance_label: string | null;
+  interest_rate_bps: number | null;
+  interest_rate_pct: number | null;
+  term_months: number | null;
+  monthly_payment_cents: number | null;
+  monthly_payment_label: string | null;
+  escrow_monthly_cents: number | null;
+  escrow_monthly_label: string | null;
+  start_date: string | null;
+  maturity_date: string | null;
+  loan_number: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMortgageInput {
+  lender_id?: string;
+  kind: string;
+  position?: number;
+  original_amount_cents?: number;
+  current_balance_cents?: number;
+  interest_rate_bps?: number;
+  term_months?: number;
+  monthly_payment_cents?: number;
+  escrow_monthly_cents?: number;
+  start_date?: string;
+  maturity_date?: string;
+  loan_number?: string;
+}
+
+// ---- Workflows -------------------------------------------------------------
+
+export interface WorkflowStage {
+  key: string;
+  label: string;
+  reached: boolean;
+  current: boolean;
+}
+
+export interface WorkflowEvent {
+  id: string;
+  strategy: string;
+  from_stage: string | null;
+  to_stage: string;
+  note: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface Workflow {
+  strategy: string;
+  strategy_label: string;
+  strategy_description: string;
+  current_stage: string;
+  stages: WorkflowStage[];
+  history: WorkflowEvent[];
+}
+
+// ---- Onboarding ------------------------------------------------------------
+
+export interface OnboardMortgageInput {
+  lender_id?: string;
+  lender_name?: string;
+  kind: string;
+  position?: number;
+  original_amount_cents?: number;
+  current_balance_cents?: number;
+  interest_rate_bps?: number;
+  term_months?: number;
+  monthly_payment_cents?: number;
+  escrow_monthly_cents?: number;
+  start_date?: string;
+  maturity_date?: string;
+  loan_number?: string;
+}
+
+export interface OnboardInput {
+  name: string;
+  address: string;
+  city: string;
+  llc_id?: string;
+  units?: number;
+  occupied_units?: number;
+  monthly_rent_cents?: number;
+  year_built?: number;
+  manager?: string;
+  status?: string;
+  property_type: string;
+  strategy: string;
+  purchase_price_cents?: number;
+  acquired_on?: string;
+  mortgages: OnboardMortgageInput[];
+  enrich: boolean;
+}
+
+export interface OnboardResponse {
+  property_id: string;
+  strategy: string;
+  workflow_stage: string;
+  mortgages_created: number;
+  lenders_created: number;
+  enrich_job_id: string | null;
 }
 
 export interface Application {

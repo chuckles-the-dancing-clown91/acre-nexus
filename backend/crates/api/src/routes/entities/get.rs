@@ -33,6 +33,6 @@ pub async fn get(
         .await?;
     Ok(Json(CounterpartyDetailDto {
         entity: CounterpartyDto::from(c),
-        notes: notes.into_iter().map(NoteDto::from).collect(),
+        notes_log: notes.into_iter().map(NoteDto::from).collect(),
     }))
 }

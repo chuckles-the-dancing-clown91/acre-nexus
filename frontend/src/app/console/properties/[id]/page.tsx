@@ -6,8 +6,10 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type {
   EnrichmentRun,
+  Mortgage,
   PropertyIntel,
   PropertyProfile,
+  Workflow,
 } from "@/lib/types";
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -17,6 +19,8 @@ export default function PropertyProfilePage() {
   const [p, setP] = useState<PropertyProfile | null>(null);
   const [intel, setIntel] = useState<PropertyIntel | null>(null);
   const [runs, setRuns] = useState<EnrichmentRun[]>([]);
+  const [mortgages, setMortgages] = useState<Mortgage[]>([]);
+  const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
 
@@ -34,6 +38,18 @@ export default function PropertyProfilePage() {
       .catch(() => {});
   }, [id]);
 
+  const loadFinancing = useCallback(() => {
+    if (!id) return;
+    api
+      .mortgages(id)
+      .then(setMortgages)
+      .catch(() => {});
+    api
+      .workflow(id)
+      .then(setWorkflow)
+      .catch(() => {});
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     api
@@ -41,7 +57,26 @@ export default function PropertyProfilePage() {
       .then(setP)
       .catch((e) => setError(e.message));
     loadIntel();
-  }, [id, loadIntel]);
+    loadFinancing();
+  }, [id, loadIntel, loadFinancing]);
+
+  // Advance the investment workflow to a chosen stage.
+  const advance = useCallback(
+    async (toStage: string) => {
+      if (!id) return;
+      try {
+        const wf = await api.advanceWorkflow(id, toStage);
+        setWorkflow(wf);
+        api
+          .property(id)
+          .then(setP)
+          .catch(() => {});
+      } catch {
+        // ignore — the stage tracker stays as-is on failure
+      }
+    },
+    [id]
+  );
 
   // Trigger enrichment, then poll a couple of times as the queue works through
   // the fanned-out jobs (the scheduler ticks every few seconds).
@@ -174,6 +209,113 @@ export default function PropertyProfilePage() {
           </dl>
         </Card>
       </div>
+
+      {/* Investment workflow */}
+      {workflow && workflow.stages.length > 0 && (
+        <Card className="p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg font-bold">
+                {workflow.strategy_label || "Workflow"}
+              </h2>
+              <p className="text-sm text-ink-3">
+                {workflow.strategy_description}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {workflow.stages.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => advance(s.key)}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                  s.current
+                    ? "bg-accent text-on-accent"
+                    : s.reached
+                      ? "bg-good-soft text-good"
+                      : "bg-surface-2 text-ink-2 hover:bg-surface"
+                }`}
+                title={s.current ? "Current stage" : `Move to ${s.label}`}
+              >
+                {s.reached && !s.current ? "✓ " : ""}
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {workflow.history.length > 0 && (
+            <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-xs text-ink-3">
+              {workflow.history.slice(0, 5).map((h) => (
+                <div key={h.id} className="flex items-center gap-2">
+                  <span className="font-semibold text-ink-2">{h.to_stage}</span>
+                  {h.from_stage && <span>← {h.from_stage}</span>}
+                  <span className="ml-auto font-mono">
+                    {formatTimestamp(h.created_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Financing */}
+      {(mortgages.length > 0 || p.financed) && (
+        <Card className="p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-bold">Financing</h2>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="info">
+                Loan balance {p.total_loan_balance_label}
+              </Badge>
+              <Badge tone="good">Equity {p.equity_label}</Badge>
+            </div>
+          </div>
+          {mortgages.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-3">
+                    <th className="py-2">Loan</th>
+                    <th className="py-2 text-right">Balance</th>
+                    <th className="py-2 text-right">Rate</th>
+                    <th className="py-2 text-right">Payment</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {mortgages.map((m) => (
+                    <tr key={m.id}>
+                      <td className="py-2">
+                        <span className="font-semibold">
+                          {humanize(m.kind)}
+                        </span>{" "}
+                        <span className="text-ink-3">· lien {m.position}</span>
+                        {m.loan_number && (
+                          <span className="ml-1 font-mono text-xs text-ink-3">
+                            {m.loan_number}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-mono text-ink-2">
+                        {m.current_balance_label ?? "—"}
+                      </td>
+                      <td className="py-2 text-right font-mono text-ink-3">
+                        {m.interest_rate_pct != null
+                          ? `${m.interest_rate_pct.toFixed(2)}%`
+                          : "—"}
+                      </td>
+                      <td className="py-2 text-right font-mono text-ink-2">
+                        {m.monthly_payment_label ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-3">No loans recorded.</p>
+          )}
+        </Card>
+      )}
 
       {/* Parcel / county record */}
       {d && (
