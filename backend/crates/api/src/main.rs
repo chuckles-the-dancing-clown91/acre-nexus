@@ -38,6 +38,7 @@ mod seed;
 mod state;
 mod tenancy;
 mod tokens;
+mod workflow;
 
 use config::Config;
 use migration::{Migrator, MigratorTrait};

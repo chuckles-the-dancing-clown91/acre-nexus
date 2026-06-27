@@ -6,6 +6,12 @@ pub enum Permission {
     // Property / leasing domain.
     PropertyRead,
     PropertyWrite,
+    /// Entities/counterparty registry (banks, lenders, contractors …).
+    EntityRead,
+    EntityManage,
+    /// Property financing (mortgages / loans).
+    FinanceRead,
+    FinanceManage,
     ListingRead,
     ListingWrite,
     ApplicationRead,
@@ -37,6 +43,10 @@ impl Permission {
         match self {
             Permission::PropertyRead => "property:read",
             Permission::PropertyWrite => "property:write",
+            Permission::EntityRead => "entity:read",
+            Permission::EntityManage => "entity:manage",
+            Permission::FinanceRead => "finance:read",
+            Permission::FinanceManage => "finance:manage",
             Permission::ListingRead => "listing:read",
             Permission::ListingWrite => "listing:write",
             Permission::ApplicationRead => "application:read",
@@ -66,6 +76,10 @@ use Permission::*;
 pub const ALL_PERMS: &[Permission] = &[
     PropertyRead,
     PropertyWrite,
+    EntityRead,
+    EntityManage,
+    FinanceRead,
+    FinanceManage,
     ListingRead,
     ListingWrite,
     ApplicationRead,

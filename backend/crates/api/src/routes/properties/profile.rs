@@ -5,10 +5,10 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
-use entity::prelude::Property;
+use entity::prelude::{Mortgage, Property, PropertyValuation};
 use rocket::serde::json::Json;
 use rocket::{get, State};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 /// `GET /properties/<id>` — full property profile with computed economics.
@@ -43,23 +43,62 @@ pub async fn profile(
         amount_label: usd(cents),
     };
 
+    // ---- Financing: debt service, levered cash flow, equity ----
+    let mortgages = Mortgage::find()
+        .filter(entity::mortgage::Column::PropertyId.eq(pid))
+        .all(&state.db)
+        .await?;
+    let active: Vec<_> = mortgages
+        .iter()
+        .filter(|m| m.status != "paid_off")
+        .collect();
+    let debt_service: i64 = active
+        .iter()
+        .map(|m| m.monthly_payment_cents.unwrap_or(0) + m.escrow_monthly_cents.unwrap_or(0))
+        .sum();
+    let total_loan_balance: i64 = active
+        .iter()
+        .map(|m| m.current_balance_cents.unwrap_or(0))
+        .sum();
+    let financed = !active.is_empty();
+    let cash_flow = net - debt_service;
+
+    // Best-known value for equity: latest AVM estimate, else purchase price.
+    let latest_value = PropertyValuation::find()
+        .filter(entity::property_valuation::Column::PropertyId.eq(pid))
+        .order_by_desc(entity::property_valuation::Column::CreatedAt)
+        .one(&state.db)
+        .await?
+        .and_then(|v| v.estimated_value_cents)
+        .or(p.purchase_price_cents)
+        .unwrap_or(0);
+    let equity = latest_value - total_loan_balance;
+
     let occupancy = format!("{}/{}", p.occupied_units, p.units);
-    let kpis = vec![
+    let mut kpis = vec![
         line("Monthly rent", rent),
         CostLine {
             label: "Occupancy".into(),
             amount_cents: p.occupied_units as i64,
             amount_label: occupancy.clone(),
         },
-        line("Maintenance MTD", maint),
         line("Net revenue", net),
     ];
-    let cost_breakdown = vec![
+    if financed {
+        kpis.push(line("Cash flow after debt", cash_flow));
+    } else {
+        kpis.push(line("Maintenance MTD", maint));
+    }
+
+    let mut cost_breakdown = vec![
         line("Rent income", rent),
         line("Maintenance & repairs", -maint),
         line("Taxes & insurance", -tax),
         line("Management fee (8%)", -mgmt),
     ];
+    if financed {
+        cost_breakdown.push(line("Debt service", -debt_service));
+    }
 
     Ok(Json(PropertyProfileResp {
         property: PropertyResp::from(p),
@@ -67,5 +106,14 @@ pub async fn profile(
         cost_breakdown,
         net_revenue_cents: net,
         net_revenue_label: usd(net),
+        financed,
+        debt_service_cents: debt_service,
+        debt_service_label: usd(debt_service),
+        cash_flow_cents: cash_flow,
+        cash_flow_label: usd(cash_flow),
+        total_loan_balance_cents: total_loan_balance,
+        total_loan_balance_label: usd(total_loan_balance),
+        equity_cents: equity,
+        equity_label: usd(equity),
     }))
 }

@@ -386,7 +386,126 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_intel(db, maple_court).await?;
     seed_intel(db, riverside_flats).await?;
 
+    // ---- demo entities (counterparties) + financing on Maple Court ----
+    let bank = seed_counterparty(
+        db,
+        northwind,
+        "lender",
+        "First Cascade Bank",
+        Some("Riley Chen, Loan Officer"),
+        Some("(503) 555-0142"),
+    )
+    .await?;
+    seed_counterparty_note(
+        db,
+        northwind,
+        bank,
+        "Pre-approved Northwind for portfolio refis at prime + 1.5%.",
+    )
+    .await?;
+    seed_counterparty(
+        db,
+        northwind,
+        "insurer",
+        "Cascade Mutual Insurance",
+        Some("Claims: (800) 555-0190"),
+        None,
+    )
+    .await?;
+    seed_counterparty(
+        db,
+        northwind,
+        "contractor",
+        "Birch & Co. General Contracting",
+        Some("Sam Ortiz"),
+        Some("(503) 555-0177"),
+    )
+    .await?;
+    // A 1st-lien mortgage on Maple Court through First Cascade Bank.
+    seed_mortgage(db, northwind, maple_court, bank).await?;
+
     tracing::info!("seed: complete");
+    Ok(())
+}
+
+async fn seed_counterparty(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    kind: &str,
+    name: &str,
+    contact_name: Option<&str>,
+    phone: Option<&str>,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+    entity::counterparty::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        kind: Set(kind.into()),
+        name: Set(name.into()),
+        contact_name: Set(contact_name.map(|s| s.to_string())),
+        email: Set(None),
+        phone: Set(phone.map(|s| s.to_string())),
+        website: Set(None),
+        address: Set(None),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+async fn seed_counterparty_note(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    counterparty_id: Uuid,
+    body: &str,
+) -> anyhow::Result<()> {
+    entity::counterparty_note::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        counterparty_id: Set(counterparty_id),
+        author_user_id: Set(None),
+        body: Set(body.into()),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_mortgage(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    lender_id: Uuid,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::mortgage::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        lender_id: Set(Some(lender_id)),
+        kind: Set("purchase".into()),
+        position: Set(1),
+        original_amount_cents: Set(Some(120_000_000)),
+        current_balance_cents: Set(Some(115_000_000)),
+        interest_rate_bps: Set(Some(650)),
+        term_months: Set(Some(360)),
+        monthly_payment_cents: Set(Some(760_000)),
+        escrow_monthly_cents: Set(Some(150_000)),
+        start_date: Set(Some("2021-04-15".into())),
+        maturity_date: Set(Some("2051-04-15".into())),
+        loan_number: Set(Some("FCB-2021-0481".into())),
+        status: Set("active".into()),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
     Ok(())
 }
 
@@ -641,6 +760,11 @@ async fn seed_property(
         status: Set(status.into()),
         year_built: Set(year),
         manager: Set(manager.into()),
+        property_type: Set("multi_family".into()),
+        strategy: Set("rental".into()),
+        workflow_stage: Set("managing".into()),
+        purchase_price_cents: Set(None),
+        acquired_on: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)

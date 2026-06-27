@@ -4,7 +4,7 @@
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{llcs, portfolio, properties};
+use crate::routes::{llcs, mortgages, onboarding, portfolio, properties, workflow};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -16,8 +16,14 @@ impl PlatformModule for PropertiesModule {
         ModuleManifest {
             key: "properties",
             name: "Property Management",
-            description: "Portfolio, property profiles, and LLC holding entities.",
-            permissions: &[Permission::PropertyRead, Permission::PropertyWrite],
+            description: "Portfolio, onboarding, property profiles, financing, \
+                          investment workflows, and LLC holding entities.",
+            permissions: &[
+                Permission::PropertyRead,
+                Permission::PropertyWrite,
+                Permission::FinanceRead,
+                Permission::FinanceManage,
+            ],
             job_kinds: &[],
             default_enabled: true,
             preview: false,
@@ -30,10 +36,17 @@ impl PlatformModule for PropertiesModule {
             properties::create::create,
             properties::profile::profile,
             properties::update::update,
+            onboarding::onboard::onboard,
             portfolio::summary::summary,
             portfolio::llc_groups::llc_groups,
             llcs::list::list,
             llcs::create::create,
+            mortgages::list::list,
+            mortgages::create::create,
+            mortgages::update::update,
+            mortgages::delete::delete,
+            workflow::get::get_workflow,
+            workflow::advance::advance,
         ]
     }
 }

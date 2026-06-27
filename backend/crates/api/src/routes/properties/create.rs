@@ -34,6 +34,11 @@ pub async fn create(
         status: Set(b.status.unwrap_or_else(|| "Stabilized".into())),
         year_built: Set(b.year_built.unwrap_or(0)),
         manager: Set(b.manager.unwrap_or_default()),
+        property_type: Set(b.property_type.unwrap_or_default()),
+        strategy: Set(b.strategy.unwrap_or_else(|| "rental".into())),
+        workflow_stage: Set(String::new()),
+        purchase_price_cents: Set(None),
+        acquired_on: Set(None),
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&state.db).await?;

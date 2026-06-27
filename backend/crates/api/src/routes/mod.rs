@@ -13,9 +13,12 @@
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
+pub mod entities;
 pub mod iam;
 pub mod llcs;
 pub mod modules;
+pub mod mortgages;
+pub mod onboarding;
 pub mod platform;
 pub mod portfolio;
 pub mod properties;
@@ -23,6 +26,7 @@ pub mod property_intel;
 pub mod public;
 pub mod theme;
 pub mod vendor;
+pub mod workflow;
 
 use rocket::serde::json::Json;
 use rocket::{get, Route};

@@ -26,6 +26,7 @@
 //! [`flips`] for a minimal, self-gating example.
 
 pub mod enrichment;
+pub mod entities;
 pub mod flips;
 pub mod leasing;
 pub mod properties;
@@ -158,6 +159,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
     vec![
         Box::new(properties::PropertiesModule),
         Box::new(enrichment::EnrichmentModule),
+        Box::new(entities::EntitiesModule),
         Box::new(leasing::LeasingModule),
         Box::new(vendor_api::VendorApiModule),
         Box::new(theming::ThemingModule),

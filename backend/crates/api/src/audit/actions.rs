@@ -18,7 +18,17 @@ pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";
 pub const PROPERTY_ENRICH: &str = "property.enrich";
+pub const PROPERTY_ONBOARD: &str = "property.onboard";
 pub const LLC_CREATE: &str = "llc.create";
+
+// ---- Investing: entities, financing, workflow ----
+pub const ENTITY_CREATE: &str = "entity.create";
+pub const ENTITY_UPDATE: &str = "entity.update";
+pub const ENTITY_NOTE_ADD: &str = "entity.note_add";
+pub const MORTGAGE_CREATE: &str = "mortgage.create";
+pub const MORTGAGE_UPDATE: &str = "mortgage.update";
+pub const MORTGAGE_DELETE: &str = "mortgage.delete";
+pub const WORKFLOW_ADVANCE: &str = "workflow.advance";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";

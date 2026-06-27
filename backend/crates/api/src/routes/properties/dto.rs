@@ -17,6 +17,11 @@ pub struct PropertyResp {
     pub status: String,
     pub year_built: i32,
     pub manager: String,
+    pub property_type: String,
+    pub strategy: String,
+    pub workflow_stage: String,
+    pub purchase_price_cents: Option<i64>,
+    pub acquired_on: Option<String>,
 }
 
 impl From<entity::property::Model> for PropertyResp {
@@ -35,6 +40,11 @@ impl From<entity::property::Model> for PropertyResp {
             status: p.status,
             year_built: p.year_built,
             manager: p.manager,
+            property_type: p.property_type,
+            strategy: p.strategy,
+            workflow_stage: p.workflow_stage,
+            purchase_price_cents: p.purchase_price_cents,
+            acquired_on: p.acquired_on,
         }
     }
 }
@@ -51,6 +61,8 @@ pub struct CreatePropertyReq {
     pub status: Option<String>,
     pub year_built: Option<i32>,
     pub manager: Option<String>,
+    pub property_type: Option<String>,
+    pub strategy: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -68,6 +80,20 @@ pub struct PropertyProfileResp {
     pub cost_breakdown: Vec<CostLine>,
     pub net_revenue_cents: i64,
     pub net_revenue_label: String,
+    /// Whether the property carries any financing.
+    pub financed: bool,
+    /// Total monthly debt service (sum of mortgage payments), in cents.
+    pub debt_service_cents: i64,
+    pub debt_service_label: String,
+    /// Levered cash flow: net operating income − debt service.
+    pub cash_flow_cents: i64,
+    pub cash_flow_label: String,
+    /// Sum of outstanding loan balances, in cents.
+    pub total_loan_balance_cents: i64,
+    pub total_loan_balance_label: String,
+    /// Estimated equity: best-known value − loan balances, in cents.
+    pub equity_cents: i64,
+    pub equity_label: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

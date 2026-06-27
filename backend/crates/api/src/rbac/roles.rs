@@ -18,6 +18,10 @@ pub struct SystemRole {
 const TENANT_FULL: &[Permission] = &[
     PropertyRead,
     PropertyWrite,
+    EntityRead,
+    EntityManage,
+    FinanceRead,
+    FinanceManage,
     ListingRead,
     ListingWrite,
     ApplicationRead,
@@ -121,6 +125,10 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
         permissions: &[
             PropertyRead,
             PropertyWrite,
+            EntityRead,
+            EntityManage,
+            FinanceRead,
+            FinanceManage,
             ListingRead,
             ListingWrite,
             ApplicationRead,
@@ -173,6 +181,8 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
         permissions: &[
             PropertyRead,
             PropertyWrite,
+            EntityRead,
+            FinanceRead,
             ListingRead,
             ListingWrite,
             ApplicationRead,
