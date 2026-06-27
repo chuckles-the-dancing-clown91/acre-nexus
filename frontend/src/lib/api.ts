@@ -11,20 +11,35 @@ import type {
   CounterpartyDetail,
   CounterpartyNote,
   CreateCounterpartyInput,
+  CreateLeaseInput,
+  CreateLienInput,
   CreateMortgageInput,
+  CreateOwnershipInput,
+  CreateTicketInput,
+  CreateUnitInput,
   EnrichmentRun,
   EnrichResponse,
+  Lease,
+  LeaseDetail,
+  LeasePayment,
+  Lien,
   Listing,
   LlcGroup,
+  MaintenanceTicket,
   Mortgage,
   OnboardInput,
   OnboardResponse,
+  Ownership,
   PortfolioSummary,
   Property,
   PropertyIntel,
   PropertyProfile,
   PublicTheme,
+  RecordPaymentInput,
+  TicketDetail,
   TokenResponse,
+  Unit,
+  UpdateTicketInput,
   User,
   Workflow,
   Workspace,
@@ -239,6 +254,90 @@ export const api = {
       method: "POST",
       auth: true,
       body: { body },
+    }),
+  // ---- rentals: units ----
+  units: (propertyId: string) =>
+    request<Unit[]>(`/properties/${propertyId}/units`, { auth: true }),
+  createUnit: (propertyId: string, body: CreateUnitInput) =>
+    request<Unit>(`/properties/${propertyId}/units`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  // ---- rentals: leases ----
+  leases: (params: { status?: string; property_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.property_id) qs.set("property_id", params.property_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<Lease[]>(`/leases${suffix}`, { auth: true });
+  },
+  propertyLeases: (propertyId: string) =>
+    request<Lease[]>(`/properties/${propertyId}/leases`, { auth: true }),
+  createLease: (propertyId: string, body: CreateLeaseInput) =>
+    request<Lease>(`/properties/${propertyId}/leases`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  lease: (id: string) => request<LeaseDetail>(`/leases/${id}`, { auth: true }),
+  recordPayment: (leaseId: string, body: RecordPaymentInput) =>
+    request<LeasePayment>(`/leases/${leaseId}/payments`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  // ---- maintenance: tickets ----
+  tickets: (
+    params: { status?: string; property_id?: string; priority?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.priority) qs.set("priority", params.priority);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<MaintenanceTicket[]>(`/tickets${suffix}`, { auth: true });
+  },
+  propertyTickets: (propertyId: string) =>
+    request<MaintenanceTicket[]>(`/properties/${propertyId}/tickets`, {
+      auth: true,
+    }),
+  createTicket: (propertyId: string, body: CreateTicketInput) =>
+    request<MaintenanceTicket>(`/properties/${propertyId}/tickets`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  ticket: (id: string) =>
+    request<TicketDetail>(`/tickets/${id}`, { auth: true }),
+  updateTicket: (id: string, body: UpdateTicketInput) =>
+    request<MaintenanceTicket>(`/tickets/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  addTicketComment: (id: string, body: string) =>
+    request<unknown>(`/tickets/${id}/comments`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  // ---- title: ownership + liens ----
+  ownership: (propertyId: string) =>
+    request<Ownership[]>(`/properties/${propertyId}/ownership`, { auth: true }),
+  createOwnership: (propertyId: string, body: CreateOwnershipInput) =>
+    request<Ownership>(`/properties/${propertyId}/ownership`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  liens: (propertyId: string) =>
+    request<Lien[]>(`/properties/${propertyId}/liens`, { auth: true }),
+  createLien: (propertyId: string, body: CreateLienInput) =>
+    request<Lien>(`/properties/${propertyId}/liens`, {
+      method: "POST",
+      auth: true,
+      body,
     }),
   applications: () => request<Application[]>("/applications", { auth: true }),
 

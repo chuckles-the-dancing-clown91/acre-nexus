@@ -29,8 +29,11 @@ pub mod enrichment;
 pub mod entities;
 pub mod flips;
 pub mod leasing;
+pub mod maintenance;
 pub mod properties;
+pub mod rentals;
 pub mod theming;
+pub mod title;
 pub mod vendor_api;
 
 use crate::error::{ApiError, ApiResult};
@@ -160,6 +163,9 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(properties::PropertiesModule),
         Box::new(enrichment::EnrichmentModule),
         Box::new(entities::EntitiesModule),
+        Box::new(rentals::RentalsModule),
+        Box::new(maintenance::MaintenanceModule),
+        Box::new(title::TitleModule),
         Box::new(leasing::LeasingModule),
         Box::new(vendor_api::VendorApiModule),
         Box::new(theming::ThemingModule),

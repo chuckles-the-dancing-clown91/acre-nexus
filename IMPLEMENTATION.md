@@ -16,6 +16,7 @@ This repository contains:
 | `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
 | `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
 | `docs/INVESTING.md` | Investor onboarding, entities registry, financing, and workflows. |
+| `docs/RENTALS.md` | Rentals (units/leases/payments), maintenance work orders, and title (ownership/liens). |
 
 ## What's implemented (this pass)
 
@@ -66,6 +67,11 @@ pattern the remaining roles plug into:
   per-property mortgages that drive levered cash flow + equity on the profile;
   and strategy-based workflows (rental/flip/BRRRR/hold/wholesale) with stage
   tracking + history. See `docs/INVESTING.md`.
+- **Rentals, maintenance & title** — units + leases/tenancies with rental &
+  payment status and a rent ledger; maintenance work orders assignable to staff
+  or contractors with a status timeline; and the full title picture (ownership /
+  deed holders + liens). Tenants/leases and a maintenance board ship in the
+  console; the property profile shows the complete dossier. See `docs/RENTALS.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

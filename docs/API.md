@@ -138,6 +138,15 @@ debt-service / cash-flow / equity into the property profile; and per-property
 investment workflows (`GET` + `POST /properties/{id}/workflow/advance`). Full
 design: **`docs/INVESTING.md`**.
 
+**Rentals, maintenance & title** (the `rentals` / `maintenance` / `title`
+modules) add the operational layer: units + leases/tenancies with rental &
+payment status + a rent ledger (`/properties/{id}/units`, `/leases`,
+`/leases/{id}/payments`); maintenance work orders assignable to staff or
+contractors (`/tickets`, `/properties/{id}/tickets`, `/tickets/{id}`,
+`/tickets/{id}/comments`); and the full title picture — ownership/deed holders
+and liens (`/properties/{id}/ownership`, `/properties/{id}/liens`). Full design:
+**`docs/RENTALS.md`**.
+
 **Property intelligence** (the `property_intel` module) enriches each property
 with parcel/county records, tax history, an automated valuation (AVM) + rent
 estimate, schools, and utilities — fetched and validated by background workers on
@@ -205,9 +214,10 @@ full model, persona list, permission catalog, and endpoint table live in
 ## Permissions
 
 Domain: `property:read` · `property:write` · `entity:read` · `entity:manage` ·
-`finance:read` · `finance:manage` · `listing:read` · `listing:write` ·
-`application:read` · `application:write` · `tenant:manage` · `billing:read` ·
-`theme:write` · `apitoken:manage`.
+`finance:read` · `finance:manage` · `lease:read` · `lease:manage` ·
+`maintenance:read` · `maintenance:manage` · `title:read` · `title:manage` ·
+`listing:read` · `listing:write` · `application:read` · `application:write` ·
+`tenant:manage` · `billing:read` · `theme:write` · `apitoken:manage`.
 IAM: `user:read` · `user:manage` · `profile:read` · `profile:write` ·
 `profile:read_pii` · `member:read` · `member:manage` · `role:read` ·
 `role:manage`. Plus `platform:admin` (super-permission, implies all).

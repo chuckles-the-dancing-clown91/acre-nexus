@@ -412,7 +412,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         None,
     )
     .await?;
-    seed_counterparty(
+    let contractor = seed_counterparty(
         db,
         northwind,
         "contractor",
@@ -424,7 +424,274 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // A 1st-lien mortgage on Maple Court through First Cascade Bank.
     seed_mortgage(db, northwind, maple_court, bank).await?;
 
+    // ---- demo rentals: units, leases, a payment, a maintenance ticket ----
+    let unit_a = seed_unit(db, northwind, maple_court, "1A", 2, 1.0, 185_000).await?;
+    let unit_b = seed_unit(db, northwind, maple_court, "2B", 1, 1.0, 162_000).await?;
+    // A current tenant and a behind tenant.
+    seed_lease(
+        db,
+        northwind,
+        maple_court,
+        unit_a,
+        "Taylor Brooks",
+        "taylor@example.com",
+        185_000,
+        "2024-09-01",
+        "active",
+        "current",
+        0,
+    )
+    .await?;
+    let behind = seed_lease(
+        db,
+        northwind,
+        maple_court,
+        unit_b,
+        "Jordan Avery",
+        "jordan.a@example.com",
+        162_000,
+        "2024-06-15",
+        "active",
+        "late",
+        162_000,
+    )
+    .await?;
+    seed_lease_payment(db, northwind, behind, "2025-06-01", 162_000, "late").await?;
+    // An open work order assigned to the contractor.
+    seed_ticket(
+        db,
+        northwind,
+        maple_court,
+        Some(unit_b),
+        contractor,
+        "Kitchen faucet leaking",
+        "plumbing",
+        "high",
+        "in_progress",
+    )
+    .await?;
+
+    // ---- demo title: ownership (deed) + liens ----
+    seed_ownership(db, northwind, maple_court, maple, "Maple Holdings LLC").await?;
+    seed_lien(
+        db,
+        northwind,
+        maple_court,
+        Some(bank),
+        "First Cascade Bank",
+        "mortgage",
+        Some(115_000_000),
+        Some(1),
+        "active",
+    )
+    .await?;
+    seed_lien(
+        db,
+        northwind,
+        maple_court,
+        None,
+        "Multnomah County Tax Assessor",
+        "tax",
+        Some(420_000),
+        Some(2),
+        "active",
+    )
+    .await?;
+
     tracing::info!("seed: complete");
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_unit(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    unit_number: &str,
+    beds: i32,
+    baths: f64,
+    rent_cents: i64,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+    entity::unit::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        unit_number: Set(unit_number.into()),
+        beds: Set(Some(beds)),
+        baths: Set(Some(baths)),
+        sqft: Set(None),
+        market_rent_cents: Set(Some(rent_cents)),
+        status: Set("occupied".into()),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_lease(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    unit_id: Uuid,
+    name: &str,
+    email: &str,
+    rent_cents: i64,
+    start_date: &str,
+    status: &str,
+    payment_status: &str,
+    balance_cents: i64,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+    entity::lease::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        unit_id: Set(Some(unit_id)),
+        tenant_name: Set(name.into()),
+        tenant_email: Set(Some(email.into())),
+        tenant_phone: Set(None),
+        rent_cents: Set(rent_cents),
+        deposit_cents: Set(Some(rent_cents)),
+        start_date: Set(start_date.into()),
+        end_date: Set(None),
+        status: Set(status.into()),
+        payment_status: Set(payment_status.into()),
+        balance_cents: Set(balance_cents),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+async fn seed_lease_payment(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    lease_id: Uuid,
+    due_date: &str,
+    amount_cents: i64,
+    status: &str,
+) -> anyhow::Result<()> {
+    entity::lease_payment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(lease_id),
+        due_date: Set(due_date.into()),
+        amount_cents: Set(amount_cents),
+        paid_date: Set(None),
+        status: Set(status.into()),
+        method: Set(None),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_ticket(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    unit_id: Option<Uuid>,
+    assignee_entity_id: Uuid,
+    title: &str,
+    category: &str,
+    priority: &str,
+    status: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::maintenance_ticket::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        unit_id: Set(unit_id),
+        lease_id: Set(None),
+        title: Set(title.into()),
+        description: Set(None),
+        category: Set(category.into()),
+        priority: Set(priority.into()),
+        status: Set(status.into()),
+        assignee_user_id: Set(None),
+        assignee_entity_id: Set(Some(assignee_entity_id)),
+        reporter: Set(Some("Resident".into())),
+        due_date: Set(None),
+        cost_cents: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_ownership(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    llc_id: Uuid,
+    owner_name: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::ownership::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        owner_kind: Set("llc".into()),
+        owner_id: Set(Some(llc_id)),
+        owner_name: Set(owner_name.into()),
+        vesting: Set(Some("Sole ownership".into())),
+        percent_bps: Set(10000),
+        deed_type: Set(Some("Warranty".into())),
+        deed_recorded_date: Set(Some("2021-04-15".into())),
+        deed_reference: Set(Some("2021-048172".into())),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_lien(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    lienholder_id: Option<Uuid>,
+    lienholder_name: &str,
+    kind: &str,
+    amount_cents: Option<i64>,
+    position: Option<i32>,
+    status: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::lien::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        lienholder_id: Set(lienholder_id),
+        lienholder_name: Set(lienholder_name.into()),
+        kind: Set(kind.into()),
+        amount_cents: Set(amount_cents),
+        position: Set(position),
+        recorded_date: Set(Some("2021-04-15".into())),
+        status: Set(status.into()),
+        reference: Set(None),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
     Ok(())
 }
 

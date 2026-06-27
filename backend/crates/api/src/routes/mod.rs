@@ -16,6 +16,7 @@ pub mod auth;
 pub mod entities;
 pub mod iam;
 pub mod llcs;
+pub mod maintenance;
 pub mod modules;
 pub mod mortgages;
 pub mod onboarding;
@@ -24,7 +25,9 @@ pub mod portfolio;
 pub mod properties;
 pub mod property_intel;
 pub mod public;
+pub mod rentals;
 pub mod theme;
+pub mod title;
 pub mod vendor;
 pub mod workflow;
 

@@ -75,6 +75,42 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    key: "rentals",
+    label: "Rentals & Leasing",
+    description: "Units, leases/tenancies, and the rent ledger.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/leases",
+        label: "Tenants",
+        icon: "user",
+        permission: "lease:read",
+      },
+    ],
+  },
+  {
+    key: "maintenance",
+    label: "Maintenance & Work Orders",
+    description: "Maintenance tickets assignable to staff or contractors.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/maintenance",
+        label: "Maintenance",
+        icon: "wrench",
+        permission: "maintenance:read",
+      },
+    ],
+  },
+  {
+    key: "title",
+    label: "Title & Ownership",
+    description:
+      "Deed ownership and liens / encumbrances (shown on properties).",
+    defaultEnabled: true,
+    nav: [],
+  },
+  {
     key: "leasing",
     label: "Leasing & Listings",
     description: "Public listings website, applications, and tenant screening.",

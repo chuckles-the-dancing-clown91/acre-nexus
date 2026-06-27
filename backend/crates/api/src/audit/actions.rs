@@ -30,6 +30,26 @@ pub const MORTGAGE_UPDATE: &str = "mortgage.update";
 pub const MORTGAGE_DELETE: &str = "mortgage.delete";
 pub const WORKFLOW_ADVANCE: &str = "workflow.advance";
 
+// ---- Rentals ----
+pub const UNIT_CREATE: &str = "unit.create";
+pub const UNIT_UPDATE: &str = "unit.update";
+pub const LEASE_CREATE: &str = "lease.create";
+pub const LEASE_UPDATE: &str = "lease.update";
+pub const LEASE_PAYMENT_RECORD: &str = "lease.payment_record";
+
+// ---- Maintenance ----
+pub const TICKET_CREATE: &str = "ticket.create";
+pub const TICKET_UPDATE: &str = "ticket.update";
+pub const TICKET_COMMENT_ADD: &str = "ticket.comment_add";
+
+// ---- Title: ownership + liens ----
+pub const OWNERSHIP_CREATE: &str = "ownership.create";
+pub const OWNERSHIP_UPDATE: &str = "ownership.update";
+pub const OWNERSHIP_DELETE: &str = "ownership.delete";
+pub const LIEN_CREATE: &str = "lien.create";
+pub const LIEN_UPDATE: &str = "lien.update";
+pub const LIEN_DELETE: &str = "lien.delete";
+
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
 pub const APPLICATION_UPDATE: &str = "application.update";

@@ -69,6 +69,10 @@ A Cargo workspace under `backend/`:
     templates per strategy (rental / flip / BRRRR / hold / wholesale) that
     properties move through, with transition history. Powers onboarding,
     financing, and the entities registry — see `docs/INVESTING.md`.
+  - **Rentals / maintenance / title** modules — the operations + title layer:
+    units, leases (rental + payment status) and a rent ledger; maintenance work
+    orders assignable to staff or contractors; ownership (deed) and liens. See
+    `docs/RENTALS.md`.
   - `modules/*` — the **pluggable module system**: each feature area is a
     `PlatformModule` that contributes its routes, the permissions it needs, and
     the background-job kinds it handles. See `docs/MODULES.md`.

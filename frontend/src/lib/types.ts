@@ -388,6 +388,209 @@ export interface OnboardResponse {
   enrich_job_id: string | null;
 }
 
+// ---- Rentals: units, leases, payments -------------------------------------
+
+export interface Unit {
+  id: string;
+  property_id: string;
+  unit_number: string;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+  market_rent_cents: number | null;
+  market_rent_label: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateUnitInput {
+  unit_number: string;
+  beds?: number;
+  baths?: number;
+  sqft?: number;
+  market_rent_cents?: number;
+  status?: string;
+}
+
+export interface Lease {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  tenant_name: string;
+  tenant_email: string | null;
+  tenant_phone: string | null;
+  rent_cents: number;
+  rent_label: string;
+  deposit_cents: number | null;
+  deposit_label: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: string;
+  payment_status: string;
+  balance_cents: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeasePayment {
+  id: string;
+  lease_id: string;
+  due_date: string;
+  amount_cents: number;
+  amount_label: string;
+  paid_date: string | null;
+  status: string;
+  method: string | null;
+  created_at: string;
+}
+
+export interface LeaseDetail extends Lease {
+  payments: LeasePayment[];
+}
+
+export interface CreateLeaseInput {
+  unit_id?: string;
+  tenant_name: string;
+  tenant_email?: string;
+  tenant_phone?: string;
+  rent_cents: number;
+  deposit_cents?: number;
+  start_date: string;
+  end_date?: string;
+  status?: string;
+  payment_status?: string;
+  notes?: string;
+}
+
+export interface RecordPaymentInput {
+  due_date: string;
+  amount_cents: number;
+  paid_date?: string;
+  status?: string;
+  method?: string;
+}
+
+// ---- Maintenance: tickets --------------------------------------------------
+
+export interface MaintenanceTicket {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  lease_id: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  priority: string;
+  status: string;
+  assignee_user_id: string | null;
+  assignee_entity_id: string | null;
+  reporter: string | null;
+  due_date: string | null;
+  cost_cents: number | null;
+  cost_label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TicketComment {
+  id: string;
+  ticket_id: string;
+  author_user_id: string | null;
+  kind: string;
+  body: string;
+  created_at: string;
+}
+
+export interface TicketDetail extends MaintenanceTicket {
+  comments: TicketComment[];
+}
+
+export interface CreateTicketInput {
+  title: string;
+  description?: string;
+  category?: string;
+  priority?: string;
+  unit_id?: string;
+  lease_id?: string;
+  assignee_user_id?: string;
+  assignee_entity_id?: string;
+  reporter?: string;
+  due_date?: string;
+  cost_cents?: number;
+}
+
+export interface UpdateTicketInput {
+  title?: string;
+  description?: string;
+  category?: string;
+  priority?: string;
+  status?: string;
+  assignee_user_id?: string;
+  assignee_entity_id?: string;
+  reporter?: string;
+  due_date?: string;
+  cost_cents?: number;
+}
+
+// ---- Title: ownership + liens ----------------------------------------------
+
+export interface Ownership {
+  id: string;
+  property_id: string;
+  owner_kind: string;
+  owner_id: string | null;
+  owner_name: string;
+  vesting: string | null;
+  percent_bps: number;
+  deed_type: string | null;
+  deed_recorded_date: string | null;
+  deed_reference: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateOwnershipInput {
+  owner_kind?: string;
+  owner_id?: string;
+  owner_name: string;
+  vesting?: string;
+  percent_bps?: number;
+  deed_type?: string;
+  deed_recorded_date?: string;
+  deed_reference?: string;
+}
+
+export interface Lien {
+  id: string;
+  property_id: string;
+  lienholder_id: string | null;
+  lienholder_name: string;
+  kind: string;
+  amount_cents: number | null;
+  amount_label: string | null;
+  position: number | null;
+  recorded_date: string | null;
+  status: string;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateLienInput {
+  lienholder_id?: string;
+  lienholder_name: string;
+  kind?: string;
+  amount_cents?: number;
+  position?: number;
+  recorded_date?: string;
+  status?: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface Application {
   id: string;
   listing_id: string | null;

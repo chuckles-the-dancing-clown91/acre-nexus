@@ -6,9 +6,14 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type {
   EnrichmentRun,
+  Lease,
+  Lien,
+  MaintenanceTicket,
   Mortgage,
+  Ownership,
   PropertyIntel,
   PropertyProfile,
+  Unit,
   Workflow,
 } from "@/lib/types";
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
@@ -21,6 +26,11 @@ export default function PropertyProfilePage() {
   const [runs, setRuns] = useState<EnrichmentRun[]>([]);
   const [mortgages, setMortgages] = useState<Mortgage[]>([]);
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [leases, setLeases] = useState<Lease[]>([]);
+  const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
+  const [ownership, setOwnership] = useState<Ownership[]>([]);
+  const [liens, setLiens] = useState<Lien[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
 
@@ -50,6 +60,16 @@ export default function PropertyProfilePage() {
       .catch(() => {});
   }, [id]);
 
+  const loadOps = useCallback(() => {
+    if (!id) return;
+    const swallow = () => {};
+    api.units(id).then(setUnits).catch(swallow);
+    api.propertyLeases(id).then(setLeases).catch(swallow);
+    api.propertyTickets(id).then(setTickets).catch(swallow);
+    api.ownership(id).then(setOwnership).catch(swallow);
+    api.liens(id).then(setLiens).catch(swallow);
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     api
@@ -58,7 +78,8 @@ export default function PropertyProfilePage() {
       .catch((e) => setError(e.message));
     loadIntel();
     loadFinancing();
-  }, [id, loadIntel, loadFinancing]);
+    loadOps();
+  }, [id, loadIntel, loadFinancing, loadOps]);
 
   // Advance the investment workflow to a chosen stage.
   const advance = useCallback(
@@ -317,6 +338,174 @@ export default function PropertyProfilePage() {
         </Card>
       )}
 
+      {/* Units & leases */}
+      {(units.length > 0 || leases.length > 0) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="p-5">
+            <h2 className="mb-4 font-display text-lg font-bold">Units</h2>
+            {units.length > 0 ? (
+              <div className="space-y-2.5">
+                {units.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                  >
+                    <div>
+                      <span className="font-semibold">
+                        Unit {u.unit_number}
+                      </span>
+                      <span className="ml-2 text-xs text-ink-3">
+                        {u.beds ?? "—"} bd / {u.baths ?? "—"} ba
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {u.market_rent_label && (
+                        <span className="font-mono text-sm text-ink-2">
+                          {u.market_rent_label}
+                        </span>
+                      )}
+                      <Badge tone={u.status === "occupied" ? "good" : "warn"}>
+                        {u.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">No units recorded.</p>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-4 font-display text-lg font-bold">Leases</h2>
+            {leases.length > 0 ? (
+              <div className="space-y-2.5">
+                {leases.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">
+                        {l.tenant_name}
+                      </div>
+                      <div className="text-xs text-ink-3">
+                        {l.rent_label}/mo · since {l.start_date}
+                      </div>
+                    </div>
+                    <Badge tone={leasePaymentTone(l.payment_status)}>
+                      {l.payment_status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">No leases recorded.</p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Maintenance tickets */}
+      {tickets.length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-4 font-display text-lg font-bold">
+            Open maintenance
+          </h2>
+          <div className="space-y-2.5">
+            {tickets.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{t.title}</div>
+                  <div className="text-xs text-ink-3">
+                    {humanize(t.category)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge tone={t.priority === "urgent" ? "bad" : "warn"}>
+                    {t.priority}
+                  </Badge>
+                  <Badge tone="info">{humanize(t.status)}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Title: ownership & liens */}
+      {(ownership.length > 0 || liens.length > 0) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="p-5">
+            <h2 className="mb-4 font-display text-lg font-bold">
+              Ownership (deed)
+            </h2>
+            {ownership.length > 0 ? (
+              <div className="space-y-2.5">
+                {ownership.map((o) => (
+                  <div
+                    key={o.id}
+                    className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                  >
+                    <div>
+                      <div className="font-semibold">{o.owner_name}</div>
+                      <div className="text-xs text-ink-3">
+                        {o.vesting ?? humanize(o.owner_kind)}
+                        {o.deed_recorded_date
+                          ? ` · ${o.deed_recorded_date}`
+                          : ""}
+                      </div>
+                    </div>
+                    <span className="font-mono text-sm text-ink-2">
+                      {(o.percent_bps / 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">No ownership recorded.</p>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-4 font-display text-lg font-bold">Liens</h2>
+            {liens.length > 0 ? (
+              <div className="space-y-2.5">
+                {liens.map((ln) => (
+                  <div
+                    key={ln.id}
+                    className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                  >
+                    <div>
+                      <div className="font-semibold">{ln.lienholder_name}</div>
+                      <div className="text-xs text-ink-3">
+                        {humanize(ln.kind)}
+                        {ln.position != null ? ` · lien ${ln.position}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {ln.amount_label && (
+                        <span className="font-mono text-sm text-ink-2">
+                          {ln.amount_label}
+                        </span>
+                      )}
+                      <Badge tone={ln.status === "active" ? "warn" : "neutral"}>
+                        {ln.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-3">No liens recorded.</p>
+            )}
+          </Card>
+        </div>
+      )}
+
       {/* Parcel / county record */}
       {d && (
         <Card className="p-5">
@@ -513,6 +702,13 @@ function Empty() {
 function ratingTone(rating: number): "good" | "warn" | "neutral" {
   if (rating >= 8) return "good";
   if (rating >= 5) return "warn";
+  return "neutral";
+}
+
+function leasePaymentTone(status: string): "good" | "warn" | "bad" | "neutral" {
+  if (status === "current") return "good";
+  if (status === "partial") return "warn";
+  if (status === "late") return "bad";
   return "neutral";
 }
 
