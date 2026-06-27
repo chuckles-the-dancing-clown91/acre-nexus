@@ -7,10 +7,13 @@
 import type {
   Application,
   ApplyResponse,
+  EnrichmentRun,
+  EnrichResponse,
   Listing,
   LlcGroup,
   PortfolioSummary,
   Property,
+  PropertyIntel,
   PropertyProfile,
   PublicTheme,
   TokenResponse,
@@ -174,6 +177,17 @@ export const api = {
   properties: () => request<Property[]>("/properties", { auth: true }),
   property: (id: string) =>
     request<PropertyProfile>(`/properties/${id}`, { auth: true }),
+  // ---- property intelligence (enrichment) ----
+  propertyIntel: (id: string) =>
+    request<PropertyIntel>(`/properties/${id}/intel`, { auth: true }),
+  enrichProperty: (id: string, sources: string[] = []) =>
+    request<EnrichResponse>(`/properties/${id}/enrich`, {
+      method: "POST",
+      auth: true,
+      body: { sources },
+    }),
+  propertyEnrichment: (id: string) =>
+    request<EnrichmentRun[]>(`/properties/${id}/enrichment`, { auth: true }),
   applications: () => request<Application[]>("/applications", { auth: true }),
 
   // ---- API tokens ----

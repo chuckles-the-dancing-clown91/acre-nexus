@@ -1,29 +1,70 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { PropertyProfile } from "@/lib/types";
-import { Badge, Card, StatTile, statusTone } from "@/components/ui";
+import type {
+  EnrichmentRun,
+  PropertyIntel,
+  PropertyProfile,
+} from "@/lib/types";
+import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 
 export default function PropertyProfilePage() {
   const params = useParams<{ id: string }>();
   const [p, setP] = useState<PropertyProfile | null>(null);
+  const [intel, setIntel] = useState<PropertyIntel | null>(null);
+  const [runs, setRuns] = useState<EnrichmentRun[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
+
+  const id = params.id;
+
+  const loadIntel = useCallback(() => {
+    if (!id) return;
+    api
+      .propertyIntel(id)
+      .then(setIntel)
+      .catch(() => {});
+    api
+      .propertyEnrichment(id)
+      .then(setRuns)
+      .catch(() => {});
+  }, [id]);
 
   useEffect(() => {
-    if (!params.id) return;
+    if (!id) return;
     api
-      .property(params.id)
+      .property(id)
       .then(setP)
       .catch((e) => setError(e.message));
-  }, [params.id]);
+    loadIntel();
+  }, [id, loadIntel]);
+
+  // Trigger enrichment, then poll a couple of times as the queue works through
+  // the fanned-out jobs (the scheduler ticks every few seconds).
+  const enrich = useCallback(async () => {
+    if (!id) return;
+    setEnriching(true);
+    try {
+      await api.enrichProperty(id);
+      for (const delay of [3500, 8000]) {
+        await new Promise((r) => setTimeout(r, delay));
+        loadIntel();
+      }
+    } finally {
+      setEnriching(false);
+    }
+  }, [id, loadIntel]);
 
   if (error)
     return <p className="text-bad">Couldn&apos;t load property: {error}</p>;
   if (!p) return <p className="text-ink-3">Loading…</p>;
+
+  const d = intel?.detail;
+  const latestValue = intel?.valuations?.[0];
 
   return (
     <div className="space-y-6">
@@ -34,14 +75,24 @@ export default function PropertyProfilePage() {
         <Icon name="back" size={16} /> All properties
       </Link>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">
-          {p.name}
-        </h1>
-        <Badge tone={statusTone(p.status)}>{p.status}</Badge>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">
+            {p.name}
+          </h1>
+          <Badge tone={statusTone(p.status)}>{p.status}</Badge>
+        </div>
+        <Button onClick={enrich} disabled={enriching}>
+          {enriching ? "Enriching…" : "Enrich data"}
+        </Button>
       </div>
       <p className="-mt-3 text-ink-3">
-        {p.address} · {p.city}
+        {d?.matched_address ?? p.address} · {p.city}
+        {d?.latitude != null && d?.longitude != null && (
+          <span className="ml-2 font-mono text-xs text-ink-3">
+            ({d.latitude.toFixed(5)}, {d.longitude.toFixed(5)})
+          </span>
+        )}
       </p>
 
       {/* KPI row */}
@@ -88,7 +139,7 @@ export default function PropertyProfilePage() {
           </div>
         </Card>
 
-        {/* Details */}
+        {/* Details + valuation */}
         <Card className="p-5">
           <h2 className="mb-4 font-display text-lg font-bold">Details</h2>
           <dl className="space-y-3 text-sm">
@@ -97,18 +148,246 @@ export default function PropertyProfilePage() {
             <Row k="Year built" v={`${p.year_built}`} />
             <Row k="Manager" v={p.manager} />
             <Row k="Monthly rent" v={`${p.monthly_rent_label}/mo`} />
+            {d?.beds != null && (
+              <Row k="Beds / baths" v={`${d.beds} / ${d.baths ?? "—"}`} />
+            )}
+            {d?.sqft != null && (
+              <Row k="Living area" v={`${d.sqft.toLocaleString()} sqft`} />
+            )}
+            {d?.property_type && <Row k="Type" v={humanize(d.property_type)} />}
+            {latestValue?.estimated_value_label && (
+              <Row
+                k="Est. value (AVM)"
+                v={`${latestValue.estimated_value_label}${
+                  latestValue.confidence != null
+                    ? ` · ${latestValue.confidence}% conf.`
+                    : ""
+                }`}
+              />
+            )}
+            {latestValue?.estimated_rent_label && (
+              <Row
+                k="Est. market rent"
+                v={`${latestValue.estimated_rent_label}/mo`}
+              />
+            )}
           </dl>
         </Card>
       </div>
+
+      {/* Parcel / county record */}
+      {d && (
+        <Card className="p-5">
+          <h2 className="mb-4 font-display text-lg font-bold">
+            Parcel &amp; county record
+          </h2>
+          <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+            <Row k="APN" v={d.apn ?? "—"} mono />
+            <Row k="County" v={d.county ?? "—"} />
+            <Row k="Zoning" v={d.zoning ?? "—"} />
+            <Row
+              k="Lot size"
+              v={
+                d.lot_size_sqft
+                  ? `${d.lot_size_sqft.toLocaleString()} sqft`
+                  : "—"
+              }
+            />
+            <Row k="Owner of record" v={d.owner_of_record ?? "—"} />
+            <Row k="Subdivision" v={d.subdivision ?? "—"} />
+            <Row
+              k="Last sale"
+              v={
+                d.last_sale_date
+                  ? `${d.last_sale_date}${
+                      d.last_sale_price_label
+                        ? ` · ${d.last_sale_price_label}`
+                        : ""
+                    }`
+                  : "—"
+              }
+            />
+            <Row k="Flood zone" v={d.flood_zone ?? "—"} />
+            <Row
+              k="Heating / cooling"
+              v={`${d.heating ?? "—"} / ${d.cooling ?? "—"}`}
+            />
+            <Row
+              k="Walk score"
+              v={d.walk_score != null ? `${d.walk_score}` : "—"}
+            />
+          </dl>
+          {d.last_enriched_at && (
+            <p className="mt-4 text-xs text-ink-3">
+              Last enriched {formatTimestamp(d.last_enriched_at)}
+            </p>
+          )}
+        </Card>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Schools */}
+        <Card className="p-5">
+          <h2 className="mb-4 font-display text-lg font-bold">Schools</h2>
+          {intel?.schools?.length ? (
+            <div className="space-y-2.5">
+              {intel.schools.map((s) => (
+                <div
+                  key={`${s.level}-${s.name}`}
+                  className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                >
+                  <div>
+                    <div className="font-semibold">{s.name}</div>
+                    <div className="text-xs text-ink-3">
+                      {humanize(s.level)}
+                      {s.grades ? ` · ${s.grades}` : ""}
+                      {s.distance_mi != null ? ` · ${s.distance_mi} mi` : ""}
+                    </div>
+                  </div>
+                  {s.rating != null && (
+                    <Badge tone={ratingTone(s.rating)}>{s.rating}/10</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty />
+          )}
+        </Card>
+
+        {/* Utilities */}
+        <Card className="p-5">
+          <h2 className="mb-4 font-display text-lg font-bold">Utilities</h2>
+          {intel?.utilities?.length ? (
+            <div className="space-y-2.5">
+              {intel.utilities.map((u) => (
+                <div
+                  key={u.utility_type}
+                  className="flex items-center justify-between border-b border-line pb-2.5 last:border-0"
+                >
+                  <div>
+                    <div className="font-semibold">
+                      {humanize(u.utility_type)}
+                    </div>
+                    <div className="text-xs text-ink-3">{u.provider}</div>
+                  </div>
+                  <span className="font-mono text-sm text-ink-2">
+                    {u.est_monthly_cost_label
+                      ? `${u.est_monthly_cost_label}/mo`
+                      : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty />
+          )}
+        </Card>
+      </div>
+
+      {/* Tax history */}
+      <Card className="p-5">
+        <h2 className="mb-4 font-display text-lg font-bold">
+          Tax &amp; assessment history
+        </h2>
+        {intel?.taxes?.length ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-3">
+                <th className="py-2">Year</th>
+                <th className="py-2">Assessed value</th>
+                <th className="py-2 text-right">Tax</th>
+                <th className="py-2 text-right">Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {intel.taxes.map((t) => (
+                <tr key={t.tax_year}>
+                  <td className="py-2 font-semibold">{t.tax_year}</td>
+                  <td className="py-2 font-mono text-ink-2">
+                    {t.assessed_value_label ?? "—"}
+                  </td>
+                  <td className="py-2 text-right font-mono text-ink-2">
+                    {t.tax_amount_label ?? "—"}
+                  </td>
+                  <td className="py-2 text-right font-mono text-ink-3">
+                    {t.tax_rate_bps != null
+                      ? `${(t.tax_rate_bps / 100).toFixed(2)}%`
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <Empty />
+        )}
+      </Card>
+
+      {/* Enrichment activity */}
+      {runs.length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-4 font-display text-lg font-bold">
+            Enrichment activity
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {runs.slice(0, 12).map((r) => (
+              <Badge
+                key={r.id}
+                tone={r.status === "succeeded" ? "good" : "bad"}
+              >
+                {humanize(r.source)} · {r.provider}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between border-b border-line pb-2.5 last:border-0">
       <dt className="text-ink-3">{k}</dt>
-      <dd className="font-semibold">{v}</dd>
+      <dd
+        className={mono ? "font-mono text-sm font-semibold" : "font-semibold"}
+      >
+        {v}
+      </dd>
     </div>
   );
+}
+
+function Empty() {
+  return (
+    <p className="text-sm text-ink-3">
+      No data yet — run <span className="font-semibold">Enrich data</span> to
+      fetch it.
+    </p>
+  );
+}
+
+function ratingTone(rating: number): "good" | "warn" | "neutral" {
+  if (rating >= 8) return "good";
+  if (rating >= 5) return "warn";
+  return "neutral";
+}
+
+/** Turn a snake/lower key into a human label, e.g. `single_family` → `Single family`. */
+function humanize(key: string): string {
+  const s = key.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatTimestamp(iso: string): string {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

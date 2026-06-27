@@ -124,6 +124,100 @@ export interface LlcGroup {
   properties: Property[];
 }
 
+// ---- Property intelligence (enrichment) ------------------------------------
+
+export interface PropertyDetail {
+  property_id: string;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+  lot_size_sqft: number | null;
+  property_type: string | null;
+  stories: number | null;
+  parking_spaces: number | null;
+  heating: string | null;
+  cooling: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  geocode_accuracy: string | null;
+  matched_address: string | null;
+  apn: string | null;
+  legal_description: string | null;
+  zoning: string | null;
+  subdivision: string | null;
+  county: string | null;
+  fips: string | null;
+  owner_of_record: string | null;
+  last_sale_date: string | null;
+  last_sale_price_cents: number | null;
+  last_sale_price_label: string | null;
+  flood_zone: string | null;
+  walk_score: number | null;
+  last_enriched_at: string | null;
+}
+
+export interface PropertyTax {
+  tax_year: number;
+  assessed_value_cents: number | null;
+  assessed_value_label: string | null;
+  tax_amount_cents: number | null;
+  tax_amount_label: string | null;
+  tax_rate_bps: number | null;
+  source: string;
+}
+
+export interface PropertyValuation {
+  as_of: string;
+  estimated_value_cents: number | null;
+  estimated_value_label: string | null;
+  value_low_cents: number | null;
+  value_high_cents: number | null;
+  estimated_rent_cents: number | null;
+  estimated_rent_label: string | null;
+  confidence: number | null;
+  source: string;
+}
+
+export interface PropertySchool {
+  name: string;
+  level: string;
+  district: string | null;
+  rating: number | null;
+  distance_mi: number | null;
+  grades: string | null;
+}
+
+export interface PropertyUtility {
+  utility_type: string;
+  provider: string;
+  est_monthly_cost_cents: number | null;
+  est_monthly_cost_label: string | null;
+  phone: string | null;
+}
+
+export interface PropertyIntel {
+  detail: PropertyDetail | null;
+  valuations: PropertyValuation[];
+  taxes: PropertyTax[];
+  schools: PropertySchool[];
+  utilities: PropertyUtility[];
+}
+
+export interface EnrichmentRun {
+  id: string;
+  source: string;
+  status: string;
+  provider: string;
+  job_id: string | null;
+  detail: unknown | null;
+  created_at: string;
+}
+
+export interface EnrichResponse {
+  job_id: string;
+  scheduled: string[];
+}
+
 export interface Application {
   id: string;
   listing_id: string | null;
