@@ -15,6 +15,7 @@ This repository contains:
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |
 | `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
 | `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
+| `docs/INVESTING.md` | Investor onboarding, entities registry, financing, and workflows. |
 
 ## What's implemented (this pass)
 
@@ -59,6 +60,12 @@ pattern the remaining roles plug into:
   utilities) fetched and validated automatically by background workers. A
   provider interface backs each source with deterministic simulations plus one
   **live** integration (the U.S. Census geocoder). See `docs/PROPERTY_DATA.md`.
+- **Investor onboarding, financing & workflows** — one-call property onboarding
+  (property + mortgages + lender entities + workflow start + enrichment); an
+  entities/counterparty registry (banks, lenders, contractors) with notes;
+  per-property mortgages that drive levered cash flow + equity on the profile;
+  and strategy-based workflows (rental/flip/BRRRR/hold/wholesale) with stage
+  tracking + history. See `docs/INVESTING.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

@@ -13,8 +13,9 @@ what a module is and how it is gated.
 
 | Key | Name | Default | Routes / responsibility |
 |-----|------|---------|--------------------------|
-| `properties` | Property Management | on | `/properties`, `/portfolio`, `/llcs` |
+| `properties` | Property Management | on | `/properties`, `/properties/onboard`, `/portfolio`, `/llcs`, `/properties/{id}/mortgages`, `/properties/{id}/workflow` (see `docs/INVESTING.md`) |
 | `property_intel` | Property Intelligence | on | `/properties/{id}/intel`, `/enrich`, `/enrichment` + the `enrich_*` enrichment jobs (see `docs/PROPERTY_DATA.md`) |
+| `entities` | Entities & Contacts | on | `/entities` registry (banks, lenders, contractors …) + notes (see `docs/INVESTING.md`) |
 | `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening/auto-email jobs |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |

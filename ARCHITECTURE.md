@@ -65,6 +65,10 @@ A Cargo workspace under `backend/`:
     fetch + validate parcel/county records, taxes, valuations, schools, and
     utilities. Driven by the queue; split into `source`/`data`/`geocode`/
     `simulated`/`runner` files.
+  - `workflow` — the **investment workflow catalog**: code-defined stage
+    templates per strategy (rental / flip / BRRRR / hold / wholesale) that
+    properties move through, with transition history. Powers onboarding,
+    financing, and the entities registry — see `docs/INVESTING.md`.
   - `modules/*` — the **pluggable module system**: each feature area is a
     `PlatformModule` that contributes its routes, the permissions it needs, and
     the background-job kinds it handles. See `docs/MODULES.md`.

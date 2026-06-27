@@ -110,6 +110,7 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 | GET | `/portfolio/llcs` | `property:read` | Properties grouped by LLC |
 | GET | `/properties` | `property:read` | Portfolio list |
 | POST | `/properties` | `property:write` | Add a property |
+| POST | `/properties/onboard` | `property:write` | **Onboard** a house (property + financing + workflow + enrichment) |
 | GET | `/properties/{id}` | `property:read` | **Full profile w/ computed economics** |
 | PATCH | `/properties/{id}` | `property:write` | Update property |
 | GET | `/properties/{id}/intel` | `property:read` | **Property intelligence**: parcel/county, taxes, valuation, schools, utilities |
@@ -128,6 +129,14 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 Property profile economics (mirrors the prototype): `maintenance ≈ 9%`, `taxes &
 insurance ≈ 12%`, `management fee = 8%` of rent; `net = rent − maintenance −
 taxes − management`.
+
+**Investor onboarding, financing & workflows** (the `properties` + `entities`
+modules) add: `POST /properties/onboard`; the entities/counterparty registry
+(`/entities`, `/entities/{id}`, `/entities/{id}/notes`); property financing
+(`/properties/{id}/mortgages`, `PATCH`/`DELETE /mortgages/{id}`) which feeds
+debt-service / cash-flow / equity into the property profile; and per-property
+investment workflows (`GET` + `POST /properties/{id}/workflow/advance`). Full
+design: **`docs/INVESTING.md`**.
 
 **Property intelligence** (the `property_intel` module) enriches each property
 with parcel/county records, tax history, an automated valuation (AVM) + rent
@@ -195,7 +204,8 @@ full model, persona list, permission catalog, and endpoint table live in
 
 ## Permissions
 
-Domain: `property:read` · `property:write` · `listing:read` · `listing:write` ·
+Domain: `property:read` · `property:write` · `entity:read` · `entity:manage` ·
+`finance:read` · `finance:manage` · `listing:read` · `listing:write` ·
 `application:read` · `application:write` · `tenant:manage` · `billing:read` ·
 `theme:write` · `apitoken:manage`.
 IAM: `user:read` · `user:manage` · `profile:read` · `profile:write` ·
