@@ -5,15 +5,16 @@ the product — its routes, the permissions it requires, the background-job kind
 processes, and whether it ships on by default. Tenants turn modules on and off
 from their software settings, which makes capabilities **sellable per feature**.
 
-The backend and frontend share a module **key** (`properties`, `leasing`,
-`vendor_api`, `theming`, `flips`) so the two halves always agree on what a module
-is and how it is gated.
+The backend and frontend share a module **key** (`properties`, `property_intel`,
+`leasing`, `vendor_api`, `theming`, `flips`) so the two halves always agree on
+what a module is and how it is gated.
 
 ## Modules today
 
 | Key | Name | Default | Routes / responsibility |
 |-----|------|---------|--------------------------|
 | `properties` | Property Management | on | `/properties`, `/portfolio`, `/llcs` |
+| `property_intel` | Property Intelligence | on | `/properties/{id}/intel`, `/enrich`, `/enrichment` + the `enrich_*` enrichment jobs (see `docs/PROPERTY_DATA.md`) |
 | `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening/auto-email jobs |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |

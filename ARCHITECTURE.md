@@ -55,7 +55,16 @@ A Cargo workspace under `backend/`:
     vendor API.
   - `scheduler` — a Tokio task that polls the `background_job` table and advances
     durable state machines (e.g. screening: `pending → awaiting_callback →
-    completed`; automated emails). Dispatch is delegated to the owning module.
+    completed`; automated emails). Dispatch is delegated to the owning module. It
+    is a **retrying queue**: jobs carry a `max_attempts` budget, transient
+    failures back off exponentially (`JobOutcome::retry`), and exhausted jobs go
+    to a terminal `failed` with `last_error` recorded.
+  - `enrichment` — the **property enrichment engine** (see
+    `docs/PROPERTY_DATA.md`): a provider interface with deterministic simulated
+    providers plus one **live** integration (the U.S. Census geocoder) that
+    fetch + validate parcel/county records, taxes, valuations, schools, and
+    utilities. Driven by the queue; split into `source`/`data`/`geocode`/
+    `simulated`/`runner` files.
   - `modules/*` — the **pluggable module system**: each feature area is a
     `PlatformModule` that contributes its routes, the permissions it needs, and
     the background-job kinds it handles. See `docs/MODULES.md`.

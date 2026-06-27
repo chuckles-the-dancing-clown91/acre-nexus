@@ -112,6 +112,9 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 | POST | `/properties` | `property:write` | Add a property |
 | GET | `/properties/{id}` | `property:read` | **Full profile w/ computed economics** |
 | PATCH | `/properties/{id}` | `property:write` | Update property |
+| GET | `/properties/{id}/intel` | `property:read` | **Property intelligence**: parcel/county, taxes, valuation, schools, utilities |
+| POST | `/properties/{id}/enrich` | `property:write` | Enqueue automated enrichment (county records, parcel, AVM, …) |
+| GET | `/properties/{id}/enrichment` | `property:read` | Recent enrichment runs |
 | GET | `/llcs` | `property:read` | Holding entities |
 | POST | `/llcs` | `tenant:manage` | Create LLC |
 | GET | `/applications` | `application:read` | Applications |
@@ -125,6 +128,15 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 Property profile economics (mirrors the prototype): `maintenance ≈ 9%`, `taxes &
 insurance ≈ 12%`, `management fee = 8%` of rent; `net = rent − maintenance −
 taxes − management`.
+
+**Property intelligence** (the `property_intel` module) enriches each property
+with parcel/county records, tax history, an automated valuation (AVM) + rent
+estimate, schools, and utilities — fetched and validated by background workers on
+the durable queue. `POST /properties/{id}/enrich` (body `{ "sources": [...] }`,
+omit for all of `geocode`/`parcel`/`tax`/`valuation`/`schools`/`utilities`)
+enqueues the work and returns the orchestrator `job_id`. One source — the
+geocoder — is a live external call; the rest are pluggable simulated providers.
+Full design: **`docs/PROPERTY_DATA.md`**.
 
 ---
 

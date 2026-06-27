@@ -14,6 +14,7 @@ This repository contains:
 | `ARCHITECTURE.md` | How the system is put together and why. |
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |
 | `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
+| `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
 
 ## What's implemented (this pass)
 
@@ -50,8 +51,14 @@ pattern the remaining roles plug into:
 - **Theming / white-label** — per-tenant branding (logo, colours, legal
   boilerplate templates) driven from the DB; the frontend re-themes at runtime
   plus a dark-mode toggle.
-- **Tokio background scheduler** — durable job engine for "progress automation"
-  (background checks awaiting a callback, automated emails).
+- **Tokio background scheduler** — durable, **retrying** job queue for "progress
+  automation" (background checks awaiting a callback, automated emails, property
+  enrichment) with backoff + `max_attempts` + a terminal `failed` state.
+- **Property intelligence ("Zillow but better")** — rich per-property data
+  (parcel/county records, tax history, AVM valuation + rent estimate, schools,
+  utilities) fetched and validated automatically by background workers. A
+  provider interface backs each source with deterministic simulations plus one
+  **live** integration (the U.S. Census geocoder). See `docs/PROPERTY_DATA.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).
