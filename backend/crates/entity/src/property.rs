@@ -22,6 +22,18 @@ pub struct Model {
     pub status: String,
     pub year_built: i32,
     pub manager: String,
+    /// Investor-entered property type: `single_family` | `multi_family` |
+    /// `condo` | `townhome` | `commercial` | `land`.
+    pub property_type: String,
+    /// Investment strategy driving the workflow: `rental` | `flip` | `brrrr` |
+    /// `hold` | `wholesale`.
+    pub strategy: String,
+    /// Current stage in the strategy's workflow (empty = not started).
+    pub workflow_stage: String,
+    /// Acquisition price, in cents (if owned/acquired).
+    pub purchase_price_cents: Option<i64>,
+    /// Acquisition date (`YYYY-MM-DD`).
+    pub acquired_on: Option<String>,
     pub created_at: DateTimeWithTimeZone,
 }
 

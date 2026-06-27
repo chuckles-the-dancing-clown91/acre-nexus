@@ -24,6 +24,9 @@ impl PlatformModule for ThemingModule {
     }
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
-        openapi_get_routes_spec![theme::get_theme, theme::update_theme]
+        openapi_get_routes_spec![
+            theme::get_theme::get_theme,
+            theme::update_theme::update_theme
+        ]
     }
 }

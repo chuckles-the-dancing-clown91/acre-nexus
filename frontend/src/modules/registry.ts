@@ -46,12 +46,69 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/properties/onboard",
+        label: "Onboard",
+        icon: "check",
+        permission: "property:write",
+      },
+      {
         href: "/console/llcs",
         label: "LLCs",
         icon: "shield",
         permission: "property:read",
       },
     ],
+  },
+  {
+    key: "entities",
+    label: "Entities & Contacts",
+    description:
+      "Registry of banks, lenders, contractors and other counterparties, with notes.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/entities",
+        label: "Entities",
+        icon: "globe",
+        permission: "entity:read",
+      },
+    ],
+  },
+  {
+    key: "rentals",
+    label: "Rentals & Leasing",
+    description: "Units, leases/tenancies, and the rent ledger.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/leases",
+        label: "Tenants",
+        icon: "user",
+        permission: "lease:read",
+      },
+    ],
+  },
+  {
+    key: "maintenance",
+    label: "Maintenance & Work Orders",
+    description: "Maintenance tickets assignable to staff or contractors.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/maintenance",
+        label: "Maintenance",
+        icon: "wrench",
+        permission: "maintenance:read",
+      },
+    ],
+  },
+  {
+    key: "title",
+    label: "Title & Ownership",
+    description:
+      "Deed ownership and liens / encumbrances (shown on properties).",
+    defaultEnabled: true,
+    nav: [],
   },
   {
     key: "leasing",

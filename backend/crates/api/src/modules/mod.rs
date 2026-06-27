@@ -25,10 +25,15 @@
 //! That is the entire contract — no central wiring to touch. See
 //! [`flips`] for a minimal, self-gating example.
 
+pub mod enrichment;
+pub mod entities;
 pub mod flips;
 pub mod leasing;
+pub mod maintenance;
 pub mod properties;
+pub mod rentals;
 pub mod theming;
+pub mod title;
 pub mod vendor_api;
 
 use crate::error::{ApiError, ApiResult};
@@ -76,6 +81,12 @@ pub struct JobOutcome {
     pub run_at: Option<DateTime<Utc>>,
     /// Optional result/detail payload to persist.
     pub result: Option<serde_json::Value>,
+    /// Error message to persist to `last_error`, if this step errored.
+    pub error: Option<String>,
+    /// True when this is a *transient retry* (vs a normal state transition). The
+    /// scheduler enforces the job's `max_attempts` budget against these: once the
+    /// budget is exhausted a retry is coerced to a terminal `failed`.
+    pub retry: bool,
 }
 
 impl JobOutcome {
@@ -85,15 +96,42 @@ impl JobOutcome {
             status: "completed".into(),
             run_at: None,
             result: Some(result),
+            error: None,
+            retry: false,
         }
     }
 
-    /// Move to `status` and try again after `delay_secs`.
+    /// Move to `status` and try again after `delay_secs` (a state-machine step,
+    /// not an error — does not count against the retry budget).
     pub fn reschedule(status: impl Into<String>, delay_secs: i64) -> Self {
         JobOutcome {
             status: status.into(),
             run_at: Some(Utc::now() + chrono::Duration::seconds(delay_secs)),
             result: None,
+            error: None,
+            retry: false,
+        }
+    }
+
+    /// Terminal failure with an error message.
+    pub fn failed(error: impl Into<String>) -> Self {
+        JobOutcome {
+            status: "failed".into(),
+            run_at: None,
+            result: None,
+            error: Some(error.into()),
+            retry: false,
+        }
+    }
+
+    /// A transient error: retry after `delay_secs`, subject to `max_attempts`.
+    pub fn retry(delay_secs: i64, error: impl Into<String>) -> Self {
+        JobOutcome {
+            status: "pending".into(),
+            run_at: Some(Utc::now() + chrono::Duration::seconds(delay_secs)),
+            result: None,
+            error: Some(error.into()),
+            retry: true,
         }
     }
 }
@@ -123,6 +161,11 @@ pub trait PlatformModule: Send + Sync {
 pub fn registry() -> Vec<Box<dyn PlatformModule>> {
     vec![
         Box::new(properties::PropertiesModule),
+        Box::new(enrichment::EnrichmentModule),
+        Box::new(entities::EntitiesModule),
+        Box::new(rentals::RentalsModule),
+        Box::new(maintenance::MaintenanceModule),
+        Box::new(title::TitleModule),
         Box::new(leasing::LeasingModule),
         Box::new(vendor_api::VendorApiModule),
         Box::new(theming::ThemingModule),

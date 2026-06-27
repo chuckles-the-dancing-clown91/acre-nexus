@@ -20,6 +20,8 @@
                     │  ├──────────┴───────────┴───────────────┤ │
                     │  │  routes (public / console / vendor)   │ │
                     │  ├───────────────────────────────────────┤ │
+                    │  │  audit fairing (every request) + events│ │
+                    │  ├───────────────────────────────────────┤ │
                     │  │  Tokio scheduler (background jobs)     │ │
                     │  └───────────────────────────────────────┘ │
                     └───────────────┬──────────────────────────┘
@@ -53,11 +55,36 @@ A Cargo workspace under `backend/`:
     vendor API.
   - `scheduler` — a Tokio task that polls the `background_job` table and advances
     durable state machines (e.g. screening: `pending → awaiting_callback →
-    completed`; automated emails). Dispatch is delegated to the owning module.
+    completed`; automated emails). Dispatch is delegated to the owning module. It
+    is a **retrying queue**: jobs carry a `max_attempts` budget, transient
+    failures back off exponentially (`JobOutcome::retry`), and exhausted jobs go
+    to a terminal `failed` with `last_error` recorded.
+  - `enrichment` — the **property enrichment engine** (see
+    `docs/PROPERTY_DATA.md`): a provider interface with deterministic simulated
+    providers plus one **live** integration (the U.S. Census geocoder) that
+    fetch + validate parcel/county records, taxes, valuations, schools, and
+    utilities. Driven by the queue; split into `source`/`data`/`geocode`/
+    `simulated`/`runner` files.
+  - `workflow` — the **investment workflow catalog**: code-defined stage
+    templates per strategy (rental / flip / BRRRR / hold / wholesale) that
+    properties move through, with transition history. Powers onboarding,
+    financing, and the entities registry — see `docs/INVESTING.md`.
+  - **Rentals / maintenance / title** modules — the operations + title layer:
+    units, leases (rental + payment status) and a rent ledger; maintenance work
+    orders assignable to staff or contractors; ownership (deed) and liens. See
+    `docs/RENTALS.md`.
   - `modules/*` — the **pluggable module system**: each feature area is a
     `PlatformModule` that contributes its routes, the permissions it needs, and
     the background-job kinds it handles. See `docs/MODULES.md`.
-  - `routes/*` — handlers grouped by audience (see `docs/API.md`).
+  - `routes/*` — HTTP handlers grouped by audience (see `docs/API.md`). Each
+    area is a folder with **one handler per file** plus a `dto.rs` (and a
+    `helpers.rs` for shared internals), kept small and readable; the mount sites
+    reference handlers by path.
+  - `audit` — the **audit logging subsystem** (see `docs/AUDIT.md`). A Rocket
+    fairing records every request (reads included) with an `X-Request-Id`; a
+    `record` writer captures rich domain events on every state change. Split
+    into single-responsibility files (`fairing`, `record`, `request_log`,
+    `actor`, `actions`, `skip`).
   - `openapi` — `rocket_okapi` integration: routes are `#[openapi]`-annotated and
     DTOs derive `JsonSchema`, so the OpenAPI 3.0 doc is **generated from the code**
     and served at `/openapi.json`, with Swagger UI (`/swagger-ui/`) and RapiDoc
@@ -116,6 +143,26 @@ settings. Adding a module is a new file plus one registry line — see
 - **Vendors**: long-lived, **scoped**, revocable API keys (`acre_live_…`). Only a
   SHA-256 hash is stored; each `/api/v1` endpoint requires a specific scope so
   services can be sold individually.
+
+## Audit logging
+
+Every action against the platform is recorded to the `audit_log` table at two
+levels (full design in **`docs/AUDIT.md`**):
+
+- **Request events** — a single Rocket **fairing** (`audit::AuditFairing`)
+  observes every request/response, resolving the principal (user / API key /
+  public) and writing method, path, status, latency, client IP, and a
+  correlation id. It is the one wiring point that makes coverage
+  comprehensive — current and future endpoints are audited automatically — and it
+  stamps an `X-Request-Id` header on every response.
+- **Domain events** — handlers additionally call `audit::record(...)` on every
+  state change (`property.create`, `role.update`, `pii.reveal`, …) with structured
+  `metadata`, for a human-readable "what changed" trail.
+
+Both writers are **best-effort** (failures are logged, never propagated) and the
+request write happens off the request path, so auditing never blocks or fails the
+underlying operation. The trail is surfaced at `GET /admin/audit` (gated by
+`audit:read`) and the platform audit viewer.
 
 ## Frontend (Next.js / React)
 

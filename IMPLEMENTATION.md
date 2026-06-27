@@ -13,6 +13,10 @@ This repository contains:
 | `frontend/` | **Next.js / React** app (App Router, TypeScript, Tailwind). |
 | `ARCHITECTURE.md` | How the system is put together and why. |
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |
+| `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
+| `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
+| `docs/INVESTING.md` | Investor onboarding, entities registry, financing, and workflows. |
+| `docs/RENTALS.md` | Rentals (units/leases/payments), maintenance work orders, and title (ownership/liens). |
 
 ## What's implemented (this pass)
 
@@ -35,6 +39,11 @@ pattern the remaining roles plug into:
   `docs/MODULES.md`.
 - **Token-based vendor API** — scoped, revocable API keys powering `/api/v1`, so
   services can be sold à la carte.
+- **Audit logging** — a Rocket fairing audits **every request** (reads included)
+  with an `X-Request-Id`, and handlers emit rich **domain events** on every state
+  change, all to one queryable `audit_log` surfaced at `GET /admin/audit` and the
+  platform audit viewer. Built as a modular, single-responsibility subsystem
+  (`api/src/audit/*`). See `docs/AUDIT.md`.
 - **Auto-generated API docs** — `rocket_okapi` produces the OpenAPI 3.0 spec from
   the `#[openapi]` routes + `JsonSchema` DTOs, served at `/openapi.json` with
   Swagger UI (`/swagger-ui/`) and RapiDoc (`/rapidoc/`).
@@ -44,8 +53,25 @@ pattern the remaining roles plug into:
 - **Theming / white-label** — per-tenant branding (logo, colours, legal
   boilerplate templates) driven from the DB; the frontend re-themes at runtime
   plus a dark-mode toggle.
-- **Tokio background scheduler** — durable job engine for "progress automation"
-  (background checks awaiting a callback, automated emails).
+- **Tokio background scheduler** — durable, **retrying** job queue for "progress
+  automation" (background checks awaiting a callback, automated emails, property
+  enrichment) with backoff + `max_attempts` + a terminal `failed` state.
+- **Property intelligence ("Zillow but better")** — rich per-property data
+  (parcel/county records, tax history, AVM valuation + rent estimate, schools,
+  utilities) fetched and validated automatically by background workers. A
+  provider interface backs each source with deterministic simulations plus one
+  **live** integration (the U.S. Census geocoder). See `docs/PROPERTY_DATA.md`.
+- **Investor onboarding, financing & workflows** — one-call property onboarding
+  (property + mortgages + lender entities + workflow start + enrichment); an
+  entities/counterparty registry (banks, lenders, contractors) with notes;
+  per-property mortgages that drive levered cash flow + equity on the profile;
+  and strategy-based workflows (rental/flip/BRRRR/hold/wholesale) with stage
+  tracking + history. See `docs/INVESTING.md`.
+- **Rentals, maintenance & title** — units + leases/tenancies with rental &
+  payment status and a rent ledger; maintenance work orders assignable to staff
+  or contractors with a status timeline; and the full title picture (ownership /
+  deed holders + liens). Tenants/leases and a maintenance board ship in the
+  console; the property profile shows the complete dossier. See `docs/RENTALS.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

@@ -41,6 +41,20 @@ Two independent auth schemes:
 | Public website | `X-Tenant` header or `?tenant=<slug>` |
 | Vendor | the API token's tenant |
 
+### Auditing
+
+**Every** request is audited. A server-side fairing records each call (method,
+path, status, latency, resolved principal) to the audit trail and returns a
+correlation id on every response:
+
+```
+X-Request-Id: 7f3c…   # echo this when reporting an issue
+```
+
+State-changing calls additionally emit a rich **domain event** (e.g.
+`property.create`, `role.update`). The trail is read via `GET /admin/audit`
+(permission `audit:read`). Full design: **`docs/AUDIT.md`**.
+
 ---
 
 ## Auth endpoints
@@ -96,8 +110,12 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 | GET | `/portfolio/llcs` | `property:read` | Properties grouped by LLC |
 | GET | `/properties` | `property:read` | Portfolio list |
 | POST | `/properties` | `property:write` | Add a property |
+| POST | `/properties/onboard` | `property:write` | **Onboard** a house (property + financing + workflow + enrichment) |
 | GET | `/properties/{id}` | `property:read` | **Full profile w/ computed economics** |
 | PATCH | `/properties/{id}` | `property:write` | Update property |
+| GET | `/properties/{id}/intel` | `property:read` | **Property intelligence**: parcel/county, taxes, valuation, schools, utilities |
+| POST | `/properties/{id}/enrich` | `property:write` | Enqueue automated enrichment (county records, parcel, AVM, …) |
+| GET | `/properties/{id}/enrichment` | `property:read` | Recent enrichment runs |
 | GET | `/llcs` | `property:read` | Holding entities |
 | POST | `/llcs` | `tenant:manage` | Create LLC |
 | GET | `/applications` | `application:read` | Applications |
@@ -111,6 +129,32 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 Property profile economics (mirrors the prototype): `maintenance ≈ 9%`, `taxes &
 insurance ≈ 12%`, `management fee = 8%` of rent; `net = rent − maintenance −
 taxes − management`.
+
+**Investor onboarding, financing & workflows** (the `properties` + `entities`
+modules) add: `POST /properties/onboard`; the entities/counterparty registry
+(`/entities`, `/entities/{id}`, `/entities/{id}/notes`); property financing
+(`/properties/{id}/mortgages`, `PATCH`/`DELETE /mortgages/{id}`) which feeds
+debt-service / cash-flow / equity into the property profile; and per-property
+investment workflows (`GET` + `POST /properties/{id}/workflow/advance`). Full
+design: **`docs/INVESTING.md`**.
+
+**Rentals, maintenance & title** (the `rentals` / `maintenance` / `title`
+modules) add the operational layer: units + leases/tenancies with rental &
+payment status + a rent ledger (`/properties/{id}/units`, `/leases`,
+`/leases/{id}/payments`); maintenance work orders assignable to staff or
+contractors (`/tickets`, `/properties/{id}/tickets`, `/tickets/{id}`,
+`/tickets/{id}/comments`); and the full title picture — ownership/deed holders
+and liens (`/properties/{id}/ownership`, `/properties/{id}/liens`). Full design:
+**`docs/RENTALS.md`**.
+
+**Property intelligence** (the `property_intel` module) enriches each property
+with parcel/county records, tax history, an automated valuation (AVM) + rent
+estimate, schools, and utilities — fetched and validated by background workers on
+the durable queue. `POST /properties/{id}/enrich` (body `{ "sources": [...] }`,
+omit for all of `geocode`/`parcel`/`tax`/`valuation`/`schools`/`utilities`)
+enqueues the work and returns the orchestrator `job_id`. One source — the
+geocoder — is a live external call; the rest are pluggable simulated providers.
+Full design: **`docs/PROPERTY_DATA.md`**.
 
 ---
 
@@ -169,9 +213,11 @@ full model, persona list, permission catalog, and endpoint table live in
 
 ## Permissions
 
-Domain: `property:read` · `property:write` · `listing:read` · `listing:write` ·
-`application:read` · `application:write` · `tenant:manage` · `billing:read` ·
-`theme:write` · `apitoken:manage`.
+Domain: `property:read` · `property:write` · `entity:read` · `entity:manage` ·
+`finance:read` · `finance:manage` · `lease:read` · `lease:manage` ·
+`maintenance:read` · `maintenance:manage` · `title:read` · `title:manage` ·
+`listing:read` · `listing:write` · `application:read` · `application:write` ·
+`tenant:manage` · `billing:read` · `theme:write` · `apitoken:manage`.
 IAM: `user:read` · `user:manage` · `profile:read` · `profile:write` ·
 `profile:read_pii` · `member:read` · `member:manage` · `role:read` ·
 `role:manage`. Plus `platform:admin` (super-permission, implies all).

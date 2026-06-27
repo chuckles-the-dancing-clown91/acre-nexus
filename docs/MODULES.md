@@ -5,15 +5,20 @@ the product — its routes, the permissions it requires, the background-job kind
 processes, and whether it ships on by default. Tenants turn modules on and off
 from their software settings, which makes capabilities **sellable per feature**.
 
-The backend and frontend share a module **key** (`properties`, `leasing`,
-`vendor_api`, `theming`, `flips`) so the two halves always agree on what a module
-is and how it is gated.
+The backend and frontend share a module **key** (`properties`, `property_intel`,
+`leasing`, `vendor_api`, `theming`, `flips`) so the two halves always agree on
+what a module is and how it is gated.
 
 ## Modules today
 
 | Key | Name | Default | Routes / responsibility |
 |-----|------|---------|--------------------------|
-| `properties` | Property Management | on | `/properties`, `/portfolio`, `/llcs` |
+| `properties` | Property Management | on | `/properties`, `/properties/onboard`, `/portfolio`, `/llcs`, `/properties/{id}/mortgages`, `/properties/{id}/workflow` (see `docs/INVESTING.md`) |
+| `property_intel` | Property Intelligence | on | `/properties/{id}/intel`, `/enrich`, `/enrichment` + the `enrich_*` enrichment jobs (see `docs/PROPERTY_DATA.md`) |
+| `entities` | Entities & Contacts | on | `/entities` registry (banks, lenders, contractors …) + notes (see `docs/INVESTING.md`) |
+| `rentals` | Rentals & Leasing | on | `/properties/{id}/units`, `/leases`, `/leases/{id}/payments` (see `docs/RENTALS.md`) |
+| `maintenance` | Maintenance & Work Orders | on | `/tickets`, `/properties/{id}/tickets`, `/tickets/{id}/comments` (see `docs/RENTALS.md`) |
+| `title` | Title & Ownership | on | `/properties/{id}/ownership`, `/properties/{id}/liens` (see `docs/RENTALS.md`) |
 | `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening/auto-email jobs |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |

@@ -26,6 +26,10 @@ pub struct Model {
     /// Earliest time the scheduler should pick this job up.
     pub run_at: DateTimeWithTimeZone,
     pub attempts: i32,
+    /// Retry budget: after this many failed attempts the job moves to `failed`.
+    pub max_attempts: i32,
+    /// Last error message, set when an attempt fails (for observability).
+    pub last_error: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

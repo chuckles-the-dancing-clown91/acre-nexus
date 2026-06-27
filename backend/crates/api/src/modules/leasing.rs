@@ -32,12 +32,12 @@ impl PlatformModule for LeasingModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
-            public::listings,
-            public::listing_detail,
-            public::public_theme,
-            public::apply,
-            applications::list,
-            applications::update_status,
+            public::listings::listings,
+            public::listing_detail::listing_detail,
+            public::public_theme::public_theme,
+            public::apply::apply,
+            applications::list::list,
+            applications::update_status::update_status,
         ]
     }
 
