@@ -17,6 +17,7 @@ pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 // ---- Properties / portfolio ----
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";
+pub const PROPERTY_ENRICH: &str = "property.enrich";
 pub const LLC_CREATE: &str = "llc.create";
 
 // ---- Leasing ----

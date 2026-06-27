@@ -179,7 +179,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let elm = seed_llc(db, northwind, "Elm Equity LLC", "45-6789012", "OR").await?;
     let alder = seed_llc(db, northwind, "Alder LLC", "33-2211009", "OR").await?;
 
-    seed_property(
+    let maple_court = seed_property(
         db,
         northwind,
         maple,
@@ -258,7 +258,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // ---- Cascade LLCs + properties ----
     let riverside = seed_llc(db, cascade, "Riverside Holdings LLC", "77-1230988", "WA").await?;
     let cnorth = seed_llc(db, cascade, "Cascade North LLC", "77-4567321", "WA").await?;
-    seed_property(
+    let riverside_flats = seed_property(
         db,
         cascade,
         riverside,
@@ -381,6 +381,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         "Brand-new construction with a balcony, smart-home package, and resort-style amenities.",
     )
     .await?;
+
+    // ---- demo property intelligence (parcel/tax/valuation/schools/utilities) ----
+    seed_intel(db, maple_court).await?;
+    seed_intel(db, riverside_flats).await?;
 
     tracing::info!("seed: complete");
     Ok(())
@@ -622,9 +626,10 @@ async fn seed_property(
     status: &str,
     year: i32,
     manager: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
     entity::property::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(id),
         tenant_id: Set(tenant_id),
         llc_id: Set(Some(llc_id)),
         name: Set(name.into()),
@@ -640,6 +645,28 @@ async fn seed_property(
     }
     .insert(db)
     .await?;
+    Ok(id)
+}
+
+/// Populate a property's intelligence (parcel, tax, valuation, schools,
+/// utilities) using the real enrichment engine's simulated providers, so the
+/// detail page shows rich data out of the box. Geocode is skipped here to keep
+/// `seed` offline; trigger it from the UI's "Enrich" action.
+async fn seed_intel(db: &DatabaseConnection, property_id: Uuid) -> anyhow::Result<()> {
+    use crate::enrichment::{runner, Source};
+    if let Some(p) = Property::find_by_id(property_id).one(db).await? {
+        for source in [
+            Source::Parcel,
+            Source::Tax,
+            Source::Valuation,
+            Source::Schools,
+            Source::Utilities,
+        ] {
+            if let Err(e) = runner::run_source(db, &p, source).await {
+                tracing::warn!("seed_intel {} failed: {e}", source.as_str());
+            }
+        }
+    }
     Ok(())
 }
 

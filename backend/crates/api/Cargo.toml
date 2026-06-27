@@ -30,5 +30,6 @@ base64 = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 dotenvy = { workspace = true }
+reqwest = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

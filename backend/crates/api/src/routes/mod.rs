@@ -19,6 +19,7 @@ pub mod modules;
 pub mod platform;
 pub mod portfolio;
 pub mod properties;
+pub mod property_intel;
 pub mod public;
 pub mod theme;
 pub mod vendor;

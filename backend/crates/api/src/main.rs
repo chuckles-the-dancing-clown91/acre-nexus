@@ -26,6 +26,7 @@ mod auth;
 mod config;
 mod cors;
 mod dto;
+mod enrichment;
 mod error;
 mod modules;
 mod openapi;

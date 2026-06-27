@@ -19,13 +19,36 @@ use serde_json::json;
 use std::time::Duration as StdDuration;
 use uuid::Uuid;
 
-/// Enqueue a new background job. Returns the job id.
+/// Default retry budget for jobs enqueued via [`enqueue`].
+pub const DEFAULT_MAX_ATTEMPTS: i32 = 5;
+
+/// Enqueue a new background job with the default retry budget. Returns the id.
 pub async fn enqueue(
     db: &DatabaseConnection,
     tenant_id: Uuid,
     kind: &str,
     payload: serde_json::Value,
     delay_secs: i64,
+) -> Result<Uuid, sea_orm::DbErr> {
+    enqueue_with_retries(
+        db,
+        tenant_id,
+        kind,
+        payload,
+        delay_secs,
+        DEFAULT_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Enqueue a new background job with an explicit `max_attempts` retry budget.
+pub async fn enqueue_with_retries(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    kind: &str,
+    payload: serde_json::Value,
+    delay_secs: i64,
+    max_attempts: i32,
 ) -> Result<Uuid, sea_orm::DbErr> {
     let now = Utc::now();
     let job = entity::background_job::ActiveModel {
@@ -37,6 +60,8 @@ pub async fn enqueue(
         result: Set(None),
         run_at: Set((now + Duration::seconds(delay_secs)).into()),
         attempts: Set(0),
+        max_attempts: Set(max_attempts.max(1)),
+        last_error: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
@@ -116,7 +141,23 @@ async fn advance(
                     if let Some(result) = outcome.result {
                         am.result = Set(Some(result));
                     }
-                    tracing::info!(job = %job.id, module = manifest.key, status = %outcome.status, "job advanced");
+                    if let Some(err) = &outcome.error {
+                        am.last_error = Set(Some(err.clone()));
+                    }
+                    // Enforce the retry budget: a transient retry whose budget is
+                    // now exhausted becomes a terminal failure.
+                    if outcome.retry && job.attempts + 1 >= job.max_attempts {
+                        am.status = Set("failed".into());
+                        am.run_at = Set(now.into());
+                        am.result = Set(Some(json!({
+                            "error": outcome.error.clone().unwrap_or_default(),
+                            "attempts": job.attempts + 1,
+                            "exhausted": true,
+                        })));
+                        tracing::warn!(job = %job.id, module = manifest.key, "job failed: retry budget exhausted");
+                    } else {
+                        tracing::info!(job = %job.id, module = manifest.key, status = %outcome.status, retry = outcome.retry, "job advanced");
+                    }
                 }
                 None => am.status = Set("completed".into()),
             }
