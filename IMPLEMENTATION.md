@@ -12,6 +12,7 @@ This repository contains:
 | `backend/` | **Rust** API — Rocket + SeaORM (Postgres) + Tokio. |
 | `frontend/` | **Next.js / React** app (App Router, TypeScript, Tailwind). |
 | `docs/PRODUCT.md` | Product vision, capability breakdown, and the six pillars. |
+| `docs/FEATURES.md` | Exhaustive feature catalog for total property management (status + priority). |
 | `docs/ROADMAP.md` | Phased plan from today's foundation to v1 GA. |
 | `ARCHITECTURE.md` | How the system is put together and why. |
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |

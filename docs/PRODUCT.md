@@ -6,8 +6,10 @@
 > token API.
 
 This document is the north-star: **what we're building, the end goal, and how
-the pieces fit.** The phased plan to get the rest of the way is in
-[`ROADMAP.md`](./ROADMAP.md). Deep-dives live in the area docs:
+the pieces fit.** The exhaustive capability list (for *total* property
+management, beyond the headline pillars) is in [`FEATURES.md`](./FEATURES.md);
+the phased plan to get the rest of the way is in [`ROADMAP.md`](./ROADMAP.md).
+Deep-dives live in the area docs:
 [`ARCHITECTURE`](../ARCHITECTURE.md) · [`IAM`](./IAM.md) · [`AUDIT`](./AUDIT.md) ·
 [`PROPERTY_DATA`](./PROPERTY_DATA.md) · [`INVESTING`](./INVESTING.md) ·
 [`RENTALS`](./RENTALS.md) · [`MODULES`](./MODULES.md) · [`API`](./API.md).
