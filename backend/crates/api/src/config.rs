@@ -34,6 +34,87 @@ pub struct Config {
     pub refresh_ttl_secs: i64,
     /// Whether to run migrations + seed on boot (handy in dev).
     pub auto_migrate: bool,
+    /// Platform-managed object-storage defaults (used when a tenant hasn't
+    /// configured their own bucket).
+    pub storage: StorageSettings,
+    /// Outbound email defaults.
+    pub email: EmailSettings,
+}
+
+/// Platform-managed object storage. A tenant may override this with their own
+/// `local` / `s3` / `gcs` bucket (see `tenant_storage_config`); when they don't,
+/// uploads land here. Driven by `STORAGE_*` env vars.
+#[derive(Clone, Debug)]
+pub struct StorageSettings {
+    /// `local` | `s3` | `gcs`.
+    pub provider: String,
+    /// Base directory for the `local` backend.
+    pub local_path: String,
+    pub bucket: Option<String>,
+    pub region: Option<String>,
+    /// Custom endpoint for S3-compatible stores (MinIO / R2).
+    pub endpoint: Option<String>,
+    /// Key prefix prepended to every object.
+    pub prefix: Option<String>,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    /// GCS service-account JSON (the whole key file contents).
+    pub gcs_service_account_json: Option<String>,
+    /// Allow plain-HTTP endpoints (MinIO in dev).
+    pub allow_http: bool,
+}
+
+/// Outbound email. Defaults to the `log` provider (records to `sent_email` and
+/// logs, never actually sending) so dev is side-effect-free; set `EMAIL_PROVIDER=smtp`
+/// plus `SMTP_*` to deliver for real.
+#[derive(Clone, Debug)]
+pub struct EmailSettings {
+    /// `log` | `smtp`.
+    pub provider: String,
+    pub from: String,
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_user: Option<String>,
+    pub smtp_pass: Option<String>,
+    pub smtp_starttls: bool,
+}
+
+impl StorageSettings {
+    fn from_env() -> Self {
+        StorageSettings {
+            provider: env::var("STORAGE_PROVIDER").unwrap_or_else(|_| "local".into()),
+            local_path: env::var("STORAGE_LOCAL_PATH").unwrap_or_else(|_| "./.storage".into()),
+            bucket: env::var("STORAGE_BUCKET").ok(),
+            region: env::var("STORAGE_REGION").ok(),
+            endpoint: env::var("STORAGE_ENDPOINT").ok(),
+            prefix: env::var("STORAGE_PREFIX").ok(),
+            access_key_id: env::var("STORAGE_ACCESS_KEY_ID").ok(),
+            secret_access_key: env::var("STORAGE_SECRET_ACCESS_KEY").ok(),
+            gcs_service_account_json: env::var("STORAGE_GCS_SERVICE_ACCOUNT_JSON").ok(),
+            allow_http: env::var("STORAGE_ALLOW_HTTP")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+        }
+    }
+}
+
+impl EmailSettings {
+    fn from_env() -> Self {
+        EmailSettings {
+            provider: env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "log".into()),
+            from: env::var("EMAIL_FROM").unwrap_or_else(|_| "no-reply@acre.example".into()),
+            smtp_host: env::var("SMTP_HOST").ok(),
+            smtp_port: env::var("SMTP_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(587),
+            smtp_user: env::var("SMTP_USER").ok(),
+            smtp_pass: env::var("SMTP_PASS").ok(),
+            smtp_starttls: env::var("SMTP_STARTTLS")
+                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+                .unwrap_or(true),
+        }
+    }
 }
 
 impl Config {
@@ -60,6 +141,8 @@ impl Config {
             auto_migrate: env::var("AUTO_MIGRATE")
                 .map(|v| v != "0" && v.to_lowercase() != "false")
                 .unwrap_or(true),
+            storage: StorageSettings::from_env(),
+            email: EmailSettings::from_env(),
         }
     }
 }

@@ -23,13 +23,26 @@ pub async fn create(
 ) -> ApiResult<Json<LlcResp>> {
     user.require(Permission::TenantManage)?;
     let b = body.into_inner();
+    let now = Utc::now();
     let model = entity::llc::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         name: Set(b.name),
         ein: Set(b.ein.unwrap_or_default()),
         state: Set(b.state.unwrap_or_default()),
-        created_at: Set(Utc::now().into()),
+        entity_type: Set(b.entity_type.unwrap_or_else(|| "LLC".into())),
+        formation_date: Set(None),
+        registered_agent: Set(None),
+        principal_address: Set(None),
+        mailing_address: Set(None),
+        contact_name: Set(None),
+        contact_email: Set(None),
+        contact_phone: Set(None),
+        website: Set(None),
+        status: Set("draft".into()),
+        onboarded_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
     };
     let saved = model.insert(&state.property_db).await?;
     crate::audit::record(

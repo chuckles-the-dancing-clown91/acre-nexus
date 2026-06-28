@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { LlcGroup } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 export default function LlcsPage() {
   const [groups, setGroups] = useState<LlcGroup[] | null>(null);
@@ -33,12 +35,19 @@ export default function LlcsPage() {
         {groups?.map((g) => (
           <Card key={g.id} className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-              <div className="flex-1">
-                <div className="font-display text-lg font-bold">{g.name}</div>
+              <Link href={`/console/llcs/${g.id}`} className="group flex-1">
+                <div className="flex items-center gap-2 font-display text-lg font-bold group-hover:text-accent">
+                  {g.name}
+                  <Icon
+                    name="back"
+                    size={16}
+                    className="rotate-180 text-ink-3 group-hover:text-accent"
+                  />
+                </div>
                 <div className="text-sm text-ink-3">
                   EIN {g.ein} · {g.state}
                 </div>
-              </div>
+              </Link>
               <div className="text-sm text-ink-2">
                 {g.property_count} properties
               </div>
@@ -46,6 +55,12 @@ export default function LlcsPage() {
               <div className="font-mono text-sm font-bold">
                 {g.monthly_rent_label}/mo
               </div>
+              <Link
+                href={`/console/llcs/${g.id}`}
+                className="rounded-xl border border-line-2 bg-surface px-3 py-1.5 text-sm font-bold text-ink hover:bg-surface-2"
+              >
+                Onboard
+              </Link>
             </div>
             <div className="divide-y divide-line">
               {g.properties.map((p) => (

@@ -33,3 +33,10 @@ dotenvy = { workspace = true }
 reqwest = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+object_store = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+handlebars = { workspace = true }
+printpdf = { workspace = true }
+image = { workspace = true }
+lettre = { workspace = true }

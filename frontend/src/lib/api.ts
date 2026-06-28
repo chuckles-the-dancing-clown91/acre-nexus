@@ -19,13 +19,23 @@ import type {
   CreateUnitInput,
   EnrichmentRun,
   EnrichResponse,
+  CreateTemplateInput,
+  GenerateDocumentInput,
+  GeneratedDocument,
   Lease,
   LeaseDetail,
   LeasePayment,
   Lien,
   Listing,
+  Llc,
+  LlcBranding,
+  LlcDocument,
   LlcGroup,
+  LlcTemplate,
   MaintenanceTicket,
+  StorageConfig,
+  UpdateLlcInput,
+  UpdateStorageConfigInput,
   Mortgage,
   OnboardInput,
   OnboardResponse,
@@ -157,6 +167,49 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Auth + acting-tenant headers, shared by JSON, upload, and blob requests. */
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  const token = tokenStore.access;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const acting = actingTenant.get();
+  if (acting) headers["X-Tenant"] = acting;
+  return headers;
+}
+
+/** POST multipart/form-data (file uploads); the browser sets the boundary. */
+async function uploadRequest<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let code = "error";
+    let message = res.statusText;
+    try {
+      const data = await res.json();
+      code = data?.error?.code ?? code;
+      message = data?.error?.message ?? message;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, code, message);
+  }
+  return (await res.json()) as T;
+}
+
+/** GET a binary response as a Blob (document downloads). */
+async function downloadBlob(path: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new ApiError(res.status, "error", res.statusText);
+  return await res.blob();
 }
 
 export const api = {
@@ -370,6 +423,92 @@ export const api = {
   // ---- flips module (preview) ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+
+  // ---- LLC onboarding ----
+  createLlc: (body: {
+    name: string;
+    ein?: string;
+    state?: string;
+    entity_type?: string;
+  }) => request<Llc>("/llcs", { method: "POST", auth: true, body }),
+  llc: (id: string) => request<Llc>(`/llcs/${id}`, { auth: true }),
+  updateLlc: (id: string, body: UpdateLlcInput) =>
+    request<Llc>(`/llcs/${id}`, { method: "PATCH", auth: true, body }),
+  llcDocuments: (id: string) =>
+    request<LlcDocument[]>(`/llcs/${id}/documents`, { auth: true }),
+  uploadLlcDocument: (id: string, file: File, kind: string, title?: string) => {
+    const form = new FormData();
+    form.set("kind", kind);
+    if (title) form.set("title", title);
+    form.set("file", file);
+    return uploadRequest<LlcDocument>(`/llcs/${id}/documents`, form);
+  },
+  deleteLlcDocument: (id: string, docId: string) =>
+    request<{ deleted: boolean }>(`/llcs/${id}/documents/${docId}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  downloadLlcDocument: (id: string, docId: string) =>
+    downloadBlob(`/llcs/${id}/documents/${docId}`),
+  llcBranding: (id: string) =>
+    request<LlcBranding>(`/llcs/${id}/branding`, { auth: true }),
+  putLlcBranding: (id: string, body: Omit<LlcBranding, "llc_id">) =>
+    request<LlcBranding>(`/llcs/${id}/branding`, {
+      method: "PUT",
+      auth: true,
+      body,
+    }),
+  llcTemplates: (id: string) =>
+    request<LlcTemplate[]>(`/llcs/${id}/templates`, { auth: true }),
+  createLlcTemplate: (id: string, body: CreateTemplateInput) =>
+    request<LlcTemplate>(`/llcs/${id}/templates`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateLlcTemplate: (
+    id: string,
+    tid: string,
+    body: Partial<CreateTemplateInput>
+  ) =>
+    request<LlcTemplate>(`/llcs/${id}/templates/${tid}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  deleteLlcTemplate: (id: string, tid: string) =>
+    request<{ deleted: boolean }>(`/llcs/${id}/templates/${tid}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  previewTemplate: (
+    id: string,
+    body: { body: string; context?: Record<string, unknown> }
+  ) =>
+    request<{ rendered: string }>(`/llcs/${id}/templates/preview`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  generateDocument: (id: string, body: GenerateDocumentInput) =>
+    request<GeneratedDocument>(`/llcs/${id}/generate`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  generatedDocuments: (id: string) =>
+    request<GeneratedDocument[]>(`/llcs/${id}/generated`, { auth: true }),
+  downloadGenerated: (gid: string) =>
+    downloadBlob(`/generated-documents/${gid}/download`),
+
+  // ---- storage configuration (tenant settings) ----
+  storageConfig: () => request<StorageConfig>("/storage/config", { auth: true }),
+  putStorageConfig: (body: UpdateStorageConfigInput) =>
+    request<StorageConfig>("/storage/config", {
+      method: "PUT",
+      auth: true,
+      body,
+    }),
 };
 
 /**

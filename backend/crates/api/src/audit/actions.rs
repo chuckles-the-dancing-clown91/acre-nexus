@@ -20,6 +20,15 @@ pub const PROPERTY_UPDATE: &str = "property.update";
 pub const PROPERTY_ENRICH: &str = "property.enrich";
 pub const PROPERTY_ONBOARD: &str = "property.onboard";
 pub const LLC_CREATE: &str = "llc.create";
+pub const LLC_UPDATE: &str = "llc.update";
+pub const LLC_DOCUMENT_UPLOAD: &str = "llc.document_upload";
+pub const LLC_DOCUMENT_DELETE: &str = "llc.document_delete";
+pub const LLC_BRANDING_UPDATE: &str = "llc.branding_update";
+pub const LLC_TEMPLATE_CREATE: &str = "llc.template_create";
+pub const LLC_TEMPLATE_UPDATE: &str = "llc.template_update";
+pub const LLC_TEMPLATE_DELETE: &str = "llc.template_delete";
+pub const DOCUMENT_GENERATE: &str = "llc.document_generate";
+pub const STORAGE_CONFIG_UPDATE: &str = "storage.config_update";
 
 // ---- Investing: entities, financing, workflow ----
 pub const ENTITY_CREATE: &str = "entity.create";

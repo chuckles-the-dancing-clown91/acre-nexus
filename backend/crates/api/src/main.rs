@@ -25,23 +25,29 @@ mod audit;
 mod auth;
 mod config;
 mod cors;
+mod documents;
 mod dto;
+mod email;
 mod enrichment;
 mod error;
 mod modules;
 mod openapi;
+mod pdf;
 mod pii;
 mod rbac;
 mod routes;
 mod scheduler;
 mod seed;
 mod state;
+mod storage;
+mod templating;
 mod tenancy;
 mod tokens;
 mod workflow;
 
 use config::Config;
 use migration::{ClientMigrator, MigratorTrait, PropertyMigrator, UserMigrator};
+use rocket::data::ToByteUnit;
 use rocket_okapi::okapi::merge::merge_specs;
 use rocket_okapi::okapi::openapi3::{Info, OpenApi};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
@@ -100,7 +106,15 @@ async fn rocket() -> _ {
     // first, then every pluggable module's routes — each module contributes both
     // its routes and a matching spec fragment.
     let mut spec = OpenApi::new();
-    let mut app = rocket::build()
+    // Raise body limits so document/logo uploads (multipart) are accepted.
+    let figment = rocket::Config::figment().merge((
+        "limits",
+        rocket::data::Limits::default()
+            .limit("file", 25.mebibytes())
+            .limit("data-form", 30.mebibytes())
+            .limit("bytes", 30.mebibytes()),
+    ));
+    let mut app = rocket::custom(figment)
         .manage(state)
         .attach(cors::Cors)
         .attach(audit::AuditFairing);

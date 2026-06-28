@@ -11,6 +11,7 @@ mod m20240101_000002_rls;
 mod m20240101_000007_property_data;
 mod m20240101_000008_investing;
 mod m20240101_000009_rentals_title;
+mod m20240101_000010_llc_onboarding;
 
 pub struct Migrator;
 
@@ -23,6 +24,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000007_property_data::Migration),
             Box::new(m20240101_000008_investing::Migration),
             Box::new(m20240101_000009_rentals_title::Migration),
+            Box::new(m20240101_000010_llc_onboarding::Migration),
         ]
     }
 }

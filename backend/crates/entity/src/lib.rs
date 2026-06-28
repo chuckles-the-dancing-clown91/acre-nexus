@@ -23,14 +23,16 @@
 // User / platform domain (acre_user database).
 pub use acre_user::entity::{
     api_token, audit_log, background_job, membership, permission, profile_type, refresh_token, role,
-    role_permission, tenant, tenant_module, theme, user, user_profile, user_role,
+    role_permission, sent_email, tenant, tenant_module, tenant_storage_config, theme, user,
+    user_profile, user_role,
 };
 
 // Property domain (acre_property database).
 pub use acre_property::entity::{
-    enrichment_run, lease, lease_payment, lien, listing, llc, maintenance_ticket, mortgage,
-    ownership, property, property_detail, property_school, property_tax, property_utility,
-    property_valuation, ticket_comment, unit, workflow_event,
+    enrichment_run, generated_document, lease, lease_payment, lien, listing, llc, llc_branding,
+    llc_document, llc_template, maintenance_ticket, mortgage, ownership, property, property_detail,
+    property_school, property_tax, property_utility, property_valuation, ticket_comment, unit,
+    workflow_event,
 };
 
 // Client domain (acre_client database).

@@ -138,6 +138,132 @@ export interface LlcGroup {
   properties: Property[];
 }
 
+// ---- LLC onboarding ----------------------------------------------------------
+
+/** An LLC's full onboarding profile (GET /llcs/:id). */
+export interface Llc {
+  id: string;
+  name: string;
+  ein: string;
+  state: string;
+  entity_type: string;
+  formation_date: string | null;
+  registered_agent: string | null;
+  principal_address: string | null;
+  mailing_address: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  website: string | null;
+  status: string;
+  onboarded: boolean;
+}
+
+/** Partial update of an LLC profile (PATCH /llcs/:id). */
+export interface UpdateLlcInput {
+  name?: string;
+  ein?: string;
+  state?: string;
+  entity_type?: string;
+  formation_date?: string;
+  registered_agent?: string;
+  principal_address?: string;
+  mailing_address?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  website?: string;
+  status?: string;
+}
+
+export interface LlcDocument {
+  id: string;
+  llc_id: string;
+  kind: string;
+  title: string | null;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_provider: string;
+  verified: boolean;
+  created_at: string;
+}
+
+export interface LlcBranding {
+  llc_id: string;
+  logo_document_id: string | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  signature_name: string | null;
+  signature_title: string | null;
+  signature_block: string | null;
+  letterhead: string | null;
+  footer: string | null;
+}
+
+export interface LlcTemplate {
+  id: string;
+  llc_id: string;
+  kind: string;
+  name: string;
+  subject: string | null;
+  body: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface CreateTemplateInput {
+  kind: string;
+  name: string;
+  subject?: string;
+  body: string;
+  is_default?: boolean;
+}
+
+export interface GeneratedDocument {
+  id: string;
+  llc_id: string;
+  kind: string;
+  title: string;
+  status: string;
+  mime_type: string;
+  size_bytes: number;
+  lease_id: string | null;
+  created_at: string;
+}
+
+export interface GenerateDocumentInput {
+  template_id?: string;
+  kind?: string;
+  title?: string;
+  lease_id?: string;
+  recipient_name?: string;
+  recipient_email?: string;
+  property_address?: string;
+  context?: Record<string, unknown>;
+  send_email?: boolean;
+}
+
+/** Per-tenant storage backend configuration. */
+export interface StorageConfig {
+  provider: string;
+  bucket: string | null;
+  region: string | null;
+  prefix: string | null;
+  endpoint: string | null;
+  has_credentials: boolean;
+  is_default: boolean;
+}
+
+export interface UpdateStorageConfigInput {
+  provider: string;
+  bucket?: string;
+  region?: string;
+  prefix?: string;
+  endpoint?: string;
+  secret?: string;
+}
+
 // ---- Property intelligence (enrichment) ------------------------------------
 
 export interface PropertyDetail {

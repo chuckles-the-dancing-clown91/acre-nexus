@@ -29,6 +29,7 @@ pub mod enrichment;
 pub mod entities;
 pub mod flips;
 pub mod leasing;
+pub mod llc_onboarding;
 pub mod maintenance;
 pub mod properties;
 pub mod rentals;
@@ -169,6 +170,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(properties::PropertiesModule),
         Box::new(enrichment::EnrichmentModule),
         Box::new(entities::EntitiesModule),
+        Box::new(llc_onboarding::LlcOnboardingModule),
         Box::new(rentals::RentalsModule),
         Box::new(maintenance::MaintenanceModule),
         Box::new(title::TitleModule),

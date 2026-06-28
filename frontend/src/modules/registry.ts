@@ -51,11 +51,26 @@ export const MODULES: ModuleDef[] = [
         icon: "check",
         permission: "property:write",
       },
+    ],
+  },
+  {
+    key: "llc_onboarding",
+    label: "LLC Onboarding",
+    description:
+      "Onboard holding companies: documents, branding, signature blocks, and auto-generated leases & letters.",
+    defaultEnabled: true,
+    nav: [
       {
         href: "/console/llcs",
         label: "LLCs",
         icon: "shield",
-        permission: "property:read",
+        permission: "llc:read",
+      },
+      {
+        href: "/console/settings/storage",
+        label: "Storage",
+        icon: "database",
+        permission: "storage:manage",
       },
     ],
   },

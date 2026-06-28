@@ -58,6 +58,21 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Multi-provider object storage for uploaded documents/logos: one API over the
+# local filesystem, AWS S3 (+ S3-compatible), and Google Cloud Storage. Lets a
+# tenant use platform-managed storage or bring their own bucket.
+object_store = { version = "0.11", features = ["aws", "gcp"] }
+bytes = "1"
+futures = "0.3"
+# Document templating + real document generation + email delivery.
+handlebars = "6"
+printpdf = { version = "0.7", features = ["embedded_images"] }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
+lettre = { version = "0.11", default-features = false, features = [
+    "builder",
+    "smtp-transport",
+    "tokio1-rustls-tls",
+] }
 
 # Faster, smaller release builds.
 [profile.release]

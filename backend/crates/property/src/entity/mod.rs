@@ -5,11 +5,15 @@
 //! enforced by the application layer, never DB foreign keys.
 
 pub mod enrichment_run;
+pub mod generated_document;
 pub mod lease;
 pub mod lease_payment;
 pub mod lien;
 pub mod listing;
 pub mod llc;
+pub mod llc_branding;
+pub mod llc_document;
+pub mod llc_template;
 pub mod maintenance_ticket;
 pub mod mortgage;
 pub mod ownership;

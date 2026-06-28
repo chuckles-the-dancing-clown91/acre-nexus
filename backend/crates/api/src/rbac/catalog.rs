@@ -30,6 +30,27 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "llc:read",
+        category: "Properties",
+        label: "View LLCs",
+        description: "View holding entities and their onboarding profile, documents, and templates.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "llc:manage",
+        category: "Properties",
+        label: "Manage LLCs",
+        description: "Onboard LLCs: edit profile, upload documents, set branding, author templates, generate documents.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "storage:manage",
+        category: "Settings",
+        label: "Manage storage",
+        description: "Configure the workspace's document storage backend (platform-managed or bring-your-own bucket).",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "entity:read",
         category: "Properties",
         label: "View entities",
