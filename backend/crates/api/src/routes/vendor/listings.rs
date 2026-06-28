@@ -20,7 +20,7 @@ pub async fn listings(
     let rows = Listing::find()
         .filter(entity::listing::Column::TenantId.eq(principal.tenant_id))
         .order_by_desc(entity::listing::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(
         rows.into_iter()

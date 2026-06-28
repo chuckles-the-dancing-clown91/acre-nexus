@@ -1,5 +1,5 @@
 //! A rental **application** submitted against a listing. Submitting one enqueues
-//! a background screening job (see [`crate::background_job`]).
+//! a background screening job (see [`super::background_job`]).
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};

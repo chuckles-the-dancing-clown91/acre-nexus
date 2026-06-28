@@ -22,7 +22,7 @@ pub async fn update_theme(
     user.require(Permission::ThemeWrite)?;
     let t = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("theme not configured".into()))?;
     let mut am: entity::theme::ActiveModel = t.into();
@@ -46,9 +46,9 @@ pub async fn update_theme(
         am.legal_templates = Set(v);
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&state.user_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::THEME_UPDATE,
         Some("theme"),

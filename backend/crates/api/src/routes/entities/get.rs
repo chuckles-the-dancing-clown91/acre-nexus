@@ -23,13 +23,13 @@ pub async fn get(
     let cid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let c = Counterparty::find_by_id(cid)
         .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.client_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("counterparty not found".into()))?;
     let notes = CounterpartyNote::find()
         .filter(entity::counterparty_note::Column::CounterpartyId.eq(cid))
         .order_by_desc(entity::counterparty_note::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.client_db)
         .await?;
     Ok(Json(CounterpartyDetailDto {
         entity: CounterpartyDto::from(c),

@@ -41,9 +41,9 @@ pub async fn create(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&state.client_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::ENTITY_CREATE,
         Some("counterparty"),

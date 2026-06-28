@@ -1,4 +1,4 @@
-//! A **user profile** holds a person's identity details, 1:1 with [`crate::user`].
+//! A **user profile** holds a person's identity details, 1:1 with [`super::user`].
 //! It is deliberately separate from the login record so that authentication
 //! (email/username/password) is decoupled from personal data.
 //!

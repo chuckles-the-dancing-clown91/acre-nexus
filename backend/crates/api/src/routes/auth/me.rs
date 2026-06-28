@@ -13,12 +13,12 @@ use sea_orm::EntityTrait;
 #[get("/auth/me")]
 pub async fn me(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<UserResp>> {
     let u = User::find_by_id(user.user_id)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
     // Reflect the workspace the current token is scoped to (from the JWT).
     let active = user.tenant_id;
-    let perms = permissions_for(&state.db, u.id, active).await?;
-    let resp = build_user_resp(&state.db, &u, active, perms).await?;
+    let perms = permissions_for(&state.user_db, u.id, active).await?;
+    let resp = build_user_resp(&state.user_db, &u, active, perms).await?;
     Ok(Json(resp))
 }

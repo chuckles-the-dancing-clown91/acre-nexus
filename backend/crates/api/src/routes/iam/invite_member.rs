@@ -30,9 +30,9 @@ pub async fn invite_member(
     // Reuse or create the underlying user account.
     let existing = User::find()
         .filter(entity::user::Column::Email.eq(email.clone()))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?;
-    let txn = state.db.begin().await?;
+    let txn = state.user_db.begin().await?;
     let uid = match existing {
         Some(u) => u.id,
         None => {

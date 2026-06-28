@@ -1,19 +1,17 @@
-//! Assigns a [`crate::role`] to a [`crate::user`] within a tenant context.
-//! `tenant_id` is carried so a user could (in principle) hold different roles
-//! in different workspaces.
+//! Join row granting a single [`super::role`] one permission string
+//! (see `api::rbac::Permission`), e.g. `property:write`.
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "user_role")]
+#[sea_orm(table_name = "role_permission")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: i64,
-    pub user_id: Uuid,
     pub role_id: Uuid,
-    /// `NULL` when the assignment is platform-wide (staff).
-    pub tenant_id: Option<Uuid>,
+    /// Permission key such as `property:read`.
+    pub permission: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

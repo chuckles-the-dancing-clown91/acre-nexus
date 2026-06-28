@@ -2,6 +2,12 @@
 //! (Northwind, Cascade), platform staff + client admins, system roles, LLCs,
 //! properties, listings and themes. All demo users share the password
 //! `password`.
+//!
+//! Since the database split, the seed writes across three databases: identity /
+//! RBAC / tenancy / themes go to `user_db`; the asset graph (LLCs, properties,
+//! listings, rentals, title, financing, intel) to `property_db`; counterparties
+//! to `client_db`. Cross-domain references (e.g. a mortgage's `lender_id` → a
+//! client counterparty) are plain UUIDs, so ordering across databases is fine.
 
 use crate::auth::hash_password;
 use crate::rbac::{PERMISSION_CATALOG, PROFILE_TYPES, SYSTEM_ROLES};
@@ -13,19 +19,23 @@ use uuid::Uuid;
 
 const DEMO_PASSWORD: &str = "password";
 
-/// Seed the database. The permission/persona catalogs are ensured (idempotently)
-/// on every boot so they stay current; the heavier demo data is only created
-/// when the database is empty.
-pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
-    ensure_catalogs(db).await?;
+/// Seed the databases. The permission/persona catalogs are ensured
+/// (idempotently) on every boot so they stay current; the heavier demo data is
+/// only created when the user database is empty.
+pub async fn run(
+    user_db: &DatabaseConnection,
+    property_db: &DatabaseConnection,
+    client_db: &DatabaseConnection,
+) -> anyhow::Result<()> {
+    ensure_catalogs(user_db).await?;
 
-    if Tenant::find().count(db).await? > 0 {
+    if Tenant::find().count(user_db).await? > 0 {
         tracing::info!("seed: tenants already present, skipping demo data");
         return Ok(());
     }
     tracing::info!("seed: populating demo data");
 
-    // ---- system roles + permissions ----
+    // ---- system roles + permissions (user db) ----
     let mut role_ids = std::collections::HashMap::new();
     for sr in SYSTEM_ROLES {
         let rid = Uuid::new_v4();
@@ -39,7 +49,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
             description: Set(sr.description.into()),
             is_system: Set(true),
         }
-        .insert(db)
+        .insert(user_db)
         .await?;
         for p in sr.permissions {
             entity::role_permission::ActiveModel {
@@ -47,22 +57,22 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
                 role_id: Set(rid),
                 permission: Set(p.as_str().into()),
             }
-            .insert(db)
+            .insert(user_db)
             .await?;
         }
     }
 
-    // ---- tenants ----
-    let northwind = seed_tenant(db, "northwind", "Northwind Property Group", "growth").await?;
-    let cascade = seed_tenant(db, "cascade", "Cascade Living LLC", "starter").await?;
+    // ---- tenants (user db) ----
+    let northwind = seed_tenant(user_db, "northwind", "Northwind Property Group", "growth").await?;
+    let cascade = seed_tenant(user_db, "cascade", "Cascade Living LLC", "starter").await?;
 
-    // ---- users, profiles, memberships ----
+    // ---- users, profiles, memberships (user db) ----
     let pw = hash_password(DEMO_PASSWORD)?;
 
     // Acre HQ (platform staff).
-    let avery = seed_user(db, None, "avery@acrehq.com", "Avery Stone", &pw, true).await?;
+    let avery = seed_user(user_db, None, "avery@acrehq.com", "Avery Stone", &pw, true).await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         avery,
         "platform",
@@ -71,11 +81,11 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         Some("Founder"),
     )
     .await?;
-    seed_profile(db, avery, "Avery", "Stone").await?;
+    seed_profile(user_db, avery, "Avery", "Stone").await?;
 
-    let sam = seed_user(db, None, "sam@acrehq.com", "Sam Okafor", &pw, true).await?;
+    let sam = seed_user(user_db, None, "sam@acrehq.com", "Sam Okafor", &pw, true).await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         sam,
         "platform",
@@ -87,7 +97,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
 
     // Northwind (client workspace) — owner, back-office, and a landlord.
     let jordan = seed_user(
-        db,
+        user_db,
         Some(northwind),
         "jordan@northwind.com",
         "Jordan Mills",
@@ -96,7 +106,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         jordan,
         "tenant",
@@ -105,10 +115,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         Some("Principal"),
     )
     .await?;
-    seed_profile(db, jordan, "Jordan", "Mills").await?;
+    seed_profile(user_db, jordan, "Jordan", "Mills").await?;
 
     let morgan = seed_user(
-        db,
+        user_db,
         Some(northwind),
         "morgan@northwind.com",
         "Morgan Lee",
@@ -117,7 +127,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         morgan,
         "tenant",
@@ -128,7 +138,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
 
     let lee = seed_user(
-        db,
+        user_db,
         Some(northwind),
         "lee@northwind.com",
         "Lee Carter",
@@ -137,7 +147,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         lee,
         "tenant",
@@ -146,11 +156,11 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         Some("Owner — Maple Holdings"),
     )
     .await?;
-    seed_profile(db, lee, "Lee", "Carter").await?;
+    seed_profile(user_db, lee, "Lee", "Carter").await?;
 
     // Cascade (client workspace) — owner.
     let priya = seed_user(
-        db,
+        user_db,
         Some(cascade),
         "priya@cascade.com",
         "Priya Rao",
@@ -159,7 +169,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_membership(
-        db,
+        user_db,
         &role_ids,
         priya,
         "tenant",
@@ -169,18 +179,18 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
-    // ---- themes ----
-    seed_theme(db, northwind, "Northwind Property Group", "#F5451F").await?;
-    seed_theme(db, cascade, "Cascade Living LLC", "#1C7C53").await?;
+    // ---- themes (user db) ----
+    seed_theme(user_db, northwind, "Northwind Property Group", "#F5451F").await?;
+    seed_theme(user_db, cascade, "Cascade Living LLC", "#1C7C53").await?;
 
-    // ---- Northwind LLCs + properties ----
-    let maple = seed_llc(db, northwind, "Maple Holdings LLC", "12-3456789", "OR").await?;
-    let harbor = seed_llc(db, northwind, "Harbor LLC", "98-7654321", "OR").await?;
-    let elm = seed_llc(db, northwind, "Elm Equity LLC", "45-6789012", "OR").await?;
-    let alder = seed_llc(db, northwind, "Alder LLC", "33-2211009", "OR").await?;
+    // ---- Northwind LLCs + properties (property db) ----
+    let maple = seed_llc(property_db, northwind, "Maple Holdings LLC", "12-3456789", "OR").await?;
+    let harbor = seed_llc(property_db, northwind, "Harbor LLC", "98-7654321", "OR").await?;
+    let elm = seed_llc(property_db, northwind, "Elm Equity LLC", "45-6789012", "OR").await?;
+    let alder = seed_llc(property_db, northwind, "Alder LLC", "33-2211009", "OR").await?;
 
     let maple_court = seed_property(
-        db,
+        property_db,
         northwind,
         maple,
         "The Maple Court",
@@ -195,7 +205,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         northwind,
         maple,
         "Birchwood Lofts",
@@ -210,7 +220,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         northwind,
         harbor,
         "Harbor View",
@@ -225,7 +235,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         northwind,
         alder,
         "The Aldercroft",
@@ -240,7 +250,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         northwind,
         elm,
         "Elmwood Residences",
@@ -255,11 +265,12 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
-    // ---- Cascade LLCs + properties ----
-    let riverside = seed_llc(db, cascade, "Riverside Holdings LLC", "77-1230988", "WA").await?;
-    let cnorth = seed_llc(db, cascade, "Cascade North LLC", "77-4567321", "WA").await?;
+    // ---- Cascade LLCs + properties (property db) ----
+    let riverside =
+        seed_llc(property_db, cascade, "Riverside Holdings LLC", "77-1230988", "WA").await?;
+    let cnorth = seed_llc(property_db, cascade, "Cascade North LLC", "77-4567321", "WA").await?;
     let riverside_flats = seed_property(
-        db,
+        property_db,
         cascade,
         riverside,
         "Riverside Flats",
@@ -274,7 +285,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         cascade,
         cnorth,
         "Cascade North Apartments",
@@ -289,7 +300,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_property(
-        db,
+        property_db,
         cascade,
         cnorth,
         "Birch & Main",
@@ -304,10 +315,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
-    // ---- Northwind public listings (the website slice) ----
-    seed_listing(db, northwind, "The Maple Court", "123 Maple Ct", "Portland, OR", 2, 1, 880, 185_000, "Available", "Now", "A bright 2-bed in a quiet, tree-lined court — hardwood floors, in-unit laundry, and a dedicated parking space.").await?;
+    // ---- Northwind public listings (the website slice) (property db) ----
+    seed_listing(property_db, northwind, "The Maple Court", "123 Maple Ct", "Portland, OR", 2, 1, 880, 185_000, "Available", "Now", "A bright 2-bed in a quiet, tree-lined court — hardwood floors, in-unit laundry, and a dedicated parking space.").await?;
     seed_listing(
-        db,
+        property_db,
         northwind,
         "Birchwood Lofts 5C",
         "88 Birch Ave",
@@ -322,7 +333,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_listing(
-        db,
+        property_db,
         northwind,
         "Cedar Park Townhome",
         "42 Cedar Park",
@@ -337,7 +348,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_listing(
-        db,
+        property_db,
         northwind,
         "Harbor View 12A",
         "700 Harbor Dr",
@@ -352,7 +363,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_listing(
-        db,
+        property_db,
         northwind,
         "The Aldercroft Studio",
         "15 Alder St",
@@ -367,7 +378,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_listing(
-        db,
+        property_db,
         northwind,
         "Elmwood Residences 3B",
         "230 Elm Blvd",
@@ -383,12 +394,12 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
 
     // ---- demo property intelligence (parcel/tax/valuation/schools/utilities) ----
-    seed_intel(db, maple_court).await?;
-    seed_intel(db, riverside_flats).await?;
+    seed_intel(property_db, maple_court).await?;
+    seed_intel(property_db, riverside_flats).await?;
 
-    // ---- demo entities (counterparties) + financing on Maple Court ----
+    // ---- demo entities (counterparties, client db) + financing (property db) ----
     let bank = seed_counterparty(
-        db,
+        client_db,
         northwind,
         "lender",
         "First Cascade Bank",
@@ -397,14 +408,14 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_counterparty_note(
-        db,
+        client_db,
         northwind,
         bank,
         "Pre-approved Northwind for portfolio refis at prime + 1.5%.",
     )
     .await?;
     seed_counterparty(
-        db,
+        client_db,
         northwind,
         "insurer",
         "Cascade Mutual Insurance",
@@ -413,7 +424,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     let contractor = seed_counterparty(
-        db,
+        client_db,
         northwind,
         "contractor",
         "Birch & Co. General Contracting",
@@ -421,15 +432,16 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         Some("(503) 555-0177"),
     )
     .await?;
-    // A 1st-lien mortgage on Maple Court through First Cascade Bank.
-    seed_mortgage(db, northwind, maple_court, bank).await?;
+    // A 1st-lien mortgage on Maple Court through First Cascade Bank (lender_id is a
+    // cross-database reference to the counterparty above).
+    seed_mortgage(property_db, northwind, maple_court, bank).await?;
 
-    // ---- demo rentals: units, leases, a payment, a maintenance ticket ----
-    let unit_a = seed_unit(db, northwind, maple_court, "1A", 2, 1.0, 185_000).await?;
-    let unit_b = seed_unit(db, northwind, maple_court, "2B", 1, 1.0, 162_000).await?;
+    // ---- demo rentals: units, leases, a payment, a maintenance ticket (property db) ----
+    let unit_a = seed_unit(property_db, northwind, maple_court, "1A", 2, 1.0, 185_000).await?;
+    let unit_b = seed_unit(property_db, northwind, maple_court, "2B", 1, 1.0, 162_000).await?;
     // A current tenant and a behind tenant.
     seed_lease(
-        db,
+        property_db,
         northwind,
         maple_court,
         unit_a,
@@ -443,7 +455,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     let behind = seed_lease(
-        db,
+        property_db,
         northwind,
         maple_court,
         unit_b,
@@ -456,10 +468,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         162_000,
     )
     .await?;
-    seed_lease_payment(db, northwind, behind, "2025-06-01", 162_000, "late").await?;
-    // An open work order assigned to the contractor.
+    seed_lease_payment(property_db, northwind, behind, "2025-06-01", 162_000, "late").await?;
+    // An open work order assigned to the contractor (cross-database reference).
     seed_ticket(
-        db,
+        property_db,
         northwind,
         maple_court,
         Some(unit_b),
@@ -471,10 +483,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
-    // ---- demo title: ownership (deed) + liens ----
-    seed_ownership(db, northwind, maple_court, maple, "Maple Holdings LLC").await?;
+    // ---- demo title: ownership (deed) + liens (property db) ----
+    seed_ownership(property_db, northwind, maple_court, maple, "Maple Holdings LLC").await?;
     seed_lien(
-        db,
+        property_db,
         northwind,
         maple_court,
         Some(bank),
@@ -486,7 +498,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_lien(
-        db,
+        property_db,
         northwind,
         maple_court,
         None,

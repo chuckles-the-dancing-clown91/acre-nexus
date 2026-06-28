@@ -18,10 +18,14 @@ pub async fn list(
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<PropertyResp>>> {
     user.require(Permission::PropertyRead)?;
+    // Strict tenant isolation: run inside a transaction clamped to the tenant via
+    // SET LOCAL app.tenant_id, so Postgres RLS enforces it beneath the filter.
+    let txn = AppState::tenant_tx(&state.property_db, scope.tenant_id).await?;
     let rows = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::property::Column::Name)
-        .all(&state.db)
+        .all(&txn)
         .await?;
+    txn.commit().await?;
     Ok(Json(rows.into_iter().map(PropertyResp::from).collect()))
 }

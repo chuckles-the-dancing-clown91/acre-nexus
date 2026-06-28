@@ -23,13 +23,13 @@ pub async fn get_lease(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let payments = LeasePayment::find()
         .filter(entity::lease_payment::Column::LeaseId.eq(lid))
         .order_by_desc(entity::lease_payment::Column::DueDate)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?
         .into_iter()
         .map(LeasePaymentDto::from)

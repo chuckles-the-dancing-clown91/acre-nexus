@@ -36,10 +36,10 @@ pub async fn apply(
         move_in: Set(b.move_in.unwrap_or_default()),
         created_at: Set(Utc::now().into()),
     };
-    model.insert(&state.db).await?;
+    model.insert(&state.client_db).await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         None,
         crate::audit::actions::APPLICATION_SUBMIT,
         Some("application"),
@@ -50,7 +50,7 @@ pub async fn apply(
     .await;
 
     let job_id = scheduler::enqueue(
-        &state.db,
+        &state.user_db,
         tenant.tenant_id,
         "background_check",
         json!({ "application_id": app_id, "applicant": b.applicant_name }),

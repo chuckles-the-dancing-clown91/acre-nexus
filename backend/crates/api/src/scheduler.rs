@@ -2,8 +2,9 @@
 //!
 //! This powers the product's "progress automation steps" — durable async work
 //! such as awaiting a background-check callback, sending automated emails, or
-//! advancing a screening pipeline. Jobs live in the `background_job` table so they
-//! survive restarts; a single Tokio task polls and advances them.
+//! advancing a screening pipeline. Jobs live in the `background_job` table (in
+//! the `acre_user` database) so they survive restarts; a single Tokio task polls
+//! and advances them.
 //!
 //! In production each job kind would call out to a real provider (Checkr, an
 //! email service, etc.). Here the side effects are simulated but the *state
@@ -19,10 +20,23 @@ use serde_json::json;
 use std::time::Duration as StdDuration;
 use uuid::Uuid;
 
+/// The three domain connections the scheduler makes available to job handlers.
+///
+/// The `background_job` queue lives in `user`, but advancing a job may require
+/// another domain's database — e.g. the property-intelligence enrichment handler
+/// writes to `property` — so all three are carried through to each handler.
+#[derive(Clone)]
+pub struct Pools {
+    pub user: DatabaseConnection,
+    pub property: DatabaseConnection,
+    pub client: DatabaseConnection,
+}
+
 /// Default retry budget for jobs enqueued via [`enqueue`].
 pub const DEFAULT_MAX_ATTEMPTS: i32 = 5;
 
 /// Enqueue a new background job with the default retry budget. Returns the id.
+/// `db` must be the `acre_user` connection (where `background_job` lives).
 pub async fn enqueue(
     db: &DatabaseConnection,
     tenant_id: Uuid,
@@ -70,20 +84,20 @@ pub async fn enqueue_with_retries(
 }
 
 /// Spawn the scheduler loop on the Tokio runtime. Non-blocking.
-pub fn spawn(db: DatabaseConnection) {
+pub fn spawn(pools: Pools) {
     tokio::spawn(async move {
         tracing::info!("background scheduler started");
         let mut tick = tokio::time::interval(StdDuration::from_secs(3));
         loop {
             tick.tick().await;
-            if let Err(e) = run_due_jobs(&db).await {
+            if let Err(e) = run_due_jobs(&pools).await {
                 tracing::error!("scheduler tick failed: {e}");
             }
         }
     });
 }
 
-async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+async fn run_due_jobs(pools: &Pools) -> Result<(), sea_orm::DbErr> {
     let now = Utc::now();
     let due = BackgroundJob::find()
         .filter(entity::background_job::Column::RunAt.lte(now))
@@ -94,11 +108,11 @@ async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
         ]))
         .order_by_asc(entity::background_job::Column::RunAt)
         .limit(25)
-        .all(db)
+        .all(&pools.user)
         .await?;
 
     for job in due {
-        advance(db, job).await?;
+        advance(pools, job).await?;
     }
     Ok(())
 }
@@ -111,9 +125,12 @@ async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
 /// processed — re-enabling the module resumes it. Jobs with no owning module
 /// fall back to "completed".
 async fn advance(
-    db: &DatabaseConnection,
+    pools: &Pools,
     job: entity::background_job::Model,
 ) -> Result<(), sea_orm::DbErr> {
+    // background_job lives in the user database; the scheduler runs unclamped
+    // (no app.tenant_id) so it can see and advance jobs across all tenants.
+    let db = &pools.user;
     let now = Utc::now();
     let mut am: entity::background_job::ActiveModel = job.clone().into();
     am.attempts = Set(job.attempts + 1);
@@ -131,7 +148,12 @@ async fn advance(
                 return Ok(());
             }
 
-            let ctx = crate::modules::JobContext { db, job: &job };
+            let ctx = crate::modules::JobContext {
+                user_db: &pools.user,
+                property_db: &pools.property,
+                client_db: &pools.client,
+                job: &job,
+            };
             match module.handle_job(&ctx).await {
                 Some(outcome) => {
                     am.status = Set(outcome.status.clone());

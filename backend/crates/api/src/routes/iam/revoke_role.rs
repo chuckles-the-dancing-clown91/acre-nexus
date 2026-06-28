@@ -20,6 +20,6 @@ pub async fn revoke_role(
     let urid: i64 = id
         .parse()
         .map_err(|_| ApiError::BadRequest("invalid assignment id".into()))?;
-    UserRole::delete_by_id(urid).exec(&state.db).await?;
+    UserRole::delete_by_id(urid).exec(&state.user_db).await?;
     Ok(Json(serde_json::json!({ "revoked": true })))
 }

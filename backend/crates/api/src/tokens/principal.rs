@@ -59,7 +59,7 @@ impl<'r> FromRequest<'r> for ApiPrincipal {
         let hash = hash_secret(&raw);
         let found = ApiToken::find()
             .filter(entity::api_token::Column::TokenHash.eq(hash))
-            .one(&state.db)
+            .one(&state.user_db)
             .await;
 
         let model = match found {
@@ -83,7 +83,7 @@ impl<'r> FromRequest<'r> for ApiPrincipal {
         // Best-effort last-used stamp (ignore failures).
         let mut am: entity::api_token::ActiveModel = model.clone().into();
         am.last_used_at = Set(Some(now.into()));
-        let _ = am.update(&state.db).await;
+        let _ = am.update(&state.user_db).await;
 
         Outcome::Success(ApiPrincipal {
             token_id: model.id,

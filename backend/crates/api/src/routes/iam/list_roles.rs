@@ -34,11 +34,11 @@ pub async fn list_roles(
     }
     let roles = q
         .order_by_asc(entity::role::Column::Name)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     let mut out = Vec::new();
     for r in roles {
-        let perms = role_permissions(&state.db, r.id).await?;
+        let perms = role_permissions(&state.user_db, r.id).await?;
         out.push(RoleDto {
             id: r.id,
             scope: r.scope,

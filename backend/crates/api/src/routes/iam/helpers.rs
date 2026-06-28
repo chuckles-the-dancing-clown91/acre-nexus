@@ -61,18 +61,18 @@ pub(crate) async fn load_user_detail(
     uid: Uuid,
 ) -> ApiResult<Json<UserDetail>> {
     let u = User::find_by_id(uid)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
 
     let profile = UserProfile::find_by_id(uid)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .map(ProfileDto::from);
 
     let memberships = Membership::find()
         .filter(entity::membership::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(&state.user_db)
         .await?
         .into_iter()
         .map(|m| MembershipDto {
@@ -89,11 +89,11 @@ pub(crate) async fn load_user_detail(
     // Roles, joined to their key/name.
     let urs = UserRole::find()
         .filter(entity::user_role::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     let mut roles = Vec::new();
     for ur in urs {
-        if let Some(r) = Role::find_by_id(ur.role_id).one(&state.db).await? {
+        if let Some(r) = Role::find_by_id(ur.role_id).one(&state.user_db).await? {
             roles.push(UserRoleDto {
                 id: ur.id,
                 role_id: r.id,

@@ -36,11 +36,11 @@ pub async fn create_role(
         description: Set(body.description.clone()),
         is_system: Set(false),
     }
-    .insert(&state.db)
+    .insert(&state.user_db)
     .await?;
-    replace_role_permissions(&state.db, id, &body.permissions).await?;
+    replace_role_permissions(&state.user_db, id, &body.permissions).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::ROLE_CREATE,
         Some("role"),

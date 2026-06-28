@@ -11,7 +11,7 @@ pub(crate) async fn resolve_tenant_ref(state: &AppState, reference: &str) -> Opt
     }
     Tenant::find()
         .filter(entity::tenant::Column::Slug.eq(reference))
-        .one(&state.db)
+        .one(&state.user_db)
         .await
         .ok()
         .flatten()

@@ -23,7 +23,7 @@ pub async fn assign_role(
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
     let body = body.into_inner();
     if Role::find_by_id(body.role_id)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .is_none()
     {
@@ -35,7 +35,7 @@ pub async fn assign_role(
         role_id: Set(body.role_id),
         tenant_id: Set(body.tenant_id),
     }
-    .insert(&state.db)
+    .insert(&state.user_db)
     .await?;
     Ok(Json(serde_json::json!({ "assigned": true })))
 }

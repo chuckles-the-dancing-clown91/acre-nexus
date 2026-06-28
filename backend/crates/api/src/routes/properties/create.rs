@@ -21,6 +21,7 @@ pub async fn create(
 ) -> ApiResult<Json<PropertyResp>> {
     user.require(Permission::PropertyWrite)?;
     let b = body.into_inner();
+    let txn = AppState::tenant_tx(&state.property_db, scope.tenant_id).await?;
     let model = entity::property::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -41,9 +42,10 @@ pub async fn create(
         acquired_on: Set(None),
         created_at: Set(Utc::now().into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&txn).await?;
+    txn.commit().await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_CREATE,
         Some("property"),

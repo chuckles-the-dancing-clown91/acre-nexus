@@ -20,7 +20,7 @@ pub async fn delete_role(
     user.require(Permission::RoleManage)?;
     let rid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid role id".into()))?;
     let role = Role::find_by_id(rid)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("role not found".into()))?;
     if role.is_system {
@@ -28,15 +28,15 @@ pub async fn delete_role(
     }
     RolePermission::delete_many()
         .filter(entity::role_permission::Column::RoleId.eq(rid))
-        .exec(&state.db)
+        .exec(&state.user_db)
         .await?;
     UserRole::delete_many()
         .filter(entity::user_role::Column::RoleId.eq(rid))
-        .exec(&state.db)
+        .exec(&state.user_db)
         .await?;
-    Role::delete_by_id(rid).exec(&state.db).await?;
+    Role::delete_by_id(rid).exec(&state.user_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::ROLE_DELETE,
         Some("role"),

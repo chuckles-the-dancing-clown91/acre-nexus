@@ -140,6 +140,6 @@ pub(crate) async fn issue_refresh_token(state: &AppState, user_id: Uuid) -> ApiR
         revoked_at: Set(None),
         created_at: Set(now.into()),
     };
-    model.insert(&state.db).await?;
+    model.insert(&state.user_db).await?;
     Ok(secret)
 }

@@ -28,7 +28,7 @@ pub async fn advance(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let property = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -46,7 +46,7 @@ pub async fn advance(
     // Update the property's current stage.
     let mut am: entity::property::ActiveModel = property.into();
     am.workflow_stage = Set(req.to_stage.clone());
-    am.update(&state.db).await?;
+    am.update(&state.property_db).await?;
 
     // Record the transition.
     entity::workflow_event::ActiveModel {
@@ -60,11 +60,11 @@ pub async fn advance(
         actor_user_id: Set(Some(user.user_id)),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&state.property_db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::WORKFLOW_ADVANCE,
         Some("property"),
@@ -77,7 +77,7 @@ pub async fn advance(
     let history = WorkflowEvent::find()
         .filter(entity::workflow_event::Column::PropertyId.eq(pid))
         .order_by_desc(entity::workflow_event::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
 
     Ok(Json(build(&strategy, &req.to_stage, history)))

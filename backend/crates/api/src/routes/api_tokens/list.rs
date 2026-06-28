@@ -21,7 +21,7 @@ pub async fn list(
     let rows = ApiToken::find()
         .filter(entity::api_token::Column::TenantId.eq(scope.tenant_id))
         .order_by_desc(entity::api_token::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     Ok(Json(rows.into_iter().map(TokenSummary::from).collect()))
 }

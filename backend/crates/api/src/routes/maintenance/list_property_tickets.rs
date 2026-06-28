@@ -23,14 +23,14 @@ pub async fn list_property_tickets(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let rows = MaintenanceTicket::find()
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::maintenance_ticket::Column::PropertyId.eq(pid))
         .order_by_desc(entity::maintenance_ticket::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(TicketDto::from).collect()))
 }

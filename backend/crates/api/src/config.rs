@@ -1,12 +1,29 @@
 //! Runtime configuration, loaded from environment variables (and `.env`).
+//!
+//! Since the database split there are **three** databases (user / property /
+//! client). Each has a *runtime* URL (connect as the least-privilege `_app`
+//! role so row-level-security bites) and an *owner* URL (used only to run
+//! migrations on boot, which need DDL privileges). All of them fall back to a
+//! shared `DATABASE_URL`, so a simple single-database dev setup still works.
 
 use sha2::{Digest, Sha256};
 use std::env;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// Postgres connection string.
-    pub database_url: String,
+    /// Runtime connection URL for the `acre_user` database (identity/auth/RBAC/
+    /// tenancy + audit_log + background_job). Connect as the non-owner `_app` role.
+    pub user_db_url: String,
+    /// Runtime connection URL for the `acre_property` database.
+    pub property_db_url: String,
+    /// Runtime connection URL for the `acre_client` database.
+    pub client_db_url: String,
+    /// Owner (DDL) URL for `acre_user`, used to run migrations on boot.
+    pub user_owner_url: String,
+    /// Owner (DDL) URL for `acre_property`.
+    pub property_owner_url: String,
+    /// Owner (DDL) URL for `acre_client`.
+    pub client_owner_url: String,
     /// HMAC secret for signing JWT access tokens. **Override in production.**
     pub jwt_secret: String,
     /// 32-byte key for AES-256-GCM PII encryption (SSN / government IDs).
@@ -24,8 +41,12 @@ impl Config {
         let _ = dotenvy::dotenv();
         let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| "dev-insecure-change-me".into());
         Config {
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://localhost:5432/acre".into()),
+            user_db_url: domain_url("USER"),
+            property_db_url: domain_url("PROPERTY"),
+            client_db_url: domain_url("CLIENT"),
+            user_owner_url: owner_url("USER"),
+            property_owner_url: owner_url("PROPERTY"),
+            client_owner_url: owner_url("CLIENT"),
             pii_key: pii_key_from_env(&jwt_secret),
             jwt_secret,
             access_ttl_secs: env::var("ACCESS_TTL_SECS")
@@ -41,6 +62,20 @@ impl Config {
                 .unwrap_or(true),
         }
     }
+}
+
+/// Runtime URL for a domain database: `<DOMAIN>_DATABASE_URL`, else the shared
+/// `DATABASE_URL`, else a localhost default.
+fn domain_url(domain: &str) -> String {
+    env::var(format!("{domain}_DATABASE_URL"))
+        .or_else(|_| env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| format!("postgres://localhost:5432/acre_{}", domain.to_lowercase()))
+}
+
+/// Owner (DDL) URL for migrations: `<DOMAIN>_DATABASE_OWNER_URL`, else the
+/// domain's runtime URL (which itself falls back to `DATABASE_URL`).
+fn owner_url(domain: &str) -> String {
+    env::var(format!("{domain}_DATABASE_OWNER_URL")).unwrap_or_else(|_| domain_url(domain))
 }
 
 /// Resolve the 32-byte PII encryption key. Prefer `PII_ENC_KEY` (64 hex chars);

@@ -65,11 +65,17 @@ pub struct ModuleManifest {
 }
 
 /// Context handed to a module when the scheduler asks it to advance a job.
+///
+/// All three domain connections are available because a job may touch any
+/// database while advancing (e.g. enrichment reads/writes `property_db`, then
+/// enqueues child jobs into `user_db`). `background_job` itself lives in
+/// `user_db`.
 pub struct JobContext<'a> {
-    /// Connection for handlers that need to touch other tables while advancing a
-    /// job (none do yet, but it's part of the handler contract).
+    pub user_db: &'a DatabaseConnection,
+    pub property_db: &'a DatabaseConnection,
+    /// Available to handlers that need client-domain data (none do yet).
     #[allow(dead_code)]
-    pub db: &'a DatabaseConnection,
+    pub client_db: &'a DatabaseConnection,
     pub job: &'a background_job::Model,
 }
 

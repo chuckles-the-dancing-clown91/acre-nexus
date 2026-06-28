@@ -12,6 +12,14 @@ path = "src/lib.rs"
 name = "migration"
 path = "src/main.rs"
 
+# Facade/orchestrator: the schema lives in the per-domain crates; this crate
+# re-exports the three migrators and provides a CLI that applies each to its
+# own database.
 [dependencies]
+acre_user = { path = "../user" }
+acre_property = { path = "../property" }
+acre_client = { path = "../client" }
+sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 tokio = { workspace = true }
+dotenvy = { workspace = true }

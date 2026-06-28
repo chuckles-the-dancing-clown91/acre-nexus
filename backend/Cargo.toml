@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/entity", "crates/migration", "crates/api"]
+members = [
+    "crates/user",
+    "crates/property",
+    "crates/client",
+    "crates/entity",
+    "crates/migration",
+    "crates/api",
+]
 
 # Shared dependency versions for the whole workspace. Pinned to recent
 # major versions so the stack compiles reproducibly on Rust 2021/1.94+.

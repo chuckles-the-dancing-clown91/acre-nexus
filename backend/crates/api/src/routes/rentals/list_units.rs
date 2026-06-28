@@ -23,13 +23,13 @@ pub async fn list_units(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let rows = Unit::find()
         .filter(entity::unit::Column::PropertyId.eq(pid))
         .order_by_asc(entity::unit::Column::UnitNumber)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(UnitDto::from).collect()))
 }

@@ -36,9 +36,9 @@ pub async fn create(
         revoked_at: Set(None),
         created_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&state.user_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::TOKEN_CREATE,
         Some("api_token"),

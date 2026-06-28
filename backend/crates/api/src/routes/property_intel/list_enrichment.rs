@@ -27,7 +27,7 @@ pub async fn list_enrichment(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -35,7 +35,7 @@ pub async fn list_enrichment(
         .filter(entity::enrichment_run::Column::PropertyId.eq(pid))
         .order_by_desc(entity::enrichment_run::Column::CreatedAt)
         .limit(limit.unwrap_or(50).min(200))
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(EnrichmentRunDto::from).collect()))
 }

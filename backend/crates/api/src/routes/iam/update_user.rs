@@ -23,7 +23,7 @@ pub async fn update_user(
     user.require(Permission::UserManage)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
     let u = User::find_by_id(uid)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
     let body = body.into_inner();
@@ -37,6 +37,6 @@ pub async fn update_user(
     if let Some(status) = body.status {
         am.status = Set(status);
     }
-    am.update(&state.db).await?;
+    am.update(&state.user_db).await?;
     load_user_detail(state, uid).await
 }

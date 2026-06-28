@@ -35,7 +35,44 @@ pub async fn onboard(
 
     let pid = Uuid::new_v4();
     let now = Utc::now();
-    let txn = state.db.begin().await?;
+
+    // Cross-database write. Lender counterparties live in the **client** database
+    // (acre_client); the property, its mortgages and the workflow event live in
+    // the **property** database (acre_property). There is no transaction spanning
+    // databases, so we first create the (independently valid) lender entities,
+    // then write the property graph atomically in one acre_property transaction.
+    let mut lenders_created = 0usize;
+    let mut prepared_mortgages = Vec::with_capacity(b.mortgages.len());
+    for m in &b.mortgages {
+        let lender_id = match (m.lender_id, m.lender_name.as_deref()) {
+            (Some(id), _) => Some(id),
+            (None, Some(name)) if !name.trim().is_empty() => {
+                let cid = Uuid::new_v4();
+                entity::counterparty::ActiveModel {
+                    id: Set(cid),
+                    tenant_id: Set(scope.tenant_id),
+                    kind: Set("lender".into()),
+                    name: Set(name.trim().to_string()),
+                    contact_name: Set(None),
+                    email: Set(None),
+                    phone: Set(None),
+                    website: Set(None),
+                    address: Set(None),
+                    notes: Set(None),
+                    created_at: Set(now.into()),
+                    updated_at: Set(now.into()),
+                }
+                .insert(&state.client_db)
+                .await?;
+                lenders_created += 1;
+                Some(cid)
+            }
+            _ => None,
+        };
+        prepared_mortgages.push((lender_id, m));
+    }
+
+    let txn = state.property_db.begin().await?;
 
     // ---- property ----
     entity::property::ActiveModel {
@@ -61,40 +98,13 @@ pub async fn onboard(
     .insert(&txn)
     .await?;
 
-    // ---- financing (+ lender entities created on the fly) ----
-    let mut lenders_created = 0usize;
-    for m in &b.mortgages {
-        let lender_id = match (m.lender_id, m.lender_name.as_deref()) {
-            (Some(id), _) => Some(id),
-            (None, Some(name)) if !name.trim().is_empty() => {
-                let cid = Uuid::new_v4();
-                entity::counterparty::ActiveModel {
-                    id: Set(cid),
-                    tenant_id: Set(scope.tenant_id),
-                    kind: Set("lender".into()),
-                    name: Set(name.trim().to_string()),
-                    contact_name: Set(None),
-                    email: Set(None),
-                    phone: Set(None),
-                    website: Set(None),
-                    address: Set(None),
-                    notes: Set(None),
-                    created_at: Set(now.into()),
-                    updated_at: Set(now.into()),
-                }
-                .insert(&txn)
-                .await?;
-                lenders_created += 1;
-                Some(cid)
-            }
-            _ => None,
-        };
-
+    // ---- financing (lender ids resolved above, in the client database) ----
+    for (lender_id, m) in &prepared_mortgages {
         entity::mortgage::ActiveModel {
             id: Set(Uuid::new_v4()),
             tenant_id: Set(scope.tenant_id),
             property_id: Set(pid),
-            lender_id: Set(lender_id),
+            lender_id: Set(*lender_id),
             kind: Set(if m.kind.is_empty() {
                 "purchase".into()
             } else {
@@ -140,7 +150,7 @@ pub async fn onboard(
     let enrich_job_id = if b.enrich {
         let sources: Vec<&str> = Source::all().iter().map(|s| s.as_str()).collect();
         scheduler::enqueue(
-            &state.db,
+            &state.user_db,
             scope.tenant_id,
             ORCHESTRATOR_KIND,
             serde_json::json!({ "property_id": pid.to_string(), "sources": sources }),
@@ -153,7 +163,7 @@ pub async fn onboard(
     };
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_ONBOARD,
         Some("property"),

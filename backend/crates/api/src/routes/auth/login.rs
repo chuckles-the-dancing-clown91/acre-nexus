@@ -15,7 +15,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<Json<TokenResp>> {
     let user = User::find()
         .filter(entity::user::Column::Email.eq(body.email.to_lowercase()))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
 
@@ -35,13 +35,13 @@ pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<J
     {
         let mut am: entity::user::ActiveModel = user.clone().into();
         am.last_login_at = Set(Some(Utc::now().into()));
-        if let Err(e) = am.update(&state.db).await {
+        if let Err(e) = am.update(&state.user_db).await {
             tracing::warn!("failed to update last_login_at: {e}");
         }
     }
 
     let active = user.tenant_id;
-    let perms = permissions_for(&state.db, user.id, active).await?;
+    let perms = permissions_for(&state.user_db, user.id, active).await?;
     let access = issue_access_token(
         &state.config,
         user.id,
@@ -52,10 +52,10 @@ pub async fn login(state: &State<AppState>, body: Json<LoginReq>) -> ApiResult<J
     .map_err(ApiError::Internal)?;
 
     let refresh = issue_refresh_token(state, user.id).await?;
-    let user_resp = build_user_resp(&state.db, &user, active, perms).await?;
+    let user_resp = build_user_resp(&state.user_db, &user, active, perms).await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.id),
         crate::audit::actions::AUTH_LOGIN,
         Some("user"),

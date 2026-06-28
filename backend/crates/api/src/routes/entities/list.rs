@@ -29,7 +29,7 @@ pub async fn list(
     }
     let rows = q
         .order_by_asc(entity::counterparty::Column::Name)
-        .all(&state.db)
+        .all(&state.client_db)
         .await?;
     Ok(Json(rows.into_iter().map(CounterpartyDto::from).collect()))
 }

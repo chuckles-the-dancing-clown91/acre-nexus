@@ -14,8 +14,9 @@ use sea_orm::EntityTrait;
 #[get("/platform/metrics")]
 pub async fn metrics(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<PlatformMetrics>> {
     user.require(Permission::PlatformAdmin)?;
-    let tenants = Tenant::find().all(&state.db).await?;
-    let props = Property::find().all(&state.db).await?;
+    // Cross-database read: tenants live in acre_user, properties in acre_property.
+    let tenants = Tenant::find().all(&state.user_db).await?;
+    let props = Property::find().all(&state.property_db).await?;
     let revenue: i64 = props.iter().map(|p| p.monthly_rent_cents).sum();
     Ok(Json(PlatformMetrics {
         tenant_count: tenants.len() as i64,

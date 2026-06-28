@@ -18,7 +18,7 @@ pub async fn listings(
         .filter(entity::listing::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::listing::Column::IsPublic.eq(true))
         .order_by_desc(entity::listing::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(ListingResp::from).collect()))
 }

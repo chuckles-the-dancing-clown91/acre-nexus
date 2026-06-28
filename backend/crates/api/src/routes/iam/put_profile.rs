@@ -22,10 +22,10 @@ pub async fn put_profile(
 ) -> ApiResult<Json<ProfileDto>> {
     user.require(Permission::ProfileWrite)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
-    if User::find_by_id(uid).one(&state.db).await?.is_none() {
+    if User::find_by_id(uid).one(&state.user_db).await?.is_none() {
         return Err(ApiError::NotFound("user not found".into()));
     }
-    upsert_profile_inner(&state.db, &state.config.pii_key, uid, &body.into_inner()).await?;
-    let p = UserProfile::find_by_id(uid).one(&state.db).await?.unwrap();
+    upsert_profile_inner(&state.user_db, &state.config.pii_key, uid, &body.into_inner()).await?;
+    let p = UserProfile::find_by_id(uid).one(&state.user_db).await?.unwrap();
     Ok(Json(p.into()))
 }

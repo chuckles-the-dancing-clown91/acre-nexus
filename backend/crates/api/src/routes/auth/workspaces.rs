@@ -16,9 +16,9 @@ pub async fn workspaces(
     user: AuthUser,
 ) -> ApiResult<Json<Vec<WorkspaceSummary>>> {
     let u = User::find_by_id(user.user_id)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
-    let memberships = load_memberships(&state.db, u.id).await?;
+    let memberships = load_memberships(&state.user_db, u.id).await?;
     Ok(Json(workspaces_from(&memberships, u.is_platform_staff)))
 }

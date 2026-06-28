@@ -41,7 +41,7 @@ mod tokens;
 mod workflow;
 
 use config::Config;
-use migration::{Migrator, MigratorTrait};
+use migration::{ClientMigrator, MigratorTrait, PropertyMigrator, UserMigrator};
 use rocket_okapi::okapi::merge::merge_specs;
 use rocket_okapi::okapi::openapi3::{Info, OpenApi};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
@@ -61,21 +61,40 @@ async fn rocket() -> _ {
         .try_init();
 
     let config = Config::from_env();
-    tracing::info!("connecting to database…");
-    let db = Database::connect(&config.database_url)
-        .await
-        .expect("failed to connect to database");
 
+    // Migrations run as the schema-owner role (DDL); the runtime connections
+    // below use the least-privilege `_app` role so RLS policies bite.
     if config.auto_migrate {
         tracing::info!("running migrations…");
-        Migrator::up(&db, None).await.expect("migration failed");
-        seed::run(&db).await.expect("seed failed");
+        migrate::<UserMigrator>("acre_user", &config.user_owner_url).await;
+        migrate::<PropertyMigrator>("acre_property", &config.property_owner_url).await;
+        migrate::<ClientMigrator>("acre_client", &config.client_owner_url).await;
     }
 
-    // Spawn the Tokio background scheduler.
-    scheduler::spawn(db.clone());
+    let user_db = connect("acre_user", &config.user_db_url).await;
+    let property_db = connect("acre_property", &config.property_db_url).await;
+    let client_db = connect("acre_client", &config.client_db_url).await;
 
-    let state = AppState { db, config };
+    if config.auto_migrate {
+        seed::run(&user_db, &property_db, &client_db)
+            .await
+            .expect("seed failed");
+    }
+
+    // Spawn the Tokio background scheduler over all three databases (it polls
+    // background_job in acre_user and dispatches to handlers that may touch any).
+    scheduler::spawn(scheduler::Pools {
+        user: user_db.clone(),
+        property: property_db.clone(),
+        client: client_db.clone(),
+    });
+
+    let state = AppState {
+        user_db,
+        property_db,
+        client_db,
+        config,
+    };
 
     // Accumulate the merged OpenAPI document as we mount routes. Core routes
     // first, then every pluggable module's routes — each module contributes both
@@ -154,4 +173,23 @@ async fn rocket() -> _ {
     );
 
     app.mount("/", routes![cors::preflight])
+}
+
+/// Open a runtime connection pool to a domain database (as the `_app` role).
+async fn connect(name: &str, url: &str) -> sea_orm::DatabaseConnection {
+    tracing::info!("connecting to {name}…");
+    Database::connect(url)
+        .await
+        .unwrap_or_else(|e| panic!("failed to connect to {name}: {e}"))
+}
+
+/// Connect to a domain database as its owner role and apply all pending
+/// migrations for that domain.
+async fn migrate<M: MigratorTrait>(name: &str, url: &str) {
+    let db = Database::connect(url)
+        .await
+        .unwrap_or_else(|e| panic!("failed to connect to {name} (owner): {e}"));
+    M::up(&db, None)
+        .await
+        .unwrap_or_else(|e| panic!("migration for {name} failed: {e}"));
 }

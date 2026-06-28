@@ -23,7 +23,7 @@ pub async fn reveal_pii(
     user.require(Permission::ProfilePiiRead)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
     let p = UserProfile::find_by_id(uid)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("profile not found".into()))?;
     let key = &state.config.pii_key;
@@ -37,7 +37,7 @@ pub async fn reveal_pii(
     };
     tracing::warn!(actor = %user.user_id, subject = %uid, "PII revealed (SSN/gov-id)");
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::PII_REVEAL,
         Some("user"),

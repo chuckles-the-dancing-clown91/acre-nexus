@@ -23,13 +23,13 @@ pub async fn get_ticket(
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let ticket = MaintenanceTicket::find_by_id(tid)
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
     let comments = TicketComment::find()
         .filter(entity::ticket_comment::Column::TicketId.eq(tid))
         .order_by_desc(entity::ticket_comment::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?
         .into_iter()
         .map(TicketCommentDto::from)

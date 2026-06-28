@@ -21,11 +21,11 @@ pub async fn list_members(
     user.require(Permission::MemberRead)?;
     let memberships = Membership::find()
         .filter(entity::membership::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     let mut out = Vec::new();
     for m in memberships {
-        if let Some(u) = User::find_by_id(m.user_id).one(&state.db).await? {
+        if let Some(u) = User::find_by_id(m.user_id).one(&state.user_db).await? {
             out.push(MemberDto {
                 membership_id: m.id,
                 user_id: u.id,

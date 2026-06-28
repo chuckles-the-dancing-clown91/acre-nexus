@@ -27,12 +27,12 @@ pub async fn enrich(
     body: Json<EnrichReq>,
 ) -> ApiResult<Json<EnrichResp>> {
     user.require(Permission::PropertyWrite)?;
-    crate::modules::require_enabled(&state.db, scope.tenant_id, "property_intel").await?;
+    crate::modules::require_enabled(&state.user_db, scope.tenant_id, "property_intel").await?;
 
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -54,7 +54,7 @@ pub async fn enrich(
     };
 
     let job_id = scheduler::enqueue(
-        &state.db,
+        &state.user_db,
         scope.tenant_id,
         ORCHESTRATOR_KIND,
         serde_json::json!({ "property_id": pid.to_string(), "sources": scheduled }),
@@ -63,7 +63,7 @@ pub async fn enrich(
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_ENRICH,
         Some("property"),

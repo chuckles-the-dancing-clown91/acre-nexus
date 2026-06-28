@@ -27,21 +27,23 @@
                     └───────────────┬──────────────────────────┘
                                     │ SeaORM
                                     ▼
-                          ┌──────────────────┐
-                          │   PostgreSQL     │
-                          │ shared schema +  │
-                          │ tenant_id (+RLS) │
-                          └──────────────────┘
+              ┌────────────┬─────────────┬────────────┐
+              │ acre_user  │acre_property│ acre_client│  3 Postgres DBs
+              │   shared schema + tenant_id (+ RLS)    │  (one per domain)
+              └────────────┴─────────────┴────────────┘
 ```
 
 ## Backend (Rust)
 
 A Cargo workspace under `backend/`:
 
-- **`crates/entity`** — SeaORM models. One module per table. Documented; money is
-  stored as integer cents (`i64`).
-- **`crates/migration`** — schema migrations. `m...init` creates all tables;
-  `m...rls` adds Postgres row-level-security policies (defence in depth).
+- **`crates/user` · `crates/property` · `crates/client`** — the three **domain
+  crates**, one per database. Each bundles its SeaORM entities and its migrations
+  (+ a `Migrator`). Money is stored as integer cents (`i64`). `acre_user` also
+  hosts the cross-cutting `audit_log` / `background_job` tables.
+- **`crates/entity` · `crates/migration`** — thin **facades** re-exporting the
+  three domains' entities (`entity::*`) and migrators under stable paths, so the
+  API and tooling don't care which crate a model or migration physically lives in.
 - **`crates/api`** — the Rocket application. Key modules:
   - `config` — env-driven config.
   - `auth` — Argon2 password hashing, JWT issue/verify, the `AuthUser` guard,
@@ -113,18 +115,30 @@ module's default). The frontend mirrors the same keys to drive navigation and
 settings. Adding a module is a new file plus one registry line — see
 `docs/MODULES.md`.
 
-## Multi-tenancy
+## Data topology & multi-tenancy
 
-**Shared schema, `tenant_id` on every scoped row.**
+**Three databases — `acre_user`, `acre_property`, `acre_client` — each a
+shared-schema multi-tenant database with `tenant_id` on every scoped row.** The
+split is by **domain**, not by tenant. Cross-domain links (e.g.
+`mortgage.lender_id` → a client counterparty, `property.tenant_id` → a user
+tenant) are plain `Uuid`s resolved in the application layer, since foreign keys
+cannot span databases. The handful of genuinely cross-database operations
+(property onboarding, platform metrics, the demo seed) do two-step, app-level
+reads/writes; there is no distributed transaction.
 
-- The application layer is the primary enforcement: every tenant-scoped query
-  filters by the active `tenant_id` from the `TenantScope`/`PublicTenant` guard.
-- The active tenant comes from: the JWT (`tid`) for client users; the `X-Tenant`
-  header for staff impersonation and for the public website; the API token for
-  vendor calls.
-- Postgres **row-level-security** policies provide a second wall (keyed on a
-  `app.tenant_id` session variable). To make RLS bite in production, connect as a
-  non-owner DB role and `SET app.tenant_id` per transaction.
+- **Application layer (primary enforcement):** every tenant-scoped query filters
+  by the active `tenant_id` from the `TenantScope`/`PublicTenant` guard. The
+  active tenant comes from the JWT (`tid`) for client users, the `X-Tenant`
+  header (staff impersonation / public website), or the API token (vendor calls).
+- **Postgres row-level-security (defence in depth, enforced):** the tenant-scoped
+  tables have `ENABLE` + `FORCE ROW LEVEL SECURITY` with a policy keyed on the
+  `app.tenant_id` session variable. The API connects as a non-owner **`_app`**
+  role and runs tenant-scoped work inside a transaction that issues
+  `SET LOCAL app.tenant_id` (`AppState::tenant_tx`), so the policy actually bites
+  (the `properties` routes are the reference implementation; the same one-line
+  wrap rolls out to the other tenant-scoped handlers). Cross-tenant workers — the
+  background scheduler and the platform-admin tenant registry — intentionally run
+  **unclamped**. Migrations run as the schema-**owner** role.
 
 ## AuthN / AuthZ
 

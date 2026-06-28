@@ -1,5 +1,5 @@
 //! The **persona catalog** ("profile types"). A persona describes what kind of
-//! actor a [`crate::membership`] represents — an Acre employee (platform scope)
+//! actor a [`super::membership`] represents — an Acre employee (platform scope)
 //! or a person inside a client workspace (tenant scope: landlord, back-office,
 //! property manager, renter, …). Seeded from `api::rbac::PROFILE_TYPES`.
 

@@ -23,13 +23,13 @@ pub async fn list_liens(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let rows = Lien::find()
         .filter(entity::lien::Column::PropertyId.eq(pid))
         .order_by_asc(entity::lien::Column::Position)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(LienDto::from).collect()))
 }

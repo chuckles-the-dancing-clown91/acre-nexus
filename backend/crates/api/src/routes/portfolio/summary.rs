@@ -21,7 +21,7 @@ pub async fn summary(
     user.require(Permission::PropertyRead)?;
     let props = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
 
     let count = props.len() as i64;

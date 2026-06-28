@@ -35,7 +35,7 @@ pub async fn set(
     let existing = TenantModule::find()
         .filter(entity::tenant_module::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::tenant_module::Column::ModuleKey.eq(key))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?;
 
     match existing {
@@ -43,7 +43,7 @@ pub async fn set(
             let mut am: entity::tenant_module::ActiveModel = row.into();
             am.enabled = Set(body.enabled);
             am.updated_at = Set(Utc::now().into());
-            am.update(&state.db).await?;
+            am.update(&state.user_db).await?;
         }
         None => {
             entity::tenant_module::ActiveModel {
@@ -53,13 +53,13 @@ pub async fn set(
                 enabled: Set(body.enabled),
                 updated_at: Set(Utc::now().into()),
             }
-            .insert(&state.db)
+            .insert(&state.user_db)
             .await?;
         }
     }
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::MODULE_TOGGLE,
         Some("module"),

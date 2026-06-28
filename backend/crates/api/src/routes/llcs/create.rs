@@ -31,9 +31,9 @@ pub async fn create(
         state: Set(b.state.unwrap_or_default()),
         created_at: Set(Utc::now().into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&state.property_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::LLC_CREATE,
         Some("llc"),

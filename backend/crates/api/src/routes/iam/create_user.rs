@@ -28,7 +28,7 @@ pub async fn create_user(
     }
     if User::find()
         .filter(entity::user::Column::Email.eq(email.clone()))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .is_some()
     {
@@ -55,7 +55,7 @@ pub async fn create_user(
         .and_then(|m| m.tenant_id);
 
     let uid = Uuid::new_v4();
-    let txn = state.db.begin().await?;
+    let txn = state.user_db.begin().await?;
     entity::user::ActiveModel {
         id: Set(uid),
         tenant_id: Set(primary_tenant),
@@ -80,7 +80,7 @@ pub async fn create_user(
     txn.commit().await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::USER_CREATE,
         Some("user"),

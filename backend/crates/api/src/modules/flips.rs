@@ -51,7 +51,7 @@ pub async fn pipeline(
     tenant: TenantScope,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Permission::PropertyRead)?;
-    super::require_enabled(&state.db, tenant.tenant_id, "flips").await?;
+    super::require_enabled(&state.user_db, tenant.tenant_id, "flips").await?;
 
     // Preview scaffold: the stage taxonomy is real; deals are populated once the
     // `deal` domain lands. The board renders against this shape today.

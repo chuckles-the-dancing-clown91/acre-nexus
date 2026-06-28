@@ -30,7 +30,7 @@ pub async fn list_leases(
     }
     let rows = query
         .order_by_desc(entity::lease::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(LeaseDto::from).collect()))
 }

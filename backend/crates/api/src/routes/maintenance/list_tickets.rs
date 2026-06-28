@@ -37,7 +37,7 @@ pub async fn list_tickets(
     }
     let rows = q
         .order_by_desc(entity::maintenance_ticket::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     Ok(Json(rows.into_iter().map(TicketDto::from).collect()))
 }

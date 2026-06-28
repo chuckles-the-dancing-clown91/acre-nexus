@@ -1,42 +1,16 @@
-//! Initial schema: all core tables for the shared-schema multi-tenant model.
+//! Initial schema for the **user** database: identity, auth, RBAC, tenancy and
+//! the two cross-cutting platform tables (`refresh_token` here; `audit_log` and
+//! `background_job` added below / in later migrations).
 
+use super::{col, index, ts, uuid_pk};
 use sea_orm_migration::prelude::*;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-/// Shorthand for a `TIMESTAMPTZ NOT NULL DEFAULT now()` column.
-fn ts(name: &str) -> ColumnDef {
-    ColumnDef::new(Alias::new(name))
-        .timestamp_with_time_zone()
-        .not_null()
-        .default(Expr::current_timestamp())
-        .take()
-}
-
-fn uuid_pk() -> ColumnDef {
-    ColumnDef::new(Alias::new("id"))
-        .uuid()
-        .not_null()
-        .primary_key()
-        .take()
-}
-
-fn col(name: &str) -> ColumnDef {
-    ColumnDef::new(Alias::new(name)).take()
-}
-
-async fn index(manager: &SchemaManager<'_>, table: &str, column: &str) -> Result<(), DbErr> {
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name(format!("idx_{table}_{column}"))
-                .table(Alias::new(table))
-                .col(Alias::new(column))
-                .to_owned(),
-        )
-        .await
+impl MigrationName for Migration {
+    fn name(&self) -> &str {
+        "m20240101_000001_user_init"
+    }
 }
 
 #[async_trait::async_trait]
@@ -134,105 +108,6 @@ impl MigrationTrait for Migration {
             .await?;
         index(manager, "user_role", "user_id").await?;
 
-        // ---- llc ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("llc"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("name").string().not_null())
-                    .col(col("ein").string().not_null().default(""))
-                    .col(col("state").string().not_null().default(""))
-                    .col(ts("created_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "llc", "tenant_id").await?;
-
-        // ---- property ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("property"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("llc_id").uuid().null())
-                    .col(col("name").string().not_null())
-                    .col(col("address").string().not_null().default(""))
-                    .col(col("city").string().not_null().default(""))
-                    .col(col("units").integer().not_null().default(0))
-                    .col(col("occupied_units").integer().not_null().default(0))
-                    .col(
-                        col("monthly_rent_cents")
-                            .big_integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .col(col("status").string().not_null().default("Stabilized"))
-                    .col(col("year_built").integer().not_null().default(0))
-                    .col(col("manager").string().not_null().default(""))
-                    .col(ts("created_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "property", "tenant_id").await?;
-
-        // ---- listing ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("listing"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("property_id").uuid().null())
-                    .col(col("title").string().not_null())
-                    .col(col("address").string().not_null().default(""))
-                    .col(col("city").string().not_null().default(""))
-                    .col(col("beds").integer().not_null().default(0))
-                    .col(col("baths").integer().not_null().default(0))
-                    .col(col("sqft").integer().not_null().default(0))
-                    .col(col("rent_cents").big_integer().not_null().default(0))
-                    .col(col("status").string().not_null().default("Available"))
-                    .col(col("available_on").string().not_null().default("Now"))
-                    .col(col("description").text().not_null().default(""))
-                    .col(col("is_public").boolean().not_null().default(true))
-                    .col(ts("created_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "listing", "tenant_id").await?;
-
-        // ---- application ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("application"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("listing_id").uuid().null())
-                    .col(col("applicant_name").string().not_null())
-                    .col(col("email").string().not_null().default(""))
-                    .col(col("phone").string().not_null().default(""))
-                    .col(
-                        col("annual_income_cents")
-                            .big_integer()
-                            .not_null()
-                            .default(0),
-                    )
-                    .col(col("credit_score").integer().null())
-                    .col(col("status").string().not_null().default("New"))
-                    .col(col("move_in").string().not_null().default(""))
-                    .col(ts("created_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "application", "tenant_id").await?;
-
         // ---- api_token ----
         manager
             .create_table(
@@ -320,10 +195,6 @@ impl MigrationTrait for Migration {
             "refresh_token",
             "theme",
             "api_token",
-            "application",
-            "listing",
-            "property",
-            "llc",
             "user_role",
             "role_permission",
             "role",

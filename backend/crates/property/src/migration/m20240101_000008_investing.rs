@@ -1,44 +1,21 @@
-//! Investor onboarding schema: the entities/counterparty registry (banks,
-//! lenders, contractors …) + their notes, property financing (`mortgage`), and
-//! the per-property investment workflow (`workflow_event` history + new property
-//! columns for type / strategy / current stage / acquisition).
+//! Property-side of the investor-onboarding schema: investor columns on
+//! `property`, financing (`mortgage`) and the per-property investment workflow
+//! (`workflow_event`). The counterparty/entities registry moved to the **client**
+//! database (see `acre_client`'s `m20240101_000008_investing`).
+//!
+//! Note: `mortgage.lender_id` and `ownership`/`lien` lienholder ids reference
+//! counterparties that now live in a *different* database — they are plain
+//! `Uuid` columns enforced by the application layer, never DB foreign keys.
 
+use super::{col, index, ts, uuid_pk};
 use sea_orm_migration::prelude::*;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-fn col(name: &str) -> ColumnDef {
-    ColumnDef::new(Alias::new(name)).take()
-}
-
-fn uuid_pk() -> ColumnDef {
-    ColumnDef::new(Alias::new("id"))
-        .uuid()
-        .not_null()
-        .primary_key()
-        .take()
-}
-
-fn ts(name: &str) -> ColumnDef {
-    ColumnDef::new(Alias::new(name))
-        .timestamp_with_time_zone()
-        .not_null()
-        .default(Expr::current_timestamp())
-        .take()
-}
-
-async fn index(manager: &SchemaManager<'_>, table: &str, column: &str) -> Result<(), DbErr> {
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name(format!("idx_{table}_{column}"))
-                .table(Alias::new(table))
-                .col(Alias::new(column))
-                .to_owned(),
-        )
-        .await
+impl MigrationName for Migration {
+    fn name(&self) -> &str {
+        "m20240101_000008_property_investing"
+    }
 }
 
 #[async_trait::async_trait]
@@ -62,46 +39,6 @@ impl MigrationTrait for Migration {
                 .await?;
         }
         index(manager, "property", "strategy").await?;
-
-        // ---- counterparty (entities registry) ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("counterparty"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("kind").string().not_null().default("other"))
-                    .col(col("name").string().not_null())
-                    .col(col("contact_name").string().null())
-                    .col(col("email").string().null())
-                    .col(col("phone").string().null())
-                    .col(col("website").string().null())
-                    .col(col("address").string().null())
-                    .col(col("notes").text().null())
-                    .col(ts("created_at"))
-                    .col(ts("updated_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "counterparty", "tenant_id").await?;
-
-        // ---- counterparty_note ----
-        manager
-            .create_table(
-                Table::create()
-                    .table(Alias::new("counterparty_note"))
-                    .if_not_exists()
-                    .col(uuid_pk())
-                    .col(col("tenant_id").uuid().not_null())
-                    .col(col("counterparty_id").uuid().not_null())
-                    .col(col("author_user_id").uuid().null())
-                    .col(col("body").text().not_null())
-                    .col(ts("created_at"))
-                    .to_owned(),
-            )
-            .await?;
-        index(manager, "counterparty_note", "counterparty_id").await?;
 
         // ---- mortgage ----
         manager
@@ -157,12 +94,7 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        for t in [
-            "workflow_event",
-            "mortgage",
-            "counterparty_note",
-            "counterparty",
-        ] {
+        for t in ["workflow_event", "mortgage"] {
             manager
                 .drop_table(Table::drop().table(Alias::new(t)).if_exists().to_owned())
                 .await?;

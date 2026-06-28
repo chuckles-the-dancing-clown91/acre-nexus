@@ -48,26 +48,28 @@ impl PlatformModule for EnrichmentModule {
     }
 
     async fn handle_job(&self, ctx: &JobContext<'_>) -> Option<JobOutcome> {
-        let db = ctx.db;
         let job = ctx.job;
+        // Property + enrichment_run live in the property database; child jobs are
+        // enqueued into background_job in the user database.
+        let property_db = ctx.property_db;
 
         // Orchestrator: fan out into one child job per requested source.
         if job.kind == enrichment::ORCHESTRATOR_KIND {
-            return Some(orchestrate(db, job).await);
+            return Some(orchestrate(ctx.user_db, job).await);
         }
 
         // Otherwise this is a single-source job.
         let source = Source::from_job_kind(&job.kind)?;
-        let property = match load_property(db, job).await {
+        let property = match load_property(property_db, job).await {
             Ok(Some(p)) => p,
             Ok(None) => return Some(JobOutcome::failed("property not found")),
             Err(e) => return Some(JobOutcome::retry(backoff(job.attempts), e)),
         };
 
-        match enrichment::runner::run_source(db, &property, source).await {
+        match enrichment::runner::run_source(property_db, &property, source).await {
             Ok(summary) => {
                 record_run(
-                    db,
+                    property_db,
                     &property,
                     source,
                     "succeeded",
@@ -84,7 +86,7 @@ impl PlatformModule for EnrichmentModule {
                 let attempts = job.attempts + 1;
                 if attempts >= job.max_attempts {
                     record_run(
-                        db,
+                        property_db,
                         &property,
                         source,
                         "failed",

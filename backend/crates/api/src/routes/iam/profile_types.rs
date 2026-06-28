@@ -18,7 +18,7 @@ pub async fn profile_types(
     user.require(Permission::MemberRead)?;
     let rows = entity::profile_type::Entity::find()
         .order_by_asc(entity::profile_type::Column::Scope)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     Ok(Json(
         rows.into_iter()

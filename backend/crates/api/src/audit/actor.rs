@@ -71,7 +71,7 @@ async fn resolve_api_token(state: &AppState, raw: &str) -> ResolvedActor {
     let hash = auth::hash_secret(raw);
     match ApiToken::find()
         .filter(entity::api_token::Column::TokenHash.eq(hash))
-        .one(&state.db)
+        .one(&state.user_db)
         .await
     {
         Ok(Some(token)) => ResolvedActor {

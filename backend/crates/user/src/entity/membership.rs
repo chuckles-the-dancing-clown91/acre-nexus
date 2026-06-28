@@ -1,4 +1,4 @@
-//! A **membership** places a [`crate::user`] into a scope with a persona.
+//! A **membership** places a [`super::user`] into a scope with a persona.
 //!
 //! * **Platform** memberships (`scope = "platform"`, `tenant_id = NULL`) make a
 //!   user an Acre employee.

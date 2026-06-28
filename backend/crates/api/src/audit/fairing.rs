@@ -79,7 +79,7 @@ impl Fairing for AuditFairing {
         };
 
         // Write off the request path so auditing never adds latency.
-        let db = state.db.clone();
+        let db = state.user_db.clone();
         tokio::spawn(async move { request_log::write(&db, rec).await });
     }
 }

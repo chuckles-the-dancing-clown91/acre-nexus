@@ -17,16 +17,18 @@ pub async fn tenants(
     user: AuthUser,
 ) -> ApiResult<Json<Vec<TenantSummary>>> {
     user.require(Permission::PlatformAdmin)?;
+    // Cross-database read: the tenant registry lives in acre_user; each tenant's
+    // properties live in acre_property. Two queries, joined in application code.
     let all = Tenant::find()
         .order_by_asc(entity::tenant::Column::Name)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
 
     let mut out = Vec::new();
     for t in all {
         let props = Property::find()
             .filter(entity::property::Column::TenantId.eq(t.id))
-            .all(&state.db)
+            .all(&state.property_db)
             .await?;
         let revenue: i64 = props.iter().map(|p| p.monthly_rent_cents).sum();
         out.push(TenantSummary {

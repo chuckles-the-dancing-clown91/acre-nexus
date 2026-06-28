@@ -19,7 +19,7 @@ pub async fn permissions(
     let rows = entity::permission::Entity::find()
         .order_by_asc(entity::permission::Column::Category)
         .order_by_asc(entity::permission::Column::Key)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     Ok(Json(
         rows.into_iter()

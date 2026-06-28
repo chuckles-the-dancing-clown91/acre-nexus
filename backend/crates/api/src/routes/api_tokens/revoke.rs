@@ -23,14 +23,14 @@ pub async fn revoke(
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let t = ApiToken::find_by_id(tid)
         .filter(entity::api_token::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("token not found".into()))?;
     let mut am: entity::api_token::ActiveModel = t.into();
     am.revoked_at = Set(Some(Utc::now().into()));
-    am.update(&state.db).await?;
+    am.update(&state.user_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::TOKEN_REVOKE,
         Some("api_token"),

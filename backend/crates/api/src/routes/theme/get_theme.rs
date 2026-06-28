@@ -18,7 +18,7 @@ pub async fn get_theme(
 ) -> ApiResult<Json<ThemeResp>> {
     let t = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("theme not configured".into()))?;
     Ok(Json(ThemeResp::from(t)))

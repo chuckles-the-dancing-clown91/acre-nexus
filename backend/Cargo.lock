@@ -3,6 +3,42 @@
 version = 4
 
 [[package]]
+name = "acre_client"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "acre_property"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "acre_user"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -785,11 +821,9 @@ dependencies = [
 name = "entity"
 version = "0.1.0"
 dependencies = [
- "chrono",
- "sea-orm",
- "serde",
- "serde_json",
- "uuid",
+ "acre_client",
+ "acre_property",
+ "acre_user",
 ]
 
 [[package]]
@@ -1690,6 +1724,11 @@ dependencies = [
 name = "migration"
 version = "0.1.0"
 dependencies = [
+ "acre_client",
+ "acre_property",
+ "acre_user",
+ "dotenvy",
+ "sea-orm",
  "sea-orm-migration",
  "tokio",
 ]

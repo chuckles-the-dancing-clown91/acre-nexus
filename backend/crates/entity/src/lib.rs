@@ -1,55 +1,39 @@
-//! # Acre domain entities
+//! # Acre domain entities (facade)
 //!
-//! SeaORM models for the Acre multi-tenant property-management platform.
+//! The entity layer is split into three per-domain crates, one per database:
+//! [`acre_user`] (`acre_user` db), [`acre_property`] (`acre_property` db) and
+//! [`acre_client`] (`acre_client` db). This crate re-exports all of them under
+//! the historical `entity::<module>` and `entity::prelude::*` paths so callers
+//! need not care which crate a model physically lives in.
 //!
 //! ## Multi-tenancy
-//! The platform uses a **shared-schema** model: a single Postgres database where
-//! every tenant-scoped row carries a `tenant_id`. Application-layer guards
-//! (see the `api` crate) enforce isolation on every query; Postgres
-//! row-level-security policies (in the migration crate) provide defence in depth.
-//!
-//! Platform-level concepts (the `tenant` table itself, platform-staff `user`s)
-//! are not tenant-scoped — they belong to "Acre HQ".
+//! Shared-schema-per-database: every tenant-scoped row carries a `tenant_id`.
+//! Application-layer guards (see the `api` crate) enforce isolation on every
+//! query; Postgres row-level-security policies (in each domain's migrations)
+//! provide defence in depth.
 //!
 //! ## Money
-//! All monetary amounts are stored as **integer cents** (`i64`) to avoid
-//! floating-point rounding. Format at the edges only.
+//! All monetary amounts are stored as **integer cents** (`i64`).
+//!
+//! ## Cross-domain references
+//! Columns like `mortgage.lender_id` (→ a client counterparty) or
+//! `property.tenant_id` (→ a user-domain tenant) are plain `Uuid`s enforced by
+//! the application layer — there are **no** cross-database foreign keys.
+
+// User / platform domain (acre_user database).
+pub use acre_user::entity::{
+    api_token, audit_log, background_job, membership, permission, profile_type, refresh_token, role,
+    role_permission, tenant, tenant_module, theme, user, user_profile, user_role,
+};
+
+// Property domain (acre_property database).
+pub use acre_property::entity::{
+    enrichment_run, lease, lease_payment, lien, listing, llc, maintenance_ticket, mortgage,
+    ownership, property, property_detail, property_school, property_tax, property_utility,
+    property_valuation, ticket_comment, unit, workflow_event,
+};
+
+// Client domain (acre_client database).
+pub use acre_client::entity::{application, counterparty, counterparty_note};
 
 pub mod prelude;
-
-pub mod api_token;
-pub mod application;
-pub mod audit_log;
-pub mod background_job;
-pub mod counterparty;
-pub mod counterparty_note;
-pub mod enrichment_run;
-pub mod lease;
-pub mod lease_payment;
-pub mod lien;
-pub mod listing;
-pub mod llc;
-pub mod maintenance_ticket;
-pub mod membership;
-pub mod mortgage;
-pub mod ownership;
-pub mod permission;
-pub mod profile_type;
-pub mod property;
-pub mod property_detail;
-pub mod property_school;
-pub mod property_tax;
-pub mod property_utility;
-pub mod property_valuation;
-pub mod refresh_token;
-pub mod role;
-pub mod role_permission;
-pub mod tenant;
-pub mod tenant_module;
-pub mod theme;
-pub mod ticket_comment;
-pub mod unit;
-pub mod user;
-pub mod user_profile;
-pub mod user_role;
-pub mod workflow_event;

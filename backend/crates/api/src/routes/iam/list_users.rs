@@ -34,7 +34,7 @@ pub async fn list_users(
     }
     let users = query
         .order_by_asc(entity::user::Column::Name)
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     Ok(Json(
         users

@@ -19,14 +19,14 @@ pub async fn switch_workspace(
     body: Json<SwitchReq>,
 ) -> ApiResult<Json<SwitchResp>> {
     let u = User::find_by_id(user.user_id)
-        .one(&state.db)
+        .one(&state.user_db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
     let target = body.tenant_id;
 
     // Authorize the switch: staff may enter any workspace; everyone else must
     // hold an active membership in the target.
-    let memberships = load_memberships(&state.db, u.id).await?;
+    let memberships = load_memberships(&state.user_db, u.id).await?;
     let authorized = match target {
         Some(tid) => {
             u.is_platform_staff
@@ -42,7 +42,7 @@ pub async fn switch_workspace(
         ));
     }
 
-    let perms = permissions_for(&state.db, u.id, target).await?;
+    let perms = permissions_for(&state.user_db, u.id, target).await?;
     let access = issue_access_token(
         &state.config,
         u.id,
@@ -51,10 +51,10 @@ pub async fn switch_workspace(
         perms.clone(),
     )
     .map_err(ApiError::Internal)?;
-    let user_resp = build_user_resp(&state.db, &u, target, perms).await?;
+    let user_resp = build_user_resp(&state.user_db, &u, target, perms).await?;
 
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(u.id),
         crate::audit::actions::AUTH_SWITCH_WORKSPACE,
         Some("workspace"),

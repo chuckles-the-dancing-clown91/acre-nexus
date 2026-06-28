@@ -16,6 +16,10 @@
 !.env.example
 !.env.local.example
 
+# setup-postgres.sh output (generated credentials + change reports — never commit)
+/backend/scripts/secrets/
+/backend/scripts/postgres-setup-report-*.md
+
 # OS / editor
 .DS_Store
 *.swp

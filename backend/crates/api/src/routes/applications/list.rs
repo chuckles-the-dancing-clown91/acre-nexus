@@ -21,7 +21,7 @@ pub async fn list(
     let rows = Application::find()
         .filter(entity::application::Column::TenantId.eq(scope.tenant_id))
         .order_by_desc(entity::application::Column::CreatedAt)
-        .all(&state.db)
+        .all(&state.client_db)
         .await?;
     Ok(Json(rows.into_iter().map(ApplicationResp::from).collect()))
 }

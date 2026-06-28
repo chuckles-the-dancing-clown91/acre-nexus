@@ -22,12 +22,12 @@ pub async fn delete(
     let mid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Mortgage::find_by_id(mid)
         .filter(entity::mortgage::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("mortgage not found".into()))?;
-    Mortgage::delete_by_id(mid).exec(&state.db).await?;
+    Mortgage::delete_by_id(mid).exec(&state.property_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::MORTGAGE_DELETE,
         Some("mortgage"),

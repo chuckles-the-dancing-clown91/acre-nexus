@@ -25,9 +25,12 @@ pub async fn profile(
 ) -> ApiResult<Json<PropertyProfileResp>> {
     user.require(Permission::PropertyRead)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
+    // Strict tenant isolation: clamp this read to the tenant via SET LOCAL so RLS
+    // enforces it. All three property reads below run on the same transaction.
+    let txn = AppState::tenant_tx(&state.property_db, scope.tenant_id).await?;
     let p = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&txn)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -46,7 +49,7 @@ pub async fn profile(
     // ---- Financing: debt service, levered cash flow, equity ----
     let mortgages = Mortgage::find()
         .filter(entity::mortgage::Column::PropertyId.eq(pid))
-        .all(&state.db)
+        .all(&txn)
         .await?;
     let active: Vec<_> = mortgages
         .iter()
@@ -67,11 +70,12 @@ pub async fn profile(
     let latest_value = PropertyValuation::find()
         .filter(entity::property_valuation::Column::PropertyId.eq(pid))
         .order_by_desc(entity::property_valuation::Column::CreatedAt)
-        .one(&state.db)
+        .one(&txn)
         .await?
         .and_then(|v| v.estimated_value_cents)
         .or(p.purchase_price_cents)
         .unwrap_or(0);
+    txn.commit().await?;
     let equity = latest_value - total_loan_balance;
 
     let occupancy = format!("{}/{}", p.occupied_units, p.units);

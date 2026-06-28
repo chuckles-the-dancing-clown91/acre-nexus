@@ -22,9 +22,10 @@ pub async fn update(
 ) -> ApiResult<Json<PropertyResp>> {
     user.require(Permission::PropertyWrite)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
+    let txn = AppState::tenant_tx(&state.property_db, scope.tenant_id).await?;
     let p = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&txn)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let mut am: entity::property::ActiveModel = p.into();
@@ -44,9 +45,10 @@ pub async fn update(
     if let Some(v) = b.manager {
         am.manager = Set(v);
     }
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&txn).await?;
+    txn.commit().await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_UPDATE,
         Some("property"),

@@ -22,11 +22,11 @@ pub async fn llc_groups(
     let llcs = Llc::find()
         .filter(entity::llc::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::llc::Column::Name)
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
     let props = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&state.property_db)
         .await?;
 
     let groups = llcs

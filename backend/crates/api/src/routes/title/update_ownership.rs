@@ -25,7 +25,7 @@ pub async fn update_ownership(
     let oid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let existing = Ownership::find_by_id(oid)
         .filter(entity::ownership::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ownership not found".into()))?;
     let b = body.into_inner();
@@ -55,9 +55,9 @@ pub async fn update_ownership(
         am.deed_reference = Set(Some(v));
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&state.property_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::OWNERSHIP_UPDATE,
         Some("ownership"),

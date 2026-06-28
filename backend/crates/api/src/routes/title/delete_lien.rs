@@ -22,12 +22,12 @@ pub async fn delete_lien(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Lien::find_by_id(lid)
         .filter(entity::lien::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lien not found".into()))?;
-    Lien::delete_by_id(lid).exec(&state.db).await?;
+    Lien::delete_by_id(lid).exec(&state.property_db).await?;
     crate::audit::record(
-        &state.db,
+        &state.user_db,
         Some(user.user_id),
         crate::audit::actions::LIEN_DELETE,
         Some("lien"),

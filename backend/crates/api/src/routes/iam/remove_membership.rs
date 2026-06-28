@@ -20,6 +20,6 @@ pub async fn remove_membership(
     user.require(Permission::MemberManage)?;
     let mid =
         Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid membership id".into()))?;
-    Membership::delete_by_id(mid).exec(&state.db).await?;
+    Membership::delete_by_id(mid).exec(&state.user_db).await?;
     Ok(Json(serde_json::json!({ "deleted": true })))
 }

@@ -21,7 +21,7 @@ pub async fn list(
     let mut out = Vec::new();
     for m in registry() {
         let man = m.manifest();
-        let enabled = modules::is_enabled(&state.db, tenant.tenant_id, man.key).await;
+        let enabled = modules::is_enabled(&state.user_db, tenant.tenant_id, man.key).await;
         out.push(ModuleInfo {
             key: man.key.to_string(),
             name: man.name.to_string(),

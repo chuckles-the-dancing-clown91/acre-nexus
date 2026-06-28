@@ -7,9 +7,10 @@ edition.workspace = true
 name = "entity"
 path = "src/lib.rs"
 
+# Facade crate: re-exports the per-domain entity crates (acre_user /
+# acre_property / acre_client) under the historical `entity::*` paths so the
+# `api` crate's imports are unchanged after the database split.
 [dependencies]
-sea-orm = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-chrono = { workspace = true }
-uuid = { workspace = true }
+acre_user = { path = "../user" }
+acre_property = { path = "../property" }
+acre_client = { path = "../client" }

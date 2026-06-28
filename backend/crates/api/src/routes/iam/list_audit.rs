@@ -26,12 +26,12 @@ pub async fn list_audit(
     }
     let rows = q
         .limit(limit.unwrap_or(100).min(500))
-        .all(&state.db)
+        .all(&state.user_db)
         .await?;
     let mut out = Vec::new();
     for r in rows {
         let actor_name = match r.actor_user_id {
-            Some(aid) => User::find_by_id(aid).one(&state.db).await?.map(|u| u.name),
+            Some(aid) => User::find_by_id(aid).one(&state.user_db).await?.map(|u| u.name),
             None => None,
         };
         out.push(AuditEntry {
