@@ -21,6 +21,7 @@
 #[macro_use]
 extern crate rocket;
 
+mod accounting;
 mod audit;
 mod auth;
 mod config;

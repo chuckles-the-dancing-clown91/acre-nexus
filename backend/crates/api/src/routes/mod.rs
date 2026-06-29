@@ -13,6 +13,8 @@
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
+pub mod banking;
+pub mod cap_table;
 pub mod domains;
 pub mod entities;
 pub mod iam;
@@ -23,6 +25,7 @@ pub mod mortgages;
 pub mod onboarding;
 pub mod platform;
 pub mod portfolio;
+pub mod portfolios;
 pub mod properties;
 pub mod property_intel;
 pub mod public;

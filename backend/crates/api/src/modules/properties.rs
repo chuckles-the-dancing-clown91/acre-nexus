@@ -4,7 +4,9 @@
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{llcs, mortgages, onboarding, portfolio, properties, workflow};
+use crate::routes::{
+    banking, cap_table, llcs, mortgages, onboarding, portfolio, portfolios, properties, workflow,
+};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -23,6 +25,8 @@ impl PlatformModule for PropertiesModule {
                 Permission::PropertyWrite,
                 Permission::FinanceRead,
                 Permission::FinanceManage,
+                Permission::EntityRead,
+                Permission::EntityManage,
             ],
             job_kinds: &[],
             default_enabled: true,
@@ -47,6 +51,15 @@ impl PlatformModule for PropertiesModule {
             mortgages::delete::delete,
             workflow::get::get_workflow,
             workflow::advance::advance,
+            // tenancy spec: portfolios, cap table, banking, onboarding workflow
+            portfolios::list::list,
+            portfolios::create::create,
+            cap_table::list::list,
+            cap_table::add::add,
+            banking::list::list,
+            banking::create::create,
+            onboarding::workflow::get_onboarding_workflow,
+            onboarding::workflow::advance_onboarding,
         ]
     }
 }
