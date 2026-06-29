@@ -58,6 +58,11 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // platform (staff, cross-tenant)
         platform::tenants::tenants,
         platform::metrics::metrics,
+        platform::staff::staff,
+        platform::provision::provision,
+        platform::impersonate::impersonate,
+        platform::impersonations::list_impersonations,
+        platform::impersonations::revoke_impersonation,
         // module management (tenant software settings)
         modules::list::list,
         modules::set::set,

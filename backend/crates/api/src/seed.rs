@@ -85,6 +85,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
+    // Platform plane: staff roster (separate from any tenant membership).
+    seed_platform_staff(db, avery).await?;
+    seed_platform_staff(db, sam).await?;
+
     // Northwind (client workspace) — owner, back-office, and a landlord.
     let jordan = seed_user(
         db,
@@ -173,11 +177,30 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_theme(db, northwind, "Northwind Property Group", "#F5451F").await?;
     seed_theme(db, cascade, "Cascade Living LLC", "#1C7C53").await?;
 
+    // ---- white-label domains (subdomain + a verified custom domain for Northwind) ----
+    seed_domain(db, northwind, "northwind.acrenexus.com", "subdomain", "admin", true).await?;
+    seed_domain(db, northwind, "owners.northwindpg.com", "custom", "owner", true).await?;
+    seed_domain(db, northwind, "pay.northwindpg.com", "custom", "renter", false).await?;
+    seed_domain(db, cascade, "cascade.acrenexus.com", "subdomain", "admin", true).await?;
+
+    // ---- onboarding workflows (one per tenant) ----
+    seed_onboarding(db, northwind, "live").await?;
+    seed_onboarding(db, cascade, "portfolio_imported").await?;
+
     // ---- Northwind LLCs + properties ----
     let maple = seed_llc(db, northwind, "Maple Holdings LLC", "12-3456789", "OR").await?;
     let harbor = seed_llc(db, northwind, "Harbor LLC", "98-7654321", "OR").await?;
     let elm = seed_llc(db, northwind, "Elm Equity LLC", "45-6789012", "OR").await?;
     let alder = seed_llc(db, northwind, "Alder LLC", "33-2211009", "OR").await?;
+
+    // ---- Maple Holdings cap table + bank accounts + a portfolio ----
+    let firm_owner = seed_owner(db, northwind, "firm", "Northwind Property Group").await?;
+    let investor = seed_owner(db, northwind, "individual", "Dana Kessler").await?;
+    seed_entity_ownership(db, northwind, maple, firm_owner, 6000, "manager").await?;
+    seed_entity_ownership(db, northwind, maple, investor, 4000, "investor").await?;
+    seed_bank_account(db, northwind, maple, "operating", "First Cascade Bank", "1042").await?;
+    seed_bank_account(db, northwind, maple, "trust", "First Cascade Bank", "7781").await?;
+    let _flip_portfolio = seed_portfolio(db, northwind, "Pacific NW Cashflow", "cashflow").await?;
 
     let maple_court = seed_property(
         db,
@@ -997,6 +1020,152 @@ async fn seed_llc(
         entity_type: Set("llc".into()),
         registered_agent: Set(None),
         status: Set("active".into()),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+async fn seed_platform_staff(db: &DatabaseConnection, user_id: Uuid) -> anyhow::Result<()> {
+    entity::platform_staff::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        user_id: Set(user_id),
+        status: Set("active".into()),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_domain(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    hostname: &str,
+    kind: &str,
+    audience: &str,
+    verified: bool,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::domain::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        hostname: Set(hostname.into()),
+        kind: Set(kind.into()),
+        audience: Set(audience.into()),
+        verification_token: Set(if kind == "custom" && !verified {
+            Some(format!("acre-verify={}", Uuid::new_v4().simple()))
+        } else {
+            None
+        }),
+        verified_at: Set(if verified { Some(now.into()) } else { None }),
+        tls_status: Set(if verified { "active" } else { "pending" }.into()),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_onboarding(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    state: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::onboarding_workflow::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        state: Set(state.into()),
+        steps: Set(json!({})),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_owner(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    kind: &str,
+    name: &str,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    entity::owner::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        kind: Set(kind.into()),
+        name: Set(name.into()),
+        email: Set(None),
+        phone: Set(None),
+        notes: Set(None),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+async fn seed_entity_ownership(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    owner_id: Uuid,
+    ownership_bps: i32,
+    role: &str,
+) -> anyhow::Result<()> {
+    entity::entity_ownership::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        entity_id: Set(entity_id),
+        owner_id: Set(owner_id),
+        ownership_bps: Set(ownership_bps),
+        role: Set(role.into()),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_bank_account(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    kind: &str,
+    institution: &str,
+    last4: &str,
+) -> anyhow::Result<()> {
+    entity::bank_account::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        entity_id: Set(entity_id),
+        kind: Set(kind.into()),
+        institution: Set(institution.into()),
+        masked_number: Set(Some(format!("••••{last4}"))),
+        status: Set("active".into()),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_portfolio(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    name: &str,
+    strategy: &str,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    entity::portfolio::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        name: Set(name.into()),
+        strategy: Set(strategy.into()),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
