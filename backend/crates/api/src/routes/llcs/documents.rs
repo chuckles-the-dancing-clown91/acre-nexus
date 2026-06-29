@@ -5,7 +5,7 @@
 //! schema generator doesn't model.
 
 use super::dto::LlcDocumentDto;
-use super::helpers::{parse_uuid, require_llc, sha256_hex};
+use super::helpers::{parse_uuid, require_llc, sanitize_ext, sha256_hex};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
@@ -77,21 +77,32 @@ pub async fn upload_document(
         .content_type()
         .map(|c| c.to_string())
         .unwrap_or_else(|| "application/octet-stream".into());
+    // The *sanitized* `name()` drops the extension, so take the raw client name
+    // (just its basename) for the stored display name + extension extraction.
+    let raw_name = f
+        .raw_name()
+        .map(|n| n.dangerous_unsafe_unsanitized_raw().as_str())
+        .map(|s| {
+            s.rsplit(|c| c == '/' || c == '\\')
+                .next()
+                .unwrap_or(s)
+                .trim()
+                .to_string()
+        })
+        .filter(|s| !s.is_empty());
     let ext = f
         .content_type()
         .and_then(|c| c.extension())
         .map(|e| e.as_str().to_ascii_lowercase())
         .or_else(|| {
-            f.raw_name()
-                .and_then(|n| n.as_str())
-                .and_then(|s| s.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()))
+            raw_name
+                .as_deref()
+                .and_then(|s| s.rsplit_once('.'))
+                .map(|(_, e)| e.to_string())
         })
+        .map(|e| sanitize_ext(&e))
         .unwrap_or_else(|| "bin".into());
-    let original = f
-        .raw_name()
-        .and_then(|n| n.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| format!("upload.{ext}"));
+    let original = raw_name.unwrap_or_else(|| format!("upload.{ext}"));
 
     // Read the uploaded bytes.
     let mut reader = f

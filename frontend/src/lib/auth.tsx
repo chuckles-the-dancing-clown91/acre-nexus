@@ -58,6 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // The API client fires this when a refresh fails (session truly dead). Drop
+  // the user so route guards / middleware bounce to /login.
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener("acre:auth-expired", onExpired);
+    return () => window.removeEventListener("acre:auth-expired", onExpired);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.login(email, password);
     tokenStore.set(res);

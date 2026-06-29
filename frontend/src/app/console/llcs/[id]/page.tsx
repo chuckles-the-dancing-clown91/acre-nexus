@@ -1,13 +1,45 @@
 "use client";
 
-// LLC onboarding hub: the profile, uploaded documents, branding/signature,
-// reusable templates, and lease/letter generation for a single holding entity.
-// Gated by `llc:read`; write actions require `llc:manage`.
+// LLC onboarding hub — the rich, tabbed profile for a single holding entity:
+// editable details, uploaded documents, reusable templates (with live preview),
+// lease/letter generation, and branding/signature blocks. Reads come from the
+// typed hooks in queries.ts; mutating actions are gated by permission and
+// confirmed via toasts. Gated overall by `llc:read`; writes need `llc:manage`
+// (branding additionally honours `theme:write`).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import * as React from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Building2,
+  Download,
+  FileText,
+  Palette,
+  Plus,
+  Sparkles,
+  Trash2,
+  Upload,
+  Wand2,
+} from "lucide-react";
+
 import { api, ApiError } from "@/lib/api";
+import {
+  useGeneratedDocuments,
+  useGenerateDocument,
+  useLlc,
+  useLlcBranding,
+  useLlcDocuments,
+  useLlcTemplates,
+  usePutLlcBranding,
+  useUpdateLlc,
+  useUploadLlcDocument,
+  useDeleteLlcDocument,
+  useCreateLlcTemplate,
+  useUpdateLlcTemplate,
+  useDeleteLlcTemplate,
+} from "@/lib/queries";
 import type {
   GeneratedDocument,
   Llc,
@@ -16,11 +48,49 @@ import type {
   LlcTemplate,
 } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
-import { Badge, Button, Card, statusTone } from "@/components/ui";
-import { Icon } from "@/components/Icon";
+import { Badge, statusTone } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { PageHeader, EmptyState } from "@/components/ui/page";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Field,
+  Input,
+  NativeSelect,
+  SelectField,
+  TextareaField,
+  TextField,
+} from "@/components/ui/form-field";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/format";
 
-const FIELD =
-  "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink";
+// ----------------------------------------------------------------------------
+// constants + helpers
+// ----------------------------------------------------------------------------
+
+const ENTITY_TYPES = [
+  "LLC",
+  "C-Corp",
+  "S-Corp",
+  "LP",
+  "Sole Proprietorship",
+  "Trust",
+];
 
 const DOC_KINDS = [
   "logo",
@@ -33,10 +103,17 @@ const DOC_KINDS = [
   "other",
 ];
 
-const TABS = ["profile", "documents", "branding", "templates", "generate"] as const;
-type Tab = (typeof TABS)[number];
+const TEMPLATE_KINDS = [
+  "lease",
+  "tenant_letter",
+  "welcome_email",
+  "notice",
+  "other",
+];
 
-function humanize(s: string): string {
+/** snake/lower → human label, e.g. `operating_agreement` → `Operating agreement`. */
+function humanize(s: string | null | undefined): string {
+  if (!s) return "—";
   const t = s.replace(/_/g, " ");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
@@ -45,6 +122,10 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function errMessage(e: unknown, fallback: string): string {
+  return e instanceof ApiError || e instanceof Error ? e.message : fallback;
 }
 
 /** Trigger a browser download of a fetched Blob. */
@@ -59,116 +140,149 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function LlcOnboardingPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
+// ----------------------------------------------------------------------------
+// page
+// ----------------------------------------------------------------------------
+
+export default function LlcDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
   const canManage = can("llc:manage");
+  const canBrand = can("llc:manage") || can("theme:write");
 
-  const [llc, setLlc] = useState<Llc | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("profile");
-
-  const loadLlc = useCallback(() => {
-    api
-      .llc(id)
-      .then(setLlc)
-      .catch((e) => setError(e.message));
-  }, [id]);
-
-  useEffect(() => {
-    if (!can("llc:read")) return;
-    loadLlc();
-  }, [loadLlc, can]);
+  const llc = useLlc(id);
+  const l = llc.data;
 
   if (!can("llc:read")) {
     return (
-      <Card className="p-6">
-        <p className="text-ink-2">
-          You don&apos;t have access to LLC onboarding. Ask an admin for the{" "}
-          <span className="font-mono">llc:read</span> permission.
-        </p>
-      </Card>
+      <div className="space-y-6">
+        <Breadcrumbs items={[{ label: "LLCs", href: "/console/llcs" }, { label: "Restricted" }]} />
+        <EmptyState
+          icon={Building2}
+          title="No access to LLC onboarding"
+          description={
+            <>
+              Ask an admin for the <span className="font-mono">llc:read</span>{" "}
+              permission to view holding entities.
+            </>
+          }
+        />
+      </div>
     );
   }
 
+  if (llc.isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-5 w-48 rounded-lg" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-9 w-80 rounded-lg" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  if (llc.isError || !l) {
+    return (
+      <div className="space-y-6">
+        <Breadcrumbs items={[{ label: "LLCs", href: "/console/llcs" }, { label: "Not found" }]} />
+        <EmptyState
+          icon={Building2}
+          title="Couldn't load this LLC"
+          description={
+            llc.error instanceof Error
+              ? llc.error.message
+              : "It may have been removed, or you don't have access to it."
+          }
+          action={
+            <Button asChild variant="outline">
+              <Link href="/console/llcs">Back to LLCs</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const subtitle = [
+    l.entity_type,
+    `EIN ${l.ein || "—"}`,
+    l.state || "—",
+  ].join(" · ");
+
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href="/console/llcs"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-ink-3 hover:text-ink"
-        >
-          <Icon name="back" size={16} /> All LLCs
-        </Link>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">
-            {llc?.name ?? "LLC"}
-          </h1>
-          {llc && (
-            <Badge tone={statusTone(llc.status)}>
-              {llc.onboarded ? "active" : llc.status}
-            </Badge>
-          )}
-        </div>
-        {llc && (
-          <p className="text-ink-3">
-            {llc.entity_type} · EIN {llc.ein || "—"} · {llc.state || "—"}
-          </p>
-        )}
-      </div>
+      <Breadcrumbs items={[{ label: "LLCs", href: "/console/llcs" }, { label: l.name }]} />
 
-      {error && <p className="text-bad">{error}</p>}
+      <PageHeader
+        eyebrow="Holding entity"
+        title={l.name}
+        description={subtitle}
+        actions={
+          <Badge tone={l.onboarded ? "good" : statusTone(l.status)}>
+            {l.onboarded ? "Onboarded" : l.status}
+          </Badge>
+        }
+      />
 
-      <div className="flex flex-wrap gap-1 border-b border-line">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold transition ${
-              tab === t
-                ? "border-accent text-ink"
-                : "border-transparent text-ink-3 hover:text-ink"
-            }`}
-          >
-            {humanize(t)}
-          </button>
-        ))}
-      </div>
+      <Tabs defaultValue="overview" className="space-y-0">
+        <TabsList className="w-full overflow-x-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="generate">Generate</TabsTrigger>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
+        </TabsList>
 
-      {tab === "profile" && llc && (
-        <ProfileTab llc={llc} canManage={canManage} onSaved={setLlc} />
-      )}
-      {tab === "documents" && <DocumentsTab id={id} canManage={canManage} />}
-      {tab === "branding" && <BrandingTab id={id} canManage={canManage} />}
-      {tab === "templates" && <TemplatesTab id={id} canManage={canManage} />}
-      {tab === "generate" && <GenerateTab id={id} canManage={canManage} />}
+        <TabsContent value="overview">
+          <OverviewTab llc={l} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="documents">
+          <DocumentsTab id={id} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="templates">
+          <TemplatesTab id={id} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="generate">
+          <GenerateTab id={id} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="branding">
+          <BrandingTab id={id} canManage={canBrand} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
-// ---- Profile -----------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Overview tab — editable details form
+// ----------------------------------------------------------------------------
 
-function ProfileTab({
-  llc,
-  canManage,
-  onSaved,
-}: {
-  llc: Llc;
-  canManage: boolean;
-  onSaved: (l: Llc) => void;
-}) {
+type LlcFormKey =
+  | "name"
+  | "ein"
+  | "state"
+  | "formation_date"
+  | "registered_agent"
+  | "principal_address"
+  | "mailing_address"
+  | "contact_name"
+  | "contact_email"
+  | "contact_phone"
+  | "website";
+
+function OverviewTab({ llc, canManage }: { llc: Llc; canManage: boolean }) {
+  const update = useUpdateLlc(llc.id);
   const [form, setForm] = useState<Llc>(llc);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
 
-  const set = (k: keyof Llc, v: string) => setForm({ ...form, [k]: v });
+  // Re-sync local form when the underlying record changes (e.g. after save).
+  React.useEffect(() => setForm(llc), [llc]);
 
-  const save = async (markActive: boolean) => {
-    setSaving(true);
-    setMsg(null);
-    try {
-      const saved = await api.updateLlc(llc.id, {
+  const set = (k: keyof Llc, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = (markOnboarded: boolean) => {
+    update.mutate(
+      {
         name: form.name,
         ein: form.ein,
         state: form.state,
@@ -181,374 +295,299 @@ function ProfileTab({
         contact_email: form.contact_email ?? undefined,
         contact_phone: form.contact_phone ?? undefined,
         website: form.website ?? undefined,
-        status: markActive ? "active" : form.status,
-      });
-      onSaved(saved);
-      setForm(saved);
-      setMsg("Saved.");
-    } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
+        status: markOnboarded ? "active" : form.status,
+      },
+      markOnboarded
+        ? { onSuccess: () => toast.success("Onboarding marked complete") }
+        : undefined
+    );
   };
 
-  const F = (label: string, k: keyof Llc, placeholder = "") => (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-      {label}
-      <input
-        className={FIELD}
-        value={(form[k] as string) ?? ""}
-        placeholder={placeholder}
-        disabled={!canManage}
-        onChange={(e) => set(k, e.target.value)}
-      />
-    </label>
+  const field = (label: string, k: LlcFormKey, placeholder?: string) => (
+    <TextField
+      label={label}
+      value={(form[k] as string) ?? ""}
+      placeholder={placeholder}
+      disabled={!canManage}
+      onChange={(e) => set(k, e.target.value)}
+    />
   );
 
   return (
-    <Card className="space-y-5 p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {F("Legal name", "name")}
-        <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-          Entity type
-          <select
-            className={FIELD}
+    <form
+      className="space-y-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(false);
+      }}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>Entity details</CardTitle>
+          {!canManage && (
+            <CardDescription>Read-only — requires llc:manage.</CardDescription>
+          )}
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {field("Legal name", "name")}
+          <SelectField
+            label="Entity type"
             value={form.entity_type}
             disabled={!canManage}
             onChange={(e) => set("entity_type", e.target.value)}
           >
-            {["LLC", "C-Corp", "S-Corp", "LP", "Sole Proprietorship", "Trust"].map(
-              (t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              )
-            )}
-          </select>
-        </label>
-        {F("EIN / Tax ID", "ein", "12-3456789")}
-        {F("State of registration", "state", "OR")}
-        {F("Formation date", "formation_date", "YYYY-MM-DD")}
-        {F("Registered agent", "registered_agent")}
-        {F("Principal address", "principal_address")}
-        {F("Mailing address", "mailing_address")}
-        {F("Contact name", "contact_name")}
-        {F("Contact email", "contact_email")}
-        {F("Contact phone", "contact_phone")}
-        {F("Website", "website")}
-      </div>
+            {ENTITY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </SelectField>
+          {field("EIN / Tax ID", "ein", "12-3456789")}
+          {field("State of registration", "state", "OR")}
+          {field("Formation date", "formation_date", "YYYY-MM-DD")}
+          {field("Registered agent", "registered_agent")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Addresses &amp; contact</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {field("Principal address", "principal_address")}
+          {field("Mailing address", "mailing_address")}
+          {field("Contact name", "contact_name")}
+          {field("Contact email", "contact_email")}
+          {field("Contact phone", "contact_phone")}
+          {field("Website", "website")}
+        </CardContent>
+      </Card>
 
       {canManage && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => save(false)} disabled={saving}>
-            {saving ? "Saving…" : "Save profile"}
+          <Button type="submit" disabled={update.isPending}>
+            {update.isPending ? "Saving…" : "Save profile"}
           </Button>
           {!llc.onboarded && (
-            <Button variant="outline" onClick={() => save(true)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={update.isPending}
+              onClick={() => submit(true)}
+            >
+              <Sparkles className="h-4 w-4" />
               Mark onboarding complete
             </Button>
           )}
-          {msg && <span className="text-sm text-ink-3">{msg}</span>}
         </div>
       )}
-    </Card>
+    </form>
   );
 }
 
-// ---- Documents ---------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Documents tab
+// ----------------------------------------------------------------------------
 
 function DocumentsTab({ id, canManage }: { id: string; canManage: boolean }) {
-  const [docs, setDocs] = useState<LlcDocument[]>([]);
+  const docs = useLlcDocuments(id);
+  const upload = useUploadLlcDocument(id);
+  const remove = useDeleteLlcDocument(id);
   const [kind, setKind] = useState("articles_of_organization");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(() => {
-    api
-      .llcDocuments(id)
-      .then(setDocs)
-      .catch((e) => setError(e.message));
-  }, [id]);
-  useEffect(load, [load]);
-
-  const onUpload = async (file: File) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.uploadLlcDocument(id, file, kind, file.name);
-      if (fileRef.current) fileRef.current.value = "";
-      load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
+  const onPick = (file: File) => {
+    upload.mutate(
+      { file, kind, title: file.name },
+      {
+        onSettled: () => {
+          if (fileRef.current) fileRef.current.value = "";
+        },
+      }
+    );
   };
 
-  const onDownload = async (d: LlcDocument) => {
+  const download = async (d: LlcDocument) => {
     try {
       const blob = await api.downloadLlcDocument(id, d.id);
       saveBlob(blob, d.original_filename);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Download failed");
+      toast.error("Download failed", { description: errMessage(e, "") });
     }
   };
 
-  const onDelete = async (d: LlcDocument) => {
-    if (!confirm(`Delete ${d.original_filename}?`)) return;
-    try {
-      await api.deleteLlcDocument(id, d.id);
-      load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Delete failed");
-    }
-  };
+  const list = docs.data ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {canManage && (
-        <Card className="flex flex-wrap items-end gap-3 p-5">
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Document type
-            <select
-              className={FIELD}
-              value={kind}
-              onChange={(e) => setKind(e.target.value)}
+        <Card>
+          <CardHeader>
+            <CardTitle>Upload a document</CardTitle>
+            <CardDescription>PDF, PNG, or JPG up to 25 MB.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-4">
+            <Field label="Document type" className="min-w-[14rem]">
+              <NativeSelect
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+              >
+                {DOC_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {humanize(k)}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={upload.isPending}
+              onClick={() => fileRef.current?.click()}
             >
-              {DOC_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {humanize(k)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-line-2 bg-surface px-4 py-2.5 text-sm font-bold text-ink hover:bg-surface-2">
-            <Icon name="upload" size={16} />
-            {busy ? "Uploading…" : "Upload file"}
+              <Upload className="h-4 w-4" />
+              {upload.isPending ? "Uploading…" : "Choose file"}
+            </Button>
             <input
               ref={fileRef}
               type="file"
               className="hidden"
-              disabled={busy}
+              disabled={upload.isPending}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) onUpload(f);
+                if (f) onPick(f);
               }}
             />
-          </label>
-          <span className="text-xs text-ink-3">PDF, PNG, JPG up to 25 MB.</span>
+          </CardContent>
         </Card>
       )}
 
-      {error && <p className="text-bad">{error}</p>}
-
-      <Card className="overflow-hidden">
-        {docs.length === 0 ? (
-          <div className="px-5 py-10 text-center text-ink-3">
-            No documents uploaded yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-line">
-            {docs.map((d) => (
-              <div key={d.id} className="flex items-center gap-3 px-5 py-3.5">
-                <Icon name="file" size={18} className="text-ink-3" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">
-                    {d.title || d.original_filename}
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {docs.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 rounded-lg" />
+              ))}
+            </div>
+          ) : list.length === 0 ? (
+            <EmptyState
+              className="m-4 border-0"
+              icon={FileText}
+              title="No documents yet"
+              description="Upload formation paperwork, the EIN letter, insurance, and more."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {list.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-3 px-5 py-3.5"
+                >
+                  <FileText className="h-5 w-5 shrink-0 text-ink-3" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-ink">
+                      {d.title || d.original_filename}
+                    </div>
+                    <div className="text-xs text-ink-3">
+                      {humanize(d.kind)} · {formatBytes(d.size_bytes)} ·{" "}
+                      {d.storage_provider} · {formatDate(d.created_at)}
+                    </div>
                   </div>
-                  <div className="text-xs text-ink-3">
-                    {humanize(d.kind)} · {formatBytes(d.size_bytes)} ·{" "}
-                    {d.storage_provider}
-                  </div>
-                </div>
-                {d.verified && <Badge tone="good">verified</Badge>}
-                <Button variant="ghost" onClick={() => onDownload(d)}>
-                  Download
-                </Button>
-                {canManage && (
-                  <Button variant="ghost" onClick={() => onDelete(d)}>
-                    Delete
+                  {d.verified && <Badge tone="good">Verified</Badge>}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => download(d)}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
                   </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  {canManage && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete document"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(d.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-bad" />
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
       </Card>
     </div>
   );
 }
 
-// ---- Branding ----------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Templates tab
+// ----------------------------------------------------------------------------
 
-function BrandingTab({ id, canManage }: { id: string; canManage: boolean }) {
-  const [branding, setBranding] = useState<LlcBranding | null>(null);
-  const [logos, setLogos] = useState<LlcDocument[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+type TemplateDraft = {
+  id?: string;
+  kind: string;
+  name: string;
+  subject: string;
+  body: string;
+  is_default: boolean;
+};
 
-  useEffect(() => {
-    api.llcBranding(id).then(setBranding).catch(() => {});
-    api
-      .llcDocuments(id)
-      .then((ds) => setLogos(ds.filter((d) => d.kind === "logo")))
-      .catch(() => {});
-  }, [id]);
-
-  if (!branding) return <Card className="p-6 text-ink-3">Loading…</Card>;
-
-  const set = (k: keyof LlcBranding, v: string) =>
-    setBranding({ ...branding, [k]: v === "" ? null : v });
-
-  const save = async () => {
-    setSaving(true);
-    setMsg(null);
-    try {
-      const { llc_id: _llc, ...rest } = branding;
-      void _llc;
-      const saved = await api.putLlcBranding(id, rest);
-      setBranding(saved);
-      setMsg("Saved.");
-    } catch (e) {
-      setMsg(e instanceof ApiError ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const text = (label: string, k: keyof LlcBranding, placeholder = "") => (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-      {label}
-      <input
-        className={FIELD}
-        value={(branding[k] as string) ?? ""}
-        placeholder={placeholder}
-        disabled={!canManage}
-        onChange={(e) => set(k, e.target.value)}
-      />
-    </label>
-  );
-  const area = (label: string, k: keyof LlcBranding, rows = 3) => (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-      {label}
-      <textarea
-        className={`${FIELD} font-mono`}
-        rows={rows}
-        value={(branding[k] as string) ?? ""}
-        disabled={!canManage}
-        onChange={(e) => set(k, e.target.value)}
-      />
-    </label>
-  );
-
-  return (
-    <Card className="space-y-5 p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-          Logo
-          <select
-            className={FIELD}
-            value={branding.logo_document_id ?? ""}
-            disabled={!canManage}
-            onChange={(e) => set("logo_document_id", e.target.value)}
-          >
-            <option value="">— none —</option>
-            {logos.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.title || l.original_filename}
-              </option>
-            ))}
-          </select>
-          {logos.length === 0 && (
-            <span className="text-[11px] font-normal text-ink-3">
-              Upload a document of type “logo” to choose one here.
-            </span>
-          )}
-        </label>
-        <div className="grid grid-cols-2 gap-4">
-          {text("Primary color", "primary_color", "#F5451F")}
-          {text("Accent color", "accent_color", "#1C7C53")}
-        </div>
-        {text("Signature name", "signature_name", "Jane Doe")}
-        {text("Signature title", "signature_title", "Managing Member")}
-      </div>
-      {area("Signature block", "signature_block", 4)}
-      {area("Letterhead (top of documents)", "letterhead", 2)}
-      {area("Footer / disclaimer", "footer", 2)}
-
-      {canManage && (
-        <div className="flex items-center gap-3">
-          <Button onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save branding"}
-          </Button>
-          {msg && <span className="text-sm text-ink-3">{msg}</span>}
-        </div>
-      )}
-    </Card>
-  );
+function blankDraft(): TemplateDraft {
+  return { kind: "lease", name: "", subject: "", body: "", is_default: false };
 }
 
-// ---- Templates ---------------------------------------------------------------
-
-const TEMPLATE_KINDS = ["lease", "tenant_letter", "welcome_email", "notice", "other"];
+function toDraft(t: LlcTemplate): TemplateDraft {
+  return {
+    id: t.id,
+    kind: t.kind,
+    name: t.name,
+    subject: t.subject ?? "",
+    body: t.body,
+    is_default: t.is_default,
+  };
+}
 
 function TemplatesTab({ id, canManage }: { id: string; canManage: boolean }) {
-  const [templates, setTemplates] = useState<LlcTemplate[]>([]);
-  const [editing, setEditing] = useState<Partial<LlcTemplate> | null>(null);
+  const templates = useLlcTemplates(id);
+  const create = useCreateLlcTemplate(id);
+  const update = useUpdateLlcTemplate(id);
+  const remove = useDeleteLlcTemplate(id);
+
+  const [draft, setDraft] = useState<TemplateDraft | null>(null);
+  const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
-  const load = useCallback(() => {
-    api.llcTemplates(id).then(setTemplates).catch((e) => setError(e.message));
-  }, [id]);
-  useEffect(load, [load]);
+  const list = templates.data ?? [];
 
-  const blank = (): Partial<LlcTemplate> => ({
-    kind: "lease",
-    name: "",
-    subject: "",
-    body: "",
-    is_default: false,
-  });
-
-  const save = async () => {
-    if (!editing) return;
-    setError(null);
-    try {
-      if (editing.id) {
-        await api.updateLlcTemplate(id, editing.id, {
-          kind: editing.kind,
-          name: editing.name,
-          subject: editing.subject ?? undefined,
-          body: editing.body,
-          is_default: editing.is_default,
-        });
-      } else {
-        await api.createLlcTemplate(id, {
-          kind: editing.kind ?? "other",
-          name: editing.name ?? "Untitled",
-          subject: editing.subject ?? undefined,
-          body: editing.body ?? "",
-          is_default: editing.is_default,
-        });
-      }
-      setEditing(null);
-      setPreview(null);
-      load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Save failed");
-    }
+  const openNew = () => {
+    setDraft(blankDraft());
+    setPreview(null);
+    setOpen(true);
+  };
+  const openEdit = (t: LlcTemplate) => {
+    setDraft(toDraft(t));
+    setPreview(null);
+    setOpen(true);
   };
 
   const runPreview = async () => {
-    if (!editing?.body) return;
+    if (!draft?.body) return;
+    setPreviewing(true);
     try {
       const r = await api.previewTemplate(id, {
-        body: editing.body,
+        body: draft.body,
         context: {
           tenant_name: "Sam Tenant",
+          llc_name: "Your LLC",
           property_address: "123 Main St, Portland OR",
           rent: "$1,950.00",
           deposit: "$1,950.00",
@@ -559,144 +598,231 @@ function TemplatesTab({ id, canManage }: { id: string; canManage: boolean }) {
       });
       setPreview(r.rendered);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Preview failed");
+      toast.error("Preview failed", { description: errMessage(e, "") });
+    } finally {
+      setPreviewing(false);
     }
   };
 
-  const remove = async (t: LlcTemplate) => {
-    if (!confirm(`Delete template “${t.name}”?`)) return;
-    await api.deleteLlcTemplate(id, t.id).catch(() => {});
-    load();
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draft) return;
+    const onSuccess = () => {
+      setOpen(false);
+      setDraft(null);
+      setPreview(null);
+    };
+    if (draft.id) {
+      update.mutate(
+        {
+          templateId: draft.id,
+          body: {
+            kind: draft.kind,
+            name: draft.name,
+            subject: draft.subject || undefined,
+            body: draft.body,
+            is_default: draft.is_default,
+          },
+        },
+        { onSuccess }
+      );
+    } else {
+      create.mutate(
+        {
+          kind: draft.kind,
+          name: draft.name || "Untitled",
+          subject: draft.subject || undefined,
+          body: draft.body,
+          is_default: draft.is_default,
+        },
+        { onSuccess }
+      );
+    }
   };
 
+  const saving = create.isPending || update.isPending;
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="space-y-3">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-ink-2">
+          Reusable Handlebars templates for leases, letters, and emails. Use{" "}
+          <span className="font-mono text-xs">{"{{tenant_name}}"}</span>,{" "}
+          <span className="font-mono text-xs">{"{{rent}}"}</span>,{" "}
+          <span className="font-mono text-xs">{"{{property_address}}"}</span>…
+        </p>
         {canManage && (
-          <Button variant="outline" onClick={() => setEditing(blank())}>
-            + New template
+          <Button onClick={openNew}>
+            <Plus className="h-4 w-4" />
+            New template
           </Button>
         )}
-        {error && <p className="text-bad">{error}</p>}
-        {templates.length === 0 && (
-          <Card className="p-6 text-ink-3">No templates yet.</Card>
-        )}
-        {templates.map((t) => (
-          <Card key={t.id} className="flex items-center gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate font-semibold">{t.name}</span>
-                {t.is_default && <Badge tone="accent">default</Badge>}
-              </div>
-              <div className="text-xs text-ink-3">{humanize(t.kind)}</div>
-            </div>
-            {canManage && (
-              <>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setEditing(t);
-                    setPreview(null);
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button variant="ghost" onClick={() => remove(t)}>
-                  Delete
-                </Button>
-              </>
-            )}
-          </Card>
-        ))}
       </div>
 
-      {editing && (
-        <Card className="space-y-3 p-5">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Kind
-              <select
-                className={FIELD}
-                value={editing.kind}
-                onChange={(e) => setEditing({ ...editing, kind: e.target.value })}
-              >
-                {TEMPLATE_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {humanize(k)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Name
-              <input
-                className={FIELD}
-                value={editing.name ?? ""}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-              />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Email subject (optional)
-            <input
-              className={FIELD}
-              value={editing.subject ?? ""}
-              onChange={(e) =>
-                setEditing({ ...editing, subject: e.target.value })
+      <Card>
+        <CardContent className="p-0">
+          {templates.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 rounded-lg" />
+              ))}
+            </div>
+          ) : list.length === 0 ? (
+            <EmptyState
+              className="m-4 border-0"
+              icon={FileText}
+              title="No templates yet"
+              description="Create a lease or letter template to generate documents from."
+              action={
+                canManage ? (
+                  <Button onClick={openNew}>
+                    <Plus className="h-4 w-4" />
+                    New template
+                  </Button>
+                ) : undefined
               }
             />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Body — use {"{{tenant_name}}"}, {"{{rent}}"}, {"{{llc_name}}"},{" "}
-            {"{{property_address}}"}…
-            <textarea
-              className={`${FIELD} font-mono`}
-              rows={14}
-              value={editing.body ?? ""}
-              onChange={(e) => setEditing({ ...editing, body: e.target.value })}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-ink-2">
-            <input
-              type="checkbox"
-              checked={!!editing.is_default}
-              onChange={(e) =>
-                setEditing({ ...editing, is_default: e.target.checked })
-              }
-            />
-            Default for its kind
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={save}>Save template</Button>
-            <Button variant="outline" onClick={runPreview}>
-              Preview
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setEditing(null);
-                setPreview(null);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-          {preview !== null && (
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
-              {preview}
-            </pre>
+          ) : (
+            <ul className="divide-y divide-line">
+              {list.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 px-5 py-3.5">
+                  <FileText className="h-5 w-5 shrink-0 text-ink-3" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium text-ink">
+                        {t.name}
+                      </span>
+                      {t.is_default && <Badge tone="accent">Default</Badge>}
+                    </div>
+                    <div className="text-xs text-ink-3">{humanize(t.kind)}</div>
+                  </div>
+                  {canManage && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(t)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete template"
+                        disabled={remove.isPending}
+                        onClick={() => remove.mutate(t.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-bad" />
+                      </Button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
-        </Card>
-      )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {draft?.id ? "Edit template" : "New template"}
+            </DialogTitle>
+          </DialogHeader>
+          {draft && (
+            <form onSubmit={save} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  label="Kind"
+                  value={draft.kind}
+                  onChange={(e) =>
+                    setDraft({ ...draft, kind: e.target.value })
+                  }
+                >
+                  {TEMPLATE_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {humanize(k)}
+                    </option>
+                  ))}
+                </SelectField>
+                <TextField
+                  label="Name"
+                  value={draft.name}
+                  onChange={(e) =>
+                    setDraft({ ...draft, name: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <TextField
+                label="Email subject (optional)"
+                value={draft.subject}
+                onChange={(e) =>
+                  setDraft({ ...draft, subject: e.target.value })
+                }
+              />
+              <TextareaField
+                label="Body"
+                hint="Handlebars syntax — {{tenant_name}}, {{rent}}, {{llc_name}}, {{property_address}}…"
+                className="[&_textarea]:min-h-[200px] [&_textarea]:font-mono"
+                value={draft.body}
+                onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+              />
+              <label className="flex items-center gap-2.5 text-sm text-ink-2">
+                <Switch
+                  checked={draft.is_default}
+                  onCheckedChange={(v) =>
+                    setDraft({ ...draft, is_default: v })
+                  }
+                />
+                Default for its kind
+              </label>
+
+              {preview !== null && (
+                <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-surface-2 p-3 text-xs text-ink-2">
+                  {preview}
+                </pre>
+              )}
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={runPreview}
+                  disabled={previewing || !draft.body}
+                >
+                  {previewing ? "Rendering…" : "Preview"}
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Save template"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// ---- Generate ----------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Generate tab
+// ----------------------------------------------------------------------------
+
+function generatedTone(status: string): "good" | "warn" | "bad" | "neutral" {
+  const s = status.toLowerCase();
+  if (s === "rendered" || s === "sent" || s === "ready") return "good";
+  if (s === "pending" || s === "queued") return "warn";
+  if (s === "failed" || s === "error") return "bad";
+  return "neutral";
+}
 
 function GenerateTab({ id, canManage }: { id: string; canManage: boolean }) {
-  const [templates, setTemplates] = useState<LlcTemplate[]>([]);
-  const [generated, setGenerated] = useState<GeneratedDocument[]>([]);
+  const templates = useLlcTemplates(id);
+  const generated = useGeneratedDocuments(id);
+  const generate = useGenerateDocument(id);
+
   const [form, setForm] = useState({
     template_id: "",
     kind: "letter",
@@ -707,42 +833,27 @@ function GenerateTab({ id, canManage }: { id: string; canManage: boolean }) {
     lease_id: "",
     send_email: false,
   });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadGenerated = useCallback(() => {
-    api.generatedDocuments(id).then(setGenerated).catch(() => {});
-  }, [id]);
-  useEffect(() => {
-    api.llcTemplates(id).then(setTemplates).catch(() => {});
-    loadGenerated();
-  }, [id, loadGenerated]);
-
-  const selectableTemplates = useMemo(
-    () => templates.filter((t) => t.kind === form.kind || form.kind === "letter"),
-    [templates, form.kind]
+  const selectable = useMemo(
+    () =>
+      (templates.data ?? []).filter(
+        (t) => t.kind === form.kind || form.kind === "letter"
+      ),
+    [templates.data, form.kind]
   );
 
-  const generate = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.generateDocument(id, {
-        template_id: form.template_id || undefined,
-        kind: form.kind,
-        title: form.title || undefined,
-        recipient_name: form.recipient_name || undefined,
-        recipient_email: form.recipient_email || undefined,
-        property_address: form.property_address || undefined,
-        lease_id: form.lease_id || undefined,
-        send_email: form.send_email,
-      });
-      loadGenerated();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Generation failed");
-    } finally {
-      setBusy(false);
-    }
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    generate.mutate({
+      template_id: form.template_id || undefined,
+      kind: form.kind,
+      title: form.title || undefined,
+      recipient_name: form.recipient_name || undefined,
+      recipient_email: form.recipient_email || undefined,
+      property_address: form.property_address || undefined,
+      lease_id: form.lease_id || undefined,
+      send_email: form.send_email,
+    });
   };
 
   const download = async (g: GeneratedDocument) => {
@@ -750,140 +861,328 @@ function GenerateTab({ id, canManage }: { id: string; canManage: boolean }) {
       const blob = await api.downloadGenerated(g.id);
       saveBlob(blob, `${g.title.replace(/[^\w.-]+/g, "_")}.pdf`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Download failed");
+      toast.error("Download failed", { description: errMessage(e, "") });
     }
   };
 
+  const docs = generated.data ?? [];
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
       {canManage && (
-        <Card className="space-y-3 p-5">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Document type
-              <select
-                className={FIELD}
-                value={form.kind}
+        <Card>
+          <CardHeader>
+            <CardTitle>Generate a document</CardTitle>
+            <CardDescription>
+              Render a lease or letter from a template, optionally emailing it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField
+                  label="Document type"
+                  value={form.kind}
+                  onChange={(e) =>
+                    setForm({ ...form, kind: e.target.value, template_id: "" })
+                  }
+                >
+                  <option value="lease">Lease contract</option>
+                  <option value="letter">Tenant letter</option>
+                </SelectField>
+                <SelectField
+                  label="Template"
+                  value={form.template_id}
+                  onChange={(e) =>
+                    setForm({ ...form, template_id: e.target.value })
+                  }
+                >
+                  <option value="">Built-in default</option>
+                  {selectable.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+              <TextField
+                label="Title (optional)"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label="Recipient name"
+                  value={form.recipient_name}
+                  onChange={(e) =>
+                    setForm({ ...form, recipient_name: e.target.value })
+                  }
+                />
+                <TextField
+                  label="Recipient email"
+                  type="email"
+                  value={form.recipient_email}
+                  onChange={(e) =>
+                    setForm({ ...form, recipient_email: e.target.value })
+                  }
+                />
+              </div>
+              <TextField
+                label="Property address"
+                value={form.property_address}
                 onChange={(e) =>
-                  setForm({ ...form, kind: e.target.value, template_id: "" })
-                }
-              >
-                <option value="lease">Lease contract</option>
-                <option value="letter">Tenant letter</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Template
-              <select
-                className={FIELD}
-                value={form.template_id}
-                onChange={(e) =>
-                  setForm({ ...form, template_id: e.target.value })
-                }
-              >
-                <option value="">Built-in default</option>
-                {selectableTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Title (optional)
-            <input
-              className={FIELD}
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Recipient name
-              <input
-                className={FIELD}
-                value={form.recipient_name}
-                onChange={(e) =>
-                  setForm({ ...form, recipient_name: e.target.value })
+                  setForm({ ...form, property_address: e.target.value })
                 }
               />
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              Recipient email
-              <input
-                className={FIELD}
-                value={form.recipient_email}
+              <TextField
+                label="Lease ID (optional)"
+                hint="Pulls in rent & dates from an existing lease."
+                className="[&_input]:font-mono"
+                placeholder="uuid"
+                value={form.lease_id}
                 onChange={(e) =>
-                  setForm({ ...form, recipient_email: e.target.value })
+                  setForm({ ...form, lease_id: e.target.value })
                 }
               />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Property address
-            <input
-              className={FIELD}
-              value={form.property_address}
-              onChange={(e) =>
-                setForm({ ...form, property_address: e.target.value })
-              }
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Lease ID (optional — pulls in rent & dates)
-            <input
-              className={`${FIELD} font-mono`}
-              value={form.lease_id}
-              placeholder="uuid"
-              onChange={(e) => setForm({ ...form, lease_id: e.target.value })}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-ink-2">
-            <input
-              type="checkbox"
-              checked={form.send_email}
-              onChange={(e) =>
-                setForm({ ...form, send_email: e.target.checked })
-              }
-            />
-            Email it to the recipient
-          </label>
-          <Button onClick={generate} disabled={busy}>
-            {busy ? "Generating…" : "Generate document"}
-          </Button>
-          {error && <p className="text-bad">{error}</p>}
+              <label className="flex items-center gap-2.5 text-sm text-ink-2">
+                <Switch
+                  checked={form.send_email}
+                  onCheckedChange={(v) => setForm({ ...form, send_email: v })}
+                />
+                Email it to the recipient
+              </label>
+              <Button type="submit" disabled={generate.isPending}>
+                <Wand2 className="h-4 w-4" />
+                {generate.isPending ? "Generating…" : "Generate document"}
+              </Button>
+            </form>
+          </CardContent>
         </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <div className="border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
-          Generated documents
-        </div>
-        {generated.length === 0 ? (
-          <div className="px-5 py-10 text-center text-ink-3">
-            Nothing generated yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-line">
-            {generated.map((g) => (
-              <div key={g.id} className="flex items-center gap-3 px-5 py-3.5">
-                <Icon name="file" size={18} className="text-ink-3" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{g.title}</div>
-                  <div className="text-xs text-ink-3">
-                    {humanize(g.kind)} · {formatBytes(g.size_bytes)}
+      <Card>
+        <CardHeader>
+          <CardTitle>Generated documents</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {generated.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 rounded-lg" />
+              ))}
+            </div>
+          ) : docs.length === 0 ? (
+            <EmptyState
+              className="m-4 border-0"
+              icon={FileText}
+              title="Nothing generated yet"
+              description="Generate a lease or letter to see it listed here."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {docs.map((g) => (
+                <li key={g.id} className="flex items-center gap-3 px-5 py-3.5">
+                  <FileText className="h-5 w-5 shrink-0 text-ink-3" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-ink">
+                      {g.title}
+                    </div>
+                    <div className="text-xs text-ink-3">
+                      {humanize(g.kind)} · {formatBytes(g.size_bytes)} ·{" "}
+                      {formatDate(g.created_at)}
+                    </div>
                   </div>
-                </div>
-                <Badge tone={statusTone(g.status)}>{g.status}</Badge>
-                <Button variant="ghost" onClick={() => download(g)}>
-                  Download
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+                  <Badge tone={generatedTone(g.status)}>{g.status}</Badge>
+                  <Button variant="ghost" size="sm" onClick={() => download(g)}>
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Branding tab
+// ----------------------------------------------------------------------------
+
+type BrandingForm = Omit<LlcBranding, "llc_id">;
+
+function BrandingTab({ id, canManage }: { id: string; canManage: boolean }) {
+  const branding = useLlcBranding(id);
+  const docs = useLlcDocuments(id);
+  const put = usePutLlcBranding(id);
+
+  const [form, setForm] = useState<BrandingForm | null>(null);
+
+  React.useEffect(() => {
+    if (branding.data) {
+      const { llc_id: _llc, ...rest } = branding.data;
+      void _llc;
+      setForm(rest);
+    }
+  }, [branding.data]);
+
+  const logos = (docs.data ?? []).filter((d) => d.kind === "logo");
+
+  if (branding.isLoading || !form) {
+    return (
+      <Card>
+        <CardContent className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 rounded-lg" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const set = (k: keyof BrandingForm, v: string) =>
+    setForm((f) => (f ? { ...f, [k]: v === "" ? null : v } : f));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (form) put.mutate(form);
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Logo &amp; colours</CardTitle>
+          {!canManage && (
+            <CardDescription>
+              Read-only — requires llc:manage or theme:write.
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Logo"
+            hint={
+              logos.length === 0
+                ? 'Upload a document of type "logo" to choose one here.'
+                : undefined
+            }
+          >
+            <NativeSelect
+              value={form.logo_document_id ?? ""}
+              disabled={!canManage}
+              onChange={(e) => set("logo_document_id", e.target.value)}
+            >
+              <option value="">— none —</option>
+              {logos.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.title || l.original_filename}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Primary color">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Primary color picker"
+                  className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-line bg-surface disabled:opacity-50"
+                  value={form.primary_color || "#F5451F"}
+                  disabled={!canManage}
+                  onChange={(e) => set("primary_color", e.target.value)}
+                />
+                <Input
+                  value={form.primary_color ?? ""}
+                  placeholder="#F5451F"
+                  disabled={!canManage}
+                  className="font-mono"
+                  onChange={(e) => set("primary_color", e.target.value)}
+                />
+              </div>
+            </Field>
+            <Field label="Accent color">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Accent color picker"
+                  className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-line bg-surface disabled:opacity-50"
+                  value={form.accent_color || "#1C7C53"}
+                  disabled={!canManage}
+                  onChange={(e) => set("accent_color", e.target.value)}
+                />
+                <Input
+                  value={form.accent_color ?? ""}
+                  placeholder="#1C7C53"
+                  disabled={!canManage}
+                  className="font-mono"
+                  onChange={(e) => set("accent_color", e.target.value)}
+                />
+              </div>
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Signature block</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Signature name"
+            placeholder="Jane Doe"
+            disabled={!canManage}
+            value={form.signature_name ?? ""}
+            onChange={(e) => set("signature_name", e.target.value)}
+          />
+          <TextField
+            label="Signature title"
+            placeholder="Managing Member"
+            disabled={!canManage}
+            value={form.signature_title ?? ""}
+            onChange={(e) => set("signature_title", e.target.value)}
+          />
+          <TextareaField
+            label="Signature block"
+            className="sm:col-span-2 [&_textarea]:font-mono"
+            disabled={!canManage}
+            value={form.signature_block ?? ""}
+            onChange={(e) => set("signature_block", e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Letterhead &amp; footer</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <TextareaField
+            label="Letterhead (top of documents)"
+            className="[&_textarea]:font-mono"
+            disabled={!canManage}
+            value={form.letterhead ?? ""}
+            onChange={(e) => set("letterhead", e.target.value)}
+          />
+          <TextareaField
+            label="Footer / disclaimer"
+            className="[&_textarea]:font-mono"
+            disabled={!canManage}
+            value={form.footer ?? ""}
+            onChange={(e) => set("footer", e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      {canManage && (
+        <Button type="submit" disabled={put.isPending}>
+          <Palette className="h-4 w-4" />
+          {put.isPending ? "Saving…" : "Save branding"}
+        </Button>
+      )}
+    </form>
   );
 }

@@ -42,9 +42,11 @@ pub async fn generate(state: &AppState, input: RenderInput) -> anyhow::Result<Ge
 
     // Logo (best-effort — never block document generation on a missing/bad logo).
     let logo = match input.branding.as_ref().and_then(|b| b.logo_document_id) {
-        Some(doc_id) => fetch_doc_bytes(state, &store, input.tenant_id, doc_id)
-            .await
-            .ok(),
+        Some(doc_id) => {
+            fetch_doc_bytes(state, &store, input.tenant_id, input.llc.id, doc_id)
+                .await
+                .ok()
+        }
         None => None,
     };
 
@@ -102,15 +104,17 @@ pub async fn generate(state: &AppState, input: RenderInput) -> anyhow::Result<Ge
     Ok(Generated { doc, body })
 }
 
-/// Load a stored document's bytes (tenant-checked) via the resolved store.
+/// Load a stored document's bytes (tenant- and LLC-checked) via the resolved store.
 async fn fetch_doc_bytes(
     state: &AppState,
     store: &storage::ResolvedStore,
     tenant_id: Uuid,
+    llc_id: Uuid,
     doc_id: Uuid,
 ) -> anyhow::Result<Vec<u8>> {
     let doc = entity::prelude::LlcDocument::find_by_id(doc_id)
         .filter(entity::llc_document::Column::TenantId.eq(tenant_id))
+        .filter(entity::llc_document::Column::LlcId.eq(llc_id))
         .one(&state.property_db)
         .await?
         .ok_or_else(|| anyhow::anyhow!("document not found"))?;

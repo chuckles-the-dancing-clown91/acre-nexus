@@ -19,10 +19,10 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/queries", () => ({
   useRoles: () => ({ data: mocks.roles, error: null, isLoading: false }),
-  usePermissionsCatalog: () => ({ data: mocks.permissions }),
-  useCreateRole: () => ({ mutateAsync: vi.fn() }),
-  useUpdateRole: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteRole: () => ({ mutate: vi.fn(), isPending: false }),
+  usePermissionsCatalog: () => ({ data: mocks.permissions, isLoading: false }),
+  useCreateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import RolesPage from "./page";
@@ -53,19 +53,20 @@ describe("RolesPage", () => {
     ];
   });
 
-  it("marks system roles as System in the list", () => {
+  it("lists system roles and flags them as System", () => {
     render(<RolesPage />);
     expect(screen.getByText("Platform admin")).toBeInTheDocument();
-    expect(screen.getByText("System")).toBeInTheDocument();
+    // "System" appears at least once (the stat tile + the row's Type badge).
+    expect(screen.getAllByText("System").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the editor with disabled checkboxes for a system role", async () => {
+  it("opens a locked editor for a system role (no save, disabled checkboxes)", async () => {
     render(<RolesPage />);
-    await userEvent.click(
-      screen.getByRole("button", { name: /Platform admin/i })
-    );
-    // Locked: a "System · locked" badge appears and checkboxes are disabled.
+    // The role list rows are clickable (DataTable onRowClick).
+    await userEvent.click(screen.getByText("Platform admin"));
+    // Locked: a "System · locked" badge appears.
     expect(screen.getByText(/System · locked/i)).toBeInTheDocument();
+    // The permission checkbox is rendered and disabled.
     const checkbox = screen.getByRole("checkbox");
     expect(checkbox).toBeDisabled();
     // No "Save permissions" action for a locked role.

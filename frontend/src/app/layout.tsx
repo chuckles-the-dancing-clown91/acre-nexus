@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Acre — Property Management OS",
+  title: "Acre — Property Operations",
   description:
-    "Multi-tenant property-management platform: public listings, landlord console, and a token-based vendor API.",
+    "Acre is the operating system for property-management companies: portfolio operations, leasing, maintenance, entities, and a multi-tenant platform console.",
 };
 
 export default function RootLayout({
@@ -14,19 +16,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    // suppressHydrationWarning is required by next-themes (it sets the theme
+    // class on <html> from a pre-paint inline script). Geist is self-hosted via
+    // next/font — no runtime font CDN, no layout shift.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+    >
       <body>
         <Providers>{children}</Providers>
       </body>

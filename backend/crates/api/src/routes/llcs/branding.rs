@@ -7,9 +7,10 @@ use crate::auth::AuthUser;
 use crate::error::ApiResult;
 use crate::rbac::Permission;
 use crate::state::AppState;
+use crate::error::ApiError;
 use crate::tenancy::TenantScope;
 use chrono::Utc;
-use entity::prelude::LlcBranding;
+use entity::prelude::{LlcBranding, LlcDocument};
 use rocket::serde::json::Json;
 use rocket::{get, put, State};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
@@ -70,6 +71,22 @@ pub async fn put_branding(
     let llc_id = parse_uuid(id)?;
     require_llc(state, scope.tenant_id, llc_id).await?;
     let req = body.into_inner();
+
+    // A referenced logo must be one of *this* LLC's own documents.
+    if let Some(logo_id) = req.logo_document_id {
+        let owns = LlcDocument::find_by_id(logo_id)
+            .filter(entity::llc_document::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::llc_document::Column::LlcId.eq(llc_id))
+            .one(&state.property_db)
+            .await?
+            .is_some();
+        if !owns {
+            return Err(ApiError::BadRequest(
+                "logo_document_id must reference a document of this LLC".into(),
+            ));
+        }
+    }
+
     let now = Utc::now();
 
     let saved = match load(state, scope.tenant_id, llc_id).await? {

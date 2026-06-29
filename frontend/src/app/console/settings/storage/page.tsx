@@ -3,219 +3,388 @@
 // Workspace document-storage settings. Choose the platform-managed default or
 // bring your own bucket (Local / S3 / GCS). Gated by `storage:manage`.
 
-import { useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
-import type { StorageConfig } from "@/lib/types";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Cloud,
+  HardDrive,
+  Lock,
+  Server,
+  ShieldCheck,
+} from "lucide-react";
+
 import { useAuth } from "@/lib/auth";
-import { Badge, Button, Card } from "@/components/ui";
+import { useStorageConfig, usePutStorageConfig } from "@/lib/queries";
+import type { LucideIcon } from "lucide-react";
 
-const FIELD =
-  "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink";
+import { PageHeader, EmptyState } from "@/components/ui/page";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Field, Input, Textarea } from "@/components/ui/form-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui";
 
-const PROVIDERS: { value: string; label: string; hint: string }[] = [
-  { value: "platform", label: "Platform-managed", hint: "Acre stores your documents — nothing to configure." },
-  { value: "local", label: "Local filesystem", hint: "Store on the server's disk (single-node / dev)." },
-  { value: "s3", label: "Amazon S3 (or compatible)", hint: "Your own S3 / MinIO / Cloudflare R2 bucket." },
-  { value: "gcs", label: "Google Cloud Storage", hint: "Your own GCS bucket." },
+type Provider = "platform" | "local" | "s3" | "gcs";
+
+const PROVIDERS: {
+  value: Provider;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    value: "platform",
+    label: "Platform-managed",
+    hint: "Acre stores your documents — nothing to configure.",
+    icon: ShieldCheck,
+  },
+  {
+    value: "local",
+    label: "Local filesystem",
+    hint: "Store on the server's disk (single-node / dev).",
+    icon: HardDrive,
+  },
+  {
+    value: "s3",
+    label: "Amazon S3 (or compatible)",
+    hint: "Your own S3 / MinIO / Cloudflare R2 bucket.",
+    icon: Cloud,
+  },
+  {
+    value: "gcs",
+    label: "Google Cloud Storage",
+    hint: "Your own GCS bucket.",
+    icon: Server,
+  },
 ];
+
+const schema = z.object({
+  provider: z.enum(["platform", "local", "s3", "gcs"]),
+  bucket: z.string().trim().optional(),
+  region: z.string().trim().optional(),
+  prefix: z.string().trim().optional(),
+  endpoint: z.string().trim().optional(),
+  secret: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof schema>;
+
+const DEFAULTS: FormValues = {
+  provider: "platform",
+  bucket: "",
+  region: "",
+  prefix: "",
+  endpoint: "",
+  secret: "",
+};
 
 export default function StorageSettingsPage() {
   const { can } = useAuth();
-  const [cfg, setCfg] = useState<StorageConfig | null>(null);
-  const [form, setForm] = useState({
-    provider: "platform",
-    bucket: "",
-    region: "",
-    prefix: "",
-    endpoint: "",
-    secret: "",
+  const allowed = can("storage:manage");
+
+  const cfgQuery = useStorageConfig({ enabled: allowed });
+  const putConfig = usePutStorageConfig();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors, isDirty },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: DEFAULTS,
   });
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
+  const cfg = cfgQuery.data;
+
+  // Hydrate the form once the saved config loads.
   useEffect(() => {
-    if (!can("storage:manage")) return;
-    api
-      .storageConfig()
-      .then((c) => {
-        setCfg(c);
-        setForm((f) => ({
-          ...f,
-          provider: c.provider,
-          bucket: c.bucket ?? "",
-          region: c.region ?? "",
-          prefix: c.prefix ?? "",
-          endpoint: c.endpoint ?? "",
-        }));
-      })
-      .catch((e) => setError(e.message));
-  }, [can]);
+    if (!cfg) return;
+    reset({
+      provider: (cfg.provider as Provider) ?? "platform",
+      bucket: cfg.bucket ?? "",
+      region: cfg.region ?? "",
+      prefix: cfg.prefix ?? "",
+      endpoint: cfg.endpoint ?? "",
+      secret: "",
+    });
+  }, [cfg, reset]);
 
-  if (!can("storage:manage")) {
+  const provider = watch("provider");
+  const active = PROVIDERS.find((p) => p.value === provider) ?? PROVIDERS[0];
+  const isLocal = provider === "local";
+  const isS3 = provider === "s3";
+  const isGcs = provider === "gcs";
+  const needsBucket = isS3 || isGcs;
+
+  const onSubmit = handleSubmit((values) => {
+    putConfig.mutate(
+      {
+        provider: values.provider,
+        bucket: values.bucket || undefined,
+        region: values.region || undefined,
+        prefix: values.prefix || undefined,
+        endpoint: values.endpoint || undefined,
+        secret: values.secret || undefined,
+      },
+      {
+        onSuccess: (saved) => {
+          reset({
+            provider: (saved.provider as Provider) ?? "platform",
+            bucket: saved.bucket ?? "",
+            region: saved.region ?? "",
+            prefix: saved.prefix ?? "",
+            endpoint: saved.endpoint ?? "",
+            secret: "",
+          });
+        },
+      }
+    );
+  });
+
+  if (!allowed) {
     return (
-      <Card className="p-6">
-        <p className="text-ink-2">
-          You need the <span className="font-mono">storage:manage</span>{" "}
-          permission to configure storage.
-        </p>
-      </Card>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Settings"
+          title="Document storage"
+          description="Configure where uploaded documents and generated PDFs are stored."
+        />
+        <EmptyState
+          icon={Lock}
+          title="You don't have access"
+          description={
+            <>
+              The <span className="font-mono text-ink-2">storage:manage</span>{" "}
+              permission is required to view and change storage settings.
+            </>
+          }
+        />
+      </div>
     );
   }
 
-  const save = async () => {
-    setSaving(true);
-    setMsg(null);
-    setError(null);
-    try {
-      const saved = await api.putStorageConfig({
-        provider: form.provider,
-        bucket: form.bucket || undefined,
-        region: form.region || undefined,
-        prefix: form.prefix || undefined,
-        endpoint: form.endpoint || undefined,
-        secret: form.secret || undefined,
-      });
-      setCfg(saved);
-      setForm((f) => ({ ...f, secret: "" }));
-      setMsg("Storage settings saved.");
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const needsBucket = form.provider === "s3" || form.provider === "gcs";
-  const isS3 = form.provider === "s3";
-  const isGcs = form.provider === "gcs";
-
   return (
     <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">
-          Document storage
-        </h1>
-        <p className="text-ink-3">
-          Where uploaded logos, LLC documents, and generated PDFs are stored.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Document storage"
+        description="Where uploaded logos, LLC documents, and generated PDFs are stored."
+      />
 
-      {cfg && (
-        <Card className="flex items-center gap-3 p-4">
-          <span className="text-sm text-ink-3">Current backend:</span>
-          <Badge tone="info">{cfg.provider}</Badge>
-          {cfg.is_default && <Badge tone="neutral">default</Badge>}
-          {cfg.has_credentials && <Badge tone="good">credentials set</Badge>}
+      {/* Current backend summary */}
+      {cfgQuery.isLoading ? (
+        <div className="skeleton h-16 rounded-xl" />
+      ) : cfg ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-3 py-4">
+            <span className="text-sm text-ink-3">Current backend</span>
+            <Badge tone="info">
+              {PROVIDERS.find((p) => p.value === cfg.provider)?.label ??
+                cfg.provider}
+            </Badge>
+            {cfg.is_default && <Badge tone="neutral">default</Badge>}
+            {cfg.has_credentials && (
+              <Badge tone="good">credentials set</Badge>
+            )}
+          </CardContent>
         </Card>
-      )}
+      ) : null}
 
-      <Card className="space-y-4 p-6">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-          Provider
-          <select
-            className={FIELD}
-            value={form.provider}
-            onChange={(e) => setForm({ ...form, provider: e.target.value })}
-          >
-            {PROVIDERS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-[11px] font-normal text-ink-3">
-            {PROVIDERS.find((p) => p.value === form.provider)?.hint}
-          </span>
-        </label>
-
-        {form.provider === "local" && (
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Base directory
-            <input
-              className={FIELD}
-              value={form.prefix}
-              placeholder="/var/acre/storage"
-              onChange={(e) => setForm({ ...form, prefix: e.target.value })}
-            />
-          </label>
-        )}
-
-        {needsBucket && (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-                Bucket
-                <input
-                  className={FIELD}
-                  value={form.bucket}
-                  onChange={(e) => setForm({ ...form, bucket: e.target.value })}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-                Key prefix (optional)
-                <input
-                  className={FIELD}
-                  value={form.prefix}
-                  onChange={(e) => setForm({ ...form, prefix: e.target.value })}
-                />
-              </label>
+      <form onSubmit={onSubmit}>
+        <Card>
+          <CardHeader>
+            <div className="min-w-0">
+              <CardTitle>Storage provider</CardTitle>
+              <CardDescription>
+                Acre manages storage by default — no setup needed. Switch to a
+                bring-your-own backend to keep documents in your own bucket.
+              </CardDescription>
             </div>
-            {isS3 && (
-              <div className="grid grid-cols-2 gap-4">
-                <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-                  Region
-                  <input
-                    className={FIELD}
-                    value={form.region}
-                    placeholder="us-east-1"
-                    onChange={(e) =>
-                      setForm({ ...form, region: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-                  Endpoint (MinIO / R2, optional)
-                  <input
-                    className={FIELD}
-                    value={form.endpoint}
-                    onChange={(e) =>
-                      setForm({ ...form, endpoint: e.target.value })
-                    }
-                  />
-                </label>
+          </CardHeader>
+
+          <CardContent className="space-y-5">
+            <Field
+              label="Provider"
+              hint={active.hint}
+              htmlFor="storage-provider"
+            >
+              <Select
+                value={provider}
+                onValueChange={(v) =>
+                  setValue("provider", v as Provider, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              >
+                <SelectTrigger id="storage-provider" aria-label="Provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVIDERS.map((p) => {
+                    const PIcon = p.icon;
+                    return (
+                      <SelectItem key={p.value} value={p.value}>
+                        <span className="flex items-center gap-2">
+                          <PIcon className="h-4 w-4 text-ink-3" />
+                          {p.label}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {provider === "platform" && (
+              <div className="flex items-start gap-3 rounded-lg border border-line bg-surface-2 px-4 py-3">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-2" />
+                <p className="text-sm text-ink-2">
+                  Acre stores your documents on managed, encrypted
+                  infrastructure. There&apos;s nothing to configure — this is
+                  the recommended default for most workspaces.
+                </p>
               </div>
             )}
-            <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-              {isGcs
-                ? "Service-account key JSON"
-                : "Credentials JSON — {\"access_key_id\":\"…\",\"secret_access_key\":\"…\"}"}
-              <textarea
-                className={`${FIELD} font-mono`}
-                rows={isGcs ? 6 : 3}
-                value={form.secret}
-                placeholder={
-                  cfg?.has_credentials
-                    ? "•••••• (leave blank to keep existing)"
-                    : ""
-                }
-                onChange={(e) => setForm({ ...form, secret: e.target.value })}
-              />
-              <span className="text-[11px] font-normal text-ink-3">
-                Encrypted at rest (AES-256-GCM) and never shown again.
-              </span>
-            </label>
-          </>
-        )}
 
-        <div className="flex items-center gap-3">
-          <Button onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save settings"}
-          </Button>
-          {msg && <span className="text-sm text-good">{msg}</span>}
-          {error && <span className="text-sm text-bad">{error}</span>}
-        </div>
-      </Card>
+            {isLocal && (
+              <Field
+                label="Base directory"
+                hint="Absolute path on the server's disk."
+                htmlFor="storage-prefix"
+                error={errors.prefix?.message}
+              >
+                <Input
+                  id="storage-prefix"
+                  placeholder="/var/acre/storage"
+                  error={!!errors.prefix}
+                  {...register("prefix")}
+                />
+              </Field>
+            )}
+
+            {needsBucket && (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label="Bucket"
+                    htmlFor="storage-bucket"
+                    error={errors.bucket?.message}
+                  >
+                    <Input
+                      id="storage-bucket"
+                      placeholder={isGcs ? "my-gcs-bucket" : "my-s3-bucket"}
+                      error={!!errors.bucket}
+                      {...register("bucket")}
+                    />
+                  </Field>
+                  <Field
+                    label="Key prefix"
+                    hint="Optional path within the bucket."
+                    htmlFor="storage-key-prefix"
+                    error={errors.prefix?.message}
+                  >
+                    <Input
+                      id="storage-key-prefix"
+                      placeholder="acre/documents"
+                      error={!!errors.prefix}
+                      {...register("prefix")}
+                    />
+                  </Field>
+                </div>
+
+                {isS3 && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                      label="Region"
+                      htmlFor="storage-region"
+                      error={errors.region?.message}
+                    >
+                      <Input
+                        id="storage-region"
+                        placeholder="us-east-1"
+                        error={!!errors.region}
+                        {...register("region")}
+                      />
+                    </Field>
+                    <Field
+                      label="Endpoint"
+                      hint="For MinIO / R2. Leave blank for AWS S3."
+                      htmlFor="storage-endpoint"
+                      error={errors.endpoint?.message}
+                    >
+                      <Input
+                        id="storage-endpoint"
+                        placeholder="https://…"
+                        error={!!errors.endpoint}
+                        {...register("endpoint")}
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                <Field
+                  label={
+                    isGcs
+                      ? "Service-account key JSON"
+                      : "Credentials JSON"
+                  }
+                  hint="Encrypted at rest (AES-256-GCM) and never shown again."
+                  htmlFor="storage-secret"
+                  error={errors.secret?.message}
+                >
+                  <Textarea
+                    id="storage-secret"
+                    className="font-mono text-xs"
+                    rows={isGcs ? 6 : 3}
+                    placeholder={
+                      cfg?.has_credentials
+                        ? "•••••• (leave blank to keep existing)"
+                        : isGcs
+                          ? '{ "type": "service_account", … }'
+                          : '{ "access_key_id": "…", "secret_access_key": "…" }'
+                    }
+                    error={!!errors.secret}
+                    {...register("secret")}
+                  />
+                </Field>
+              </>
+            )}
+          </CardContent>
+
+          <CardFooter className="flex items-center justify-between gap-3">
+            <p className="text-xs text-ink-3">
+              {cfgQuery.error
+                ? "Couldn't load the current configuration."
+                : "Changes apply to new uploads immediately."}
+            </p>
+            <Button
+              type="submit"
+              disabled={putConfig.isPending || !isDirty}
+            >
+              {putConfig.isPending ? "Saving…" : "Save settings"}
+            </Button>
+          </CardFooter>
+        </Card>
+      </form>
     </div>
   );
 }

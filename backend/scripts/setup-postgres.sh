@@ -12,9 +12,10 @@
 #    database + a least-privilege owner/app role pair per Acre service
 #    (user / property / client). App roles are NOBYPASSRLS so the existing
 #    row-level-security tenancy keeps biting at runtime.
-# 4. Writes a per-service .env (mode 0600) with the connection strings and a
-#    full Markdown change-report so you can see — and undo — everything that
-#    touched the machine.
+# 4. Writes the connection strings (mode 0600) using the per-DOMAIN env var names
+#    the app actually reads (USER_/PROPERTY_/CLIENT_DATABASE_URL + _OWNER_URL):
+#    a per-service file each, plus a combined `secrets/acre.env` it can optionally
+#    install straight into backend/.env. Also writes a full Markdown change-report.
 #
 # Idempotent: safe to run repeatedly. Secrets are generated with a CSPRNG and
 # never appear in argv (so they can't leak via `ps`); prompts read from the
@@ -38,6 +39,7 @@ PG_HOST="${PG_HOST:-127.0.0.1}"
 PG_PORT="${PG_PORT:-5432}"
 LISTEN_ADDRESSES="${LISTEN_ADDRESSES:-localhost}"   # do NOT expose publicly by default
 ASSUME_YES="${ASSUME_YES:-0}"
+FRESH_INSTALL=0   # set to 1 only when THIS run installed PostgreSQL (vs reusing one)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -47,6 +49,8 @@ SECRETS_DIR="${SECRETS_DIR:-$SCRIPT_DIR/secrets}"
 # ---- change ledger (rendered into the report at the end) ------------------
 declare -a PKGS_INSTALLED=() FILES_CHANGED=() SVCS_ENABLED=()
 declare -a ROLES_CREATED=() DBS_CREATED=() ENV_FILES=() NOTES=()
+# Accumulated `<DOMAIN>_DATABASE_URL` lines for the combined backend .env.
+declare -a ENV_LINES=()
 
 # ---- pretty logging -------------------------------------------------------
 if [[ -t 1 ]]; then C_B="\033[1m"; C_G="\033[32m"; C_Y="\033[33m"; C_R="\033[31m"; C_0="\033[0m"; else C_B=""; C_G=""; C_Y=""; C_R=""; C_0=""; fi
@@ -54,6 +58,17 @@ log()  { printf "${C_G}==>${C_0} %s\n" "$*"; }
 step() { printf "\n${C_B}### %s${C_0}\n" "$*"; }
 warn() { printf "${C_Y}warn:${C_0} %s\n" "$*" >&2; }
 die()  { printf "${C_R}error:${C_0} %s\n" "$*" >&2; exit 1; }
+
+# On any UNHANDLED failure (set -e), say exactly which command + line broke — so a
+# mid-run crash is never silent. Does NOT fire for failures already guarded by
+# if / || / && / ! (those are intentional).
+on_err() {
+  local rc=$? cmd=$BASH_COMMAND line=${BASH_LINENO[0]:-?}
+  printf "${C_R}error:${C_0} command failed (exit %s) near line %s:\n  %s\n" "$rc" "$line" "$cmd" >&2
+  [[ ${#ENV_FILES[@]} -gt 0 ]] && printf "note: credentials already saved to: %s\n" "${ENV_FILES[*]}" >&2
+  exit "$rc"
+}
+trap on_err ERR
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -107,6 +122,42 @@ detect_platform() {
 # SQL is fed on stdin (never argv) so passwords cannot leak via the process list.
 psql_admin() { $SUDO -u "$PG_OS_USER" psql -v ON_ERROR_STOP=1 -X "$@"; }
 
+# Is a cluster already accepting connections on PG_HOST:PG_PORT? Deliberately
+# uses pg_isready (NOT sudo) so the "is it up?" decision never depends on being
+# able to sudo to the postgres user — which silently fails when sudo needs a
+# password and our probe output is suppressed.
+cluster_running() {
+  if command_exists pg_isready; then
+    pg_isready -q -h "$PG_HOST" -p "$PG_PORT" >/dev/null 2>&1 && return 0
+  fi
+  (exec 3<>"/dev/tcp/${PG_HOST}/${PG_PORT}") >/dev/null 2>&1 && { exec 3>&- 3<&-; return 0; }
+  return 1
+}
+
+# Cache sudo credentials ONCE, visibly, up front — so the many later
+# output-suppressed `sudo` calls (probes, psql_admin) don't fail silently on a
+# host where sudo requires a password.
+prime_sudo() {
+  [[ -z "$SUDO" ]] && return 0                 # running as root: nothing to do
+  sudo -n true 2>/dev/null && return 0          # already passwordless / cached
+  [[ -e /dev/tty ]] || die "sudo needs a password but there is no terminal to prompt on (run as root or enable passwordless sudo)"
+  log "Caching sudo credentials (you may be prompted once)…"
+  sudo -v || die "sudo is required to install/configure PostgreSQL"
+}
+
+# Ensure the secrets dir exists and is writable by US. A previous run executed as
+# root (e.g. `sudo ./setup-postgres.sh`) leaves it owned by root:root mode 700, so
+# a later non-root run can't write into it — reclaim it rather than failing.
+ensure_secrets_dir() {
+  if [[ -e "$SECRETS_DIR" && ! -w "$SECRETS_DIR" ]]; then
+    warn "$SECRETS_DIR isn't writable (likely created by an earlier root run); reclaiming ownership"
+    $SUDO chown -R "$(id -un)":"$(id -gn)" "$SECRETS_DIR" 2>/dev/null \
+      || die "cannot write to $SECRETS_DIR. Fix with: sudo chown -R $(id -un) '$SECRETS_DIR'"
+  fi
+  mkdir -p "$SECRETS_DIR"
+  chmod 700 "$SECRETS_DIR" 2>/dev/null || true
+}
+
 # ---- step 1: is PostgreSQL installed? -------------------------------------
 postgres_installed() { command_exists psql || command_exists pg_config || command_exists postgres; }
 
@@ -117,11 +168,8 @@ install_postgres() {
     dnf)
       $SUDO dnf install -y postgresql-server postgresql-contrib
       PKGS_INSTALLED+=("postgresql-server" "postgresql-contrib")
-      # Fedora/RHEL ship an un-initialised data dir; create it explicitly.
-      if [[ ! -f /var/lib/pgsql/data/PG_VERSION ]]; then
-        $SUDO postgresql-setup --initdb
-        NOTES+=("Initialised data dir at /var/lib/pgsql/data via postgresql-setup --initdb")
-      fi
+      # Data-dir init is handled by ensure_initialized() right before start, so it
+      # also covers an already-installed-but-never-initialised cluster.
       ;;
     apt)
       $SUDO apt-get update -y
@@ -136,18 +184,60 @@ install_postgres() {
   esac
 }
 
+# Fedora/RHEL ship an UN-initialised data dir — PostgreSQL will not start until
+# it exists. (Debian/Ubuntu auto-create a cluster on install; Homebrew inits on
+# first run.) Idempotent: only initialises when the data dir has no PG_VERSION.
+ensure_initialized() {
+  [[ "$PKG" == "dnf" ]] || return 0
+  local datadir="${PGDATA:-/var/lib/pgsql/data}"
+  # The data dir is mode 700/postgres-owned, so test it through sudo — a plain
+  # `[[ -f ]]` as the invoking user false-negatives and would try to re-init a
+  # live cluster.
+  $SUDO test -f "$datadir/PG_VERSION" && return 0
+  step "Initialising the PostgreSQL data directory ($datadir)"
+  if command_exists postgresql-setup; then
+    $SUDO postgresql-setup --initdb
+  elif command_exists initdb; then
+    $SUDO install -d -o "$PG_OS_USER" -g "$PG_OS_USER" "$datadir"
+    $SUDO -u "$PG_OS_USER" initdb --pgdata="$datadir" --auth-host=scram-sha-256
+  else
+    die "data dir $datadir is not initialised and neither postgresql-setup nor initdb is on PATH"
+  fi
+  NOTES+=("Initialised data dir at $datadir")
+}
+
+# Dump recent service status + journal to stderr to explain a start failure.
+dump_service_logs() {
+  $SUDO systemctl status "$SERVICE" --no-pager -l 2>&1 | tail -n 20 >&2 || true
+  $SUDO journalctl -u "$SERVICE" --no-pager -n 30 2>&1 | tail -n 30 >&2 || true
+}
+
 # ---- step 2b: enable + start the service ----------------------------------
 start_service() {
+  # If a cluster is already up (common on a dev box), don't touch it.
+  if cluster_running; then
+    log "PostgreSQL already accepting connections on ${PG_HOST}:${PG_PORT}; not starting."
+    return 0
+  fi
   step "Enabling + starting the service"
+  ensure_initialized
   if [[ "$PKG" == "brew" ]]; then
     brew services start postgresql
   else
-    $SUDO systemctl enable --now "$SERVICE"
+    if ! $SUDO systemctl enable --now "$SERVICE"; then
+      warn "Could not start ${SERVICE}. Recent status / logs:"
+      dump_service_logs
+      die "failed to start ${SERVICE} — see the logs above (common causes: uninitialised data dir, a port already in use, or a versioned package whose unit isn't '${SERVICE}')."
+    fi
   fi
   SVCS_ENABLED+=("$SERVICE")
-  # Wait for the socket to accept connections.
-  for _ in $(seq 1 30); do psql_admin -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
-  psql_admin -tAc 'SELECT 1' >/dev/null 2>&1 || die "PostgreSQL did not become ready"
+  # Wait for the socket to accept connections (sudo-free probe).
+  for _ in $(seq 1 30); do cluster_running && break; sleep 1; done
+  if ! cluster_running; then
+    warn "${SERVICE} started but is not accepting connections yet. Recent logs:"
+    dump_service_logs
+    die "PostgreSQL did not become ready"
+  fi
 }
 
 # Replace (or insert) a marker-delimited managed block in a root-owned file,
@@ -171,6 +261,9 @@ write_managed_block() {
   $SUDO cp "$out" "$file"
   $SUDO chown --reference="${file}.acre-bak-$TS" "$file" 2>/dev/null || true
   $SUDO chmod --reference="${file}.acre-bak-$TS" "$file" 2>/dev/null || true
+  # Copying from /tmp clobbers the SELinux label on Fedora/RHEL (the data dir is
+  # postgresql_db_t); restore it so PostgreSQL can still read the file on reload.
+  command_exists restorecon && $SUDO restorecon "$file" 2>/dev/null || true
   rm -f "$stripped" "$out"
   FILES_CHANGED+=("$file (backup: ${file}.acre-bak-$TS)")
 }
@@ -206,8 +299,39 @@ local   all             all                                     scram-sha-256"
   NOTES+=("SSL is left at the cluster default — terminate TLS at a proxy or set ssl=on with certs for remote access.")
 }
 
+# For an ALREADY-installed cluster: make sure our app/owner roles can connect over
+# loopback with scram, and that new passwords are hashed with scram — WITHOUT
+# touching the cluster's existing listen_addresses/port (that fuller change is
+# only made on a fresh install, by harden_postgres). Idempotent; reload-only.
+ensure_auth_config() {
+  step "Ensuring loopback scram auth for the app roles"
+  local hba
+  hba="$(psql_admin -tAc 'SHOW hba_file')" || die "could not locate pg_hba.conf"
+  [[ -n "$hba" ]] || die "could not locate pg_hba.conf"
+
+  # First match wins in pg_hba; prepend so these take precedence.
+  write_managed_block "$hba" prepend "\
+local   all             ${ADMIN_DB_USER}                        peer
+host    all             all             127.0.0.1/32            scram-sha-256
+host    all             all             ::1/128                 scram-sha-256
+local   all             all                                     scram-sha-256"
+
+  # Hash NEW passwords with scram (persisted in postgresql.auto.conf, which loads
+  # after — and overrides — the main config). Existing md5 passwords still work.
+  psql_admin -tAc "ALTER SYSTEM SET password_encryption = 'scram-sha-256'" >/dev/null
+  psql_admin -tAc "SELECT pg_reload_conf()" >/dev/null
+  NOTES+=("Ensured pg_hba scram rules on loopback + password_encryption=scram-sha-256 (existing listen_addresses/port left unchanged).")
+}
+
 # ---- step 3: superuser password -------------------------------------------
 set_superuser_password() {
+  # Only (re)set the superuser password on a cluster WE installed. On a
+  # pre-existing cluster, changing the postgres password is intrusive and
+  # unnecessary — provisioning uses local peer auth as the postgres OS user.
+  if [[ "$FRESH_INSTALL" != "1" ]]; then
+    log "Existing cluster — leaving the postgres superuser password unchanged."
+    return 0
+  fi
   step "Setting the postgres superuser password"
   if ! psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='${ADMIN_DB_USER}'" | grep -q 1; then
     warn "superuser role '${ADMIN_DB_USER}' not found; skipping"
@@ -242,7 +366,7 @@ SQL
 
 provision_services() {
   step "Provisioning ${#SERVICES[@]} database(s): ${SERVICES[*]}"
-  mkdir -p "$SECRETS_DIR"
+  ensure_secrets_dir
   for svc in "${SERVICES[@]}"; do
     local db="${DB_PREFIX}_${svc}" owner="${DB_PREFIX}_${svc}_owner" app="${DB_PREFIX}_${svc}_app"
     local owner_pw app_pw
@@ -252,6 +376,27 @@ provision_services() {
     log "roles for '$svc'"
     upsert_role "$owner" "$owner_pw"
     upsert_role "$app"   "$app_pw"
+
+    # Save this service's connection env IMMEDIATELY — the moment the roles (and
+    # thus the passwords) are real — so a failure in the DB/grant steps below
+    # can't cost you the credentials. The application reads PER-DOMAIN vars
+    # (USER_/PROPERTY_/CLIENT_DATABASE_URL + _OWNER_URL — see config.rs), NOT a
+    # generic DATABASE_URL.
+    local domain="${svc^^}"
+    local app_url="postgres://${app}:${app_pw}@${PG_HOST}:${PG_PORT}/${db}"
+    local owner_url="postgres://${owner}:${owner_pw}@${PG_HOST}:${PG_PORT}/${db}"
+    local envf="$SECRETS_DIR/${svc}.env"
+    cat > "$envf" <<ENV
+# Acre ${svc} database — generated ${TS} by setup-postgres.sh
+${domain}_DATABASE_URL=${app_url}
+${domain}_DATABASE_OWNER_URL=${owner_url}
+ENV
+    chmod 600 "$envf"
+    ENV_FILES+=("$envf")
+    ENV_LINES+=("# ${svc} database (runtime app role + owner/DDL role)")
+    ENV_LINES+=("${domain}_DATABASE_URL=${app_url}")
+    ENV_LINES+=("${domain}_DATABASE_OWNER_URL=${owner_url}")
+    ENV_LINES+=("")
 
     if db_exists "$db"; then
       log "database '$db' already exists"
@@ -274,20 +419,51 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO "$app";
 SQL
-
-    # Per-service env file (0600). DATABASE_URL = runtime app role (RLS bites);
-    # DATABASE_OWNER_URL = owner role for running migrations.
-    local envf="$SECRETS_DIR/${svc}.env"
-    cat > "$envf" <<ENV
-# Acre ${svc} service — generated ${TS} by setup-postgres.sh
-# Runtime connection (least privilege, NOBYPASSRLS):
-DATABASE_URL=postgres://${app}:${app_pw}@${PG_HOST}:${PG_PORT}/${db}
-# Migration/DDL connection (schema owner) — use for: cargo run -p migration:
-DATABASE_OWNER_URL=postgres://${owner}:${owner_pw}@${PG_HOST}:${PG_PORT}/${db}
-ENV
-    chmod 600 "$envf"
-    ENV_FILES+=("$envf")
   done
+}
+
+# Write the combined backend env (all domains in one file) and optionally install
+# it into backend/.env, preserving any non-DB settings already there.
+finalize_env() {
+  step "Writing combined backend env"
+  local combined="$SECRETS_DIR/acre.env"
+  {
+    echo "# Acre Nexus — database connection env, generated ${TS} by setup-postgres.sh."
+    echo "# Copy to backend/.env (or source it) before running the API."
+    echo
+    printf '%s\n' "${ENV_LINES[@]}"
+  } > "$combined"
+  chmod 600 "$combined"
+  ENV_FILES+=("$combined (combined — the file the app needs; copy to backend/.env)")
+
+  local backend_env="$SCRIPT_DIR/../.env"
+  if ! confirm "Install these connection strings into backend/.env now?"; then
+    log "Skipped backend/.env — copy $combined there yourself when ready."
+    return
+  fi
+
+  local tmp; tmp="$(mktemp)"
+  local db_re='^[[:space:]]*(USER|PROPERTY|CLIENT)_DATABASE(_OWNER)?_URL=|^[[:space:]]*DATABASE_URL='
+  if [[ -f "$backend_env" ]]; then
+    # Back up into the gitignored secrets dir (NOT next to .env, which would be
+    # a tracked path) so the old credentials never risk landing in git.
+    local bak="$SECRETS_DIR/dotenv.acre-bak-$TS"
+    cp -p "$backend_env" "$bak"
+    FILES_CHANGED+=("$backend_env (backup: $bak)")
+    grep -vE "$db_re" "$backend_env" > "$tmp" || true        # keep non-DB settings
+  elif [[ -f "$SCRIPT_DIR/../.env.example" ]]; then
+    grep -vE "$db_re" "$SCRIPT_DIR/../.env.example" > "$tmp" || true   # seed from example
+  fi
+
+  {
+    printf '%s\n' "${ENV_LINES[@]}"
+    if [[ -s "$tmp" ]]; then echo "# ---- other settings ----"; cat "$tmp"; fi
+  } > "$backend_env"
+  rm -f "$tmp"
+  chmod 600 "$backend_env"
+  ENV_FILES+=("$backend_env (DB connection strings installed)")
+  NOTES+=("Wrote DB connection strings to backend/.env (existing file backed up; non-DB settings preserved).")
+  log "backend/.env written"
 }
 
 # ---- export: write the change report --------------------------------------
@@ -342,30 +518,43 @@ write_report() {
 # ---- main -----------------------------------------------------------------
 main() {
   detect_platform
-  mkdir -p "$SECRETS_DIR"
+  prime_sudo          # cache sudo creds up front so suppressed sudo probes don't fail
+  ensure_secrets_dir  # (re)claim a writable secrets dir before anything writes to it
 
   step "Step 1 — checking for an existing PostgreSQL install"
   if postgres_installed; then
     log "PostgreSQL already installed ($(psql --version 2>/dev/null || echo present)); skipping install"
+    cluster_running || start_service
   else
     log "PostgreSQL not found"
     confirm "Install + harden PostgreSQL and provision ${#SERVICES[@]} databases (${SERVICES[*]})?" \
       || die "aborted by user"
+    FRESH_INSTALL=1
     install_postgres
     start_service
     harden_postgres
   fi
 
-  # If it was already installed we still ensure it is running before provisioning.
-  psql_admin -tAc 'SELECT 1' >/dev/null 2>&1 || start_service
+  # Belt-and-braces: confirm the cluster is reachable before provisioning.
+  cluster_running || start_service
 
   set_superuser_password
   provision_services
+  finalize_env
+
+  # Make app-role auth work on a PRE-EXISTING cluster — done AFTER the databases +
+  # credentials are saved, and non-fatally, so a pg_hba/SELinux hiccup can never
+  # cost you the output. (Fresh installs already get this via harden_postgres.)
+  if [[ "$FRESH_INSTALL" != "1" ]]; then
+    ensure_auth_config || warn "couldn't adjust pg_hba/password_encryption automatically; if the app can't connect over 127.0.0.1, add 'host all all 127.0.0.1/32 scram-sha-256' to pg_hba.conf and reload."
+  fi
+
   write_report
 
   step "Done"
   log "Provisioned: ${DBS_CREATED[*]:-none}"
-  log "Credentials + connection strings: $SECRETS_DIR/*.env (mode 0600)"
+  log "App connection env (USER_/PROPERTY_/CLIENT_DATABASE_URL): $SECRETS_DIR/acre.env"
+  log "Use it by copying to backend/.env (the script can do this for you above)."
   log "Full change report: $REPORT"
   warn "Secrets and the report live under $SECRETS_DIR / scripts/. Keep them out of git."
 }

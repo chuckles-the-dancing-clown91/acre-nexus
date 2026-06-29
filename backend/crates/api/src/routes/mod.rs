@@ -57,6 +57,9 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::switch_workspace::switch_workspace,
         // platform (staff, cross-tenant)
         platform::tenants::tenants,
+        platform::get_tenant::get_tenant,
+        platform::create_tenant::create_tenant,
+        platform::update_tenant::update_tenant,
         platform::metrics::metrics,
         // module management (tenant software settings)
         modules::list::list,

@@ -1,21 +1,34 @@
 "use client";
 
-// Acre platform user directory: searchable table of every user across tenants,
-// with a "New user" dialog that can seed an initial membership + profile basics.
+// Acre PLATFORM-ADMIN user directory: every user across the whole platform.
+// A debounced search box drives the server-side `useUsers(q)` query; the table
+// surfaces scope (Platform vs Tenant), status, and tenant, and links each row
+// to the user's detail page. Staff with "user:manage" can create new users.
 
-import { useState } from "react";
-import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
-import type { CreateUserInput, ProfileInput } from "@/lib/api";
 import { useCreateUser, useProfileTypes, useUsers } from "@/lib/queries";
+import type { CreateUserInput, MembershipInput, UserSummary } from "@/lib/api";
 import { createUserSchema, type CreateUserInputForm } from "@/lib/schemas";
-import { Badge, Card, statusTone } from "@/components/ui";
+import { initials, titleCase } from "@/lib/format";
+
+import { PageHeader, StatCard, EmptyState } from "@/components/ui/page";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
+import { Badge, statusTone } from "@/components/ui";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, Input, TextField } from "@/components/ui/form-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -26,96 +39,177 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-/** Platform-staff directory of every Acre user, with creation. */
+/** Platform-staff directory of every Acre user across all tenants. */
 export default function PlatformUsersPage() {
-  const { can, user } = useAuth();
-  const [q, setQ] = useState("");
-  const { data: users, error, isLoading } = useUsers(q);
+  const { can } = useAuth();
+  const router = useRouter();
   const canManage = can("user:manage");
 
-  if (!user?.is_platform_staff) {
-    return (
-      <Card className="p-6">
-        <p className="text-ink-2">This directory is platform-staff only.</p>
-      </Card>
-    );
-  }
+  // Debounce the search box: typing updates `term` immediately, but the server
+  // query `q` only follows ~300ms later so we don't refetch on every keystroke.
+  const [term, setTerm] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setQ(term.trim()), 300);
+    return () => clearTimeout(id);
+  }, [term]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">
-            Users
-          </h1>
-          <p className="text-ink-3">
-            Every person across all client workspaces and Acre HQ.
-          </p>
-        </div>
-        {canManage && <NewUserDialog />}
-      </div>
+  const users = useUsers(q);
+  const rows = users.data ?? [];
+  const staffCount = rows.filter((u) => u.is_platform_staff).length;
 
-      <div className="max-w-sm">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or email…"
-          aria-label="Search users"
-        />
-      </div>
-
-      {error && <p className="text-bad">{error.message}</p>}
-
-      <Card className="overflow-hidden">
-        <div className="grid grid-cols-[1.5fr_1.5fr_.7fr_.6fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
-          <span>Name</span>
-          <span>Email</span>
-          <span>Role</span>
-          <span className="text-right">Status</span>
-        </div>
-        <div className="divide-y divide-line">
-          {users?.map((u) => (
-            <Link
-              key={u.id}
-              href={`/console/platform/users/${u.id}`}
-              className="grid grid-cols-[1.5fr_1.5fr_.7fr_.6fr] items-center gap-4 px-5 py-3.5 hover:bg-surface-2"
-            >
+  const columns = useMemo<ColumnDef<UserSummary, unknown>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => {
+          const u = row.original;
+          return (
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent-2">
+                {initials(u.name)}
+              </span>
               <div className="min-w-0">
-                <div className="truncate font-semibold">{u.name}</div>
+                <div className="truncate font-medium text-ink">{u.name}</div>
                 {u.username && (
-                  <div className="truncate text-sm text-ink-3">
+                  <div className="truncate text-xs text-ink-3">
                     @{u.username}
                   </div>
                 )}
               </div>
-              <span className="truncate text-sm text-ink-2">{u.email}</span>
-              <span className="text-sm">
-                {u.is_platform_staff ? (
-                  <Badge tone="info">Staff</Badge>
-                ) : (
-                  <span className="text-ink-3">Client</span>
-                )}
-              </span>
-              <span className="flex justify-end">
-                <Badge tone={statusTone(u.status)}>{u.status}</Badge>
-              </span>
-            </Link>
-          ))}
-          {isLoading && (
-            <div className="px-5 py-10 text-center text-ink-3">Loading…</div>
-          )}
-          {users && users.length === 0 && (
-            <div className="px-5 py-10 text-center text-ink-3">
-              No users match “{q}”.
             </div>
-          )}
-        </div>
-      </Card>
+          );
+        },
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => (
+          <span className="text-ink-2">{row.original.email}</span>
+        ),
+      },
+      {
+        id: "scope",
+        accessorKey: "is_platform_staff",
+        header: "Scope",
+        cell: ({ row }) =>
+          row.original.is_platform_staff ? (
+            <Badge tone="info">Platform</Badge>
+          ) : (
+            <Badge tone="neutral">Tenant</Badge>
+          ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge tone={statusTone(row.original.status)}>
+            {titleCase(row.original.status)}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "tenant_id",
+        header: "Tenant",
+        cell: ({ row }) =>
+          row.original.tenant_id ? (
+            <span className="font-mono text-xs text-ink-2">
+              {row.original.tenant_id}
+            </span>
+          ) : (
+            <span className="text-ink-3">—</span>
+          ),
+      },
+    ],
+    []
+  );
+
+  const searching = q.length > 0;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Platform admin"
+        title="Users"
+        description="Every person across all client workspaces and Acre HQ."
+        actions={canManage ? <NewUserDialog /> : undefined}
+      />
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {users.isLoading ? (
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="skeleton h-[104px] rounded-xl" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              label="Users"
+              value={rows.length}
+              sub={searching ? `Matching “${q}”` : "Across the platform"}
+              icon={Users}
+            />
+            <StatCard
+              label="Platform staff"
+              value={staffCount}
+              sub="Acre HQ accounts"
+              icon={ShieldCheck}
+              tone="accent"
+            />
+          </>
+        )}
+      </div>
+
+      <div className="relative max-w-xs">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
+        <Input
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+          placeholder="Search by name or email…"
+          aria-label="Search users"
+          className="pl-9"
+        />
+      </div>
+
+      <DataTable<UserSummary>
+        columns={columns}
+        data={rows}
+        isLoading={users.isLoading}
+        enableSearch={false}
+        onRowClick={(u) => router.push(`/console/platform/users/${u.id}`)}
+        emptyState={
+          <EmptyState
+            className="border-0"
+            icon={Users}
+            title={searching ? "No matching users" : "No users yet"}
+            description={
+              searching
+                ? `No users match “${q}”. Try a different name or email.`
+                : "Users created across the platform will appear here."
+            }
+            action={!searching && canManage ? <NewUserDialog /> : undefined}
+          />
+        }
+      />
     </div>
   );
 }
 
-/** Dialog to create a user with an optional membership + profile basics. */
+const EMPTY_FORM: CreateUserInputForm = {
+  email: "",
+  name: "",
+  username: "",
+  password: "",
+  scope: "tenant",
+  tenant_id: "",
+  profile_type: "",
+  title: "",
+  legal_first_name: "",
+  legal_last_name: "",
+  phone: "",
+};
+
+/** Dialog to create a user, optionally with a starting membership + profile. */
 function NewUserDialog() {
   const [open, setOpen] = useState(false);
   const createUser = useCreateUser();
@@ -124,58 +218,71 @@ function NewUserDialog() {
   const {
     register,
     handleSubmit,
+    control,
     watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<CreateUserInputForm>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { scope: "tenant", email: "", name: "" },
+    defaultValues: EMPTY_FORM,
   });
 
   const scope = watch("scope");
   const scopedTypes = (profileTypes ?? []).filter((t) => t.scope === scope);
 
   const onSubmit = handleSubmit(async (values) => {
-    // Assemble the typed API payload, dropping empty optional fields.
-    const profile: ProfileInput = {};
-    if (values.legal_first_name)
-      profile.legal_first_name = values.legal_first_name;
-    if (values.legal_last_name)
-      profile.legal_last_name = values.legal_last_name;
-    if (values.phone) profile.phone = values.phone;
-
     const body: CreateUserInput = {
       email: values.email,
       name: values.name,
     };
     if (values.username) body.username = values.username;
     if (values.password) body.password = values.password;
+
+    // Only attach a membership when a persona is chosen.
     if (values.profile_type) {
-      body.membership = {
+      const membership: MembershipInput = {
         scope: values.scope,
         profile_type: values.profile_type,
       };
       if (values.scope === "tenant" && values.tenant_id)
-        body.membership.tenant_id = values.tenant_id;
-      if (values.title) body.membership.title = values.title;
+        membership.tenant_id = values.tenant_id;
+      if (values.title) membership.title = values.title;
+      body.membership = membership;
     }
+
+    // Drop empty optional profile fields.
+    const profile: NonNullable<CreateUserInput["profile"]> = {};
+    if (values.legal_first_name)
+      profile.legal_first_name = values.legal_first_name;
+    if (values.legal_last_name)
+      profile.legal_last_name = values.legal_last_name;
+    if (values.phone) profile.phone = values.phone;
     if (Object.keys(profile).length > 0) body.profile = profile;
 
     await createUser.mutateAsync(body, {
       onSuccess: () => {
-        reset({ scope: "tenant", email: "", name: "" });
+        reset(EMPTY_FORM);
         setOpen(false);
       },
     });
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset(EMPTY_FORM);
+      }}
+    >
       <DialogTrigger asChild>
-        <Button>New user</Button>
+        <Button>
+          <UserPlus className="h-4 w-4" />
+          New user
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} className="space-y-5">
           <DialogHeader>
             <DialogTitle>New user</DialogTitle>
             <DialogDescription>
@@ -183,94 +290,135 @@ function NewUserDialog() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-5 space-y-4">
-            <Field label="Email" error={errors.email?.message}>
-              <Input
-                type="email"
-                placeholder="person@example.com"
-                aria-invalid={!!errors.email}
-                {...register("email")}
-              />
-            </Field>
-            <Field label="Full name" error={errors.name?.message}>
-              <Input
-                placeholder="Jane Doe"
-                aria-invalid={!!errors.name}
-                {...register("name")}
-              />
-            </Field>
+          <div className="space-y-4">
+            <TextField
+              label="Email"
+              type="email"
+              placeholder="person@example.com"
+              required
+              error={errors.email?.message}
+              {...register("email")}
+            />
+            <TextField
+              label="Full name"
+              placeholder="Jane Doe"
+              required
+              error={errors.name?.message}
+              {...register("name")}
+            />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Username (optional)">
-                <Input placeholder="jdoe" {...register("username")} />
-              </Field>
-              <Field label="Password (optional)">
-                <Input
-                  type="password"
-                  placeholder="Auto if blank"
-                  {...register("password")}
-                />
-              </Field>
+              <TextField
+                label="Username"
+                hint="Optional."
+                placeholder="jdoe"
+                error={errors.username?.message}
+                {...register("username")}
+              />
+              <TextField
+                label="Password"
+                type="password"
+                hint="Auto-generated if blank."
+                placeholder="••••••••"
+                error={errors.password?.message}
+                {...register("password")}
+              />
             </div>
 
             <div className="border-t border-line pt-4">
-              <p className="mb-3 text-sm font-bold text-ink-2">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-3">
                 Membership (optional)
               </p>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Scope">
-                  <select
-                    className="flex h-10 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm outline-none focus:border-accent"
-                    {...register("scope")}
-                  >
-                    <option value="tenant">Tenant</option>
-                    <option value="platform">Platform</option>
-                  </select>
+                <Field label="Scope" error={errors.scope?.message}>
+                  <Controller
+                    control={control}
+                    name="scope"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue placeholder="Select scope" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tenant">Tenant</SelectItem>
+                          <SelectItem value="platform">Platform</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </Field>
-                <Field label="Persona">
-                  <select
-                    className="flex h-10 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm outline-none focus:border-accent"
-                    {...register("profile_type")}
-                  >
-                    <option value="">— None —</option>
-                    {scopedTypes.map((t) => (
-                      <option key={t.key} value={t.key}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Persona" error={errors.profile_type?.message}>
+                  <Controller
+                    control={control}
+                    name="profile_type"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger
+                          className="h-10"
+                          disabled={scopedTypes.length === 0}
+                        >
+                          <SelectValue placeholder="None" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {scopedTypes.map((t) => (
+                            <SelectItem key={t.key} value={t.key}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
                 </Field>
               </div>
               {scope === "tenant" && (
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <Field label="Tenant ID">
-                    <Input
-                      placeholder="tenant uuid"
-                      {...register("tenant_id")}
-                    />
-                  </Field>
-                  <Field label="Title (optional)">
-                    <Input placeholder="e.g. Owner" {...register("title")} />
-                  </Field>
+                  <TextField
+                    label="Tenant ID"
+                    hint="Required for tenant memberships."
+                    placeholder="tenant uuid"
+                    error={errors.tenant_id?.message}
+                    {...register("tenant_id")}
+                  />
+                  <TextField
+                    label="Title"
+                    hint="Optional."
+                    placeholder="e.g. Owner"
+                    error={errors.title?.message}
+                    {...register("title")}
+                  />
                 </div>
               )}
             </div>
 
             <div className="border-t border-line pt-4">
-              <p className="mb-3 text-sm font-bold text-ink-2">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-3">
                 Profile basics (optional)
               </p>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Legal first name">
-                  <Input {...register("legal_first_name")} />
-                </Field>
-                <Field label="Legal last name">
-                  <Input {...register("legal_last_name")} />
-                </Field>
+                <TextField
+                  label="Legal first name"
+                  error={errors.legal_first_name?.message}
+                  {...register("legal_first_name")}
+                />
+                <TextField
+                  label="Legal last name"
+                  error={errors.legal_last_name?.message}
+                  {...register("legal_last_name")}
+                />
               </div>
               <div className="mt-3">
-                <Field label="Phone">
-                  <Input {...register("phone")} />
-                </Field>
+                <TextField
+                  label="Phone"
+                  placeholder="(555) 555-0100"
+                  error={errors.phone?.message}
+                  {...register("phone")}
+                />
               </div>
             </div>
           </div>
@@ -284,34 +432,12 @@ function NewUserDialog() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
+              <UserPlus className="h-4 w-4" />
               {isSubmitting ? "Creating…" : "Create user"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** Labelled form field with an optional inline error. */
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
-      {error && (
-        <p className="text-sm text-bad" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

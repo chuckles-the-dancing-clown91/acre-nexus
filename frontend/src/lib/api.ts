@@ -68,6 +68,25 @@ const REFRESH_KEY = "acre.refresh";
 const ACTING_KEY = "acre.acting_tenant";
 
 /**
+ * Presence cookie read by `middleware.ts` to gate `/console/*` server-side
+ * (before render, killing the unauthenticated flash). It is NOT the credential
+ * — every API call is still authorized by the JWT and the backend — it only
+ * tells the edge "a session exists". Mirrors the access-token lifecycle.
+ */
+const SESSION_COOKIE = "acre.session";
+
+function setSessionCookie() {
+  if (typeof document === "undefined") return;
+  // 30 days; refreshed on every token write.
+  document.cookie = `${SESSION_COOKIE}=1; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+}
+
+function clearSessionCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+}
+
+/**
  * Platform staff have no single tenant, so they "view as" a client by setting an
  * acting tenant slug. It rides along as `X-Tenant` on authenticated requests.
  */
@@ -99,6 +118,7 @@ export const tokenStore = {
   set(tokens: { access_token: string; refresh_token: string }) {
     localStorage.setItem(ACCESS_KEY, tokens.access_token);
     localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+    setSessionCookie();
   },
   /**
    * Update ONLY the access token, leaving the refresh token intact. Used by
@@ -107,12 +127,55 @@ export const tokenStore = {
    */
   setAccess(token: string) {
     localStorage.setItem(ACCESS_KEY, token);
+    setSessionCookie();
   },
   clear() {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    clearSessionCookie();
   },
 };
+
+/**
+ * Single-flight refresh. When the access token expires the backend returns 401;
+ * we rotate ONCE via POST /auth/refresh (the backend rotates the refresh token
+ * too), and concurrent 401s all await the same in-flight refresh.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  const refresh = tokenStore.refresh;
+  if (!refresh) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("refresh failed");
+        const data = (await res.json()) as {
+          access_token: string;
+          refresh_token: string;
+        };
+        tokenStore.set(data);
+        return true;
+      } catch {
+        // Refresh is dead — clear the session and let the app bounce to /login.
+        tokenStore.clear();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("acre:auth-expired"));
+        }
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -129,6 +192,8 @@ interface RequestOpts {
   body?: unknown;
   tenant?: string;
   auth?: boolean;
+  /** Internal: set on the single automatic retry after a token refresh. */
+  _retry?: boolean;
 }
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
@@ -152,6 +217,19 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
     cache: "no-store",
   });
+
+  // Access token expired → rotate once and retry transparently.
+  if (
+    res.status === 401 &&
+    opts.auth &&
+    !opts._retry &&
+    path !== "/auth/refresh" &&
+    tokenStore.refresh
+  ) {
+    if (await refreshAccessToken()) {
+      return request<T>(path, { ...opts, _retry: true });
+    }
+  }
 
   if (!res.ok) {
     let code = "error";
@@ -408,6 +486,20 @@ export const api = {
   // ---- platform (staff) ----
   platformTenants: () =>
     request<TenantSummary[]>("/platform/tenants", { auth: true }),
+  platformTenant: (id: string) =>
+    request<TenantDetail>(`/platform/tenants/${id}`, { auth: true }),
+  createTenant: (body: CreateTenantInput) =>
+    request<TenantSummary>("/platform/tenants", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateTenant: (id: string, body: UpdateTenantInput) =>
+    request<TenantSummary>(`/platform/tenants/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
   platformMetrics: () =>
     request<PlatformMetrics>("/platform/metrics", { auth: true }),
 
@@ -509,7 +601,31 @@ export const api = {
       auth: true,
       body,
     }),
+
+  // ---- tenant theme / white-label branding ----
+  theme: () => request<Theme>("/theme", { auth: true }),
+  updateTheme: (body: UpdateThemeInput) =>
+    request<Theme>("/theme", { method: "PUT", auth: true, body }),
 };
+
+/** A tenant's full theme record (branding + colours + legal boilerplate). */
+export interface Theme {
+  company_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  accent_color: string;
+  default_mode: string;
+  legal_templates: Record<string, unknown>;
+}
+
+export interface UpdateThemeInput {
+  company_name?: string;
+  logo_url?: string | null;
+  primary_color?: string;
+  accent_color?: string;
+  default_mode?: string;
+  legal_templates?: Record<string, unknown>;
+}
 
 /**
  * IAM (identity & access management) API surface: permissions catalog, profile
@@ -855,6 +971,34 @@ export interface PlatformMetrics {
   active_tenants: number;
   total_properties: number;
   total_managed_revenue_label: string;
+}
+
+/** A single tenant with rollups, for the platform tenant-detail view. */
+export interface TenantDetail {
+  id: string;
+  slug: string;
+  name: string;
+  plan: string;
+  status: string;
+  custom_domain: string | null;
+  property_count: number;
+  member_count: number;
+  revenue_cents: number;
+  managed_revenue_label: string;
+  created_at: string;
+}
+
+export interface CreateTenantInput {
+  slug: string;
+  name: string;
+  plan?: string;
+}
+
+export interface UpdateTenantInput {
+  status?: string;
+  plan?: string;
+  name?: string;
+  custom_domain?: string;
 }
 
 /** A pluggable module plus its enablement for the active tenant. */

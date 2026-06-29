@@ -31,3 +31,20 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     h.update(bytes);
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
+
+/// Reduce a client-supplied extension to a safe object-key suffix (lowercase
+/// alphanumerics, capped) so it can't smuggle path/control characters into the
+/// storage key. Falls back to `bin`.
+pub fn sanitize_ext(ext: &str) -> String {
+    let cleaned: String = ext
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if cleaned.is_empty() {
+        "bin".into()
+    } else {
+        cleaned
+    }
+}

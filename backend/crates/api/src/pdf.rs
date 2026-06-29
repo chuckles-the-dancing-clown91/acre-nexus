@@ -173,11 +173,23 @@ fn max_chars(size: f32) -> usize {
     ((USABLE_W / char_w_mm).floor() as usize).max(20)
 }
 
-/// Greedy word wrap into lines of at most `max` characters.
+/// Greedy word wrap into lines of at most `max` characters. A single token longer
+/// than `max` (a URL, hash, etc.) is hard-broken into `max`-sized chunks so no
+/// line ever overflows the page width.
 fn wrap(line: &str, max: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
     for word in line.split_whitespace() {
+        if word.chars().count() > max {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            let chars: Vec<char> = word.chars().collect();
+            for chunk in chars.chunks(max) {
+                out.push(chunk.iter().collect());
+            }
+            continue;
+        }
         if cur.is_empty() {
             cur.push_str(word);
         } else if cur.chars().count() + 1 + word.chars().count() <= max {
@@ -226,5 +238,15 @@ mod tests {
         let lines = wrap(&"word ".repeat(40), 20);
         assert!(lines.len() > 1);
         assert!(lines.iter().all(|l| l.chars().count() <= 20));
+    }
+
+    #[test]
+    fn wrap_hard_breaks_long_tokens() {
+        let long = "x".repeat(250);
+        let lines = wrap(&format!("intro {long} outro"), 30);
+        assert!(
+            lines.iter().all(|l| l.chars().count() <= 30),
+            "no line may exceed the width even for an unbroken token"
+        );
     }
 }

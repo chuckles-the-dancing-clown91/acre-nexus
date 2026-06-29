@@ -26,10 +26,13 @@ pub async fn tenants(
 
     let mut out = Vec::new();
     for t in all {
+        // RLS-clamp the property read to this tenant (deterministic under pooling).
+        let txn = AppState::tenant_tx(&state.property_db, t.id).await?;
         let props = Property::find()
             .filter(entity::property::Column::TenantId.eq(t.id))
-            .all(&state.property_db)
+            .all(&txn)
             .await?;
+        txn.rollback().await.ok();
         let revenue: i64 = props.iter().map(|p| p.monthly_rent_cents).sum();
         out.push(TenantSummary {
             id: t.id,

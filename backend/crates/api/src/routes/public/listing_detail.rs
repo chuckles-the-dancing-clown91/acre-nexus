@@ -17,11 +17,14 @@ pub async fn listing_detail(
     id: &str,
 ) -> ApiResult<Json<ListingResp>> {
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
-    let l = Listing::find_by_id(lid)
+    // Clamp the RLS context to the resolved tenant (deterministic under pooling).
+    let txn = AppState::tenant_tx(&state.property_db, tenant.tenant_id).await?;
+    let found = Listing::find_by_id(lid)
         .filter(entity::listing::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::listing::Column::IsPublic.eq(true))
-        .one(&state.property_db)
-        .await?
-        .ok_or_else(|| ApiError::NotFound("listing not found".into()))?;
+        .one(&txn)
+        .await?;
+    txn.rollback().await.ok();
+    let l = found.ok_or_else(|| ApiError::NotFound("listing not found".into()))?;
     Ok(Json(ListingResp::from(l)))
 }

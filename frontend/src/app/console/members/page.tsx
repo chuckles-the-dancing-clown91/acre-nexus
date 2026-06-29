@@ -1,19 +1,33 @@
 "use client";
 
-// Client-admin member directory: people in the current tenant workspace, with
-// an "Invite member" dialog. Tenant is implied by the current JWT.
+// Tenant-scoped member directory (client-admin view): everyone with access to
+// the current workspace, rebuilt on the Acre design system. Tenant is implied
+// by the active session's JWT. Admins can invite new members under a persona.
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Mail, Plus, UserPlus, Users } from "lucide-react";
+import type { ColumnDef } from "@/components/ui/data-table";
 
 import { useAuth } from "@/lib/auth";
 import { useInviteMember, useMembers, useProfileTypes } from "@/lib/queries";
+import type { Member } from "@/lib/api";
 import { inviteMemberSchema, type InviteMemberInputForm } from "@/lib/schemas";
-import { Badge, Card, statusTone } from "@/components/ui";
+import { initials, titleCase } from "@/lib/format";
+
+import { PageHeader, StatCard, EmptyState } from "@/components/ui/page";
+import { DataTable } from "@/components/ui/data-table";
+import { Badge, statusTone } from "@/components/ui";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, TextField } from "@/components/ui/form-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -27,62 +41,119 @@ import {
 /** Tenant-scoped member directory for client admins. */
 export default function MembersPage() {
   const { can } = useAuth();
-  const { data: members, error, isLoading } = useMembers();
+  const members = useMembers();
   const canManage = can("member:manage");
+
+  const rows = members.data ?? [];
+  const activeCount = rows.filter((m) => m.status === "active").length;
+
+  const columns = useMemo<ColumnDef<Member, unknown>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => {
+          const m = row.original;
+          return (
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent-2">
+                {initials(m.name)}
+              </span>
+              <span className="font-medium text-ink">{m.name}</span>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => (
+          <span className="text-ink-2">{row.original.email}</span>
+        ),
+      },
+      {
+        accessorKey: "profile_type",
+        header: "Persona",
+        cell: ({ row }) => (
+          <Badge tone="neutral">{titleCase(row.original.profile_type)}</Badge>
+        ),
+      },
+      {
+        accessorKey: "title",
+        header: "Title",
+        cell: ({ row }) =>
+          row.original.title ? (
+            <span className="text-ink-2">{row.original.title}</span>
+          ) : (
+            <span className="text-ink-3">—</span>
+          ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge tone={statusTone(row.original.status)}>
+            {titleCase(row.original.status)}
+          </Badge>
+        ),
+      },
+    ],
+    []
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">
-            Members
-          </h1>
-          <p className="text-ink-3">People with access to your workspace.</p>
-        </div>
-        {canManage && <InviteMemberDialog />}
+      <PageHeader
+        eyebrow="Workspace"
+        title="Team members"
+        description="People with access to your workspace and the persona they act under."
+        actions={canManage ? <InviteMemberDialog /> : undefined}
+      />
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {members.isLoading ? (
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="skeleton h-[104px] rounded-xl" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              label="Members"
+              value={rows.length}
+              sub="With workspace access"
+              icon={Users}
+            />
+            <StatCard
+              label="Active"
+              value={activeCount}
+              sub={`of ${rows.length} total`}
+              icon={UserPlus}
+              tone="good"
+            />
+          </>
+        )}
       </div>
 
-      {error && <p className="text-bad">{error.message}</p>}
-
-      <Card className="overflow-hidden">
-        <div className="grid grid-cols-[1.4fr_1.4fr_.9fr_.5fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
-          <span>Name</span>
-          <span>Email</span>
-          <span>Persona</span>
-          <span className="text-right">Status</span>
-        </div>
-        <div className="divide-y divide-line">
-          {members?.map((m) => (
-            <div
-              key={m.membership_id}
-              className="grid grid-cols-[1.4fr_1.4fr_.9fr_.5fr] items-center gap-4 px-5 py-3.5"
-            >
-              <div className="min-w-0 truncate font-semibold">{m.name}</div>
-              <span className="truncate text-sm text-ink-2">{m.email}</span>
-              <span className="text-sm text-ink-2">
-                {m.profile_type}
-                {m.title && <span className="text-ink-3"> · {m.title}</span>}
-              </span>
-              <span className="flex justify-end">
-                <Badge tone={statusTone(m.status)}>{m.status}</Badge>
-              </span>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="px-5 py-10 text-center text-ink-3">Loading…</div>
-          )}
-          {members && members.length === 0 && (
-            <div className="px-5 py-10 text-center text-ink-3">
-              No members yet.
-            </div>
-          )}
-        </div>
-      </Card>
+      <DataTable
+        columns={columns}
+        data={rows}
+        isLoading={members.isLoading}
+        searchPlaceholder="Search members…"
+        emptyState={
+          <EmptyState
+            className="border-0"
+            icon={Users}
+            title="No members yet"
+            description="Invite a teammate to give them access to this workspace under a persona."
+            action={canManage ? <InviteMemberDialog /> : undefined}
+          />
+        }
+      />
     </div>
   );
 }
 
-/** Dialog to invite a member into the current tenant. */
+/** Dialog to invite a member into the current tenant under a persona. */
 function InviteMemberDialog() {
   const [open, setOpen] = useState(false);
   const invite = useInviteMember();
@@ -92,11 +163,12 @@ function InviteMemberDialog() {
   const {
     register,
     handleSubmit,
+    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<InviteMemberInputForm>({
     resolver: zodResolver(inviteMemberSchema),
-    defaultValues: { email: "", name: "", profile_type: "" },
+    defaultValues: { email: "", name: "", profile_type: "", title: "" },
   });
 
   const onSubmit = handleSubmit(async (values) => {
@@ -109,7 +181,7 @@ function InviteMemberDialog() {
       },
       {
         onSuccess: () => {
-          reset({ email: "", name: "", profile_type: "" });
+          reset({ email: "", name: "", profile_type: "", title: "" });
           setOpen(false);
         },
       }
@@ -117,74 +189,79 @@ function InviteMemberDialog() {
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset({ email: "", name: "", profile_type: "", title: "" });
+      }}
+    >
       <DialogTrigger asChild>
-        <Button>Invite member</Button>
+        <Button>
+          <Plus className="h-4 w-4" />
+          Invite member
+        </Button>
       </DialogTrigger>
       <DialogContent>
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} className="space-y-5">
           <DialogHeader>
             <DialogTitle>Invite member</DialogTitle>
             <DialogDescription>
               Add someone to your workspace under a persona.
             </DialogDescription>
           </DialogHeader>
-          <div className="my-5 space-y-4">
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="person@example.com"
-                aria-invalid={!!errors.email}
-                {...register("email")}
+
+          <div className="space-y-4">
+            <TextField
+              label="Email"
+              type="email"
+              placeholder="person@example.com"
+              required
+              error={errors.email?.message}
+              {...register("email")}
+            />
+            <TextField
+              label="Full name"
+              placeholder="Jane Doe"
+              required
+              error={errors.name?.message}
+              {...register("name")}
+            />
+            <Field
+              label="Persona"
+              required
+              error={errors.profile_type?.message}
+            >
+              <Controller
+                control={control}
+                name="profile_type"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger
+                      aria-invalid={!!errors.profile_type}
+                      className="h-10"
+                    >
+                      <SelectValue placeholder="Select a persona" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tenantTypes.map((t) => (
+                        <SelectItem key={t.key} value={t.key}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
-              {errors.email && (
-                <p className="text-sm text-bad" role="alert">
-                  {errors.email.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Full name</Label>
-              <Input
-                placeholder="Jane Doe"
-                aria-invalid={!!errors.name}
-                {...register("name")}
-              />
-              {errors.name && (
-                <p className="text-sm text-bad" role="alert">
-                  {errors.name.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Persona</Label>
-              <select
-                className="flex h-10 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm outline-none focus:border-accent"
-                aria-invalid={!!errors.profile_type}
-                {...register("profile_type")}
-              >
-                <option value="">— Select —</option>
-                {tenantTypes.map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              {errors.profile_type && (
-                <p className="text-sm text-bad" role="alert">
-                  {errors.profile_type.message}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Title (optional)</Label>
-              <Input
-                placeholder="e.g. Property manager"
-                {...register("title")}
-              />
-            </div>
+            </Field>
+            <TextField
+              label="Title"
+              placeholder="e.g. Property manager"
+              hint="Optional."
+              {...register("title")}
+            />
           </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -194,6 +271,7 @@ function InviteMemberDialog() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
+              <Mail className="h-4 w-4" />
               {isSubmitting ? "Inviting…" : "Invite member"}
             </Button>
           </DialogFooter>

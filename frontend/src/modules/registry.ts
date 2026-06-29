@@ -159,7 +159,14 @@ export const MODULES: ModuleDef[] = [
     label: "Branding & Theming",
     description: "White-label branding, colours, and legal templates.",
     defaultEnabled: true,
-    nav: [],
+    nav: [
+      {
+        href: "/console/settings/branding",
+        label: "Branding",
+        icon: "branding",
+        permission: "theme:write",
+      },
+    ],
   },
   {
     key: "flips",

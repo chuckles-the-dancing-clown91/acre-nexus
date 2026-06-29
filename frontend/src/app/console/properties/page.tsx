@@ -1,63 +1,138 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Badge, Button, Card, statusTone } from "@/components/ui";
+import { Building2, Plus } from "lucide-react";
+
 import { useAuth } from "@/lib/auth";
 import { useProperties } from "@/lib/queries";
+import { titleCase } from "@/lib/format";
+import { Badge, statusTone } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { PageHeader, EmptyState } from "@/components/ui/page";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
+import type { Property } from "@/lib/types";
+
+/** Thin occupancy progress bar + "11/12" text, mirroring the dashboard. */
+function OccupancyBar({ property }: { property: Property }) {
+  const pct = property.units
+    ? Math.round((property.occupied_units / property.units) * 100)
+    : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-2">
+        <div
+          className="h-full rounded-full bg-accent"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span data-numeric className="text-xs text-ink-2">
+        {property.occupancy}
+      </span>
+    </div>
+  );
+}
+
+const columns: ColumnDef<Property>[] = [
+  {
+    accessorKey: "name",
+    header: "Property",
+    cell: ({ row }) => {
+      const p = row.original;
+      return (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-ink">{p.name}</div>
+          <div className="truncate text-xs text-ink-3">
+            {p.address}
+            {p.city ? ` · ${p.city}` : ""}
+          </div>
+        </div>
+      );
+    },
+  },
+  {
+    id: "occupancy",
+    accessorKey: "occupied_units",
+    header: "Occupancy",
+    cell: ({ row }) => <OccupancyBar property={row.original} />,
+  },
+  {
+    accessorKey: "monthly_rent_cents",
+    header: () => <div className="text-right">Monthly rent</div>,
+    cell: ({ row }) => (
+      <div
+        data-numeric
+        className="text-right font-medium text-ink"
+      >
+        {row.original.monthly_rent_label}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => (
+      <Badge tone={statusTone(row.original.status)}>
+        {row.original.status}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "property_type",
+    header: "Type",
+    cell: ({ row }) => (
+      <span className="text-ink-2">{titleCase(row.original.property_type)}</span>
+    ),
+  },
+];
 
 export default function PropertiesPage() {
-  // Reference pattern: server state via a TanStack Query hook instead of
-  // useEffect + useState. Caching, retry, and stale handling come for free.
-  const { data: properties, error } = useProperties();
   const { can } = useAuth();
+  const router = useRouter();
+  const props = useProperties();
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">
-            Properties
-          </h1>
-          <p className="text-ink-3">Every asset in your portfolio.</p>
-        </div>
-        {can("property:write") && (
-          <Link href="/console/properties/onboard">
-            <Button>Onboard a property</Button>
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Portfolio"
+        title="Properties"
+        description="Every asset in your managed portfolio."
+        actions={
+          can("property:write") ? (
+            <Button asChild>
+              <Link href="/console/properties/onboard">
+                <Plus className="h-4 w-4" />
+                Onboard property
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {error && <p className="text-bad">{error.message}</p>}
-
-      <Card className="overflow-hidden">
-        <div className="grid grid-cols-[1.5fr_.7fr_.8fr_.6fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
-          <span>Property</span>
-          <span>Occupancy</span>
-          <span className="text-right">Rent</span>
-          <span className="text-right">Status</span>
-        </div>
-        <div className="divide-y divide-line">
-          {properties?.map((p) => (
-            <Link
-              key={p.id}
-              href={`/console/properties/${p.id}`}
-              className="grid grid-cols-[1.5fr_.7fr_.8fr_.6fr] items-center gap-4 px-5 py-3.5 hover:bg-surface-2"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-semibold">{p.name}</div>
-                <div className="truncate text-sm text-ink-3">{p.city}</div>
-              </div>
-              <span className="text-sm text-ink-2">{p.occupancy}</span>
-              <span className="text-right font-mono text-sm">
-                {p.monthly_rent_label}
-              </span>
-              <span className="flex justify-end">
-                <Badge tone={statusTone(p.status)}>{p.status}</Badge>
-              </span>
-            </Link>
-          ))}
-        </div>
-      </Card>
+      <DataTable<Property>
+        columns={columns}
+        data={props.data ?? []}
+        isLoading={props.isLoading}
+        searchPlaceholder="Search properties…"
+        onRowClick={(p) => router.push(`/console/properties/${p.id}`)}
+        emptyState={
+          <EmptyState
+            className="border-0"
+            icon={Building2}
+            title="No properties yet"
+            description="Onboard your first property to start tracking occupancy, rent, and maintenance."
+            action={
+              can("property:write") ? (
+                <Button asChild>
+                  <Link href="/console/properties/onboard">
+                    Onboard property
+                  </Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        }
+      />
     </div>
   );
 }

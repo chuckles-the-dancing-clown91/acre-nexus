@@ -146,7 +146,11 @@ async fn merge_lease_context(
         .one(&state.property_db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
-    ctx.insert("tenant_name".into(), Value::String(lease.tenant_name.clone()));
+    // An explicitly-provided recipient_name wins; otherwise use the lease's tenant
+    // (symmetric with property_address below).
+    if !ctx.contains_key("tenant_name") {
+        ctx.insert("tenant_name".into(), Value::String(lease.tenant_name.clone()));
+    }
     ctx.insert("rent".into(), Value::String(documents::fmt_money(lease.rent_cents)));
     ctx.insert(
         "deposit".into(),

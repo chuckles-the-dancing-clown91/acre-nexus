@@ -1,169 +1,291 @@
 "use client";
 
-// Audit log: a read-only feed of recent platform/tenant actions. Gated by the
-// "audit:read" permission. Supports a simple client-side filter by action via a
-// select of the distinct actions present in the loaded page.
+// Acre PLATFORM-ADMIN audit explorer: a read-only feed of the security audit
+// trail across the whole platform. The query is server-driven — a limit Select
+// (50/100/200) and a debounced action filter feed `useAudit({ limit, action })`.
+// Rows come in two flavours: per-request "http.request" entries (method + path
+// + status_code) and domain events (action + target_type/target_id). Gated by
+// the "audit:read" permission.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { ScrollText, Server, ShieldAlert } from "lucide-react";
+
 import { useAuth } from "@/lib/auth";
-import { humanizeKey } from "@/lib/iam";
 import { useAudit } from "@/lib/queries";
-import { Badge, Card } from "@/components/ui";
+import type { AuditEntry } from "@/lib/api";
+import { formatDateTime, relativeDate, titleCase } from "@/lib/format";
 
-/** Format an ISO timestamp into a compact, locale-aware date-time string. */
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { PageHeader, StatCard, EmptyState } from "@/components/ui/page";
+import { DataTable, type ColumnDef } from "@/components/ui/data-table";
+import { Badge } from "@/components/ui";
+import { Input } from "@/components/ui/form-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-/** Badge tone for an HTTP status code (2xx ok, 3xx info, 4xx warn, 5xx bad). */
-function statusTone(code: number): "good" | "info" | "warn" | "bad" {
+const LIMITS = [50, 100, 200] as const;
+type Limit = (typeof LIMITS)[number];
+
+/** Badge tones, mirrored from the `Badge` component (not exported there). */
+type BadgeTone = "neutral" | "good" | "warn" | "bad" | "info" | "accent";
+
+/** Badge tone for an HTTP status code (2xx good, 3xx info, 4xx warn, 5xx bad). */
+function statusCodeTone(code: number): BadgeTone {
   if (code >= 500) return "bad";
   if (code >= 400) return "warn";
   if (code >= 300) return "info";
   return "good";
 }
 
-/** Platform audit-log viewer. */
-export default function AuditPage() {
+/** Friendly label for a non-user principal (no actor name available). */
+function principalLabel(kind: string | null): string {
+  switch (kind) {
+    case "api_token":
+      return "API token";
+    case "public":
+      return "Public";
+    case "system":
+      return "System";
+    default:
+      return "—";
+  }
+}
+
+/** Platform-staff audit-log explorer. */
+export default function PlatformAuditPage() {
   const { can } = useAuth();
-  const [action, setAction] = useState<string>("");
-  const { data, error, isLoading } = useAudit({ limit: 200 });
+  const canRead = can("audit:read");
 
-  // Distinct actions across the loaded entries, for the filter dropdown.
-  const actions = useMemo(() => {
-    if (!data) return [] as string[];
-    return Array.from(new Set(data.map((e) => e.action))).sort();
-  }, [data]);
+  const [limit, setLimit] = useState<Limit>(100);
 
-  const entries = useMemo(
-    () => (action ? (data ?? []).filter((e) => e.action === action) : data),
-    [data, action]
+  // Debounce the action filter: typing updates `term` immediately, but the
+  // server query `action` only follows ~300ms later so we don't refetch on
+  // every keystroke.
+  const [term, setTerm] = useState("");
+  const [action, setAction] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setAction(term.trim()), 300);
+    return () => clearTimeout(id);
+  }, [term]);
+
+  const audit = useAudit(
+    { limit, action: action || undefined },
+    { enabled: canRead }
+  );
+  const rows = useMemo(() => audit.data ?? [], [audit.data]);
+
+  // Surface query errors as a toast (the page itself stays usable).
+  const errorMessage = audit.error?.message;
+  useEffect(() => {
+    if (errorMessage) {
+      toast.error("Couldn't load audit log", { description: errorMessage });
+    }
+  }, [errorMessage]);
+
+  const requestCount = useMemo(
+    () => rows.filter((e) => e.method != null && e.path != null).length,
+    [rows]
   );
 
-  if (!can("audit:read")) {
+  const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
+    () => [
+      {
+        accessorKey: "created_at",
+        header: "When",
+        cell: ({ row }) => {
+          const e = row.original;
+          return (
+            <span
+              className="whitespace-nowrap text-ink-2"
+              title={formatDateTime(e.created_at)}
+            >
+              {relativeDate(e.created_at)}
+            </span>
+          );
+        },
+      },
+      {
+        id: "actor",
+        accessorKey: "actor_name",
+        header: "Actor",
+        cell: ({ row }) => {
+          const e = row.original;
+          if (e.actor_name) {
+            return <span className="font-medium text-ink">{e.actor_name}</span>;
+          }
+          return (
+            <span className="text-ink-3">
+              {principalLabel(e.principal_kind)}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "action",
+        header: "Action",
+        cell: ({ row }) => (
+          <Badge tone="info" className="font-mono">
+            {row.original.action}
+          </Badge>
+        ),
+      },
+      {
+        id: "target",
+        accessorKey: "target_type",
+        header: "Target",
+        cell: ({ row }) => {
+          const e = row.original;
+          if (!e.target_type) return <span className="text-ink-3">—</span>;
+          return (
+            <span className="flex flex-col">
+              <span className="text-ink-2">{titleCase(e.target_type)}</span>
+              {e.target_id && (
+                <span className="font-mono text-xs text-ink-3">
+                  {e.target_id}
+                </span>
+              )}
+            </span>
+          );
+        },
+      },
+      {
+        id: "request",
+        header: "Request",
+        cell: ({ row }) => {
+          const e = row.original;
+          if (e.method == null || e.path == null) {
+            return <span className="text-ink-3">—</span>;
+          }
+          return (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs font-bold text-ink-3">
+                {e.method}
+              </span>
+              <span className="max-w-[22rem] truncate font-mono text-xs text-ink-2">
+                {e.path}
+              </span>
+              {e.status_code != null && (
+                <Badge tone={statusCodeTone(e.status_code)} className="font-mono">
+                  {e.status_code}
+                </Badge>
+              )}
+            </span>
+          );
+        },
+      },
+    ],
+    []
+  );
+
+  if (!canRead) {
     return (
-      <Card className="p-6">
-        <p className="text-ink-2">
-          You don&apos;t have access to the audit log. Ask a platform admin to
-          grant the <span className="font-mono">audit:read</span> permission.
-        </p>
-      </Card>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Platform admin"
+          title="Audit log"
+          description="The security audit trail across the platform."
+        />
+        <EmptyState
+          icon={ShieldAlert}
+          title="No access to the audit log"
+          description={
+            "You don't have the audit:read permission. Ask a platform admin to grant it."
+          }
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">
-            Audit log
-          </h1>
-          <p className="text-ink-3">
-            Recent actions across the platform and client workspaces.
-          </p>
-        </div>
-        {actions.length > 0 && (
-          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Filter by action
-            <select
-              value={action}
-              onChange={(e) => setAction(e.target.value)}
-              className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink"
-            >
-              <option value="">All actions</option>
-              {actions.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </label>
+      <PageHeader
+        eyebrow="Platform admin"
+        title="Audit log"
+        description="Security audit trail across the platform — request logs and domain events."
+      />
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {audit.isLoading ? (
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="skeleton h-[104px] rounded-xl" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              label="Entries"
+              value={rows.length}
+              sub={action ? `Matching “${action}”` : `Most recent ${limit}`}
+              icon={ScrollText}
+            />
+            <StatCard
+              label="Request logs"
+              value={requestCount}
+              sub={`of ${rows.length} loaded`}
+              icon={Server}
+              tone="accent"
+            />
+          </>
         )}
       </div>
 
-      {error && <p className="text-bad">{error.message}</p>}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+            Action
+          </span>
+          <Input
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Filter by action…"
+            aria-label="Filter by action"
+            className="w-64"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-3">
+            Limit
+          </span>
+          <Select
+            value={String(limit)}
+            onValueChange={(v) => setLimit(Number(v) as Limit)}
+          >
+            <SelectTrigger className="h-10 w-28" aria-label="Result limit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIMITS.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+      </div>
 
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <div className="px-5 py-10 text-center text-ink-3">Loading…</div>
-        ) : !entries || entries.length === 0 ? (
-          <div className="px-5 py-10 text-center text-ink-3">
-            {action ? "No entries match this action." : "No audit entries yet."}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-3">
-                  <th className="px-5 py-3">Action</th>
-                  <th className="px-5 py-3">Actor</th>
-                  <th className="px-5 py-3">Target / request</th>
-                  <th className="px-5 py-3 text-right">When</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {entries.map((e) => (
-                  <tr key={e.id}>
-                    <td className="px-5 py-3">
-                      <Badge tone="info">{e.action}</Badge>
-                    </td>
-                    <td className="px-5 py-3">
-                      {e.actor_name ?? (
-                        <span className="text-ink-3">
-                          {e.principal_kind === "api_token"
-                            ? "API token"
-                            : e.principal_kind === "public"
-                              ? "Public"
-                              : "System"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-ink-2">
-                      {e.method && e.path ? (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-ink-3">
-                            {e.method}
-                          </span>
-                          <span className="font-mono text-xs text-ink-2">
-                            {e.path}
-                          </span>
-                          {e.status_code != null && (
-                            <Badge tone={statusTone(e.status_code)}>
-                              {e.status_code}
-                            </Badge>
-                          )}
-                        </span>
-                      ) : e.target_type ? (
-                        <span>
-                          {humanizeKey(e.target_type)}
-                          {e.target_id && (
-                            <span className="ml-1 font-mono text-xs text-ink-3">
-                              {e.target_id}
-                            </span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-ink-3">—</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3 text-right font-mono text-xs text-ink-3">
-                      {formatTimestamp(e.created_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      <DataTable<AuditEntry>
+        columns={columns}
+        data={rows}
+        isLoading={audit.isLoading}
+        searchPlaceholder="Search loaded entries…"
+        emptyState={
+          <EmptyState
+            className="border-0"
+            icon={ScrollText}
+            title={action ? "No matching entries" : "No audit entries yet"}
+            description={
+              action
+                ? `No entries match the action “${action}”. Try a different filter.`
+                : "Actions across the platform and client workspaces will appear here."
+            }
+          />
+        }
+      />
     </div>
   );
 }

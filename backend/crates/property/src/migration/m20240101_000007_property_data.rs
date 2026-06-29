@@ -1,7 +1,9 @@
 //! Property-intelligence schema: the rich per-property data the enrichment engine
 //! populates (parcel/county detail, tax history, AVM valuations, schools,
-//! utilities) plus the `enrichment_run` audit trail. Also upgrades
-//! `background_job` into a proper retrying queue (`max_attempts`, `last_error`).
+//! utilities) plus the `enrichment_run` audit trail.
+//!
+//! Note: `background_job` lives in the **user** database and carries its own
+//! retry-queue columns (`max_attempts`, `last_error`); it is not touched here.
 
 use sea_orm_migration::prelude::*;
 
@@ -44,24 +46,6 @@ async fn index(manager: &SchemaManager<'_>, table: &str, column: &str) -> Result
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // ---- background_job: retry budget + last error ----
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Alias::new("background_job"))
-                    .add_column_if_not_exists(col("max_attempts").integer().not_null().default(5))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(Alias::new("background_job"))
-                    .add_column_if_not_exists(col("last_error").text().null())
-                    .to_owned(),
-            )
-            .await?;
-
         // ---- property_detail (1:1) ----
         manager
             .create_table(
@@ -222,16 +206,6 @@ impl MigrationTrait for Migration {
         ] {
             manager
                 .drop_table(Table::drop().table(Alias::new(t)).if_exists().to_owned())
-                .await?;
-        }
-        for c in ["max_attempts", "last_error"] {
-            manager
-                .alter_table(
-                    Table::alter()
-                        .table(Alias::new("background_job"))
-                        .drop_column(Alias::new(c))
-                        .to_owned(),
-                )
                 .await?;
         }
         Ok(())

@@ -1,15 +1,38 @@
 "use client";
 
-// Multi-step property onboarding wizard. Collects property details, optional
-// financing (mortgages), and a review/confirm step before calling
-// `api.onboardProperty`. Gated behind the "property:write" permission.
+// Property onboarding. A clean, multi-section form (react-hook-form + zod)
+// grouped into Cards — Property, Financials & strategy, Holding entity, and
+// optional Financing (mortgages) — that submits to `api.onboardProperty` and
+// routes to the new property profile on success. Gated by "property:write".
 
-import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useFieldArray, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ArrowLeft, Building2, Plus, ShieldAlert, Trash2 } from "lucide-react";
+
 import { api } from "@/lib/api";
 import type { OnboardInput, OnboardMortgageInput } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
-import { Button, Card } from "@/components/ui";
+import { useLlcGroups } from "@/lib/queries";
+import { titleCase } from "@/lib/format";
+import {
+  PageHeader,
+  EmptyState,
+} from "@/components/ui/page";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { TextField, SelectField } from "@/components/ui/form-field";
 
 // ---- Options ---------------------------------------------------------------
 const PROPERTY_TYPES = [
@@ -32,50 +55,49 @@ const MORTGAGE_KINDS = [
   "seller_finance",
 ] as const;
 
-// ---- Form state ------------------------------------------------------------
-interface PropertyForm {
-  name: string;
-  address: string;
-  city: string;
-  property_type: string;
-  strategy: string;
-  units: string;
-  occupied_units: string;
-  year_built: string;
-  monthly_rent: string;
-  purchase_price: string;
-  acquired_on: string;
+function humanize(key: string): string {
+  return titleCase(key.replace(/_/g, " "));
 }
 
-interface MortgageForm {
-  lender_name: string;
-  kind: string;
-  original_amount: string;
-  current_balance: string;
-  interest_rate: string;
-  monthly_payment: string;
-  escrow: string;
-  term_months: string;
-  loan_number: string;
-  start_date: string;
-  maturity_date: string;
-}
+// ---- Schema ----------------------------------------------------------------
+// Numeric fields are kept as strings in the form (native number inputs emit
+// strings) and coerced to cents / bps / ints when building the API payload.
+const mortgageSchema = z.object({
+  lender_name: z.string(),
+  kind: z.string().min(1),
+  original_amount: z.string(),
+  current_balance: z.string(),
+  interest_rate: z.string(),
+  monthly_payment: z.string(),
+  escrow: z.string(),
+  term_months: z.string(),
+  loan_number: z.string(),
+  start_date: z.string(),
+  maturity_date: z.string(),
+});
 
-const EMPTY_PROPERTY: PropertyForm = {
-  name: "",
-  address: "",
-  city: "",
-  property_type: "",
-  strategy: "",
-  units: "",
-  occupied_units: "",
-  year_built: "",
-  monthly_rent: "",
-  purchase_price: "",
-  acquired_on: "",
-};
+const schema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  address: z.string().trim().min(1, "Address is required"),
+  city: z.string().trim().min(1, "City is required"),
+  property_type: z.string().min(1, "Choose a property type"),
+  strategy: z.string().min(1, "Choose a strategy"),
+  units: z.string(),
+  occupied_units: z.string(),
+  year_built: z.string(),
+  monthly_rent: z.string(),
+  purchase_price: z.string(),
+  acquired_on: z.string(),
+  manager: z.string(),
+  llc_id: z.string(),
+  enrich: z.boolean(),
+  mortgages: z.array(mortgageSchema),
+});
 
-function emptyMortgage(): MortgageForm {
+type FormValues = z.infer<typeof schema>;
+type MortgageValues = z.infer<typeof mortgageSchema>;
+
+function emptyMortgage(): MortgageValues {
   return {
     lender_name: "",
     kind: "purchase",
@@ -91,53 +113,52 @@ function emptyMortgage(): MortgageForm {
   };
 }
 
-const FIELD_CLASS =
-  "rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink";
-
-const STEPS = ["Property", "Financing", "Review"] as const;
+const DEFAULTS: FormValues = {
+  name: "",
+  address: "",
+  city: "",
+  property_type: "",
+  strategy: "",
+  units: "",
+  occupied_units: "",
+  year_built: "",
+  monthly_rent: "",
+  purchase_price: "",
+  acquired_on: "",
+  manager: "",
+  llc_id: "",
+  enrich: true,
+  mortgages: [],
+};
 
 // ---- Conversion helpers ----------------------------------------------------
-/** Dollars string → integer cents, or undefined if blank/NaN. */
 function dollarsToCents(v: string): number | undefined {
   const t = v.trim();
   if (t === "") return undefined;
   const n = Number(t);
-  if (Number.isNaN(n)) return undefined;
-  return Math.round(n * 100);
+  return Number.isNaN(n) ? undefined : Math.round(n * 100);
 }
 
-/** Percent string (e.g. "6.5") → integer basis points, or undefined. */
 function percentToBps(v: string): number | undefined {
   const t = v.trim();
   if (t === "") return undefined;
   const n = Number(t);
-  if (Number.isNaN(n)) return undefined;
-  return Math.round(n * 100);
+  return Number.isNaN(n) ? undefined : Math.round(n * 100);
 }
 
-/** Integer string → number, or undefined if blank/NaN. */
 function toInt(v: string): number | undefined {
   const t = v.trim();
   if (t === "") return undefined;
   const n = Number(t);
-  if (Number.isNaN(n)) return undefined;
-  return Math.round(n);
+  return Number.isNaN(n) ? undefined : Math.round(n);
 }
 
-/** Trimmed string, or undefined if blank. */
 function toStr(v: string): string | undefined {
   const t = v.trim();
   return t === "" ? undefined : t;
 }
 
-/** Turn a snake/lower key into a human label, e.g. `single_family` → `Single family`. */
-function humanize(key: string): string {
-  const s = key.replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** True when a mortgage row has no meaningful data entered. */
-function isMortgageEmpty(m: MortgageForm): boolean {
+function isMortgageEmpty(m: MortgageValues): boolean {
   return (
     m.lender_name.trim() === "" &&
     m.original_amount.trim() === "" &&
@@ -152,8 +173,7 @@ function isMortgageEmpty(m: MortgageForm): boolean {
   );
 }
 
-/** Map a populated mortgage form row to the API input, dropping empty fields. */
-function toMortgageInput(m: MortgageForm): OnboardMortgageInput {
+function toMortgageInput(m: MortgageValues): OnboardMortgageInput {
   const out: OnboardMortgageInput = { kind: m.kind };
   const lender = toStr(m.lender_name);
   if (lender !== undefined) out.lender_name = lender;
@@ -178,509 +198,423 @@ function toMortgageInput(m: MortgageForm): OnboardMortgageInput {
   return out;
 }
 
-// ---- Small field components ------------------------------------------------
-function TextField({
-  label,
-  value,
-  onChange,
-  required,
-  type = "text",
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-      <span>
-        {label}
-        {required && <span className="ml-0.5 text-bad">*</span>}
-      </span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className={FIELD_CLASS}
-      />
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-  required,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: readonly string[];
-  required?: boolean;
-  placeholder?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-      <span>
-        {label}
-        {required && <span className="ml-0.5 text-bad">*</span>}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={FIELD_CLASS}
-      >
-        {placeholder !== undefined && <option value="">{placeholder}</option>}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {humanize(o)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function SummaryRow({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-line pb-2.5 last:border-0">
-      <dt className="text-ink-3">{k}</dt>
-      <dd className="font-semibold">{v}</dd>
-    </div>
-  );
+function buildInput(v: FormValues): OnboardInput {
+  const input: OnboardInput = {
+    name: v.name.trim(),
+    address: v.address.trim(),
+    city: v.city.trim(),
+    property_type: v.property_type,
+    strategy: v.strategy,
+    mortgages: v.mortgages.filter((m) => !isMortgageEmpty(m)).map(toMortgageInput),
+    enrich: v.enrich,
+  };
+  const units = toInt(v.units);
+  if (units !== undefined) input.units = units;
+  const occupied = toInt(v.occupied_units);
+  if (occupied !== undefined) input.occupied_units = occupied;
+  const rent = dollarsToCents(v.monthly_rent);
+  if (rent !== undefined) input.monthly_rent_cents = rent;
+  const year = toInt(v.year_built);
+  if (year !== undefined) input.year_built = year;
+  const price = dollarsToCents(v.purchase_price);
+  if (price !== undefined) input.purchase_price_cents = price;
+  const acquired = toStr(v.acquired_on);
+  if (acquired !== undefined) input.acquired_on = acquired;
+  const manager = toStr(v.manager);
+  if (manager !== undefined) input.manager = manager;
+  const llc = toStr(v.llc_id);
+  if (llc !== undefined) input.llc_id = llc;
+  return input;
 }
 
 // ---- Page ------------------------------------------------------------------
 export default function OnboardPropertyPage() {
   const { can } = useAuth();
   const router = useRouter();
+  const llcs = useLlcGroups();
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [property, setProperty] = useState<PropertyForm>(EMPTY_PROPERTY);
-  const [mortgages, setMortgages] = useState<MortgageForm[]>([]);
-  const [enrich, setEnrich] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    control,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: DEFAULTS,
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "mortgages",
+  });
+
+  const enrich = watch("enrich");
+
+  const onboard = useMutation({
+    mutationFn: (input: OnboardInput) => api.onboardProperty(input),
+    onSuccess: (resp) => {
+      toast.success("Property onboarded");
+      router.push(`/console/properties/${resp.property_id}`);
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "Failed to onboard property."
+      ),
+  });
 
   if (!can("property:write")) {
     return (
-      <Card className="p-6">
-        <p className="text-ink-2">
-          You don&apos;t have access to onboard properties. Ask a platform admin
-          to grant the <span className="font-mono">property:write</span>{" "}
-          permission.
-        </p>
-      </Card>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Properties"
+          title="Onboard a property"
+          description="Add a property to your managed portfolio."
+        />
+        <EmptyState
+          icon={ShieldAlert}
+          title="You don't have access"
+          description="Ask a platform admin to grant the property:write permission to onboard properties."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/console/properties">Back to properties</Link>
+            </Button>
+          }
+        />
+      </div>
     );
   }
 
-  const setP = (patch: Partial<PropertyForm>) =>
-    setProperty((prev) => ({ ...prev, ...patch }));
+  const onSubmit = handleSubmit((values) => {
+    onboard.mutate(buildInput(values));
+  });
 
-  const setMortgage = (idx: number, patch: Partial<MortgageForm>) =>
-    setMortgages((prev) =>
-      prev.map((m, i) => (i === idx ? { ...m, ...patch } : m))
-    );
-
-  const addMortgage = () => setMortgages((prev) => [...prev, emptyMortgage()]);
-
-  const removeMortgage = (idx: number) =>
-    setMortgages((prev) => prev.filter((_, i) => i !== idx));
-
-  const step1Valid =
-    property.name.trim() !== "" &&
-    property.address.trim() !== "" &&
-    property.city.trim() !== "" &&
-    property.property_type !== "" &&
-    property.strategy !== "";
-
-  const buildInput = (): OnboardInput => {
-    const input: OnboardInput = {
-      name: property.name.trim(),
-      address: property.address.trim(),
-      city: property.city.trim(),
-      property_type: property.property_type,
-      strategy: property.strategy,
-      mortgages: mortgages
-        .filter((m) => !isMortgageEmpty(m))
-        .map(toMortgageInput),
-      enrich,
-    };
-    const units = toInt(property.units);
-    if (units !== undefined) input.units = units;
-    const occupied = toInt(property.occupied_units);
-    if (occupied !== undefined) input.occupied_units = occupied;
-    const rent = dollarsToCents(property.monthly_rent);
-    if (rent !== undefined) input.monthly_rent_cents = rent;
-    const year = toInt(property.year_built);
-    if (year !== undefined) input.year_built = year;
-    const price = dollarsToCents(property.purchase_price);
-    if (price !== undefined) input.purchase_price_cents = price;
-    const acquired = toStr(property.acquired_on);
-    if (acquired !== undefined) input.acquired_on = acquired;
-    return input;
-  };
-
-  const submit = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const resp = await api.onboardProperty(buildInput());
-      router.push(`/console/properties/${resp.property_id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to onboard property.");
-      setSubmitting(false);
-    }
-  };
-
-  const populatedMortgages = mortgages.filter((m) => !isMortgageEmpty(m));
+  const submitting = onboard.isPending;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">
-          Onboard a property
-        </h1>
-        <p className="text-ink-3">
-          Add property details, financing, and kick off enrichment in three
-          steps.
-        </p>
-      </div>
+    <form onSubmit={onSubmit} className="space-y-6">
+      <PageHeader
+        eyebrow="Properties"
+        title="Onboard a property"
+        description="Capture property details, financing, and kick off enrichment."
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/console/properties">
+              <ArrowLeft className="h-4 w-4" />
+              Back to properties
+            </Link>
+          </Button>
+        }
+      />
 
-      {/* Step indicator */}
-      <div className="flex flex-wrap items-center gap-3">
-        {STEPS.map((label, i) => {
-          const n = (i + 1) as 1 | 2 | 3;
-          const active = n === step;
-          const done = n < step;
-          return (
-            <div key={label} className="flex items-center gap-2">
-              <span
-                className={
-                  "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold " +
-                  (active
-                    ? "bg-accent text-on-accent"
-                    : done
-                      ? "bg-good-soft text-good"
-                      : "bg-surface-2 text-ink-3")
-                }
-              >
-                {n}
-              </span>
-              <span
-                className={
-                  "text-sm font-semibold " +
-                  (active ? "text-ink" : "text-ink-3")
-                }
-              >
-                {label}
-              </span>
-              {i < STEPS.length - 1 && (
-                <span className="ml-1 hidden h-px w-8 bg-line sm:block" />
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Property */}
+      <Card>
+        <CardHeader className="block border-b-0 pb-0">
+          <CardTitle>Property</CardTitle>
+          <CardDescription>
+            Where it is and what kind of asset it is.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <TextField
+            label="Name"
+            required
+            placeholder="Birchwood Lofts"
+            error={errors.name?.message}
+            {...register("name")}
+          />
+          <TextField
+            label="Address"
+            required
+            placeholder="88 Birch Ave"
+            error={errors.address?.message}
+            {...register("address")}
+          />
+          <TextField
+            label="City"
+            required
+            placeholder="Portland, OR"
+            error={errors.city?.message}
+            {...register("city")}
+          />
+          <SelectField
+            label="Property type"
+            required
+            defaultValue=""
+            error={errors.property_type?.message}
+            {...register("property_type")}
+          >
+            <option value="" disabled>
+              Select a type…
+            </option>
+            {PROPERTY_TYPES.map((o) => (
+              <option key={o} value={o}>
+                {humanize(o)}
+              </option>
+            ))}
+          </SelectField>
+          <TextField
+            label="Units"
+            type="number"
+            inputMode="numeric"
+            placeholder="12"
+            {...register("units")}
+          />
+          <TextField
+            label="Occupied units"
+            type="number"
+            inputMode="numeric"
+            placeholder="11"
+            {...register("occupied_units")}
+          />
+          <TextField
+            label="Year built"
+            type="number"
+            inputMode="numeric"
+            placeholder="2019"
+            {...register("year_built")}
+          />
+          <TextField
+            label="Manager"
+            placeholder="Dana K."
+            {...register("manager")}
+          />
+        </CardContent>
+      </Card>
 
-      {/* Step 1: Property */}
-      {step === 1 && (
-        <Card className="space-y-5 p-5">
-          <h2 className="font-display text-lg font-bold">Property details</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label="Name"
-              value={property.name}
-              onChange={(v) => setP({ name: v })}
-              required
-            />
-            <TextField
-              label="Address"
-              value={property.address}
-              onChange={(v) => setP({ address: v })}
-              required
-            />
-            <TextField
-              label="City"
-              value={property.city}
-              onChange={(v) => setP({ city: v })}
-              required
-            />
-            <SelectField
-              label="Property type"
-              value={property.property_type}
-              onChange={(v) => setP({ property_type: v })}
-              options={PROPERTY_TYPES}
-              placeholder="Select a type…"
-              required
-            />
-            <SelectField
-              label="Strategy"
-              value={property.strategy}
-              onChange={(v) => setP({ strategy: v })}
-              options={STRATEGIES}
-              placeholder="Select a strategy…"
-              required
-            />
-            <TextField
-              label="Units"
-              type="number"
-              value={property.units}
-              onChange={(v) => setP({ units: v })}
-            />
-            <TextField
-              label="Occupied units"
-              type="number"
-              value={property.occupied_units}
-              onChange={(v) => setP({ occupied_units: v })}
-            />
-            <TextField
-              label="Year built"
-              type="number"
-              value={property.year_built}
-              onChange={(v) => setP({ year_built: v })}
-            />
-            <TextField
-              label="Monthly rent ($)"
-              type="number"
-              value={property.monthly_rent}
-              onChange={(v) => setP({ monthly_rent: v })}
-            />
-            <TextField
-              label="Purchase price ($)"
-              type="number"
-              value={property.purchase_price}
-              onChange={(v) => setP({ purchase_price: v })}
-            />
-            <TextField
-              label="Acquired on"
-              type="date"
-              value={property.acquired_on}
-              onChange={(v) => setP({ acquired_on: v })}
-            />
+      {/* Financials & strategy */}
+      <Card>
+        <CardHeader className="block border-b-0 pb-0">
+          <CardTitle>Financials &amp; strategy</CardTitle>
+          <CardDescription>
+            How you run the property and the acquisition basics.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <SelectField
+            label="Strategy"
+            required
+            defaultValue=""
+            error={errors.strategy?.message}
+            {...register("strategy")}
+          >
+            <option value="" disabled>
+              Select a strategy…
+            </option>
+            {STRATEGIES.map((o) => (
+              <option key={o} value={o}>
+                {humanize(o)}
+              </option>
+            ))}
+          </SelectField>
+          <TextField
+            label="Monthly rent"
+            type="number"
+            inputMode="decimal"
+            placeholder="0.00"
+            hint="Gross scheduled rent, in dollars."
+            {...register("monthly_rent")}
+          />
+          <TextField
+            label="Purchase price"
+            type="number"
+            inputMode="decimal"
+            placeholder="0.00"
+            hint="In dollars."
+            {...register("purchase_price")}
+          />
+          <TextField
+            label="Acquired on"
+            type="date"
+            {...register("acquired_on")}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Holding entity */}
+      <Card>
+        <CardHeader className="block border-b-0 pb-0">
+          <CardTitle>Holding entity</CardTitle>
+          <CardDescription>
+            Optionally vest this property in one of your LLCs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SelectField
+            label="Holding LLC"
+            defaultValue=""
+            disabled={llcs.isLoading}
+            className="sm:max-w-sm"
+            {...register("llc_id")}
+          >
+            <option value="">No holding entity</option>
+            {(llcs.data ?? []).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+                {g.state ? ` · ${g.state}` : ""}
+              </option>
+            ))}
+          </SelectField>
+        </CardContent>
+      </Card>
+
+      {/* Financing */}
+      <Card>
+        <CardHeader>
+          <div className="min-w-0">
+            <CardTitle>Financing</CardTitle>
+            <CardDescription className="mt-0.5">
+              Optional — add any loans secured against the property.
+            </CardDescription>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={() => setStep(2)} disabled={!step1Valid}>
-              Next
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Step 2: Financing */}
-      {step === 2 && (
-        <Card className="space-y-5 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg font-bold">Financing</h2>
-            <Button variant="outline" onClick={addMortgage}>
-              Add loan
-            </Button>
-          </div>
-
-          {mortgages.length === 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => append(emptyMortgage())}
+          >
+            <Plus className="h-4 w-4" />
+            Add loan
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {fields.length === 0 ? (
             <p className="text-sm text-ink-3">
-              No loans added. Financing is optional — add a loan or continue.
+              No loans added. Financing is optional — add a loan or onboard
+              without one.
             </p>
           ) : (
-            <div className="space-y-5">
-              {mortgages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className="space-y-4 rounded-xl border border-line p-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-ink-2">
-                      Loan {idx + 1}
-                    </span>
-                    <Button variant="ghost" onClick={() => removeMortgage(idx)}>
-                      Remove
-                    </Button>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <TextField
-                      label="Lender name"
-                      value={m.lender_name}
-                      onChange={(v) => setMortgage(idx, { lender_name: v })}
-                    />
-                    <SelectField
-                      label="Kind"
-                      value={m.kind}
-                      onChange={(v) => setMortgage(idx, { kind: v })}
-                      options={MORTGAGE_KINDS}
-                    />
-                    <TextField
-                      label="Original amount ($)"
-                      type="number"
-                      value={m.original_amount}
-                      onChange={(v) => setMortgage(idx, { original_amount: v })}
-                    />
-                    <TextField
-                      label="Current balance ($)"
-                      type="number"
-                      value={m.current_balance}
-                      onChange={(v) => setMortgage(idx, { current_balance: v })}
-                    />
-                    <TextField
-                      label="Interest rate (%)"
-                      type="number"
-                      value={m.interest_rate}
-                      onChange={(v) => setMortgage(idx, { interest_rate: v })}
-                    />
-                    <TextField
-                      label="Monthly payment ($)"
-                      type="number"
-                      value={m.monthly_payment}
-                      onChange={(v) => setMortgage(idx, { monthly_payment: v })}
-                    />
-                    <TextField
-                      label="Escrow / mo ($)"
-                      type="number"
-                      value={m.escrow}
-                      onChange={(v) => setMortgage(idx, { escrow: v })}
-                    />
-                    <TextField
-                      label="Term (months)"
-                      type="number"
-                      value={m.term_months}
-                      onChange={(v) => setMortgage(idx, { term_months: v })}
-                    />
-                    <TextField
-                      label="Loan number"
-                      value={m.loan_number}
-                      onChange={(v) => setMortgage(idx, { loan_number: v })}
-                    />
-                    <TextField
-                      label="Start date"
-                      type="date"
-                      value={m.start_date}
-                      onChange={(v) => setMortgage(idx, { start_date: v })}
-                    />
-                    <TextField
-                      label="Maturity date"
-                      type="date"
-                      value={m.maturity_date}
-                      onChange={(v) => setMortgage(idx, { maturity_date: v })}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button onClick={() => setStep(3)}>Next</Button>
-          </div>
-        </Card>
-      )}
-
-      {/* Step 3: Review & submit */}
-      {step === 3 && (
-        <Card className="space-y-5 p-5">
-          <h2 className="font-display text-lg font-bold">
-            Review &amp; submit
-          </h2>
-
-          <dl className="space-y-3 text-sm">
-            <SummaryRow k="Name" v={property.name} />
-            <SummaryRow k="Address" v={property.address} />
-            <SummaryRow k="City" v={property.city} />
-            <SummaryRow
-              k="Property type"
-              v={humanize(property.property_type)}
-            />
-            <SummaryRow k="Strategy" v={humanize(property.strategy)} />
-            {property.units.trim() !== "" && (
-              <SummaryRow k="Units" v={property.units} />
-            )}
-            {property.occupied_units.trim() !== "" && (
-              <SummaryRow k="Occupied units" v={property.occupied_units} />
-            )}
-            {property.year_built.trim() !== "" && (
-              <SummaryRow k="Year built" v={property.year_built} />
-            )}
-            {property.monthly_rent.trim() !== "" && (
-              <SummaryRow k="Monthly rent" v={`$${property.monthly_rent}`} />
-            )}
-            {property.purchase_price.trim() !== "" && (
-              <SummaryRow
-                k="Purchase price"
-                v={`$${property.purchase_price}`}
-              />
-            )}
-            {property.acquired_on.trim() !== "" && (
-              <SummaryRow k="Acquired on" v={property.acquired_on} />
-            )}
-          </dl>
-
-          <div>
-            <h3 className="mb-2 text-sm font-bold text-ink-2">
-              Financing ({populatedMortgages.length})
-            </h3>
-            {populatedMortgages.length === 0 ? (
-              <p className="text-sm text-ink-3">No loans added.</p>
-            ) : (
-              <div className="space-y-3">
-                {populatedMortgages.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-line p-3 text-sm"
+            fields.map((field, idx) => (
+              <div
+                key={field.id}
+                className="space-y-4 rounded-xl border border-line bg-surface-2/40 p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-ink-2">
+                    Loan {idx + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(idx)}
+                    aria-label={`Remove loan ${idx + 1}`}
                   >
-                    <div className="mb-1 font-semibold">
-                      {m.lender_name.trim() || "Loan"} · {humanize(m.kind)}
-                    </div>
-                    <div className="text-ink-3">
-                      {m.original_amount.trim() !== "" &&
-                        `Orig $${m.original_amount} · `}
-                      {m.current_balance.trim() !== "" &&
-                        `Balance $${m.current_balance} · `}
-                      {m.interest_rate.trim() !== "" &&
-                        `${m.interest_rate}% · `}
-                      {m.monthly_payment.trim() !== "" &&
-                        `$${m.monthly_payment}/mo`}
-                    </div>
-                  </div>
-                ))}
+                    <Trash2 className="h-4 w-4" />
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    label="Lender name"
+                    placeholder="First National"
+                    {...register(`mortgages.${idx}.lender_name`)}
+                  />
+                  <SelectField
+                    label="Kind"
+                    {...register(`mortgages.${idx}.kind`)}
+                  >
+                    {MORTGAGE_KINDS.map((o) => (
+                      <option key={o} value={o}>
+                        {humanize(o)}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <TextField
+                    label="Original amount"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    {...register(`mortgages.${idx}.original_amount`)}
+                  />
+                  <TextField
+                    label="Current balance"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    {...register(`mortgages.${idx}.current_balance`)}
+                  />
+                  <TextField
+                    label="Interest rate (%)"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="6.5"
+                    {...register(`mortgages.${idx}.interest_rate`)}
+                  />
+                  <TextField
+                    label="Monthly payment"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    {...register(`mortgages.${idx}.monthly_payment`)}
+                  />
+                  <TextField
+                    label="Escrow / mo"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    {...register(`mortgages.${idx}.escrow`)}
+                  />
+                  <TextField
+                    label="Term (months)"
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="360"
+                    {...register(`mortgages.${idx}.term_months`)}
+                  />
+                  <TextField
+                    label="Loan number"
+                    {...register(`mortgages.${idx}.loan_number`)}
+                  />
+                  <TextField
+                    label="Start date"
+                    type="date"
+                    {...register(`mortgages.${idx}.start_date`)}
+                  />
+                  <TextField
+                    label="Maturity date"
+                    type="date"
+                    {...register(`mortgages.${idx}.maturity_date`)}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
 
-          <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
-            <input
-              type="checkbox"
+      {/* Submit */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-start gap-3">
+            <Switch
               checked={enrich}
-              onChange={(e) => setEnrich(e.target.checked)}
-              className="h-4 w-4 rounded border-line"
+              onCheckedChange={(v) =>
+                setValue("enrich", v, { shouldDirty: true })
+              }
+              aria-label="Run automated enrichment"
             />
-            Run automated enrichment after onboarding
+            <span className="text-sm">
+              <span className="font-semibold text-ink">
+                Run automated enrichment
+              </span>
+              <span className="block text-ink-3">
+                Fetch parcel records, taxes, and valuations after onboarding.
+              </span>
+            </span>
           </label>
-
-          {error && <p className="text-bad">{error}</p>}
-
-          <div className="flex justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setStep(2)}
-              disabled={submitting}
-            >
-              Back
+          <div className="flex items-center gap-2">
+            <Button asChild type="button" variant="outline">
+              <Link href="/console/properties">Cancel</Link>
             </Button>
-            <Button onClick={submit} disabled={submitting}>
+            <Button type="submit" disabled={submitting}>
+              <Building2 className="h-4 w-4" />
               {submitting ? "Onboarding…" : "Onboard property"}
             </Button>
           </div>
-        </Card>
-      )}
-    </div>
+        </CardContent>
+      </Card>
+    </form>
   );
 }
