@@ -13,6 +13,7 @@
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
+pub mod domains;
 pub mod entities;
 pub mod iam;
 pub mod llcs;
@@ -63,6 +64,8 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         platform::impersonate::impersonate,
         platform::impersonations::list_impersonations,
         platform::impersonations::revoke_impersonation,
+        // public routing entrypoint (host -> tenant + audience + theme)
+        domains::resolve::resolve,
         // module management (tenant software settings)
         modules::list::list,
         modules::set::set,
