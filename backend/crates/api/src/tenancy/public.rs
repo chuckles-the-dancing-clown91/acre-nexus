@@ -11,6 +11,8 @@ pub struct PublicTenant {
     pub tenant_id: Uuid,
     /// The app surface this host serves (`admin` / `owner` / `renter`), when the
     /// tenant was resolved from a configured domain. Defaults to `admin`.
+    /// Consumed by audience-gated public routes (e.g. owner vs renter portal).
+    #[allow(dead_code)]
     pub audience: String,
 }
 

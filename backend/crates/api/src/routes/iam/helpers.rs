@@ -100,6 +100,8 @@ pub(crate) async fn load_user_detail(
                 role_key: r.key,
                 role_name: r.name,
                 tenant_id: ur.tenant_id,
+                scope: ur.scope,
+                scope_ref_id: ur.scope_ref_id,
             });
         }
     }

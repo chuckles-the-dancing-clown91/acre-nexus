@@ -72,6 +72,7 @@ impl ResourceScope {
     }
 
     /// A resource scoped to a whole legal entity (its books / cap table).
+    #[allow(dead_code)] // used by cap-table/banking scope checks as they adopt require_scoped
     pub fn entity(entity_id: Uuid) -> Self {
         ResourceScope {
             entity_id: Some(entity_id),
@@ -80,6 +81,7 @@ impl ResourceScope {
     }
 
     /// A resource scoped to a whole portfolio.
+    #[allow(dead_code)] // used by portfolio scope checks as they adopt require_scoped
     pub fn portfolio(portfolio_id: Uuid) -> Self {
         ResourceScope {
             portfolio_id: Some(portfolio_id),

@@ -236,6 +236,10 @@ pub struct UserRoleDto {
     pub role_key: String,
     pub role_name: String,
     pub tenant_id: Option<Uuid>,
+    /// Coverage scope: platform | tenant | entity | portfolio | property.
+    pub scope: String,
+    /// The entity/portfolio/property id when the scope is narrower than tenant.
+    pub scope_ref_id: Option<Uuid>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

@@ -15,6 +15,10 @@ use crate::error::ApiError;
 use uuid::Uuid;
 
 /// One side of a posting against a bank account.
+///
+/// Part of the accounting invariant surface that future posting code calls; the
+/// double-entry engine that constructs these lands with the ledger tables.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub struct PostingLeg {
     /// The legal entity (LLC) whose ledger this leg belongs to.
@@ -29,6 +33,7 @@ pub struct PostingLeg {
 /// both sides belong to the **same** legal entity. Operating-to-operating and
 /// operating-to-trust transfers across entities are permitted (e.g. a management
 /// fee sweep); trust-to-trust across entities is the commingling the rule forbids.
+#[allow(dead_code)]
 pub fn assert_no_commingling(from: PostingLeg, to: PostingLeg) -> Result<(), ApiError> {
     if from.is_trust && to.is_trust && from.entity_id != to.entity_id {
         return Err(ApiError::BadRequest(

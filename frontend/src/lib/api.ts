@@ -370,6 +370,86 @@ export const api = {
   // ---- flips module (preview) ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+
+  // ---- white-label domains & routing ----
+  domains: () => request<DomainInfo[]>("/domains", { auth: true }),
+  createDomain: (hostname: string, audience: string) =>
+    request<DomainInfo>("/domains", {
+      method: "POST",
+      auth: true,
+      body: { hostname, audience },
+    }),
+  verifyDomain: (id: string) =>
+    request<DomainInfo>(`/domains/${id}/verify`, {
+      method: "POST",
+      auth: true,
+    }),
+  deleteDomain: (id: string) =>
+    request<void>(`/domains/${id}`, { method: "DELETE", auth: true }),
+  /** Public: resolve a host to its tenant + audience + branding (no auth). */
+  resolveHost: (host: string) =>
+    request<ResolveResult>(`/public/resolve?host=${encodeURIComponent(host)}`),
+
+  // ---- onboarding workflow (per-tenant setup state machine) ----
+  onboardingWorkflow: () =>
+    request<OnboardingSnapshot>("/onboarding/workflow", { auth: true }),
+  advanceOnboarding: () =>
+    request<OnboardingSnapshot>("/onboarding/workflow/advance", {
+      method: "POST",
+      auth: true,
+    }),
+
+  // ---- portfolios ----
+  portfolios: () => request<PortfolioInfo[]>("/portfolios", { auth: true }),
+  createPortfolio: (name: string, strategy?: string) =>
+    request<PortfolioInfo>("/portfolios", {
+      method: "POST",
+      auth: true,
+      body: { name, strategy },
+    }),
+
+  // ---- legal-entity cap table + banking ----
+  capTable: (entityId: string) =>
+    request<CapTable>(`/entities/${entityId}/cap-table`, { auth: true }),
+  addOwnership: (entityId: string, body: AddOwnershipInput) =>
+    request<unknown>(`/entities/${entityId}/cap-table`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  bankAccounts: (entityId: string) =>
+    request<BankAccount[]>(`/entities/${entityId}/bank-accounts`, {
+      auth: true,
+    }),
+  createBankAccount: (entityId: string, body: CreateBankAccountInput) =>
+    request<BankAccount>(`/entities/${entityId}/bank-accounts`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- platform plane: staff + audited impersonation + provisioning ----
+  platformStaff: () =>
+    request<PlatformStaff[]>("/platform/staff", { auth: true }),
+  impersonations: () =>
+    request<ImpersonationSummary[]>("/platform/impersonations", { auth: true }),
+  impersonate: (tenant: string, reason: string) =>
+    request<ImpersonationResult>("/platform/impersonate", {
+      method: "POST",
+      auth: true,
+      body: { tenant, reason },
+    }),
+  revokeImpersonation: (id: string) =>
+    request<void>(`/platform/impersonations/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  provisionTenant: (body: ProvisionInput) =>
+    request<ProvisionResult>("/platform/provision", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
 };
 
 /**
@@ -446,7 +526,15 @@ export const iam = {
     }),
 
   // ---- user roles ----
-  assignRole: (userId: string, body: { role_id: string; tenant_id?: string }) =>
+  assignRole: (
+    userId: string,
+    body: {
+      role_id: string;
+      tenant_id?: string;
+      scope?: string;
+      scope_ref_id?: string;
+    }
+  ) =>
     request<void>(`/admin/users/${userId}/roles`, {
       method: "POST",
       auth: true,
@@ -631,6 +719,9 @@ export interface UserRole {
   role_key: string;
   role_name: string;
   tenant_id: string | null;
+  /** Coverage scope: platform | tenant | entity | portfolio | property. */
+  scope: string;
+  scope_ref_id: string | null;
 }
 
 /** Full user record returned by detail / mutation endpoints. */
@@ -738,4 +829,141 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+// ---- tenancy spec: domains, onboarding, multi-entity, platform plane ----
+
+export interface DnsInstructions {
+  cname_target: string;
+  txt_name: string;
+  txt_value: string;
+}
+
+export interface DomainInfo {
+  id: string;
+  hostname: string;
+  kind: string;
+  audience: string;
+  verification_token: string | null;
+  verified: boolean;
+  verified_at: string | null;
+  tls_status: string;
+  dns_instructions: DnsInstructions | null;
+}
+
+export interface ResolveResult {
+  tenant_id: string;
+  tenant_slug: string;
+  audience: string;
+  company_name: string;
+  primary_color: string;
+  accent_color: string;
+}
+
+export interface OnboardingStep {
+  key: string;
+  label: string;
+  complete: boolean;
+  optional: boolean;
+}
+
+export interface OnboardingSnapshot {
+  state: string;
+  steps: OnboardingStep[];
+  live: boolean;
+}
+
+export interface PortfolioInfo {
+  id: string;
+  name: string;
+  strategy: string;
+  property_count: number;
+}
+
+export interface CapTableRow {
+  ownership_id: string;
+  owner_id: string;
+  owner_name: string;
+  owner_kind: string;
+  ownership_bps: number;
+  ownership_label: string;
+  role: string;
+}
+
+export interface CapTable {
+  entity_id: string;
+  rows: CapTableRow[];
+  total_bps: number;
+  total_label: string;
+}
+
+export interface AddOwnershipInput {
+  owner_id?: string;
+  owner_name?: string;
+  owner_kind?: string;
+  ownership_bps: number;
+  role?: string;
+}
+
+export interface BankAccount {
+  id: string;
+  entity_id: string;
+  kind: string;
+  institution: string;
+  masked_number: string | null;
+  status: string;
+}
+
+export interface CreateBankAccountInput {
+  kind: string;
+  institution: string;
+  account_number?: string;
+}
+
+export interface PlatformStaff {
+  id: string;
+  user_id: string;
+  email: string;
+  name: string;
+  status: string;
+}
+
+export interface ImpersonationSummary {
+  id: string;
+  platform_staff_id: string;
+  tenant_id: string;
+  tenant_name: string | null;
+  reason: string;
+  expires_at: string;
+  revoked_at: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ImpersonationResult {
+  session_id: string;
+  tenant_id: string;
+  reason: string;
+  expires_at: string;
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface ProvisionInput {
+  slug: string;
+  name: string;
+  plan?: string;
+  owner_email: string;
+  owner_name?: string;
+  owner_password?: string;
+}
+
+export interface ProvisionResult {
+  tenant_id: string;
+  slug: string;
+  subdomain: string;
+  owner_user_id: string;
+  owner_email: string;
+  temp_password: string | null;
 }

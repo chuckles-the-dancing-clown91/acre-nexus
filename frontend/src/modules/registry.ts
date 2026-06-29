@@ -57,6 +57,12 @@ export const MODULES: ModuleDef[] = [
         icon: "shield",
         permission: "property:read",
       },
+      {
+        href: "/console/onboarding",
+        label: "Getting set up",
+        icon: "check",
+        permission: "tenant:manage",
+      },
     ],
   },
   {
@@ -145,6 +151,21 @@ export const MODULES: ModuleDef[] = [
     description: "White-label branding, colours, and legal templates.",
     defaultEnabled: true,
     nav: [],
+  },
+  {
+    key: "domains",
+    label: "Domains & Routing",
+    description:
+      "White-label custom domains and audience routing (admin / owner / renter portals).",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/domains",
+        label: "Domains",
+        icon: "globe",
+        permission: "domain:read",
+      },
+    ],
   },
   {
     key: "flips",

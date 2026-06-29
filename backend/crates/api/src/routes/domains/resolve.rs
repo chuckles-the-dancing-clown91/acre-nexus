@@ -10,7 +10,6 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 use crate::tenancy::helpers::resolve_host;
 use entity::prelude::{Tenant, Theme};
-use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::serde::json::Json;
 use rocket::{get, State};

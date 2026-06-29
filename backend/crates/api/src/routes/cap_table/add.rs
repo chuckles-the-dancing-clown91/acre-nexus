@@ -12,7 +12,7 @@ use chrono::Utc;
 use entity::prelude::{Llc, Owner};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use uuid::Uuid;
 
 /// `POST /entities/<entity_id>/cap-table` — add a cap-table row.
