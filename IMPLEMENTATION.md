@@ -20,6 +20,7 @@ This repository contains:
 | `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
 | `docs/INVESTING.md` | Investor onboarding, entities registry, financing, and workflows. |
 | `docs/RENTALS.md` | Rentals (units/leases/payments), maintenance work orders, and title (ownership/liens). |
+| `docs/TENANCY.md` | Onboarding, multi-entity (LLC cap tables, trust accounts), the platform plane + audited impersonation, scoped RBAC, and white-label multi-domain routing. |
 
 ## What's implemented (this pass)
 
