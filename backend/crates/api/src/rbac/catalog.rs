@@ -226,6 +226,27 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "both",
     },
     PermissionMeta {
+        key: "domain:read",
+        category: "Settings",
+        label: "View domains",
+        description: "View white-label domains and their verification / TLS status.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "domain:manage",
+        category: "Settings",
+        label: "Manage domains",
+        description: "Add custom domains, verify DNS, and set audiences.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "platform:impersonate",
+        category: "Platform",
+        label: "Impersonate tenants",
+        description: "Begin an audited, time-boxed impersonation session into a client workspace.",
+        scope: "platform",
+    },
+    PermissionMeta {
         key: "platform:admin",
         category: "Platform",
         label: "Platform administrator",

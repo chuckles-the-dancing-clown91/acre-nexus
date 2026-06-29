@@ -790,6 +790,7 @@ async fn seed_tenant(
         plan: Set(plan.into()),
         status: Set("active".into()),
         custom_domain: Set(None),
+        parent_org_id: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
@@ -945,6 +946,8 @@ async fn assign_role(
         user_id: Set(user_id),
         role_id: Set(role_id),
         tenant_id: Set(tenant_id),
+        scope: Set(if tenant_id.is_some() { "tenant" } else { "platform" }.into()),
+        scope_ref_id: Set(None),
     }
     .insert(db)
     .await?;
@@ -991,6 +994,9 @@ async fn seed_llc(
         name: Set(name.into()),
         ein: Set(ein.into()),
         state: Set(state.into()),
+        entity_type: Set("llc".into()),
+        registered_agent: Set(None),
+        status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
@@ -1018,6 +1024,7 @@ async fn seed_property(
         id: Set(id),
         tenant_id: Set(tenant_id),
         llc_id: Set(Some(llc_id)),
+        portfolio_id: Set(None),
         name: Set(name.into()),
         address: Set(address.into()),
         city: Set(city.into()),

@@ -14,6 +14,9 @@ mod m20240101_000006_audit_request;
 mod m20240101_000007_property_data;
 mod m20240101_000008_investing;
 mod m20240101_000009_rentals_title;
+mod m20240101_000010_tenancy_entities;
+mod m20240101_000011_platform_plane;
+mod m20240101_000012_domains_onboarding;
 
 pub struct Migrator;
 
@@ -30,6 +33,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000007_property_data::Migration),
             Box::new(m20240101_000008_investing::Migration),
             Box::new(m20240101_000009_rentals_title::Migration),
+            Box::new(m20240101_000010_tenancy_entities::Migration),
+            Box::new(m20240101_000011_platform_plane::Migration),
+            Box::new(m20240101_000012_domains_onboarding::Migration),
         ]
     }
 }

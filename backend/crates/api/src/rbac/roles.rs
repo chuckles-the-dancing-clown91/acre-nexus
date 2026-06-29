@@ -33,6 +33,8 @@ const TENANT_FULL: &[Permission] = &[
     ApplicationRead,
     ApplicationWrite,
     ThemeWrite,
+    DomainRead,
+    DomainManage,
     ApiTokenManage,
     BillingRead,
     TenantManage,
@@ -73,6 +75,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             PropertyRead,
             ApplicationRead,
             AuditRead,
+            ImpersonateTenant,
         ],
     },
     SystemRole {
@@ -89,6 +92,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ListingRead,
             ApplicationRead,
             TenantManage,
+            ImpersonateTenant,
         ],
     },
     SystemRole {

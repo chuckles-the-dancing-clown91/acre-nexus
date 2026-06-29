@@ -25,6 +25,7 @@ pub async fn create(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         llc_id: Set(b.llc_id),
+        portfolio_id: Set(b.portfolio_id),
         name: Set(b.name),
         address: Set(b.address),
         city: Set(b.city),

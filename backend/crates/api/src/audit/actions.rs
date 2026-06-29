@@ -67,4 +67,18 @@ pub const USER_CREATE: &str = "user.create";
 pub const ROLE_CREATE: &str = "role.create";
 pub const ROLE_UPDATE: &str = "role.update";
 pub const ROLE_DELETE: &str = "role.delete";
+pub const ROLE_ASSIGN: &str = "role.assign";
 pub const PII_REVEAL: &str = "pii.reveal";
+
+// ---- Tenancy spec: provisioning, platform plane, routing, multi-entity ----
+pub const TENANT_PROVISION: &str = "tenant.provision";
+pub const IMPERSONATION_START: &str = "impersonation.start";
+pub const IMPERSONATION_REVOKE: &str = "impersonation.revoke";
+pub const DOMAIN_CREATE: &str = "domain.create";
+pub const DOMAIN_VERIFY: &str = "domain.verify";
+pub const DOMAIN_DELETE: &str = "domain.delete";
+pub const PORTFOLIO_CREATE: &str = "portfolio.create";
+pub const OWNER_CREATE: &str = "owner.create";
+pub const ENTITY_OWNERSHIP_ADD: &str = "entity_ownership.add";
+pub const BANK_ACCOUNT_CREATE: &str = "bank_account.create";
+pub const ONBOARDING_ADVANCE: &str = "onboarding.advance";
