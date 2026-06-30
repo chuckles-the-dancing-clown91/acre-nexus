@@ -13,6 +13,9 @@ pub struct ApplicationResp {
     pub credit_score: Option<i32>,
     pub status: String,
     pub move_in: String,
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
 }
 
 impl From<entity::application::Model> for ApplicationResp {
@@ -27,6 +30,9 @@ impl From<entity::application::Model> for ApplicationResp {
             credit_score: a.credit_score,
             status: a.status,
             move_in: a.move_in,
+            has_pet: a.has_pet,
+            pet_details: a.pet_details,
+            is_military: a.is_military,
         }
     }
 }
@@ -35,4 +41,15 @@ impl From<entity::application::Model> for ApplicationResp {
 pub struct UpdateApplicationReq {
     /// `New` | `Screening` | `Approved` | `Declined`.
     pub status: String,
+}
+
+/// Convert an approved application into a (draft) lease.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ConvertReq {
+    pub property_id: Uuid,
+    pub unit_id: Option<Uuid>,
+    pub rent_cents: i64,
+    pub deposit_cents: Option<i64>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
 }
