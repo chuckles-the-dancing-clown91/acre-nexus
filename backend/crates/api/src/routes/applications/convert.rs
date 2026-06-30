@@ -16,9 +16,7 @@ use chrono::Utc;
 use entity::prelude::{Application, Lease, Property, Vehicle};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use uuid::Uuid;
 
 /// `POST /applications/<id>/convert-to-lease` — create a lease from an application.

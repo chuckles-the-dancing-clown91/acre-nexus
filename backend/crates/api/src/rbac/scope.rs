@@ -63,7 +63,11 @@ pub struct ResourceScope {
 
 impl ResourceScope {
     /// A resource scoped to a single property and its grouping/title chain.
-    pub fn property(property_id: Uuid, portfolio_id: Option<Uuid>, entity_id: Option<Uuid>) -> Self {
+    pub fn property(
+        property_id: Uuid,
+        portfolio_id: Option<Uuid>,
+        entity_id: Option<Uuid>,
+    ) -> Self {
         ResourceScope {
             property_id: Some(property_id),
             portfolio_id,

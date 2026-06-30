@@ -64,8 +64,7 @@ pub async fn revoke_impersonation(
     id: &str,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Permission::ImpersonateTenant)?;
-    let sid =
-        Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid session id".into()))?;
+    let sid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid session id".into()))?;
     let session = ImpersonationSession::find_by_id(sid)
         .one(&state.db)
         .await?

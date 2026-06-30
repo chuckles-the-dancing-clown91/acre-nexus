@@ -39,7 +39,10 @@ pub fn interpolate(template: &str, vars: &HashMap<&str, String>) -> String {
 }
 
 fn template_str(templates: &serde_json::Value, key: &str) -> Option<String> {
-    templates.get(key).and_then(|v| v.as_str()).map(str::to_string)
+    templates
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }
 
 /// A one-line human description of a vehicle, e.g. "2021 Toyota Tacoma (Silver, plate ABC-1234)".
@@ -70,7 +73,11 @@ pub fn describe_vehicle(v: &vehicle::Model) -> String {
 /// (discounts/rebates are negative). Not floored — if discounts exceed rent the
 /// resident carries a credit, and the printed line items must sum to this total.
 pub fn monthly_total_cents(lease: &lease::Model, charges: &[lease_charge::Model]) -> i64 {
-    let add: i64 = charges.iter().filter(|c| c.recurring).map(|c| c.amount_cents).sum();
+    let add: i64 = charges
+        .iter()
+        .filter(|c| c.recurring)
+        .map(|c| c.amount_cents)
+        .sum();
     lease.rent_cents + add
 }
 
@@ -91,7 +98,11 @@ pub fn render(
     let vehicles_desc = if vehicles.is_empty() {
         "none on file".to_string()
     } else {
-        vehicles.iter().map(describe_vehicle).collect::<Vec<_>>().join("; ")
+        vehicles
+            .iter()
+            .map(describe_vehicle)
+            .collect::<Vec<_>>()
+            .join("; ")
     };
     let monthly = monthly_total_cents(lease, charges);
 
@@ -105,16 +116,26 @@ pub fn render(
     );
     vars.insert(
         "unit",
-        unit.map(|u| u.unit_number.clone()).unwrap_or_else(|| "—".into()),
+        unit.map(|u| u.unit_number.clone())
+            .unwrap_or_else(|| "—".into()),
     );
     vars.insert("rent", usd(lease.rent_cents));
     vars.insert("deposit", usd(lease.deposit_cents.unwrap_or(0)));
     vars.insert("monthly_total", usd(monthly));
     vars.insert("start_date", lease.start_date.clone());
-    vars.insert("end_date", lease.end_date.clone().unwrap_or_else(|| "month-to-month".into()));
+    vars.insert(
+        "end_date",
+        lease
+            .end_date
+            .clone()
+            .unwrap_or_else(|| "month-to-month".into()),
+    );
     vars.insert("grace_days", "5".into());
     vars.insert("late_fee", usd(5000));
-    vars.insert("pet_details", lease.pet_details.clone().unwrap_or_else(|| "N/A".into()));
+    vars.insert(
+        "pet_details",
+        lease.pet_details.clone().unwrap_or_else(|| "N/A".into()),
+    );
     vars.insert("vehicles", vehicles_desc.clone());
 
     let mut doc = String::new();
@@ -137,7 +158,10 @@ pub fn render(
     if let Some(email) = &lease.tenant_email {
         doc.push_str(&format!("   Resident email: {email}\n"));
     }
-    doc.push_str(&format!("   Premises: {}, {}", property.address, property.city));
+    doc.push_str(&format!(
+        "   Premises: {}, {}",
+        property.address, property.city
+    ));
     if let Some(u) = unit {
         doc.push_str(&format!(", Unit {}", u.unit_number));
     }
@@ -147,11 +171,17 @@ pub fn render(
     doc.push_str(&format!(
         "   Start: {}    End: {}\n\n",
         lease.start_date,
-        lease.end_date.clone().unwrap_or_else(|| "month-to-month".into())
+        lease
+            .end_date
+            .clone()
+            .unwrap_or_else(|| "month-to-month".into())
     ));
 
     doc.push_str("3. RENT & CHARGES\n");
-    doc.push_str(&format!("   Base rent: {} / month\n", usd(lease.rent_cents)));
+    doc.push_str(&format!(
+        "   Base rent: {} / month\n",
+        usd(lease.rent_cents)
+    ));
     for c in charges.iter().filter(|c| c.recurring) {
         let sign = if c.amount_cents < 0 { "-" } else { "+" };
         doc.push_str(&format!(
@@ -193,7 +223,10 @@ pub fn render(
         doc.push_str("5. PETS\n");
         doc.push_str(&format!(
             "   Resident is permitted the following pet(s): {}.\n\n",
-            lease.pet_details.clone().unwrap_or_else(|| "as disclosed".into())
+            lease
+                .pet_details
+                .clone()
+                .unwrap_or_else(|| "as disclosed".into())
         ));
     }
 
@@ -215,7 +248,9 @@ pub fn render(
     }
 
     doc.push_str("SIGNATURES\n");
-    doc.push_str(&format!("   Landlord: {landlord} ____________________  Date: __________\n"));
+    doc.push_str(&format!(
+        "   Landlord: {landlord} ____________________  Date: __________\n"
+    ));
     doc.push_str(&format!(
         "   Resident: {} ____________________  Date: __________\n",
         lease.tenant_name
@@ -240,6 +275,9 @@ mod tests {
     fn interpolate_handles_amount() {
         let mut vars = HashMap::new();
         vars.insert("amount", "$50.00".to_string());
-        assert_eq!(interpolate("Pet rent of {amount}.", &vars), "Pet rent of $50.00.");
+        assert_eq!(
+            interpolate("Pet rent of {amount}.", &vars),
+            "Pet rent of $50.00."
+        );
     }
 }

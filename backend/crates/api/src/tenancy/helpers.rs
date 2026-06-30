@@ -15,7 +15,11 @@ pub(crate) struct ResolvedHost {
 /// (§7.2). Only verified domains route; an unverified custom domain returns
 /// `None` so the caller can fall back to the marketing/landing surface.
 pub(crate) async fn resolve_host(state: &AppState, hostname: &str) -> Option<ResolvedHost> {
-    let host = hostname.split(':').next().unwrap_or(hostname).to_lowercase();
+    let host = hostname
+        .split(':')
+        .next()
+        .unwrap_or(hostname)
+        .to_lowercase();
     Domain::find()
         .filter(entity::domain::Column::Hostname.eq(host))
         .one(&state.db)

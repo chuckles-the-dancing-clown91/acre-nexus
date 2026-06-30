@@ -200,9 +200,7 @@ impl MigrationTrait for Migration {
         // Backfill: a null tenant_id assignment is a platform-wide grant.
         manager
             .get_connection()
-            .execute_unprepared(
-                "UPDATE user_role SET scope = 'platform' WHERE tenant_id IS NULL;",
-            )
+            .execute_unprepared("UPDATE user_role SET scope = 'platform' WHERE tenant_id IS NULL;")
             .await?;
 
         // ---- RLS on the new tenant-scoped tables ----

@@ -57,7 +57,14 @@ pub async fn generate(
         .map(|t| t.legal_templates)
         .unwrap_or_else(|| serde_json::json!({}));
 
-    let body = leasedoc::render(&templates, &lease, &property, unit.as_ref(), &charges, &vehicles);
+    let body = leasedoc::render(
+        &templates,
+        &lease,
+        &property,
+        unit.as_ref(),
+        &charges,
+        &vehicles,
+    );
 
     let now = Utc::now();
     let saved = entity::lease_document::ActiveModel {

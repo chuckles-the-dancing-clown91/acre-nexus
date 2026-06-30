@@ -7,9 +7,7 @@
 //! reverted to `vacant` when none does (leaving `make_ready`/`down` untouched).
 
 use entity::prelude::{Lease, Property, Unit};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashSet;
 use uuid::Uuid;
 

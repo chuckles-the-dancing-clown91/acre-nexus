@@ -24,12 +24,14 @@ pub async fn list(
     application_id: Option<String>,
 ) -> ApiResult<Json<Vec<VehicleDto>>> {
     user.require(Permission::VehicleRead)?;
-    let mut q =
-        Vehicle::find().filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id));
+    let mut q = Vehicle::find().filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id));
     if let Some(l) = lease_id.as_deref().and_then(|s| Uuid::parse_str(s).ok()) {
         q = q.filter(entity::vehicle::Column::LeaseId.eq(l));
     }
-    if let Some(a) = application_id.as_deref().and_then(|s| Uuid::parse_str(s).ok()) {
+    if let Some(a) = application_id
+        .as_deref()
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
         q = q.filter(entity::vehicle::Column::ApplicationId.eq(a));
     }
     let rows = q

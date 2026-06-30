@@ -70,7 +70,11 @@ impl MigrationTrait for Migration {
                 vec![
                     col("has_pet").boolean().not_null().default(false).take(),
                     col("pet_details").text().null().take(),
-                    col("is_military").boolean().not_null().default(false).take(),
+                    col("is_military")
+                        .boolean()
+                        .not_null()
+                        .default(false)
+                        .take(),
                 ],
             ),
             (
@@ -79,7 +83,11 @@ impl MigrationTrait for Migration {
                     col("application_id").uuid().null().take(),
                     col("has_pet").boolean().not_null().default(false).take(),
                     col("pet_details").text().null().take(),
-                    col("is_military").boolean().not_null().default(false).take(),
+                    col("is_military")
+                        .boolean()
+                        .not_null()
+                        .default(false)
+                        .take(),
                 ],
             ),
         ] {
@@ -194,12 +202,22 @@ impl MigrationTrait for Migration {
                     .col(uuid_pk())
                     .col(col("tenant_id").uuid().not_null())
                     .col(col("lease_id").uuid().not_null())
-                    .col(col("title").string().not_null().default("Residential Lease Agreement"))
+                    .col(
+                        col("title")
+                            .string()
+                            .not_null()
+                            .default("Residential Lease Agreement"),
+                    )
                     .col(col("body").text().not_null())
                     .col(col("format").string().not_null().default("text"))
                     // `draft` | `sent` | `signed`
                     .col(col("status").string().not_null().default("draft"))
-                    .col(col("generated_at").timestamp_with_time_zone().not_null().default(Expr::current_timestamp()))
+                    .col(
+                        col("generated_at")
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
                     .col(col("signed_at").timestamp_with_time_zone().null())
                     .col(col("signed_by").string().null())
                     .col(ts("created_at"))

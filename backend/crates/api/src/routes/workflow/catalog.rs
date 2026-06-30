@@ -5,8 +5,8 @@
 use crate::auth::AuthUser;
 use crate::error::ApiResult;
 use crate::rbac::Permission;
-use rocket::serde::json::Json;
 use rocket::get;
+use rocket::serde::json::Json;
 use serde::Serialize;
 
 #[derive(Serialize, schemars::JsonSchema)]

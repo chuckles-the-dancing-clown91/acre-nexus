@@ -43,7 +43,9 @@ pub async fn update(
     }
     if let Some(v) = b.amount_cents {
         if v < 0 {
-            return Err(ApiError::BadRequest("amount_cents must be non-negative".into()));
+            return Err(ApiError::BadRequest(
+                "amount_cents must be non-negative".into(),
+            ));
         }
         am.amount_cents = Set(v);
     }

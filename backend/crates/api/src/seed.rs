@@ -178,10 +178,42 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_theme(db, cascade, "Cascade Living LLC", "#1C7C53").await?;
 
     // ---- white-label domains (subdomain + a verified custom domain for Northwind) ----
-    seed_domain(db, northwind, "northwind.acrenexus.com", "subdomain", "admin", true).await?;
-    seed_domain(db, northwind, "owners.northwindpg.com", "custom", "owner", true).await?;
-    seed_domain(db, northwind, "pay.northwindpg.com", "custom", "renter", false).await?;
-    seed_domain(db, cascade, "cascade.acrenexus.com", "subdomain", "admin", true).await?;
+    seed_domain(
+        db,
+        northwind,
+        "northwind.acrenexus.com",
+        "subdomain",
+        "admin",
+        true,
+    )
+    .await?;
+    seed_domain(
+        db,
+        northwind,
+        "owners.northwindpg.com",
+        "custom",
+        "owner",
+        true,
+    )
+    .await?;
+    seed_domain(
+        db,
+        northwind,
+        "pay.northwindpg.com",
+        "custom",
+        "renter",
+        false,
+    )
+    .await?;
+    seed_domain(
+        db,
+        cascade,
+        "cascade.acrenexus.com",
+        "subdomain",
+        "admin",
+        true,
+    )
+    .await?;
 
     // ---- onboarding workflows (one per tenant) ----
     seed_onboarding(db, northwind, "live").await?;
@@ -190,12 +222,32 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // ---- fee schedule (conditional fees / discounts / amenities) ----
     seed_fee(db, northwind, "pet_fee", "fee", "Pet rent", 5000, true, "has_pet",
         "Resident discloses pet(s): {pet_details}. A monthly pet rent of {amount} applies and resident agrees to the pet addendum.").await?;
-    seed_fee(db, northwind, "military_discount", "discount", "Military discount", 10000, true, "is_military",
-        "A monthly military/veteran discount of {amount} is applied to base rent.").await?;
+    seed_fee(
+        db,
+        northwind,
+        "military_discount",
+        "discount",
+        "Military discount",
+        10000,
+        true,
+        "is_military",
+        "A monthly military/veteran discount of {amount} is applied to base rent.",
+    )
+    .await?;
     seed_fee(db, northwind, "garage", "amenity", "Reserved garage", 15000, true, "manual",
         "Resident is assigned one reserved garage for vehicle: {vehicles}. Monthly amenity fee of {amount} applies.").await?;
-    seed_fee(db, northwind, "application_fee", "fee", "Application fee", 5000, false, "manual",
-        "A one-time application/processing fee of {amount}.").await?;
+    seed_fee(
+        db,
+        northwind,
+        "application_fee",
+        "fee",
+        "Application fee",
+        5000,
+        false,
+        "manual",
+        "A one-time application/processing fee of {amount}.",
+    )
+    .await?;
 
     // ---- Northwind LLCs + properties ----
     let maple = seed_llc(db, northwind, "Maple Holdings LLC", "12-3456789", "OR").await?;
@@ -208,7 +260,15 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let investor = seed_owner(db, northwind, "individual", "Dana Kessler").await?;
     seed_entity_ownership(db, northwind, maple, firm_owner, 6000, "manager").await?;
     seed_entity_ownership(db, northwind, maple, investor, 4000, "investor").await?;
-    seed_bank_account(db, northwind, maple, "operating", "First Cascade Bank", "1042").await?;
+    seed_bank_account(
+        db,
+        northwind,
+        maple,
+        "operating",
+        "First Cascade Bank",
+        "1042",
+    )
+    .await?;
     seed_bank_account(db, northwind, maple, "trust", "First Cascade Bank", "7781").await?;
     let _flip_portfolio = seed_portfolio(db, northwind, "Pacific NW Cashflow", "cashflow").await?;
 
@@ -491,7 +551,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
     seed_lease_payment(db, northwind, behind, "2025-06-01", 162_000, "late").await?;
     // Demo vehicle + a garage amenity charge on the behind lease.
-    seed_vehicle(db, northwind, behind, "Toyota", "Tacoma", 2021, "Silver", "ABC-1234").await?;
+    seed_vehicle(
+        db, northwind, behind, "Toyota", "Tacoma", 2021, "Silver", "ABC-1234",
+    )
+    .await?;
     seed_lease_charge(
         db,
         northwind,
@@ -1092,7 +1155,12 @@ async fn assign_role(
         user_id: Set(user_id),
         role_id: Set(role_id),
         tenant_id: Set(tenant_id),
-        scope: Set(if tenant_id.is_some() { "tenant" } else { "platform" }.into()),
+        scope: Set(if tenant_id.is_some() {
+            "tenant"
+        } else {
+            "platform"
+        }
+        .into()),
         scope_ref_id: Set(None),
     }
     .insert(db)

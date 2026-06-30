@@ -101,7 +101,12 @@ impl MigrationTrait for Migration {
                     // The current furthest-reached state (see routes::onboarding::state).
                     .col(col("state").string().not_null().default("provisioning"))
                     // Per-step completion + metadata, recomputed on read.
-                    .col(col("steps").json_binary().not_null().default(Expr::cust("'{}'::jsonb")))
+                    .col(
+                        col("steps")
+                            .json_binary()
+                            .not_null()
+                            .default(Expr::cust("'{}'::jsonb")),
+                    )
                     .col(ts("created_at"))
                     .col(ts("updated_at"))
                     .to_owned(),

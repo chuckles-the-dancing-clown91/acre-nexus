@@ -51,7 +51,11 @@ pub async fn impersonate(
     let tenant_id = resolve_tenant_ref(state, &b.tenant)
         .await
         .ok_or_else(|| ApiError::NotFound("tenant not found".into()))?;
-    if Tenant::find_by_id(tenant_id).one(&state.db).await?.is_none() {
+    if Tenant::find_by_id(tenant_id)
+        .one(&state.db)
+        .await?
+        .is_none()
+    {
         return Err(ApiError::NotFound("tenant not found".into()));
     }
 

@@ -34,7 +34,9 @@ pub async fn create(
     }
     let condition = b.condition_type.unwrap_or_else(|| "manual".into());
     if !CONDITIONS.contains(&condition.as_str()) {
-        return Err(ApiError::BadRequest(format!("invalid condition_type: {condition}")));
+        return Err(ApiError::BadRequest(format!(
+            "invalid condition_type: {condition}"
+        )));
     }
     if b.amount_cents < 0 {
         return Err(ApiError::BadRequest(
@@ -49,7 +51,9 @@ pub async fn create(
         .await?
         .is_some()
     {
-        return Err(ApiError::Conflict(format!("fee code '{code}' already exists")));
+        return Err(ApiError::Conflict(format!(
+            "fee code '{code}' already exists"
+        )));
     }
 
     let now = Utc::now();

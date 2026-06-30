@@ -34,7 +34,9 @@ pub async fn create(
     }
     let audience = b.audience.unwrap_or_else(|| "admin".into());
     if !VALID_AUDIENCES.contains(&audience.as_str()) {
-        return Err(ApiError::BadRequest(format!("invalid audience: {audience}")));
+        return Err(ApiError::BadRequest(format!(
+            "invalid audience: {audience}"
+        )));
     }
 
     if Domain::find()

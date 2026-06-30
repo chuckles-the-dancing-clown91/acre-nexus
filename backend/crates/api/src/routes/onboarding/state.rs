@@ -45,13 +45,41 @@ struct StepDef {
 /// Ordered steps after `provisioning`. `domains_configured` and `staff_invited`
 /// are optional (don't block `live`).
 const STEPS: &[StepDef] = &[
-    StepDef { key: "firm_admin_accepted", label: "Firm owner active", optional: false },
-    StepDef { key: "branding_configured", label: "Branding configured", optional: false },
-    StepDef { key: "domains_configured", label: "Domains configured", optional: true },
-    StepDef { key: "entities_created", label: "Legal entities created", optional: false },
-    StepDef { key: "banking_linked", label: "Bank & trust accounts linked", optional: false },
-    StepDef { key: "portfolio_imported", label: "Portfolio imported", optional: false },
-    StepDef { key: "staff_invited", label: "Staff invited", optional: true },
+    StepDef {
+        key: "firm_admin_accepted",
+        label: "Firm owner active",
+        optional: false,
+    },
+    StepDef {
+        key: "branding_configured",
+        label: "Branding configured",
+        optional: false,
+    },
+    StepDef {
+        key: "domains_configured",
+        label: "Domains configured",
+        optional: true,
+    },
+    StepDef {
+        key: "entities_created",
+        label: "Legal entities created",
+        optional: false,
+    },
+    StepDef {
+        key: "banking_linked",
+        label: "Bank & trust accounts linked",
+        optional: false,
+    },
+    StepDef {
+        key: "portfolio_imported",
+        label: "Portfolio imported",
+        optional: false,
+    },
+    StepDef {
+        key: "staff_invited",
+        label: "Staff invited",
+        optional: true,
+    },
 ];
 
 /// Evaluate every step predicate for `tenant_id` and derive the state.

@@ -29,8 +29,7 @@ pub async fn update(
     // Scoped authorization: a firm-wide `property:write` grant passes; so does a
     // narrower grant (entity/portfolio/property) that covers this property — so a
     // contract bookkeeper scoped to one LLC can edit only that LLC's properties.
-    let resource =
-        crate::rbac::scope::ResourceScope::property(p.id, p.portfolio_id, p.llc_id);
+    let resource = crate::rbac::scope::ResourceScope::property(p.id, p.portfolio_id, p.llc_id);
     crate::tenancy::resolve::require_scoped(&state.db, &user, Permission::PropertyWrite, &resource)
         .await?;
     let mut am: entity::property::ActiveModel = p.into();

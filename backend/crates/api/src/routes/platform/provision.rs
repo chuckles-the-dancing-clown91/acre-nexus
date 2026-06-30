@@ -15,9 +15,7 @@ use chrono::Utc;
 use entity::prelude::{Role, Tenant};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use serde_json::json;
 use uuid::Uuid;
 

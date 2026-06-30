@@ -1,8 +1,8 @@
 //! Assigns a [`crate::role`] to a [`crate::user`] within a tenant context — the
 //! tenancy spec's **scoped role assignment**. `tenant_id` is carried so a user
-//! could (in principle) hold different roles in different workspaces, and `scope`
-//! + `scope_ref_id` narrow a grant below the whole tenant (to one LLC, portfolio,
-//! or property). Coverage is resolved hierarchically by `rbac::scope_covers`.
+//! could (in principle) hold different roles in different workspaces. `scope`
+//! together with `scope_ref_id` narrows a grant below the whole tenant (to one
+//! LLC, portfolio, or property); coverage is resolved by `rbac::scope_covers`.
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
