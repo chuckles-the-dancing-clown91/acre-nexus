@@ -42,6 +42,7 @@ pub async fn apply_to_lease<C: ConnectionTrait>(
         .all(db)
         .await?;
     let existing: HashSet<String> = LeaseCharge::find()
+        .filter(entity::lease_charge::Column::TenantId.eq(tenant_id))
         .filter(entity::lease_charge::Column::LeaseId.eq(lease.id))
         .all(db)
         .await?
@@ -49,6 +50,7 @@ pub async fn apply_to_lease<C: ConnectionTrait>(
         .filter_map(|c| c.code)
         .collect();
     let has_vehicle = Vehicle::find()
+        .filter(entity::vehicle::Column::TenantId.eq(tenant_id))
         .filter(entity::vehicle::Column::LeaseId.eq(lease.id))
         .one(db)
         .await?

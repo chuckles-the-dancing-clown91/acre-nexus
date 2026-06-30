@@ -13,7 +13,7 @@ use crate::routes::rentals::dto::LeaseDto;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use chrono::Utc;
-use entity::prelude::{Application, Property, Vehicle};
+use entity::prelude::{Application, Lease, Property, Vehicle};
 use rocket::serde::json::Json;
 use rocket::{post, State};
 use sea_orm::{
@@ -53,6 +53,20 @@ pub async fn convert(
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
+    // Idempotency: never convert the same application twice (would duplicate the
+    // lease and steal the first lease's vehicles).
+    if Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
+        .filter(entity::lease::Column::ApplicationId.eq(aid))
+        .one(&state.db)
+        .await?
+        .is_some()
+    {
+        return Err(ApiError::Conflict(
+            "this application has already been converted to a lease".into(),
+        ));
+    }
+
     let now = Utc::now();
     let lease_id = Uuid::new_v4();
     let start_date = b
@@ -89,8 +103,10 @@ pub async fn convert(
     .insert(&txn)
     .await?;
 
-    // Re-link vehicles captured during application to the new lease.
+    // Re-link vehicles captured during application to the new lease (tenant-scoped
+    // so a foreign vehicle carrying this application_id can't be pulled in).
     let app_vehicles = Vehicle::find()
+        .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::vehicle::Column::ApplicationId.eq(aid))
         .all(&txn)
         .await?;
@@ -100,6 +116,11 @@ pub async fn convert(
         vm.updated_at = Set(now.into());
         vm.update(&txn).await?;
     }
+
+    // Mark the application as leased so it can't be converted again / re-shown.
+    let mut am: entity::application::ActiveModel = app.clone().into();
+    am.status = Set("Leased".into());
+    am.update(&txn).await?;
 
     // Auto-apply the conditional fee schedule (pet fee, military discount, …).
     let applied = apply_to_lease(&txn, scope.tenant_id, &lease).await?;

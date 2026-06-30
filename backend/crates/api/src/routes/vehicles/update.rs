@@ -31,6 +31,8 @@ pub async fn update(
         .await?
         .ok_or_else(|| ApiError::NotFound("vehicle not found".into()))?;
     let b = body.into_inner();
+    // A re-pointed lease must belong to this tenant.
+    super::assert_links_in_tenant(&state.db, scope.tenant_id, b.lease_id, None).await?;
     let mut am: entity::vehicle::ActiveModel = existing.into();
     if let Some(v) = b.lease_id {
         am.lease_id = Set(Some(v));

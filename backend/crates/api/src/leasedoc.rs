@@ -67,10 +67,11 @@ pub fn describe_vehicle(v: &vehicle::Model) -> String {
 }
 
 /// The total recurring monthly amount: base rent plus all recurring charges
-/// (discounts/rebates are negative), floored at zero.
+/// (discounts/rebates are negative). Not floored — if discounts exceed rent the
+/// resident carries a credit, and the printed line items must sum to this total.
 pub fn monthly_total_cents(lease: &lease::Model, charges: &[lease_charge::Model]) -> i64 {
     let add: i64 = charges.iter().filter(|c| c.recurring).map(|c| c.amount_cents).sum();
-    (lease.rent_cents + add).max(0)
+    lease.rent_cents + add
 }
 
 /// Render the full lease agreement body (plain text).

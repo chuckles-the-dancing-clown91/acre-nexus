@@ -89,7 +89,7 @@ export default function ApplicationsPage() {
                       Approve
                     </button>
                   )}
-                {canLease && a.status === "Approved" && (
+                {canLease && canWrite && a.status === "Approved" && (
                   <button
                     onClick={() =>
                       setConverting(converting === a.id ? null : a.id)

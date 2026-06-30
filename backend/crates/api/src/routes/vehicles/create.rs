@@ -26,6 +26,9 @@ pub async fn create(
     if b.make.trim().is_empty() || b.model.trim().is_empty() {
         return Err(ApiError::BadRequest("make and model are required".into()));
     }
+    // Linked lease/application must belong to this tenant (prevents injecting a
+    // vehicle into another tenant's lease document + fee evaluation).
+    super::assert_links_in_tenant(&state.db, scope.tenant_id, b.lease_id, b.application_id).await?;
     let now = Utc::now();
     let saved = entity::vehicle::ActiveModel {
         id: Set(Uuid::new_v4()),

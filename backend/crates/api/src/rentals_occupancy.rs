@@ -52,9 +52,12 @@ async fn try_sync(db: &DatabaseConnection, property_id: Uuid) -> Result<(), sea_
         }
     }
 
-    // Property occupied_units = number of active tenancies (capped at unit count).
+    // Property occupied_units = distinct occupied units + active whole-property
+    // leases that carry no unit (single-family). Counting raw active leases would
+    // double-count renewals on the same unit and inflate the occupancy ratio.
     if let Some(p) = Property::find_by_id(property_id).one(db).await? {
-        let mut occupied = active.len() as i32;
+        let no_unit_active = active.iter().filter(|l| l.unit_id.is_none()).count();
+        let mut occupied = (occupied_unit_ids.len() + no_unit_active) as i32;
         if p.units > 0 && occupied > p.units {
             occupied = p.units;
         }

@@ -31,6 +31,7 @@ pub async fn list(
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let charges = LeaseCharge::find()
+        .filter(entity::lease_charge::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease_charge::Column::LeaseId.eq(lid))
         .order_by_asc(entity::lease_charge::Column::CreatedAt)
         .all(&state.db)

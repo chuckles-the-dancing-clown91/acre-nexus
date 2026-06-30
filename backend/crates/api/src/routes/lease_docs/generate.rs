@@ -40,11 +40,13 @@ pub async fn generate(
         None => None,
     };
     let charges = LeaseCharge::find()
+        .filter(entity::lease_charge::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease_charge::Column::LeaseId.eq(lid))
         .order_by_asc(entity::lease_charge::Column::CreatedAt)
         .all(&state.db)
         .await?;
     let vehicles = Vehicle::find()
+        .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::vehicle::Column::LeaseId.eq(lid))
         .all(&state.db)
         .await?;
