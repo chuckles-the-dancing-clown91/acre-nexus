@@ -51,6 +51,7 @@ impl PlatformModule for PropertiesModule {
             mortgages::delete::delete,
             workflow::get::get_workflow,
             workflow::advance::advance,
+            workflow::catalog::catalog,
             // tenancy spec: portfolios, cap table, banking, onboarding workflow
             portfolios::list::list,
             portfolios::create::create,

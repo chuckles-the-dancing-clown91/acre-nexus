@@ -52,6 +52,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:write",
       },
       {
+        href: "/console/workflows",
+        label: "Workflows",
+        icon: "chart",
+        permission: "property:read",
+      },
+      {
         href: "/console/llcs",
         label: "LLCs",
         icon: "shield",

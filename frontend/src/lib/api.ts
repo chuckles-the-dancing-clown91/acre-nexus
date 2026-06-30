@@ -239,6 +239,9 @@ export const api = {
       auth: true,
       body: { to_stage, note },
     }),
+  /** The strategy + stage templates, independent of any property (board columns). */
+  workflowCatalog: () =>
+    request<WorkflowStrategy[]>("/workflows/catalog", { auth: true }),
   // ---- entities registry (counterparties) ----
   entities: (kind?: string) =>
     request<Counterparty[]>(
@@ -829,6 +832,20 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+/** A stage in a strategy's workflow template. */
+export interface WorkflowCatalogStage {
+  key: string;
+  label: string;
+}
+
+/** An investment strategy + its ordered stage template (board columns). */
+export interface WorkflowStrategy {
+  key: string;
+  label: string;
+  description: string;
+  stages: WorkflowCatalogStage[];
 }
 
 // ---- tenancy spec: domains, onboarding, multi-entity, platform plane ----
