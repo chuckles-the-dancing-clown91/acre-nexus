@@ -42,6 +42,7 @@ pub async fn onboard(
         id: Set(pid),
         tenant_id: Set(scope.tenant_id),
         llc_id: Set(b.llc_id),
+        portfolio_id: Set(b.portfolio_id),
         name: Set(b.name.clone()),
         address: Set(b.address.clone()),
         city: Set(b.city.clone()),

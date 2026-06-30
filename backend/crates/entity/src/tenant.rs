@@ -19,7 +19,13 @@ pub struct Model {
     /// Lifecycle status: `active` | `trial` | `suspended`.
     pub status: String,
     /// Optional custom domain for white-label hosting.
+    ///
+    /// Legacy single-domain pointer; the richer [`crate::domain`] table is the
+    /// source of truth for multi-domain / multi-audience routing.
     pub custom_domain: Option<String>,
+    /// Future-proofing: a holding company that groups several PM-brand tenants for
+    /// roll-up reporting. Nullable; no code depends on it yet.
+    pub parent_org_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
 }
 

@@ -15,6 +15,12 @@ pub enum Permission {
     /// Rentals: units, leases/tenancies, rent ledger.
     LeaseRead,
     LeaseManage,
+    /// Fee/discount/amenity schedule (the conditional-charge catalog).
+    FeeRead,
+    FeeManage,
+    /// Resident vehicle profiles.
+    VehicleRead,
+    VehicleManage,
     /// Maintenance work orders / tickets.
     MaintenanceRead,
     MaintenanceManage,
@@ -43,6 +49,11 @@ pub enum Permission {
     RoleManage,
     /// View the security audit log.
     AuditRead,
+    /// White-label routing: custom domains & audiences.
+    DomainRead,
+    DomainManage,
+    /// Begin an audited, time-boxed impersonation session into a tenant (staff).
+    ImpersonateTenant,
     /// Cross-tenant platform administration (Acre HQ staff only) — implies all.
     PlatformAdmin,
 }
@@ -58,6 +69,10 @@ impl Permission {
             Permission::FinanceManage => "finance:manage",
             Permission::LeaseRead => "lease:read",
             Permission::LeaseManage => "lease:manage",
+            Permission::FeeRead => "fee:read",
+            Permission::FeeManage => "fee:manage",
+            Permission::VehicleRead => "vehicle:read",
+            Permission::VehicleManage => "vehicle:manage",
             Permission::MaintenanceRead => "maintenance:read",
             Permission::MaintenanceManage => "maintenance:manage",
             Permission::TitleRead => "title:read",
@@ -80,6 +95,9 @@ impl Permission {
             Permission::RoleRead => "role:read",
             Permission::RoleManage => "role:manage",
             Permission::AuditRead => "audit:read",
+            Permission::DomainRead => "domain:read",
+            Permission::DomainManage => "domain:manage",
+            Permission::ImpersonateTenant => "platform:impersonate",
             Permission::PlatformAdmin => "platform:admin",
         }
     }
@@ -97,6 +115,10 @@ pub const ALL_PERMS: &[Permission] = &[
     FinanceManage,
     LeaseRead,
     LeaseManage,
+    FeeRead,
+    FeeManage,
+    VehicleRead,
+    VehicleManage,
     MaintenanceRead,
     MaintenanceManage,
     TitleRead,
@@ -119,6 +141,9 @@ pub const ALL_PERMS: &[Permission] = &[
     RoleRead,
     RoleManage,
     AuditRead,
+    DomainRead,
+    DomainManage,
+    ImpersonateTenant,
     PlatformAdmin,
 ];
 

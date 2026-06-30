@@ -16,6 +16,8 @@
 
 use crate::auth::AuthUser;
 use crate::error::ApiError;
+use crate::guards::ClientIp;
+use crate::routes::domains::resolve::HostHeader;
 use crate::tenancy::{PublicTenant, TenantScope};
 use crate::tokens::ApiPrincipal;
 use rocket_okapi::gen::OpenApiGenerator;
@@ -86,6 +88,8 @@ macro_rules! header_only_guard {
 
 header_only_guard!(TenantScope);
 header_only_guard!(PublicTenant);
+header_only_guard!(HostHeader);
+header_only_guard!(ClientIp);
 
 impl OpenApiResponderInner for ApiError {
     fn responses(_gen: &mut OpenApiGenerator) -> Result<Responses> {

@@ -138,9 +138,17 @@ export default function PropertyProfilePage() {
           </h1>
           <Badge tone={statusTone(p.status)}>{p.status}</Badge>
         </div>
-        <Button onClick={enrich} disabled={enriching}>
-          {enriching ? "Enriching…" : "Enrich data"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/console/properties/${params.id}/tenants`}
+            className="rounded-lg border border-line px-3 py-2 text-sm font-semibold"
+          >
+            Tenant history
+          </Link>
+          <Button onClick={enrich} disabled={enriching}>
+            {enriching ? "Enriching…" : "Enrich data"}
+          </Button>
+        </div>
       </div>
       <p className="-mt-3 text-ink-3">
         {d?.matched_address ?? p.address} · {p.city}

@@ -43,6 +43,7 @@ pub async fn create_lease(
         tenant_id: Set(scope.tenant_id),
         property_id: Set(pid),
         unit_id: Set(b.unit_id),
+        application_id: Set(None),
         tenant_name: Set(b.tenant_name),
         tenant_email: Set(b.tenant_email),
         tenant_phone: Set(b.tenant_phone),
@@ -53,11 +54,16 @@ pub async fn create_lease(
         status: Set(status),
         payment_status: Set(payment_status),
         balance_cents: Set(0),
+        has_pet: Set(b.has_pet.unwrap_or(false)),
+        pet_details: Set(b.pet_details.clone()),
+        is_military: Set(b.is_military.unwrap_or(false)),
         notes: Set(b.notes),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
     let saved = model.insert(&state.db).await?;
+    // Reflect the new tenancy on the property + unit immediately.
+    crate::rentals_occupancy::sync_property_occupancy(&state.db, pid).await;
     crate::audit::record(
         &state.db,
         Some(user.user_id),

@@ -23,9 +23,12 @@ pub mod grants;
 pub mod permission;
 pub mod personas;
 pub mod roles;
+pub mod scope;
 
 pub use catalog::PERMISSION_CATALOG;
 pub use grants::Grants;
 pub use permission::{Permission, SCOPE_PLATFORM, SCOPE_TENANT};
 pub use personas::{default_role_for_persona, PROFILE_TYPES};
 pub use roles::SYSTEM_ROLES;
+#[allow(unused_imports)]
+pub use scope::{scope_covers, ResourceScope};

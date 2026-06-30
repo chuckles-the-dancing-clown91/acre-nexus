@@ -20,13 +20,18 @@ pub async fn update(
     id: &str,
     body: Json<UpdatePropertyReq>,
 ) -> ApiResult<Json<PropertyResp>> {
-    user.require(Permission::PropertyWrite)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let p = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .one(&state.db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
+    // Scoped authorization: a firm-wide `property:write` grant passes; so does a
+    // narrower grant (entity/portfolio/property) that covers this property — so a
+    // contract bookkeeper scoped to one LLC can edit only that LLC's properties.
+    let resource = crate::rbac::scope::ResourceScope::property(p.id, p.portfolio_id, p.llc_id);
+    crate::tenancy::resolve::require_scoped(&state.db, &user, Permission::PropertyWrite, &resource)
+        .await?;
     let mut am: entity::property::ActiveModel = p.into();
     let b = body.into_inner();
     if let Some(v) = b.name {

@@ -29,6 +29,9 @@ pub async fn create(
         name: Set(b.name),
         ein: Set(b.ein.unwrap_or_default()),
         state: Set(b.state.unwrap_or_default()),
+        entity_type: Set(b.entity_type.unwrap_or_else(|| "llc".into())),
+        registered_agent: Set(b.registered_agent),
+        status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&state.db).await?;

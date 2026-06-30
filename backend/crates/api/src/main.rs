@@ -21,6 +21,7 @@
 #[macro_use]
 extern crate rocket;
 
+mod accounting;
 mod audit;
 mod auth;
 mod config;
@@ -28,10 +29,13 @@ mod cors;
 mod dto;
 mod enrichment;
 mod error;
+mod guards;
+mod leasedoc;
 mod modules;
 mod openapi;
 mod pii;
 mod rbac;
+mod rentals_occupancy;
 mod routes;
 mod scheduler;
 mod seed;

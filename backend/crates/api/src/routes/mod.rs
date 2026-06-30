@@ -13,8 +13,14 @@
 pub mod api_tokens;
 pub mod applications;
 pub mod auth;
+pub mod banking;
+pub mod cap_table;
+pub mod domains;
 pub mod entities;
+pub mod fees;
 pub mod iam;
+pub mod lease_charges;
+pub mod lease_docs;
 pub mod llcs;
 pub mod maintenance;
 pub mod modules;
@@ -22,12 +28,15 @@ pub mod mortgages;
 pub mod onboarding;
 pub mod platform;
 pub mod portfolio;
+pub mod portfolios;
 pub mod properties;
 pub mod property_intel;
 pub mod public;
 pub mod rentals;
+pub mod tenant_history;
 pub mod theme;
 pub mod title;
+pub mod vehicles;
 pub mod vendor;
 pub mod workflow;
 
@@ -58,6 +67,13 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // platform (staff, cross-tenant)
         platform::tenants::tenants,
         platform::metrics::metrics,
+        platform::staff::staff,
+        platform::provision::provision,
+        platform::impersonate::impersonate,
+        platform::impersonations::list_impersonations,
+        platform::impersonations::revoke_impersonation,
+        // public routing entrypoint (host -> tenant + audience + theme)
+        domains::resolve::resolve,
         // module management (tenant software settings)
         modules::list::list,
         modules::set::set,

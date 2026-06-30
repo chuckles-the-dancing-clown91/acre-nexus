@@ -239,6 +239,9 @@ export const api = {
       auth: true,
       body: { to_stage, note },
     }),
+  /** The strategy + stage templates, independent of any property (board columns). */
+  workflowCatalog: () =>
+    request<WorkflowStrategy[]>("/workflows/catalog", { auth: true }),
   // ---- entities registry (counterparties) ----
   entities: (kind?: string) =>
     request<Counterparty[]>(
@@ -340,6 +343,12 @@ export const api = {
       body,
     }),
   applications: () => request<Application[]>("/applications", { auth: true }),
+  updateApplication: (id: string, status: string) =>
+    request<Application>(`/applications/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
 
   // ---- API tokens ----
   apiTokens: () => request<TokenSummary[]>("/api-tokens", { auth: true }),
@@ -370,6 +379,159 @@ export const api = {
   // ---- flips module (preview) ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+
+  // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
+  fees: () => request<Fee[]>("/fees", { auth: true }),
+  createFee: (body: CreateFeeInput) =>
+    request<Fee>("/fees", { method: "POST", auth: true, body }),
+  updateFee: (id: string, body: UpdateFeeInput) =>
+    request<Fee>(`/fees/${id}`, { method: "PATCH", auth: true, body }),
+  deleteFee: (id: string) =>
+    request<void>(`/fees/${id}`, { method: "DELETE", auth: true }),
+
+  vehicles: (params: { lease_id?: string; application_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.lease_id) qs.set("lease_id", params.lease_id);
+    if (params.application_id) qs.set("application_id", params.application_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<VehicleProfile[]>(`/vehicles${suffix}`, { auth: true });
+  },
+  createVehicle: (body: CreateVehicleInput) =>
+    request<VehicleProfile>("/vehicles", { method: "POST", auth: true, body }),
+  deleteVehicle: (id: string) =>
+    request<void>(`/vehicles/${id}`, { method: "DELETE", auth: true }),
+
+  leaseCharges: (leaseId: string) =>
+    request<ChargesResp>(`/leases/${leaseId}/charges`, { auth: true }),
+  addLeaseCharge: (leaseId: string, body: AddChargeInput) =>
+    request<LeaseChargeDto>(`/leases/${leaseId}/charges`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteLeaseCharge: (id: string) =>
+    request<void>(`/lease-charges/${id}`, { method: "DELETE", auth: true }),
+  applyFees: (leaseId: string) =>
+    request<ApplyFeesResp>(`/leases/${leaseId}/apply-fees`, {
+      method: "POST",
+      auth: true,
+    }),
+
+  generateLeaseDoc: (leaseId: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document/generate`, {
+      method: "POST",
+      auth: true,
+    }),
+  leaseDoc: (leaseId: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document`, { auth: true }),
+  signLeaseDoc: (leaseId: string, signed_by: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document/sign`, {
+      method: "POST",
+      auth: true,
+      body: { signed_by },
+    }),
+
+  convertApplication: (applicationId: string, body: ConvertInput) =>
+    request<Lease>(`/applications/${applicationId}/convert-to-lease`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  tenantHistory: () =>
+    request<TenantHistoryRow[]>("/tenant-history", { auth: true }),
+  propertyTenantHistory: (propertyId: string) =>
+    request<TenantHistoryRow[]>(`/properties/${propertyId}/tenant-history`, {
+      auth: true,
+    }),
+
+  // ---- branding / theme ----
+  theme: () => request<ThemeConfig>("/theme", { auth: true }),
+  updateTheme: (body: UpdateThemeInput) =>
+    request<ThemeConfig>("/theme", { method: "PUT", auth: true, body }),
+
+  // ---- legal entities (LLCs) ----
+  legalEntities: () => request<LegalEntity[]>("/llcs", { auth: true }),
+
+  // ---- white-label domains & routing ----
+  domains: () => request<DomainInfo[]>("/domains", { auth: true }),
+  createDomain: (hostname: string, audience: string) =>
+    request<DomainInfo>("/domains", {
+      method: "POST",
+      auth: true,
+      body: { hostname, audience },
+    }),
+  verifyDomain: (id: string) =>
+    request<DomainInfo>(`/domains/${id}/verify`, {
+      method: "POST",
+      auth: true,
+    }),
+  deleteDomain: (id: string) =>
+    request<void>(`/domains/${id}`, { method: "DELETE", auth: true }),
+  /** Public: resolve a host to its tenant + audience + branding (no auth). */
+  resolveHost: (host: string) =>
+    request<ResolveResult>(`/public/resolve?host=${encodeURIComponent(host)}`),
+
+  // ---- onboarding workflow (per-tenant setup state machine) ----
+  onboardingWorkflow: () =>
+    request<OnboardingSnapshot>("/onboarding/workflow", { auth: true }),
+  advanceOnboarding: () =>
+    request<OnboardingSnapshot>("/onboarding/workflow/advance", {
+      method: "POST",
+      auth: true,
+    }),
+
+  // ---- portfolios ----
+  portfolios: () => request<PortfolioInfo[]>("/portfolios", { auth: true }),
+  createPortfolio: (name: string, strategy?: string) =>
+    request<PortfolioInfo>("/portfolios", {
+      method: "POST",
+      auth: true,
+      body: { name, strategy },
+    }),
+
+  // ---- legal-entity cap table + banking ----
+  capTable: (entityId: string) =>
+    request<CapTable>(`/entities/${entityId}/cap-table`, { auth: true }),
+  addOwnership: (entityId: string, body: AddOwnershipInput) =>
+    request<unknown>(`/entities/${entityId}/cap-table`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  bankAccounts: (entityId: string) =>
+    request<BankAccount[]>(`/entities/${entityId}/bank-accounts`, {
+      auth: true,
+    }),
+  createBankAccount: (entityId: string, body: CreateBankAccountInput) =>
+    request<BankAccount>(`/entities/${entityId}/bank-accounts`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- platform plane: staff + audited impersonation + provisioning ----
+  platformStaff: () =>
+    request<PlatformStaff[]>("/platform/staff", { auth: true }),
+  impersonations: () =>
+    request<ImpersonationSummary[]>("/platform/impersonations", { auth: true }),
+  impersonate: (tenant: string, reason: string) =>
+    request<ImpersonationResult>("/platform/impersonate", {
+      method: "POST",
+      auth: true,
+      body: { tenant, reason },
+    }),
+  revokeImpersonation: (id: string) =>
+    request<void>(`/platform/impersonations/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  provisionTenant: (body: ProvisionInput) =>
+    request<ProvisionResult>("/platform/provision", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
 };
 
 /**
@@ -446,7 +608,15 @@ export const iam = {
     }),
 
   // ---- user roles ----
-  assignRole: (userId: string, body: { role_id: string; tenant_id?: string }) =>
+  assignRole: (
+    userId: string,
+    body: {
+      role_id: string;
+      tenant_id?: string;
+      scope?: string;
+      scope_ref_id?: string;
+    }
+  ) =>
     request<void>(`/admin/users/${userId}/roles`, {
       method: "POST",
       auth: true,
@@ -631,6 +801,9 @@ export interface UserRole {
   role_key: string;
   role_name: string;
   tenant_id: string | null;
+  /** Coverage scope: platform | tenant | entity | portfolio | property. */
+  scope: string;
+  scope_ref_id: string | null;
 }
 
 /** Full user record returned by detail / mutation endpoints. */
@@ -738,4 +911,328 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+// ---- leasing lifecycle ----
+
+export interface Fee {
+  id: string;
+  code: string;
+  kind: string;
+  label: string;
+  amount_cents: number;
+  amount_label: string;
+  recurring: boolean;
+  condition_type: string;
+  verbiage: string | null;
+  active: boolean;
+}
+
+export interface CreateFeeInput {
+  code: string;
+  kind: string;
+  label: string;
+  amount_cents: number;
+  recurring?: boolean;
+  condition_type?: string;
+  verbiage?: string;
+}
+
+export interface UpdateFeeInput {
+  label?: string;
+  amount_cents?: number;
+  recurring?: boolean;
+  condition_type?: string;
+  verbiage?: string;
+  active?: boolean;
+}
+
+export interface VehicleProfile {
+  id: string;
+  lease_id: string | null;
+  application_id: string | null;
+  user_id: string | null;
+  make: string;
+  model: string;
+  year: number | null;
+  color: string | null;
+  license_plate: string | null;
+  plate_state: string | null;
+  notes: string | null;
+  label: string;
+}
+
+export interface CreateVehicleInput {
+  lease_id?: string;
+  application_id?: string;
+  make: string;
+  model: string;
+  year?: number;
+  color?: string;
+  license_plate?: string;
+  plate_state?: string;
+  notes?: string;
+}
+
+export interface LeaseChargeDto {
+  id: string;
+  lease_id: string;
+  kind: string;
+  code: string | null;
+  label: string;
+  amount_cents: number;
+  amount_label: string;
+  recurring: boolean;
+  source: string;
+  verbiage: string | null;
+}
+
+export interface ChargesResp {
+  charges: LeaseChargeDto[];
+  base_rent_cents: number;
+  base_rent_label: string;
+  monthly_total_cents: number;
+  monthly_total_label: string;
+}
+
+export interface AddChargeInput {
+  kind: string;
+  code?: string;
+  label: string;
+  amount_cents: number;
+  recurring?: boolean;
+  verbiage?: string;
+}
+
+export interface ApplyFeesResp {
+  applied: number;
+  charges: LeaseChargeDto[];
+}
+
+export interface LeaseDocDto {
+  id: string;
+  lease_id: string;
+  title: string;
+  body: string;
+  format: string;
+  status: string;
+  generated_at: string;
+  signed_at: string | null;
+  signed_by: string | null;
+  signed_hash: string | null;
+}
+
+export interface ConvertInput {
+  property_id: string;
+  unit_id?: string;
+  rent_cents: number;
+  deposit_cents?: number;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface TenancySummary {
+  lease_id: string;
+  property_id: string;
+  property_name: string | null;
+  unit_id: string | null;
+  status: string;
+  payment_status: string;
+  start_date: string;
+  end_date: string | null;
+  rent_cents: number;
+  rent_label: string;
+  balance_cents: number;
+  balance_label: string;
+  from_application: boolean;
+}
+
+export interface TenantHistoryRow {
+  tenant_name: string;
+  tenant_email: string | null;
+  tenant_phone: string | null;
+  current: boolean;
+  lease_count: number;
+  latest_start: string;
+  tenancies: TenancySummary[];
+}
+
+/** A tenant's white-label branding configuration. */
+export interface ThemeConfig {
+  company_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  accent_color: string;
+  default_mode: string;
+  legal_templates: unknown;
+}
+
+export interface UpdateThemeInput {
+  company_name?: string;
+  logo_url?: string;
+  primary_color?: string;
+  accent_color?: string;
+  default_mode?: string;
+}
+
+/** A legal entity (LLC/LP/…) — the spec's enriched holding entity. */
+export interface LegalEntity {
+  id: string;
+  name: string;
+  ein: string;
+  state: string;
+  entity_type: string;
+  registered_agent: string | null;
+  status: string;
+}
+
+/** A stage in a strategy's workflow template. */
+export interface WorkflowCatalogStage {
+  key: string;
+  label: string;
+}
+
+/** An investment strategy + its ordered stage template (board columns). */
+export interface WorkflowStrategy {
+  key: string;
+  label: string;
+  description: string;
+  stages: WorkflowCatalogStage[];
+}
+
+// ---- tenancy spec: domains, onboarding, multi-entity, platform plane ----
+
+export interface DnsInstructions {
+  cname_target: string;
+  txt_name: string;
+  txt_value: string;
+}
+
+export interface DomainInfo {
+  id: string;
+  hostname: string;
+  kind: string;
+  audience: string;
+  verification_token: string | null;
+  verified: boolean;
+  verified_at: string | null;
+  tls_status: string;
+  dns_instructions: DnsInstructions | null;
+}
+
+export interface ResolveResult {
+  tenant_id: string;
+  tenant_slug: string;
+  audience: string;
+  company_name: string;
+  primary_color: string;
+  accent_color: string;
+}
+
+export interface OnboardingStep {
+  key: string;
+  label: string;
+  complete: boolean;
+  optional: boolean;
+}
+
+export interface OnboardingSnapshot {
+  state: string;
+  steps: OnboardingStep[];
+  live: boolean;
+}
+
+export interface PortfolioInfo {
+  id: string;
+  name: string;
+  strategy: string;
+  property_count: number;
+}
+
+export interface CapTableRow {
+  ownership_id: string;
+  owner_id: string;
+  owner_name: string;
+  owner_kind: string;
+  ownership_bps: number;
+  ownership_label: string;
+  role: string;
+}
+
+export interface CapTable {
+  entity_id: string;
+  rows: CapTableRow[];
+  total_bps: number;
+  total_label: string;
+}
+
+export interface AddOwnershipInput {
+  owner_id?: string;
+  owner_name?: string;
+  owner_kind?: string;
+  ownership_bps: number;
+  role?: string;
+}
+
+export interface BankAccount {
+  id: string;
+  entity_id: string;
+  kind: string;
+  institution: string;
+  masked_number: string | null;
+  status: string;
+}
+
+export interface CreateBankAccountInput {
+  kind: string;
+  institution: string;
+  account_number?: string;
+}
+
+export interface PlatformStaff {
+  id: string;
+  user_id: string;
+  email: string;
+  name: string;
+  status: string;
+}
+
+export interface ImpersonationSummary {
+  id: string;
+  platform_staff_id: string;
+  tenant_id: string;
+  tenant_name: string | null;
+  reason: string;
+  expires_at: string;
+  revoked_at: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface ImpersonationResult {
+  session_id: string;
+  tenant_id: string;
+  reason: string;
+  expires_at: string;
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface ProvisionInput {
+  slug: string;
+  name: string;
+  plan?: string;
+  owner_email: string;
+  owner_name?: string;
+  owner_password?: string;
+}
+
+export interface ProvisionResult {
+  tenant_id: string;
+  slug: string;
+  subdomain: string;
+  owner_user_id: string;
+  owner_email: string;
+  temp_password: string | null;
 }

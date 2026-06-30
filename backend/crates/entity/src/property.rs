@@ -11,6 +11,8 @@ pub struct Model {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub llc_id: Option<Uuid>,
+    /// Optional [`crate::portfolio`] grouping (investor / strategy / region).
+    pub portfolio_id: Option<Uuid>,
     pub name: String,
     pub address: String,
     pub city: String,

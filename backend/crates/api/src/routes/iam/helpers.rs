@@ -100,6 +100,8 @@ pub(crate) async fn load_user_detail(
                 role_key: r.key,
                 role_name: r.name,
                 tenant_id: ur.tenant_id,
+                scope: ur.scope,
+                scope_ref_id: ur.scope_ref_id,
             });
         }
     }
@@ -170,6 +172,13 @@ pub(crate) async fn add_membership_inner<C: sea_orm::ConnectionTrait>(
                 user_id: Set(user_id),
                 role_id: Set(role.id),
                 tenant_id: Set(m.tenant_id),
+                scope: Set(if m.tenant_id.is_some() {
+                    "tenant"
+                } else {
+                    "platform"
+                }
+                .into()),
+                scope_ref_id: Set(None),
             }
             .insert(db)
             .await?;

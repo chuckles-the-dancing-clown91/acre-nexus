@@ -8,9 +8,15 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use std::collections::HashSet;
 use uuid::Uuid;
 
-/// Resolve the effective permission set for a user **in a given workspace**.
-/// Platform-scoped role assignments (`tenant_id IS NULL`) always apply; tenant
-/// assignments apply only when they match `active_tenant`.
+/// Resolve the effective **workspace-wide** permission set for a user in a given
+/// workspace. Platform-scoped assignments (`tenant_id IS NULL`) always apply;
+/// tenant assignments apply only when they match `active_tenant`.
+///
+/// Only `platform`- and `tenant`-scoped grants flatten into this set (and thus
+/// into the JWT). Narrower grants (`entity` / `portfolio` / `property`) are
+/// resolved per-resource via [`crate::rbac::scope_covers`] — see
+/// `crate::tenancy::resolve` — so a contract bookkeeper scoped to one LLC does
+/// not gain firm-wide permissions.
 pub(crate) async fn permissions_for(
     db: &sea_orm::DatabaseConnection,
     user_id: Uuid,
@@ -22,6 +28,11 @@ pub(crate) async fn permissions_for(
         .await?;
     let role_ids: Vec<Uuid> = assignments
         .into_iter()
+        .filter(|r| {
+            // Only workspace-wide grants contribute to the flat permission set.
+            r.scope == crate::rbac::scope::SCOPE_PLATFORM
+                || r.scope == crate::rbac::scope::SCOPE_TENANT
+        })
         .filter(|r| match (r.tenant_id, active_tenant) {
             (None, _) => true,            // platform / global assignment
             (Some(t), Some(a)) => t == a, // tenant assignment in the active workspace

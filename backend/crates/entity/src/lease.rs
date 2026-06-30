@@ -13,6 +13,8 @@ pub struct Model {
     pub tenant_id: Uuid,
     pub property_id: Uuid,
     pub unit_id: Option<Uuid>,
+    /// The [`super::application`] this lease was converted from, if any.
+    pub application_id: Option<Uuid>,
     pub tenant_name: String,
     pub tenant_email: Option<String>,
     pub tenant_phone: Option<String>,
@@ -27,6 +29,10 @@ pub struct Model {
     pub payment_status: String,
     /// Outstanding balance owed, in cents (negative = credit).
     pub balance_cents: i64,
+    /// Resident attributes that drive conditional charges + lease verbiage.
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
     pub notes: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

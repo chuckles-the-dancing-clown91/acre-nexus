@@ -52,10 +52,22 @@ export const MODULES: ModuleDef[] = [
         permission: "property:write",
       },
       {
+        href: "/console/workflows",
+        label: "Workflows",
+        icon: "chart",
+        permission: "property:read",
+      },
+      {
         href: "/console/llcs",
         label: "LLCs",
         icon: "shield",
         permission: "property:read",
+      },
+      {
+        href: "/console/onboarding",
+        label: "Getting set up",
+        icon: "check",
+        permission: "tenant:manage",
       },
     ],
   },
@@ -84,6 +96,27 @@ export const MODULES: ModuleDef[] = [
         href: "/console/leases",
         label: "Tenants",
         icon: "user",
+        permission: "lease:read",
+      },
+    ],
+  },
+  {
+    key: "lease_builder",
+    label: "Lease Builder & Tenancy",
+    description:
+      "Conditional fees & discounts, vehicle profiles, templated lease documents, and tenant history.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/fees",
+        label: "Fee schedule",
+        icon: "dollar",
+        permission: "fee:read",
+      },
+      {
+        href: "/console/tenant-history",
+        label: "Tenant history",
+        icon: "search",
         permission: "lease:read",
       },
     ],
@@ -144,7 +177,29 @@ export const MODULES: ModuleDef[] = [
     label: "Branding & Theming",
     description: "White-label branding, colours, and legal templates.",
     defaultEnabled: true,
-    nav: [],
+    nav: [
+      {
+        href: "/console/branding",
+        label: "Branding",
+        icon: "globe",
+        permission: "theme:write",
+      },
+    ],
+  },
+  {
+    key: "domains",
+    label: "Domains & Routing",
+    description:
+      "White-label custom domains and audience routing (admin / owner / renter portals).",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/domains",
+        label: "Domains",
+        icon: "globe",
+        permission: "domain:read",
+      },
+    ],
   },
   {
     key: "flips",

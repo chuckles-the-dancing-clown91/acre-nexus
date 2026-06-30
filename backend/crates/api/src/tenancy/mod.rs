@@ -11,6 +11,7 @@
 
 pub mod helpers;
 pub mod public;
+pub mod resolve;
 pub mod scope;
 
 pub use public::PublicTenant;

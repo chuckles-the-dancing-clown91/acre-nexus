@@ -3,5 +3,6 @@
 //! `workflow_event`. Mounted by the `properties` module.
 
 pub mod advance;
+pub mod catalog;
 pub mod dto;
 pub mod get;

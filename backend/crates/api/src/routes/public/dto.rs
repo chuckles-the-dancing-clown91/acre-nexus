@@ -56,6 +56,10 @@ pub struct ApplyReq {
     pub annual_income_cents: Option<i64>,
     pub credit_score: Option<i32>,
     pub move_in: Option<String>,
+    /// Renter attributes that carry into the lease + drive conditional charges.
+    pub has_pet: Option<bool>,
+    pub pet_details: Option<String>,
+    pub is_military: Option<bool>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
