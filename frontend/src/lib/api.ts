@@ -343,6 +343,12 @@ export const api = {
       body,
     }),
   applications: () => request<Application[]>("/applications", { auth: true }),
+  updateApplication: (id: string, status: string) =>
+    request<Application>(`/applications/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
 
   // ---- API tokens ----
   apiTokens: () => request<TokenSummary[]>("/api-tokens", { auth: true }),
@@ -373,6 +379,71 @@ export const api = {
   // ---- flips module (preview) ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+
+  // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
+  fees: () => request<Fee[]>("/fees", { auth: true }),
+  createFee: (body: CreateFeeInput) =>
+    request<Fee>("/fees", { method: "POST", auth: true, body }),
+  updateFee: (id: string, body: UpdateFeeInput) =>
+    request<Fee>(`/fees/${id}`, { method: "PATCH", auth: true, body }),
+  deleteFee: (id: string) =>
+    request<void>(`/fees/${id}`, { method: "DELETE", auth: true }),
+
+  vehicles: (params: { lease_id?: string; application_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.lease_id) qs.set("lease_id", params.lease_id);
+    if (params.application_id) qs.set("application_id", params.application_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<VehicleProfile[]>(`/vehicles${suffix}`, { auth: true });
+  },
+  createVehicle: (body: CreateVehicleInput) =>
+    request<VehicleProfile>("/vehicles", { method: "POST", auth: true, body }),
+  deleteVehicle: (id: string) =>
+    request<void>(`/vehicles/${id}`, { method: "DELETE", auth: true }),
+
+  leaseCharges: (leaseId: string) =>
+    request<ChargesResp>(`/leases/${leaseId}/charges`, { auth: true }),
+  addLeaseCharge: (leaseId: string, body: AddChargeInput) =>
+    request<LeaseChargeDto>(`/leases/${leaseId}/charges`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteLeaseCharge: (id: string) =>
+    request<void>(`/lease-charges/${id}`, { method: "DELETE", auth: true }),
+  applyFees: (leaseId: string) =>
+    request<ApplyFeesResp>(`/leases/${leaseId}/apply-fees`, {
+      method: "POST",
+      auth: true,
+    }),
+
+  generateLeaseDoc: (leaseId: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document/generate`, {
+      method: "POST",
+      auth: true,
+    }),
+  leaseDoc: (leaseId: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document`, { auth: true }),
+  signLeaseDoc: (leaseId: string, signed_by: string) =>
+    request<LeaseDocDto>(`/leases/${leaseId}/document/sign`, {
+      method: "POST",
+      auth: true,
+      body: { signed_by },
+    }),
+
+  convertApplication: (applicationId: string, body: ConvertInput) =>
+    request<Lease>(`/applications/${applicationId}/convert-to-lease`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  tenantHistory: () =>
+    request<TenantHistoryRow[]>("/tenant-history", { auth: true }),
+  propertyTenantHistory: (propertyId: string) =>
+    request<TenantHistoryRow[]>(`/properties/${propertyId}/tenant-history`, {
+      auth: true,
+    }),
 
   // ---- branding / theme ----
   theme: () => request<ThemeConfig>("/theme", { auth: true }),
@@ -840,6 +911,149 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+// ---- leasing lifecycle ----
+
+export interface Fee {
+  id: string;
+  code: string;
+  kind: string;
+  label: string;
+  amount_cents: number;
+  amount_label: string;
+  recurring: boolean;
+  condition_type: string;
+  verbiage: string | null;
+  active: boolean;
+}
+
+export interface CreateFeeInput {
+  code: string;
+  kind: string;
+  label: string;
+  amount_cents: number;
+  recurring?: boolean;
+  condition_type?: string;
+  verbiage?: string;
+}
+
+export interface UpdateFeeInput {
+  label?: string;
+  amount_cents?: number;
+  recurring?: boolean;
+  condition_type?: string;
+  verbiage?: string;
+  active?: boolean;
+}
+
+export interface VehicleProfile {
+  id: string;
+  lease_id: string | null;
+  application_id: string | null;
+  user_id: string | null;
+  make: string;
+  model: string;
+  year: number | null;
+  color: string | null;
+  license_plate: string | null;
+  plate_state: string | null;
+  notes: string | null;
+  label: string;
+}
+
+export interface CreateVehicleInput {
+  lease_id?: string;
+  application_id?: string;
+  make: string;
+  model: string;
+  year?: number;
+  color?: string;
+  license_plate?: string;
+  plate_state?: string;
+  notes?: string;
+}
+
+export interface LeaseChargeDto {
+  id: string;
+  lease_id: string;
+  kind: string;
+  code: string | null;
+  label: string;
+  amount_cents: number;
+  amount_label: string;
+  recurring: boolean;
+  source: string;
+  verbiage: string | null;
+}
+
+export interface ChargesResp {
+  charges: LeaseChargeDto[];
+  base_rent_cents: number;
+  base_rent_label: string;
+  monthly_total_cents: number;
+  monthly_total_label: string;
+}
+
+export interface AddChargeInput {
+  kind: string;
+  code?: string;
+  label: string;
+  amount_cents: number;
+  recurring?: boolean;
+  verbiage?: string;
+}
+
+export interface ApplyFeesResp {
+  applied: number;
+  charges: LeaseChargeDto[];
+}
+
+export interface LeaseDocDto {
+  id: string;
+  lease_id: string;
+  title: string;
+  body: string;
+  format: string;
+  status: string;
+  generated_at: string;
+  signed_at: string | null;
+  signed_by: string | null;
+}
+
+export interface ConvertInput {
+  property_id: string;
+  unit_id?: string;
+  rent_cents: number;
+  deposit_cents?: number;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface TenancySummary {
+  lease_id: string;
+  property_id: string;
+  property_name: string | null;
+  unit_id: string | null;
+  status: string;
+  payment_status: string;
+  start_date: string;
+  end_date: string | null;
+  rent_cents: number;
+  rent_label: string;
+  balance_cents: number;
+  balance_label: string;
+  from_application: boolean;
+}
+
+export interface TenantHistoryRow {
+  tenant_name: string;
+  tenant_email: string | null;
+  tenant_phone: string | null;
+  current: boolean;
+  lease_count: number;
+  latest_start: string;
+  tenancies: TenancySummary[];
 }
 
 /** A tenant's white-label branding configuration. */

@@ -4,6 +4,7 @@
 // Gated by `lease:read`.
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Lease, Property } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
@@ -98,9 +99,10 @@ export default function LeasesPage() {
             <div className="px-5 py-10 text-center text-ink-3">No leases.</div>
           ) : (
             leases.map((l) => (
-              <div
+              <Link
                 key={l.id}
-                className="grid grid-cols-[1.4fr_1.2fr_.8fr_.7fr_.7fr] items-center gap-4 px-5 py-3.5"
+                href={`/console/leases/${l.id}`}
+                className="grid grid-cols-[1.4fr_1.2fr_.8fr_.7fr_.7fr] items-center gap-4 px-5 py-3.5 hover:bg-surface-2"
               >
                 <div className="min-w-0">
                   <div className="truncate font-semibold">{l.tenant_name}</div>
@@ -122,10 +124,9 @@ export default function LeasesPage() {
                 <span className="flex justify-end">
                   <Badge tone={paymentTone(l.payment_status)}>
                     {l.payment_status}
-                    {l.balance_cents > 0 ? "" : ""}
                   </Badge>
                 </span>
-              </div>
+              </Link>
             ))
           )}
         </div>

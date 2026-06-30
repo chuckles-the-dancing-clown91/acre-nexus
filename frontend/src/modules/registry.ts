@@ -101,6 +101,27 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    key: "lease_builder",
+    label: "Lease Builder & Tenancy",
+    description:
+      "Conditional fees & discounts, vehicle profiles, templated lease documents, and tenant history.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/fees",
+        label: "Fee schedule",
+        icon: "dollar",
+        permission: "fee:read",
+      },
+      {
+        href: "/console/tenant-history",
+        label: "Tenant history",
+        icon: "search",
+        permission: "lease:read",
+      },
+    ],
+  },
+  {
     key: "maintenance",
     label: "Maintenance & Work Orders",
     description: "Maintenance tickets assignable to staff or contractors.",

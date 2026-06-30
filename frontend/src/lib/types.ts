@@ -429,6 +429,10 @@ export interface Lease {
   status: string;
   payment_status: string;
   balance_cents: number;
+  application_id: string | null;
+  has_pet: boolean;
+  pet_details: string | null;
+  is_military: boolean;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -601,6 +605,9 @@ export interface Application {
   credit_score: number | null;
   status: string;
   move_in: string;
+  has_pet: boolean;
+  pet_details: string | null;
+  is_military: boolean;
 }
 
 export interface ApplyResponse {
