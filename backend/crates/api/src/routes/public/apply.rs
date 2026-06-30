@@ -34,6 +34,9 @@ pub async fn apply(
         credit_score: Set(b.credit_score),
         status: Set("Screening".into()),
         move_in: Set(b.move_in.unwrap_or_default()),
+        has_pet: Set(b.has_pet.unwrap_or(false)),
+        pet_details: Set(b.pet_details.clone()),
+        is_military: Set(b.is_military.unwrap_or(false)),
         created_at: Set(Utc::now().into()),
     };
     model.insert(&state.db).await?;

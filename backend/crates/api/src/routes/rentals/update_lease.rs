@@ -63,11 +63,22 @@ pub async fn update_lease(
     if let Some(v) = b.balance_cents {
         am.balance_cents = Set(v);
     }
+    if let Some(v) = b.has_pet {
+        am.has_pet = Set(v);
+    }
+    if let Some(v) = b.pet_details {
+        am.pet_details = Set(Some(v));
+    }
+    if let Some(v) = b.is_military {
+        am.is_military = Set(v);
+    }
     if let Some(v) = b.notes {
         am.notes = Set(Some(v));
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&state.db).await?;
+    // Keep property occupancy + unit status in sync when the lease status changes.
+    crate::rentals_occupancy::sync_property_occupancy(&state.db, saved.property_id).await;
     crate::audit::record(
         &state.db,
         Some(user.user_id),

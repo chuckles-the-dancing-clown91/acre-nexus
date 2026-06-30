@@ -20,6 +20,10 @@ pub struct Model {
     /// `New` | `Screening` | `Approved` | `Declined`.
     pub status: String,
     pub move_in: String,
+    /// Applicant attributes that carry into the lease + drive conditional charges.
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
     pub created_at: DateTimeWithTimeZone,
 }
 

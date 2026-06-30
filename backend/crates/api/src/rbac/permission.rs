@@ -15,6 +15,12 @@ pub enum Permission {
     /// Rentals: units, leases/tenancies, rent ledger.
     LeaseRead,
     LeaseManage,
+    /// Fee/discount/amenity schedule (the conditional-charge catalog).
+    FeeRead,
+    FeeManage,
+    /// Resident vehicle profiles.
+    VehicleRead,
+    VehicleManage,
     /// Maintenance work orders / tickets.
     MaintenanceRead,
     MaintenanceManage,
@@ -63,6 +69,10 @@ impl Permission {
             Permission::FinanceManage => "finance:manage",
             Permission::LeaseRead => "lease:read",
             Permission::LeaseManage => "lease:manage",
+            Permission::FeeRead => "fee:read",
+            Permission::FeeManage => "fee:manage",
+            Permission::VehicleRead => "vehicle:read",
+            Permission::VehicleManage => "vehicle:manage",
             Permission::MaintenanceRead => "maintenance:read",
             Permission::MaintenanceManage => "maintenance:manage",
             Permission::TitleRead => "title:read",
@@ -105,6 +115,10 @@ pub const ALL_PERMS: &[Permission] = &[
     FinanceManage,
     LeaseRead,
     LeaseManage,
+    FeeRead,
+    FeeManage,
+    VehicleRead,
+    VehicleManage,
     MaintenanceRead,
     MaintenanceManage,
     TitleRead,

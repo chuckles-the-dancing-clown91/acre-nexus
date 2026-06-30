@@ -37,6 +37,20 @@ pub const LEASE_CREATE: &str = "lease.create";
 pub const LEASE_UPDATE: &str = "lease.update";
 pub const LEASE_PAYMENT_RECORD: &str = "lease.payment_record";
 
+// ---- Leasing lifecycle: fees, charges, vehicles, documents, conversion ----
+pub const FEE_SCHEDULE_CREATE: &str = "fee_schedule.create";
+pub const FEE_SCHEDULE_UPDATE: &str = "fee_schedule.update";
+pub const FEE_SCHEDULE_DELETE: &str = "fee_schedule.delete";
+pub const LEASE_CHARGE_ADD: &str = "lease_charge.add";
+pub const LEASE_CHARGE_REMOVE: &str = "lease_charge.remove";
+pub const LEASE_FEES_APPLY: &str = "lease.apply_fees";
+pub const LEASE_DOC_GENERATE: &str = "lease_document.generate";
+pub const LEASE_DOC_SIGN: &str = "lease_document.sign";
+pub const VEHICLE_CREATE: &str = "vehicle.create";
+pub const VEHICLE_UPDATE: &str = "vehicle.update";
+pub const VEHICLE_DELETE: &str = "vehicle.delete";
+pub const APPLICATION_CONVERT: &str = "application.convert";
+
 // ---- Maintenance ----
 pub const TICKET_CREATE: &str = "ticket.create";
 pub const TICKET_UPDATE: &str = "ticket.update";

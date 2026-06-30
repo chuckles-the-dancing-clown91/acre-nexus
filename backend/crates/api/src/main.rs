@@ -33,6 +33,7 @@ mod modules;
 mod openapi;
 mod pii;
 mod rbac;
+mod rentals_occupancy;
 mod routes;
 mod scheduler;
 mod seed;

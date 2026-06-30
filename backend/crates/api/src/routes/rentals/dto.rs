@@ -83,6 +83,10 @@ pub struct LeaseDto {
     pub status: String,
     pub payment_status: String,
     pub balance_cents: i64,
+    pub application_id: Option<Uuid>,
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -107,6 +111,10 @@ impl From<entity::lease::Model> for LeaseDto {
             status: l.status,
             payment_status: l.payment_status,
             balance_cents: l.balance_cents,
+            application_id: l.application_id,
+            has_pet: l.has_pet,
+            pet_details: l.pet_details,
+            is_military: l.is_military,
             notes: l.notes,
             created_at: l.created_at.to_rfc3339(),
             updated_at: l.updated_at.to_rfc3339(),
@@ -126,6 +134,9 @@ pub struct CreateLeaseReq {
     pub end_date: Option<String>,
     pub status: Option<String>,
     pub payment_status: Option<String>,
+    pub has_pet: Option<bool>,
+    pub pet_details: Option<String>,
+    pub is_military: Option<bool>,
     pub notes: Option<String>,
 }
 
@@ -142,6 +153,9 @@ pub struct UpdateLeaseReq {
     pub status: Option<String>,
     pub payment_status: Option<String>,
     pub balance_cents: Option<i64>,
+    pub has_pet: Option<bool>,
+    pub pet_details: Option<String>,
+    pub is_military: Option<bool>,
     pub notes: Option<String>,
 }
 

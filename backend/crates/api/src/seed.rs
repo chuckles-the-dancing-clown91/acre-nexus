@@ -187,6 +187,16 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_onboarding(db, northwind, "live").await?;
     seed_onboarding(db, cascade, "portfolio_imported").await?;
 
+    // ---- fee schedule (conditional fees / discounts / amenities) ----
+    seed_fee(db, northwind, "pet_fee", "fee", "Pet rent", 5000, true, "has_pet",
+        "Resident discloses pet(s): {pet_details}. A monthly pet rent of {amount} applies and resident agrees to the pet addendum.").await?;
+    seed_fee(db, northwind, "military_discount", "discount", "Military discount", 10000, true, "is_military",
+        "A monthly military/veteran discount of {amount} is applied to base rent.").await?;
+    seed_fee(db, northwind, "garage", "amenity", "Reserved garage", 15000, true, "manual",
+        "Resident is assigned one reserved garage for vehicle: {vehicles}. Monthly amenity fee of {amount} applies.").await?;
+    seed_fee(db, northwind, "application_fee", "fee", "Application fee", 5000, false, "manual",
+        "A one-time application/processing fee of {amount}.").await?;
+
     // ---- Northwind LLCs + properties ----
     let maple = seed_llc(db, northwind, "Maple Holdings LLC", "12-3456789", "OR").await?;
     let harbor = seed_llc(db, northwind, "Harbor LLC", "98-7654321", "OR").await?;
@@ -480,6 +490,20 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
     seed_lease_payment(db, northwind, behind, "2025-06-01", 162_000, "late").await?;
+    // Demo vehicle + a garage amenity charge on the behind lease.
+    seed_vehicle(db, northwind, behind, "Toyota", "Tacoma", 2021, "Silver", "ABC-1234").await?;
+    seed_lease_charge(
+        db,
+        northwind,
+        behind,
+        "amenity",
+        Some("garage"),
+        "Reserved garage",
+        15000,
+        "manual",
+        Some("Resident is assigned one reserved garage for vehicle: 2021 Toyota Tacoma (Silver, plate ABC-1234)."),
+    )
+    .await?;
     // An open work order assigned to the contractor.
     seed_ticket(
         db,
@@ -576,6 +600,7 @@ async fn seed_lease(
         tenant_id: Set(tenant_id),
         property_id: Set(property_id),
         unit_id: Set(Some(unit_id)),
+        application_id: Set(None),
         tenant_name: Set(name.into()),
         tenant_email: Set(Some(email.into())),
         tenant_phone: Set(None),
@@ -586,6 +611,9 @@ async fn seed_lease(
         status: Set(status.into()),
         payment_status: Set(payment_status.into()),
         balance_cents: Set(balance_cents),
+        has_pet: Set(false),
+        pet_details: Set(None),
+        is_military: Set(false),
         notes: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -593,6 +621,101 @@ async fn seed_lease(
     .insert(db)
     .await?;
     Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_fee(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    code: &str,
+    kind: &str,
+    label: &str,
+    amount_cents: i64,
+    recurring: bool,
+    condition_type: &str,
+    verbiage: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::fee_schedule::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        code: Set(code.into()),
+        kind: Set(kind.into()),
+        label: Set(label.into()),
+        amount_cents: Set(amount_cents),
+        recurring: Set(recurring),
+        condition_type: Set(condition_type.into()),
+        verbiage: Set(Some(verbiage.into())),
+        active: Set(true),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_vehicle(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    lease_id: Uuid,
+    make: &str,
+    model: &str,
+    year: i32,
+    color: &str,
+    plate: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::vehicle::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(Some(lease_id)),
+        application_id: Set(None),
+        user_id: Set(None),
+        make: Set(make.into()),
+        model: Set(model.into()),
+        year: Set(Some(year)),
+        color: Set(Some(color.into())),
+        license_plate: Set(Some(plate.into())),
+        plate_state: Set(None),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_lease_charge(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    lease_id: Uuid,
+    kind: &str,
+    code: Option<&str>,
+    label: &str,
+    amount_cents: i64,
+    source: &str,
+    verbiage: Option<&str>,
+) -> anyhow::Result<()> {
+    entity::lease_charge::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(lease_id),
+        kind: Set(kind.into()),
+        code: Set(code.map(|s| s.to_string())),
+        label: Set(label.into()),
+        amount_cents: Set(amount_cents),
+        recurring: Set(true),
+        source: Set(source.into()),
+        verbiage: Set(verbiage.map(|s| s.to_string())),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
 }
 
 async fn seed_lease_payment(
