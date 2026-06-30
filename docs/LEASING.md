@@ -78,8 +78,12 @@ charge), `{pet_details}`, `{vehicles}`.
 - `GET /leases/<id>/document` — the latest.
 - `POST /leases/<id>/document/sign` — typed signature → `signed`, activates lease.
 
-Documents are stored (`lease_document`) for re-download + audit; PDF export and
-true e-signature are deliberate later milestones (the body is plain text today).
+Signing is **tamper-evident**: it records a SHA-256 hash of the document body
+plus the signer's IP and timestamp (`lease_document.signed_hash` / `signed_ip`),
+so a signed lease can be proven unchanged. Documents are stored for re-download
+and **printed to PDF** from the lease detail page (the browser's Save-as-PDF over
+the rendered body — no external dependency). A third-party e-signature
+integration (DocuSign-style countersigning) remains a later option.
 
 ## Property reflects the tenant
 

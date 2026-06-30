@@ -191,6 +191,14 @@ export default function LeaseDetailPage() {
               {doc.status}
             </Badge>
           )}
+          {doc && (
+            <button
+              onClick={() => printDoc(doc)}
+              className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold"
+            >
+              Print / Save PDF
+            </button>
+          )}
           {manage && (
             <button
               onClick={() => run("gen", () => api.generateLeaseDoc(id))}
@@ -207,9 +215,14 @@ export default function LeaseDetailPage() {
               {doc.body}
             </pre>
             {doc.status === "signed" ? (
-              <p className="text-sm text-good">
+              <div className="text-sm text-good">
                 Signed by {doc.signed_by} on {doc.signed_at?.slice(0, 10)}.
-              </p>
+                {doc.signed_hash && (
+                  <div className="mt-1 font-mono text-xs text-ink-3">
+                    integrity sha256:{doc.signed_hash.slice(0, 16)}…
+                  </div>
+                )}
+              </div>
             ) : (
               manage && <SignForm leaseId={id} onSigned={load} />
             )}
@@ -244,6 +257,25 @@ export default function LeaseDetailPage() {
       </Card>
     </div>
   );
+}
+
+/** Open the lease text in a print window — the browser's "Save as PDF" exports it. */
+function printDoc(doc: LeaseDocDto) {
+  const w = window.open("", "_blank", "width=800,height=1000");
+  if (!w) return;
+  const safe = doc.body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  w.document.write(
+    `<html><head><title>${doc.title}</title><style>` +
+      `body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;` +
+      `padding:48px;font-size:12px;line-height:1.6;color:#111}</style></head>` +
+      `<body>${safe}</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  w.print();
 }
 
 function ChargeRow({

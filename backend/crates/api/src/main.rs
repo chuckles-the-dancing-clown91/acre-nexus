@@ -29,6 +29,7 @@ mod cors;
 mod dto;
 mod enrichment;
 mod error;
+mod guards;
 mod leasedoc;
 mod modules;
 mod openapi;

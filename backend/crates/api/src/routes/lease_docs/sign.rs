@@ -5,6 +5,7 @@
 use super::dto::{LeaseDocDto, SignReq};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
+use crate::guards::ClientIp;
 use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
@@ -13,7 +14,15 @@ use entity::prelude::{Lease, LeaseDocument};
 use rocket::serde::json::Json;
 use rocket::{post, State};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
+
+/// SHA-256 (hex) of the document body — the tamper-evidence anchor.
+fn body_hash(body: &str) -> String {
+    let mut h = Sha256::new();
+    h.update(body.as_bytes());
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
 
 /// `POST /leases/<id>/document/sign` — sign the latest document + activate the lease.
 #[rocket_okapi::openapi(tag = "Lease Documents")]
@@ -22,6 +31,7 @@ pub async fn sign(
     state: &State<AppState>,
     user: AuthUser,
     scope: TenantScope,
+    client_ip: ClientIp,
     id: &str,
     body: Json<SignReq>,
 ) -> ApiResult<Json<LeaseDocDto>> {
@@ -48,10 +58,13 @@ pub async fn sign(
     }
 
     let now = Utc::now();
+    let hash = body_hash(&doc.body);
     let mut dm: entity::lease_document::ActiveModel = doc.into();
     dm.status = Set("signed".into());
     dm.signed_at = Set(Some(now.into()));
     dm.signed_by = Set(Some(b.signed_by.clone()));
+    dm.signed_hash = Set(Some(hash));
+    dm.signed_ip = Set(client_ip.0.clone());
     let saved = dm.update(&state.db).await?;
 
     // Signing activates the tenancy.

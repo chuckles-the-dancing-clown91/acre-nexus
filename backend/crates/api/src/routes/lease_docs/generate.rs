@@ -78,6 +78,8 @@ pub async fn generate(
         generated_at: Set(now.into()),
         signed_at: Set(None),
         signed_by: Set(None),
+        signed_hash: Set(None),
+        signed_ip: Set(None),
         created_at: Set(now.into()),
     }
     .insert(&state.db)

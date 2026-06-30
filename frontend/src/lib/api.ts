@@ -1019,6 +1019,7 @@ export interface LeaseDocDto {
   generated_at: string;
   signed_at: string | null;
   signed_by: string | null;
+  signed_hash: string | null;
 }
 
 export interface ConvertInput {

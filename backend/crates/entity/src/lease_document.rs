@@ -25,6 +25,10 @@ pub struct Model {
     pub signed_at: Option<DateTimeWithTimeZone>,
     /// The typed signature name of the signer.
     pub signed_by: Option<String>,
+    /// SHA-256 (hex) of `body` at signing time — proves the signed text is unchanged.
+    pub signed_hash: Option<String>,
+    /// The signer's IP address, for the e-signature audit trail.
+    pub signed_ip: Option<String>,
     pub created_at: DateTimeWithTimeZone,
 }
 

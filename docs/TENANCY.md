@@ -91,7 +91,8 @@ A `domain` maps an inbound `Host` to a **tenant + audience** (`admin` / `owner` 
 ## Multi-entity accounting
 
 Each LLC has a **cap table** (`entity_ownership`: owner → basis-point stake →
-role; the firm itself can be an owner) and its own **bank accounts**
+role; the firm itself can be an owner) — total allocation is capped at 100%
+(10000 bps), enforced server-side on add — and its own **bank accounts**
 (`operating` / `trust`). The trust **no-commingling invariant** (a posting may
 never move funds between two entities' trust ledgers) is enforced in the
 accounting domain — `accounting::assert_no_commingling` is the single guard every

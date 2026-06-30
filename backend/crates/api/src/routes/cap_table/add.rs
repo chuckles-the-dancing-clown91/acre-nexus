@@ -9,10 +9,10 @@ use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use chrono::Utc;
-use entity::prelude::{Llc, Owner};
+use entity::prelude::{EntityOwnership, Llc, Owner};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 /// `POST /entities/<entity_id>/cap-table` — add a cap-table row.
@@ -42,6 +42,22 @@ pub async fn add(
         .await?
         .filter(|l| l.tenant_id == scope.tenant_id)
         .ok_or_else(|| ApiError::NotFound("legal entity not found".into()))?;
+
+    // A cap table may never allocate more than 100% (10000 bps).
+    let allocated: i32 = EntityOwnership::find()
+        .filter(entity::entity_ownership::Column::EntityId.eq(llc.id))
+        .all(&state.db)
+        .await?
+        .iter()
+        .map(|r| r.ownership_bps)
+        .sum();
+    if allocated + b.ownership_bps > 10000 {
+        return Err(ApiError::BadRequest(format!(
+            "cap table would exceed 100%: {:.1}% already allocated, {:.1}% requested",
+            allocated as f64 / 100.0,
+            b.ownership_bps as f64 / 100.0
+        )));
+    }
 
     // Resolve the owner: existing reference (scoped to tenant) or create inline.
     let owner_id = match b.owner_id {
