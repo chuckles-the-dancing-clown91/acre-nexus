@@ -17,6 +17,9 @@ export default function WorkflowsPage() {
   const [active, setActive] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
+  // Native drag-and-drop state (no external dependency).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
 
   const load = () =>
     Promise.all([api.workflowCatalog(), api.properties()])
@@ -99,7 +102,8 @@ export default function WorkflowsPage() {
           Workflows
         </h1>
         <p className="text-ink-3">
-          Track every property through its investment strategy&apos;s stages.
+          Track every property through its investment strategy&apos;s stages —
+          drag a card between columns, or use its menu.
         </p>
       </div>
 
@@ -147,8 +151,32 @@ export default function WorkflowsPage() {
         >
           {columns.map((stage) => {
             const items = buckets.get(stage.key) ?? [];
+            const droppable = stage.key !== UNSTAGED;
             return (
-              <div key={stage.key} className="space-y-2">
+              <div
+                key={stage.key}
+                className={`space-y-2 rounded-lg p-1 transition-colors ${
+                  dragOver === stage.key && droppable
+                    ? "bg-accent/5 ring-1 ring-accent"
+                    : ""
+                }`}
+                onDragOver={(e) => {
+                  if (!droppable) return;
+                  e.preventDefault();
+                  if (dragOver !== stage.key) setDragOver(stage.key);
+                }}
+                onDragLeave={() =>
+                  setDragOver((s) => (s === stage.key ? null : s))
+                }
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(null);
+                  if (!droppable || !dragId) return;
+                  const p = properties?.find((x) => x.id === dragId);
+                  setDragId(null);
+                  if (p) move(p, stage.key);
+                }}
+              >
                 <div className="flex items-center justify-between px-1">
                   <h3 className="font-display text-sm font-bold">
                     {stage.label}
@@ -157,33 +185,50 @@ export default function WorkflowsPage() {
                 </div>
                 <div className="space-y-2">
                   {items.map((p) => (
-                    <Card key={p.id} className="space-y-2 p-3">
-                      <div className="font-semibold leading-tight">
-                        {p.name}
-                      </div>
-                      <div className="text-xs text-ink-3">{p.city}</div>
-                      <div className="font-mono text-xs">
-                        {p.monthly_rent_label}/mo
-                      </div>
-                      <select
-                        aria-label={`Move ${p.name} to a stage`}
-                        value={stage.key === UNSTAGED ? "" : p.workflow_stage}
-                        disabled={moving === p.id}
-                        onChange={(e) => move(p, e.target.value)}
-                        className="w-full rounded-md border border-line bg-surface px-2 py-1 text-xs disabled:opacity-50"
-                      >
-                        {stage.key === UNSTAGED && (
-                          <option value="" disabled>
-                            Move to…
-                          </option>
-                        )}
-                        {strategy.stages.map((s) => (
-                          <option key={s.key} value={s.key}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
-                    </Card>
+                    <div
+                      key={p.id}
+                      draggable={moving !== p.id}
+                      onDragStart={(e) => {
+                        setDragId(p.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setDragOver(null);
+                      }}
+                      className={`cursor-grab active:cursor-grabbing ${
+                        dragId === p.id ? "opacity-50" : ""
+                      }`}
+                    >
+                      <Card className="space-y-2 p-3">
+                        <div className="font-semibold leading-tight">
+                          {p.name}
+                        </div>
+                        <div className="text-xs text-ink-3">{p.city}</div>
+                        <div className="font-mono text-xs">
+                          {p.monthly_rent_label}/mo
+                        </div>
+                        {/* Accessible fallback for keyboard / non-DnD users. */}
+                        <select
+                          aria-label={`Move ${p.name} to a stage`}
+                          value={stage.key === UNSTAGED ? "" : p.workflow_stage}
+                          disabled={moving === p.id}
+                          onChange={(e) => move(p, e.target.value)}
+                          className="w-full rounded-md border border-line bg-surface px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          {stage.key === UNSTAGED && (
+                            <option value="" disabled>
+                              Move to…
+                            </option>
+                          )}
+                          {strategy.stages.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Card>
+                    </div>
                   ))}
                   {items.length === 0 && (
                     <Card className="flex min-h-20 items-center justify-center p-3 text-center text-xs text-ink-3">

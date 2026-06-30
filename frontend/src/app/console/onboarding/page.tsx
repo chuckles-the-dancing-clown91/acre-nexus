@@ -12,6 +12,8 @@ const ACTIONS: Record<string, { hint: string; href?: string; cta?: string }> = {
   },
   branding_configured: {
     hint: "Set your company name, logo, and brand colors so the white-label site and portals match your firm.",
+    href: "/console/branding",
+    cta: "Set branding",
   },
   domains_configured: {
     hint: "Connect a custom domain (or use your reserved subdomain) for the admin app and portals.",

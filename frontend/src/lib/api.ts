@@ -374,6 +374,14 @@ export const api = {
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
 
+  // ---- branding / theme ----
+  theme: () => request<ThemeConfig>("/theme", { auth: true }),
+  updateTheme: (body: UpdateThemeInput) =>
+    request<ThemeConfig>("/theme", { method: "PUT", auth: true, body }),
+
+  // ---- legal entities (LLCs) ----
+  legalEntities: () => request<LegalEntity[]>("/llcs", { auth: true }),
+
   // ---- white-label domains & routing ----
   domains: () => request<DomainInfo[]>("/domains", { auth: true }),
   createDomain: (hostname: string, audience: string) =>
@@ -832,6 +840,35 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+/** A tenant's white-label branding configuration. */
+export interface ThemeConfig {
+  company_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  accent_color: string;
+  default_mode: string;
+  legal_templates: unknown;
+}
+
+export interface UpdateThemeInput {
+  company_name?: string;
+  logo_url?: string;
+  primary_color?: string;
+  accent_color?: string;
+  default_mode?: string;
+}
+
+/** A legal entity (LLC/LP/…) — the spec's enriched holding entity. */
+export interface LegalEntity {
+  id: string;
+  name: string;
+  ein: string;
+  state: string;
+  entity_type: string;
+  registered_agent: string | null;
+  status: string;
 }
 
 /** A stage in a strategy's workflow template. */

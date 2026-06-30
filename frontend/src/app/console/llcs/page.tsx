@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { LlcGroup } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
@@ -46,6 +47,12 @@ export default function LlcsPage() {
               <div className="font-mono text-sm font-bold">
                 {g.monthly_rent_label}/mo
               </div>
+              <Link
+                href={`/console/llcs/${g.id}`}
+                className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold"
+              >
+                Manage entity
+              </Link>
             </div>
             <div className="divide-y divide-line">
               {g.properties.map((p) => (
