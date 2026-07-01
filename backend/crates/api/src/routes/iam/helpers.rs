@@ -185,6 +185,47 @@ pub(crate) async fn add_membership_inner<C: sea_orm::ConnectionTrait>(
     Ok(model)
 }
 
+/// Which `ProfileInput` fields carry a value, for audit metadata. Names only —
+/// never the values themselves (some of these are PII, and SSN/gov-id are
+/// sealed at rest specifically so they don't end up sitting in plaintext
+/// anywhere else, including the audit log).
+pub(crate) fn profile_fields_touched(input: &ProfileInput) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    macro_rules! note {
+        ($field:ident) => {
+            if input.$field.is_some() {
+                fields.push(stringify!($field));
+            }
+        };
+    }
+    note!(legal_first_name);
+    note!(legal_middle_name);
+    note!(legal_last_name);
+    note!(preferred_name);
+    note!(date_of_birth);
+    note!(phone);
+    note!(address_line1);
+    note!(address_line2);
+    note!(city);
+    note!(region);
+    note!(postal_code);
+    note!(country);
+    note!(photo_url);
+    note!(gov_id_type);
+    if input.ssn.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+        fields.push("ssn");
+    }
+    if input
+        .gov_id_number
+        .as_deref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+    {
+        fields.push("gov_id_number");
+    }
+    fields
+}
+
 /// Insert or update a user's profile, encrypting SSN / gov-ID when provided.
 pub(crate) async fn upsert_profile_inner<C: sea_orm::ConnectionTrait>(
     db: &C,

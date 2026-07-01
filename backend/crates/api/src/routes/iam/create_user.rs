@@ -1,5 +1,7 @@
 use super::dto::{CreateUserReq, UserDetail};
-use super::helpers::{add_membership_inner, load_user_detail, upsert_profile_inner};
+use super::helpers::{
+    add_membership_inner, load_user_detail, profile_fields_touched, upsert_profile_inner,
+};
 use crate::auth::{hash_password, random_secret, AuthUser};
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::{self, Permission};
@@ -73,10 +75,37 @@ pub async fn create_user(
     .await?;
 
     if let Some(m) = &body.membership {
-        add_membership_inner(&db, uid, m, true).await?;
+        let membership = add_membership_inner(&db, uid, m, true).await?;
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::MEMBERSHIP_ADD,
+            Some("user"),
+            Some(uid.to_string()),
+            membership.tenant_id,
+            Some(serde_json::json!({
+                "membership_id": membership.id,
+                "profile_type": membership.profile_type,
+                "via": "create_user",
+            })),
+        )
+        .await;
     }
     if let Some(p) = &body.profile {
         upsert_profile_inner(&db, &state.config.pii_key, uid, p).await?;
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::PROFILE_WRITE,
+            Some("user"),
+            Some(uid.to_string()),
+            primary_tenant,
+            Some(serde_json::json!({
+                "fields_set": profile_fields_touched(p),
+                "via": "create_user",
+            })),
+        )
+        .await;
     }
 
     crate::audit::record(
