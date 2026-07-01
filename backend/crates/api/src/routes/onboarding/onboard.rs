@@ -136,6 +136,21 @@ pub async fn onboard(
     .insert(&db)
     .await?;
 
+    // ---- assign the starting team (each grants property-scoped access) ----
+    let mut assignments_created = 0usize;
+    for a in &b.assignments {
+        crate::routes::assignments::create_assignment_inner(
+            &db,
+            scope.tenant_id,
+            user.user_id,
+            crate::routes::assignments::SUBJECT_PROPERTY,
+            pid,
+            a,
+        )
+        .await?;
+        assignments_created += 1;
+    }
+
     // ---- kick off enrichment (best-effort, off the critical path) ----
     let enrich_job_id = if b.enrich {
         let sources: Vec<&str> = Source::all().iter().map(|s| s.as_str()).collect();
@@ -173,6 +188,7 @@ pub async fn onboard(
         workflow_stage: stage,
         mortgages_created: b.mortgages.len(),
         lenders_created,
+        assignments_created,
         enrich_job_id,
     }))
 }

@@ -72,6 +72,31 @@ tenant-scoped access token carrying the staff actor's platform permissions.
 Sessions are listable / revocable (`/platform/impersonations`) and every start /
 revoke is an audit event.
 
+## Staff assignments (`assignment`)
+
+Firms attach people — property managers, landlords, maintenance, leasing agents,
+back-office — to a specific **property** or **legal entity (LLC)**. An assignment
+is both a directory relationship *and* an access grant:
+
+- `POST /properties/<id>/assignments` and `POST /entities/<id>/assignments` create
+  an `assignment` row (subject_type + subject_id + user + relationship + primary +
+  title) **and**, in the same request transaction, a scoped `user_role` grant:
+  the relationship's tenant role at `property:{id}` / `entity:{id}` scope. So the
+  assignment immediately confers real access via the existing `scope_covers`
+  resolver — an LLC assignment covers every property that LLC holds title to.
+- `DELETE …/assignments/<id>` removes the row and revokes exactly that grant.
+- The grant is idempotent (no duplicate rows) and the whole thing rides the RLS
+  request transaction, so a forgotten filter can't leak across tenants.
+- Gates reuse existing permissions: `property:write` for property assignments,
+  `entity:manage` for LLC assignments; reads need `property:read` / `entity:read`.
+- Assignments can be added during onboarding (`POST /properties/onboard` accepts
+  an `assignments[]`) or later from the property / LLC detail "Team" card. The
+  primary property manager also syncs `property.manager` for display.
+
+Only assignable relationships are the operational tenant roles (`property_manager`,
+`landlord`, `maintenance`, `leasing_agent`, `back_office`); `tenant_owner` /
+`renter` are deliberately not grantable this way.
+
 ## White-label routing (`domain`)
 
 A `domain` maps an inbound `Host` to a **tenant + audience** (`admin` / `owner` /

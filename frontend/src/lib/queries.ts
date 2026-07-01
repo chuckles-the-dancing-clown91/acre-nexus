@@ -36,7 +36,14 @@ import {
 } from "./api";
 import { tokenStore } from "./api";
 import { toast } from "sonner";
-import type { Application, PortfolioSummary, Property } from "./types";
+import type {
+  Application,
+  Assignment,
+  AssignmentSubject,
+  CreateAssignmentInput,
+  PortfolioSummary,
+  Property,
+} from "./types";
 
 /** Centralised, hierarchical query keys. */
 export const queryKeys = {
@@ -56,6 +63,8 @@ export const queryKeys = {
   members: ["iam", "members"] as const,
   audit: (params?: { limit?: number; action?: string }) =>
     ["iam", "audit", params ?? {}] as const,
+  assignments: (subjectType: AssignmentSubject, id: string) =>
+    ["assignments", subjectType, id] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -216,6 +225,73 @@ export function useMembers(opts?: QueryOpts<Member[]>) {
     queryFn: () => iam.members(),
     enabled: isAuthed(),
     ...opts,
+  });
+}
+
+// ---- Staff assignments (property / LLC) ------------------------------------
+
+/** The assigned team for a property or legal entity. */
+export function useAssignments(
+  subjectType: AssignmentSubject,
+  id: string,
+  opts?: QueryOpts<Assignment[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.assignments(subjectType, id),
+    queryFn: () =>
+      subjectType === "entity"
+        ? api.entityAssignments(id)
+        : api.propertyAssignments(id),
+    enabled: isAuthed() && !!id,
+    ...opts,
+  });
+}
+
+/** Assign a person (also grants scoped access); refreshes the team + subject. */
+export function useCreateAssignment(
+  subjectType: AssignmentSubject,
+  id: string
+) {
+  const qc = useQueryClient();
+  return useMutation<Assignment, Error, CreateAssignmentInput>({
+    mutationFn: (body) =>
+      subjectType === "entity"
+        ? api.createEntityAssignment(id, body)
+        : api.createPropertyAssignment(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.assignments(subjectType, id),
+      });
+      if (subjectType === "property") {
+        qc.invalidateQueries({ queryKey: queryKeys.property(id) });
+      }
+      toast.success("Assigned");
+    },
+    onError: notifyError("Couldn't assign"),
+  });
+}
+
+/** Unassign a person (revokes their scoped grant); refreshes the team. */
+export function useDeleteAssignment(
+  subjectType: AssignmentSubject,
+  id: string
+) {
+  const qc = useQueryClient();
+  return useMutation<{ removed: boolean }, Error, string>({
+    mutationFn: (assignmentId) =>
+      subjectType === "entity"
+        ? api.deleteEntityAssignment(id, assignmentId)
+        : api.deletePropertyAssignment(id, assignmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.assignments(subjectType, id),
+      });
+      if (subjectType === "property") {
+        qc.invalidateQueries({ queryKey: queryKeys.property(id) });
+      }
+      toast.success("Removed");
+    },
+    onError: notifyError("Couldn't remove assignment"),
   });
 }
 

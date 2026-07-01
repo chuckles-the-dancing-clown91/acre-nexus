@@ -18,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { AssignmentsCard } from "@/components/AssignmentsCard";
 
 export default function PropertyProfilePage() {
   const params = useParams<{ id: string }>();
@@ -238,6 +239,13 @@ export default function PropertyProfilePage() {
           </dl>
         </Card>
       </div>
+
+      {/* Team / assignments */}
+      <AssignmentsCard
+        subjectType="property"
+        subjectId={id}
+        writePermission="property:write"
+      />
 
       {/* Investment workflow */}
       {workflow && workflow.stages.length > 0 && (

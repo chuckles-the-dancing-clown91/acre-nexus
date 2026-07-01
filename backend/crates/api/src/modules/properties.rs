@@ -5,7 +5,8 @@
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{
-    banking, cap_table, llcs, mortgages, onboarding, portfolio, portfolios, properties, workflow,
+    assignments, banking, cap_table, llcs, mortgages, onboarding, portfolio, portfolios,
+    properties, workflow,
 };
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
@@ -61,6 +62,13 @@ impl PlatformModule for PropertiesModule {
             banking::create::create,
             onboarding::workflow::get_onboarding_workflow,
             onboarding::workflow::advance_onboarding,
+            // staff assignments (property + LLC), each grants scoped access
+            assignments::property::list,
+            assignments::property::create,
+            assignments::property::delete,
+            assignments::llc::list,
+            assignments::llc::create,
+            assignments::llc::delete,
         ]
     }
 }

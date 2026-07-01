@@ -96,3 +96,5 @@ pub const OWNER_CREATE: &str = "owner.create";
 pub const ENTITY_OWNERSHIP_ADD: &str = "entity_ownership.add";
 pub const BANK_ACCOUNT_CREATE: &str = "bank_account.create";
 pub const ONBOARDING_ADVANCE: &str = "onboarding.advance";
+pub const ASSIGNMENT_CREATE: &str = "assignment.create";
+pub const ASSIGNMENT_REMOVE: &str = "assignment.remove";

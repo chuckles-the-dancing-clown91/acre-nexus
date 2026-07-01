@@ -7,6 +7,8 @@
 import type {
   Application,
   ApplyResponse,
+  Assignment,
+  CreateAssignmentInput,
   Counterparty,
   CounterpartyDetail,
   CounterpartyNote,
@@ -219,6 +221,35 @@ export const api = {
       auth: true,
       body,
     }),
+  // ---- staff assignments (property + LLC) ----
+  propertyAssignments: (propertyId: string) =>
+    request<Assignment[]>(`/properties/${propertyId}/assignments`, {
+      auth: true,
+    }),
+  createPropertyAssignment: (propertyId: string, body: CreateAssignmentInput) =>
+    request<Assignment>(`/properties/${propertyId}/assignments`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deletePropertyAssignment: (propertyId: string, assignmentId: string) =>
+    request<{ removed: boolean }>(
+      `/properties/${propertyId}/assignments/${assignmentId}`,
+      { method: "DELETE", auth: true }
+    ),
+  entityAssignments: (entityId: string) =>
+    request<Assignment[]>(`/entities/${entityId}/assignments`, { auth: true }),
+  createEntityAssignment: (entityId: string, body: CreateAssignmentInput) =>
+    request<Assignment>(`/entities/${entityId}/assignments`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteEntityAssignment: (entityId: string, assignmentId: string) =>
+    request<{ removed: boolean }>(
+      `/entities/${entityId}/assignments/${assignmentId}`,
+      { method: "DELETE", auth: true }
+    ),
   // ---- financing (mortgages) ----
   mortgages: (propertyId: string) =>
     request<Mortgage[]>(`/properties/${propertyId}/mortgages`, { auth: true }),

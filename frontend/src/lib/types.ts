@@ -376,6 +376,7 @@ export interface OnboardInput {
   purchase_price_cents?: number;
   acquired_on?: string;
   mortgages: OnboardMortgageInput[];
+  assignments?: CreateAssignmentInput[];
   enrich: boolean;
 }
 
@@ -385,7 +386,47 @@ export interface OnboardResponse {
   workflow_stage: string;
   mortgages_created: number;
   lenders_created: number;
+  assignments_created: number;
   enrich_job_id: string | null;
+}
+
+// ---- Staff assignments (property / LLC) -----------------------------------
+
+/** The subject an assignment targets. */
+export type AssignmentSubject = "property" | "entity";
+
+/** Relationships a person can be assigned as. Each maps to a tenant role that is
+ * granted at the subject's scope, so assigning also confers access. */
+export const ASSIGNABLE_RELATIONSHIPS: { key: string; label: string }[] = [
+  { key: "property_manager", label: "Property Manager" },
+  { key: "landlord", label: "Landlord / Owner" },
+  { key: "maintenance", label: "Maintenance" },
+  { key: "leasing_agent", label: "Leasing Agent" },
+  { key: "back_office", label: "Back-office Staff" },
+];
+
+export interface Assignment {
+  id: string;
+  subject_type: AssignmentSubject;
+  subject_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  relationship: string;
+  relationship_label: string;
+  role_id: string | null;
+  is_primary: boolean;
+  title: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreateAssignmentInput {
+  user_id: string;
+  relationship: string;
+  is_primary?: boolean;
+  title?: string;
+  notes?: string;
 }
 
 // ---- Rentals: units, leases, payments -------------------------------------

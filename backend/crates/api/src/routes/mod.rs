@@ -12,6 +12,7 @@
 
 pub mod api_tokens;
 pub mod applications;
+pub mod assignments;
 pub mod auth;
 pub mod banking;
 pub mod cap_table;
