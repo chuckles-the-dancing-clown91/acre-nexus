@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Entities")]
 #[post("/entities/<id>/notes", data = "<body>")]
 pub async fn add_note(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn add_note(
     let cid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Counterparty::find_by_id(cid)
         .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("counterparty not found".into()))?;
     let model = entity::counterparty_note::ActiveModel {
@@ -36,9 +37,9 @@ pub async fn add_note(
         body: Set(body.into_inner().body),
         created_at: Set(Utc::now().into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ENTITY_NOTE_ADD,
         Some("counterparty"),

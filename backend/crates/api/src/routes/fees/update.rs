@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Fee Schedule")]
 #[patch("/fees/<id>", data = "<body>")]
 pub async fn update(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -28,7 +29,7 @@ pub async fn update(
     let fid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let existing = FeeSchedule::find_by_id(fid)
         .filter(entity::fee_schedule::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("fee not found".into()))?;
     let b = body.into_inner();
@@ -62,9 +63,9 @@ pub async fn update(
         am.active = Set(v);
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::FEE_SCHEDULE_UPDATE,
         Some("fee_schedule"),

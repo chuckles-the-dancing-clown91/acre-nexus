@@ -9,7 +9,7 @@ use entity::prelude::*;
 use rocket::post;
 use rocket::serde::json::Json;
 use rocket::State;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 /// `POST /admin/users` — create an account, optionally with a persona + profile.
@@ -17,6 +17,7 @@ use uuid::Uuid;
 #[post("/admin/users", data = "<body>")]
 pub async fn create_user(
     state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     body: Json<CreateUserReq>,
 ) -> ApiResult<Json<UserDetail>> {
@@ -28,7 +29,7 @@ pub async fn create_user(
     }
     if User::find()
         .filter(entity::user::Column::Email.eq(email.clone()))
-        .one(&state.db)
+        .one(&db)
         .await?
         .is_some()
     {
@@ -55,7 +56,7 @@ pub async fn create_user(
         .and_then(|m| m.tenant_id);
 
     let uid = Uuid::new_v4();
-    let txn = state.db.begin().await?;
+    // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
     entity::user::ActiveModel {
         id: Set(uid),
         tenant_id: Set(primary_tenant),
@@ -68,19 +69,18 @@ pub async fn create_user(
         last_login_at: Set(None),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     if let Some(m) = &body.membership {
-        add_membership_inner(&txn, uid, m, true).await?;
+        add_membership_inner(&db, uid, m, true).await?;
     }
     if let Some(p) = &body.profile {
-        upsert_profile_inner(&txn, &state.config.pii_key, uid, p).await?;
+        upsert_profile_inner(&db, &state.config.pii_key, uid, p).await?;
     }
-    txn.commit().await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::USER_CREATE,
         Some("user"),
@@ -90,5 +90,5 @@ pub async fn create_user(
     )
     .await;
 
-    load_user_detail(state, uid).await
+    load_user_detail(&db, uid).await
 }

@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "LLCs")]
 #[post("/llcs", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateLlcReq>,
@@ -34,9 +35,9 @@ pub async fn create(
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LLC_CREATE,
         Some("llc"),

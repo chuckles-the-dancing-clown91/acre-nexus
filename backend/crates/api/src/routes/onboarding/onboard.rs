@@ -13,14 +13,15 @@ use crate::tenancy::TenantScope;
 use chrono::Utc;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, Set};
 use uuid::Uuid;
 
 /// `POST /properties/onboard` — full property intake (property + financing).
 #[rocket_okapi::openapi(tag = "Onboarding")]
 #[post("/properties/onboard", data = "<body>")]
 pub async fn onboard(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<OnboardReq>,
@@ -35,7 +36,7 @@ pub async fn onboard(
 
     let pid = Uuid::new_v4();
     let now = Utc::now();
-    let txn = state.db.begin().await?;
+    // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
 
     // ---- property ----
     entity::property::ActiveModel {
@@ -59,7 +60,7 @@ pub async fn onboard(
         acquired_on: Set(b.acquired_on.clone()),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // ---- financing (+ lender entities created on the fly) ----
@@ -83,7 +84,7 @@ pub async fn onboard(
                     created_at: Set(now.into()),
                     updated_at: Set(now.into()),
                 }
-                .insert(&txn)
+                .insert(&db)
                 .await?;
                 lenders_created += 1;
                 Some(cid)
@@ -116,7 +117,7 @@ pub async fn onboard(
             created_at: Set(now.into()),
             updated_at: Set(now.into()),
         }
-        .insert(&txn)
+        .insert(&db)
         .await?;
     }
 
@@ -132,16 +133,14 @@ pub async fn onboard(
         actor_user_id: Set(Some(user.user_id)),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
-
-    txn.commit().await?;
 
     // ---- kick off enrichment (best-effort, off the critical path) ----
     let enrich_job_id = if b.enrich {
         let sources: Vec<&str> = Source::all().iter().map(|s| s.as_str()).collect();
         scheduler::enqueue(
-            &state.db,
+            &db,
             scope.tenant_id,
             ORCHESTRATOR_KIND,
             serde_json::json!({ "property_id": pid.to_string(), "sources": sources }),
@@ -154,7 +153,7 @@ pub async fn onboard(
     };
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_ONBOARD,
         Some("property"),

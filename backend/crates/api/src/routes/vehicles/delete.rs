@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Vehicles")]
 #[delete("/vehicles/<id>")]
 pub async fn delete(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -24,12 +25,12 @@ pub async fn delete(
     let vid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let v = Vehicle::find_by_id(vid)
         .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("vehicle not found".into()))?;
-    v.delete(&state.db).await?;
+    v.delete(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::VEHICLE_DELETE,
         Some("vehicle"),

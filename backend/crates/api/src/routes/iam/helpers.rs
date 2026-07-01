@@ -2,16 +2,14 @@ use super::dto::{MembershipDto, NewMembership, ProfileDto, ProfileInput, UserDet
 use crate::error::{ApiError, ApiResult};
 use crate::pii;
 use crate::rbac;
-use crate::state::AppState;
 use chrono::{NaiveDate, Utc};
 use entity::prelude::*;
 use rocket::serde::json::Json;
-use rocket::State;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 pub(crate) async fn role_permissions(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     role_id: Uuid,
 ) -> Result<Vec<String>, ApiError> {
     Ok(RolePermission::find()
@@ -24,7 +22,7 @@ pub(crate) async fn role_permissions(
 }
 
 pub(crate) async fn replace_role_permissions(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     role_id: Uuid,
     perms: &[String],
 ) -> Result<(), ApiError> {
@@ -57,22 +55,22 @@ pub(crate) fn validate_permissions(perms: &[String]) -> Result<(), ApiError> {
 }
 
 pub(crate) async fn load_user_detail(
-    state: &State<AppState>,
+    db: &impl sea_orm::ConnectionTrait,
     uid: Uuid,
 ) -> ApiResult<Json<UserDetail>> {
     let u = User::find_by_id(uid)
-        .one(&state.db)
+        .one(db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
 
     let profile = UserProfile::find_by_id(uid)
-        .one(&state.db)
+        .one(db)
         .await?
         .map(ProfileDto::from);
 
     let memberships = Membership::find()
         .filter(entity::membership::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(db)
         .await?
         .into_iter()
         .map(|m| MembershipDto {
@@ -89,11 +87,11 @@ pub(crate) async fn load_user_detail(
     // Roles, joined to their key/name.
     let urs = UserRole::find()
         .filter(entity::user_role::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(db)
         .await?;
     let mut roles = Vec::new();
     for ur in urs {
-        if let Some(r) = Role::find_by_id(ur.role_id).one(&state.db).await? {
+        if let Some(r) = Role::find_by_id(ur.role_id).one(db).await? {
             roles.push(UserRoleDto {
                 id: ur.id,
                 role_id: r.id,

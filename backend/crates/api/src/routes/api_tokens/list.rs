@@ -13,7 +13,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "API Tokens")]
 #[get("/api-tokens")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<TokenSummary>>> {
@@ -21,7 +22,7 @@ pub async fn list(
     let rows = ApiToken::find()
         .filter(entity::api_token::Column::TenantId.eq(scope.tenant_id))
         .order_by_desc(entity::api_token::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(TokenSummary::from).collect()))
 }

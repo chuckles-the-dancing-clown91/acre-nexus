@@ -12,8 +12,8 @@
 use chrono::{Duration, Utc};
 use entity::prelude::BackgroundJob;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect, Set,
 };
 use serde_json::json;
 use std::time::Duration as StdDuration;
@@ -24,7 +24,7 @@ pub const DEFAULT_MAX_ATTEMPTS: i32 = 5;
 
 /// Enqueue a new background job with the default retry budget. Returns the id.
 pub async fn enqueue(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     tenant_id: Uuid,
     kind: &str,
     payload: serde_json::Value,
@@ -43,7 +43,7 @@ pub async fn enqueue(
 
 /// Enqueue a new background job with an explicit `max_attempts` retry budget.
 pub async fn enqueue_with_retries(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     tenant_id: Uuid,
     kind: &str,
     payload: serde_json::Value,

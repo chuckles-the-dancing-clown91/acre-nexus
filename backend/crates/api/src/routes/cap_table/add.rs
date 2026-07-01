@@ -19,7 +19,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Legal Entities")]
 #[post("/entities/<entity_id>/cap-table", data = "<body>")]
 pub async fn add(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     entity_id: &str,
@@ -38,7 +39,7 @@ pub async fn add(
 
     // The legal entity must belong to the active tenant.
     let llc = Llc::find_by_id(eid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .filter(|l| l.tenant_id == scope.tenant_id)
         .ok_or_else(|| ApiError::NotFound("legal entity not found".into()))?;
@@ -46,7 +47,7 @@ pub async fn add(
     // A cap table may never allocate more than 100% (10000 bps).
     let allocated: i32 = EntityOwnership::find()
         .filter(entity::entity_ownership::Column::EntityId.eq(llc.id))
-        .all(&state.db)
+        .all(&db)
         .await?
         .iter()
         .map(|r| r.ownership_bps)
@@ -63,7 +64,7 @@ pub async fn add(
     let owner_id = match b.owner_id {
         Some(id) => {
             Owner::find_by_id(id)
-                .one(&state.db)
+                .one(&db)
                 .await?
                 .filter(|o| o.tenant_id == scope.tenant_id)
                 .ok_or_else(|| ApiError::NotFound("owner not found".into()))?;
@@ -87,10 +88,10 @@ pub async fn add(
                 notes: Set(None),
                 created_at: Set(Utc::now().into()),
             }
-            .insert(&state.db)
+            .insert(&db)
             .await?;
             crate::audit::record(
-                &state.db,
+                &db,
                 Some(user.user_id),
                 crate::audit::actions::OWNER_CREATE,
                 Some("owner"),
@@ -113,11 +114,11 @@ pub async fn add(
         role: Set(b.role.unwrap_or_else(|| "investor".into())),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ENTITY_OWNERSHIP_ADD,
         Some("entity_ownership"),

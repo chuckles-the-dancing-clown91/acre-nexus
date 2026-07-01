@@ -17,7 +17,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Public Website")]
 #[post("/public/applications", data = "<body>")]
 pub async fn apply(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     tenant: PublicTenant,
     body: Json<ApplyReq>,
 ) -> ApiResult<Json<ApplyResp>> {
@@ -39,10 +40,10 @@ pub async fn apply(
         is_military: Set(b.is_military.unwrap_or(false)),
         created_at: Set(Utc::now().into()),
     };
-    model.insert(&state.db).await?;
+    model.insert(&db).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         None,
         crate::audit::actions::APPLICATION_SUBMIT,
         Some("application"),
@@ -53,7 +54,7 @@ pub async fn apply(
     .await;
 
     let job_id = scheduler::enqueue(
-        &state.db,
+        &db,
         tenant.tenant_id,
         "background_check",
         json!({ "application_id": app_id, "applicant": b.applicant_name }),

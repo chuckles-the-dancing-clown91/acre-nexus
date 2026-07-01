@@ -20,7 +20,8 @@ const KINDS: &[&str] = &["fee", "discount", "rebate", "amenity"];
 #[rocket_okapi::openapi(tag = "Lease Charges")]
 #[post("/leases/<id>/charges", data = "<body>")]
 pub async fn add(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -30,7 +31,7 @@ pub async fn add(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let b = body.into_inner();
@@ -50,10 +51,10 @@ pub async fn add(
         verbiage: Set(b.verbiage),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_CHARGE_ADD,
         Some("lease_charge"),

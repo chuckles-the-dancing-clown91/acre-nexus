@@ -26,6 +26,7 @@ mod audit;
 mod auth;
 mod config;
 mod cors;
+mod db;
 mod dto;
 mod enrichment;
 mod error;
@@ -88,6 +89,7 @@ async fn rocket() -> _ {
     let mut app = rocket::build()
         .manage(state)
         .attach(cors::Cors)
+        .attach(db::TxCommit)
         .attach(audit::AuditFairing);
 
     let (core_routes, core_spec) = routes::core_api();

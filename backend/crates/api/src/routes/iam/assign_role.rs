@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[post("/admin/users/<id>/roles", data = "<body>")]
 pub async fn assign_role(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
     body: Json<AssignRoleReq>,
@@ -22,11 +23,7 @@ pub async fn assign_role(
     user.require(Permission::RoleManage)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
     let body = body.into_inner();
-    if Role::find_by_id(body.role_id)
-        .one(&state.db)
-        .await?
-        .is_none()
-    {
+    if Role::find_by_id(body.role_id).one(&db).await?.is_none() {
         return Err(ApiError::NotFound("role not found".into()));
     }
 
@@ -56,10 +53,10 @@ pub async fn assign_role(
         scope: Set(scope.clone()),
         scope_ref_id: Set(body.scope_ref_id),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ROLE_ASSIGN,
         Some("user"),

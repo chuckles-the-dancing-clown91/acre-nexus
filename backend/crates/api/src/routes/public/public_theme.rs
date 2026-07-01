@@ -11,12 +11,13 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 #[rocket_okapi::openapi(tag = "Public Website")]
 #[get("/public/theme")]
 pub async fn public_theme(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     tenant: PublicTenant,
 ) -> ApiResult<Json<PublicTheme>> {
     let t = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(tenant.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("theme not configured".into()))?;
     Ok(Json(PublicTheme {

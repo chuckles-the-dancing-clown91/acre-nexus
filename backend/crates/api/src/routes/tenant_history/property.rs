@@ -19,7 +19,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Tenant History")]
 #[get("/properties/<id>/tenant-history")]
 pub async fn property_history(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -28,13 +29,13 @@ pub async fn property_history(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let prop = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let leases = Lease::find()
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease::Column::PropertyId.eq(pid))
-        .all(&state.db)
+        .all(&db)
         .await?;
     let mut prop_names = HashMap::new();
     prop_names.insert(prop.id, prop.name);

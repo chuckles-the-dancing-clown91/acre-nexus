@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Domains")]
 #[delete("/domains/<id>")]
 pub async fn delete(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,14 +26,14 @@ pub async fn delete(
     let domain = Domain::find()
         .filter(entity::domain::Column::Id.eq(did))
         .filter(entity::domain::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("domain not found".into()))?;
     let hostname = domain.hostname.clone();
-    domain.delete(&state.db).await?;
+    domain.delete(&db).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::DOMAIN_DELETE,
         Some("domain"),

@@ -12,13 +12,14 @@ use sea_orm::EntityTrait;
 #[rocket_okapi::openapi(tag = "Auth")]
 #[get("/auth/workspaces")]
 pub async fn workspaces(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<WorkspaceSummary>>> {
     let u = User::find_by_id(user.user_id)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
-    let memberships = load_memberships(&state.db, u.id).await?;
+    let memberships = load_memberships(&db, u.id).await?;
     Ok(Json(workspaces_from(&memberships, u.is_platform_staff)))
 }

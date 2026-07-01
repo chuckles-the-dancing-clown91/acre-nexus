@@ -19,7 +19,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Lease Documents")]
 #[post("/leases/<id>/document/generate")]
 pub async fn generate(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -28,31 +29,31 @@ pub async fn generate(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let property = Property::find_by_id(lease.property_id)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let unit = match lease.unit_id {
-        Some(uid) => Unit::find_by_id(uid).one(&state.db).await?,
+        Some(uid) => Unit::find_by_id(uid).one(&db).await?,
         None => None,
     };
     let charges = LeaseCharge::find()
         .filter(entity::lease_charge::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease_charge::Column::LeaseId.eq(lid))
         .order_by_asc(entity::lease_charge::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     let vehicles = Vehicle::find()
         .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::vehicle::Column::LeaseId.eq(lid))
-        .all(&state.db)
+        .all(&db)
         .await?;
     let templates = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .map(|t| t.legal_templates)
         .unwrap_or_else(|| serde_json::json!({}));
@@ -82,11 +83,11 @@ pub async fn generate(
         signed_ip: Set(None),
         created_at: Set(now.into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_DOC_GENERATE,
         Some("lease_document"),

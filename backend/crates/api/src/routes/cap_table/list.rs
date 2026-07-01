@@ -22,7 +22,8 @@ pub(crate) fn bps_label(bps: i32) -> String {
 #[rocket_okapi::openapi(tag = "Legal Entities")]
 #[get("/entities/<entity_id>/cap-table")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     entity_id: &str,
@@ -33,20 +34,20 @@ pub async fn list(
 
     // The legal entity must belong to the active tenant.
     let llc = Llc::find_by_id(eid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .filter(|l| l.tenant_id == scope.tenant_id)
         .ok_or_else(|| ApiError::NotFound("legal entity not found".into()))?;
 
     let rows = EntityOwnership::find()
         .filter(entity::entity_ownership::Column::EntityId.eq(llc.id))
-        .all(&state.db)
+        .all(&db)
         .await?;
 
     let mut owners: HashMap<Uuid, (String, String)> = HashMap::new();
     for o in Owner::find()
         .filter(entity::owner::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?
     {
         owners.insert(o.id, (o.name, o.kind));

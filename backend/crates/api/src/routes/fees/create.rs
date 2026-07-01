@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Fee Schedule")]
 #[post("/fees", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateFeeReq>,
@@ -47,7 +48,7 @@ pub async fn create(
     if FeeSchedule::find()
         .filter(entity::fee_schedule::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::fee_schedule::Column::Code.eq(code.clone()))
-        .one(&state.db)
+        .one(&db)
         .await?
         .is_some()
     {
@@ -71,11 +72,11 @@ pub async fn create(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::FEE_SCHEDULE_CREATE,
         Some("fee_schedule"),

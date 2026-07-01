@@ -14,12 +14,13 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 #[post("/auth/refresh", data = "<body>")]
 pub async fn refresh(
     state: &State<AppState>,
+    db: crate::db::RequestDb,
     body: Json<RefreshReq>,
 ) -> ApiResult<Json<TokenResp>> {
     let hash = hash_secret(&body.refresh_token);
     let token = RefreshToken::find()
         .filter(entity::refresh_token::Column::TokenHash.eq(hash))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
 
@@ -31,14 +32,14 @@ pub async fn refresh(
     // Rotate: revoke the old refresh token.
     let mut am: entity::refresh_token::ActiveModel = token.clone().into();
     am.revoked_at = Set(Some(now.into()));
-    am.update(&state.db).await?;
+    am.update(&db).await?;
 
     let user = User::find_by_id(token.user_id)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or(ApiError::Unauthorized)?;
     let active = user.tenant_id;
-    let perms = permissions_for(&state.db, user.id, active).await?;
+    let perms = permissions_for(&db, user.id, active).await?;
     let access = issue_access_token(
         &state.config,
         user.id,
@@ -47,11 +48,11 @@ pub async fn refresh(
         perms.clone(),
     )
     .map_err(ApiError::Internal)?;
-    let new_refresh = issue_refresh_token(state, user.id).await?;
-    let user_resp = build_user_resp(&state.db, &user, active, perms).await?;
+    let new_refresh = issue_refresh_token(&db, state.config.refresh_ttl_secs, user.id).await?;
+    let user_resp = build_user_resp(&db, &user, active, perms).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.id),
         crate::audit::actions::AUTH_REFRESH,
         Some("user"),

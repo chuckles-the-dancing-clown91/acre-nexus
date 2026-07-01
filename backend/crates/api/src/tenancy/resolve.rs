@@ -9,13 +9,13 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::scope::{scope_covers, ResourceScope};
 use crate::rbac::Permission;
 use entity::prelude::{Property, RolePermission, UserRole};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 /// Build the scope chain for a property (its grouping + title entity).
 #[allow(dead_code)] // convenience for handlers that load a property id without the row
 pub async fn property_scope(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     property_id: Uuid,
 ) -> ApiResult<Option<ResourceScope>> {
     Ok(Property::find_by_id(property_id)
@@ -31,7 +31,7 @@ pub async fn property_scope(
 /// narrower scoped role assignment that grants `perm` and whose scope covers the
 /// resource. Otherwise `403`.
 pub async fn require_scoped(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user: &AuthUser,
     perm: Permission,
     resource: &ResourceScope,

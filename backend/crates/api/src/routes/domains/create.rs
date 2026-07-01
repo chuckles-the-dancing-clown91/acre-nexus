@@ -21,7 +21,8 @@ const VALID_AUDIENCES: &[&str] = &["admin", "owner", "renter"];
 #[rocket_okapi::openapi(tag = "Domains")]
 #[post("/domains", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateDomainReq>,
@@ -41,7 +42,7 @@ pub async fn create(
 
     if Domain::find()
         .filter(entity::domain::Column::Hostname.eq(hostname.clone()))
-        .one(&state.db)
+        .one(&db)
         .await?
         .is_some()
     {
@@ -61,11 +62,11 @@ pub async fn create(
         tls_status: Set("pending".into()),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::DOMAIN_CREATE,
         Some("domain"),

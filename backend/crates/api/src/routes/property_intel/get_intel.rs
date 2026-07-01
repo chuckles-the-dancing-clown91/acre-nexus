@@ -17,7 +17,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Property Intelligence")]
 #[get("/properties/<id>/intel")]
 pub async fn get_intel(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -28,19 +29,19 @@ pub async fn get_intel(
     // Confirm the property exists in the active tenant before exposing data.
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
     let detail = PropertyDetail::find_by_id(pid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .map(PropertyDetailDto::from);
 
     let valuations = PropertyValuation::find()
         .filter(entity::property_valuation::Column::PropertyId.eq(pid))
         .order_by_desc(entity::property_valuation::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(ValuationDto::from)
@@ -49,7 +50,7 @@ pub async fn get_intel(
     let taxes = PropertyTax::find()
         .filter(entity::property_tax::Column::PropertyId.eq(pid))
         .order_by_desc(entity::property_tax::Column::TaxYear)
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(TaxDto::from)
@@ -57,7 +58,7 @@ pub async fn get_intel(
 
     let schools = PropertySchool::find()
         .filter(entity::property_school::Column::PropertyId.eq(pid))
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(SchoolDto::from)
@@ -65,7 +66,7 @@ pub async fn get_intel(
 
     let utilities = PropertyUtility::find()
         .filter(entity::property_utility::Column::PropertyId.eq(pid))
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(UtilityDto::from)

@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Title")]
 #[patch("/liens/<id>", data = "<body>")]
 pub async fn update_lien(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn update_lien(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let existing = Lien::find_by_id(lid)
         .filter(entity::lien::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lien not found".into()))?;
     let b = body.into_inner();
@@ -58,9 +59,9 @@ pub async fn update_lien(
         am.notes = Set(Some(v));
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LIEN_UPDATE,
         Some("lien"),

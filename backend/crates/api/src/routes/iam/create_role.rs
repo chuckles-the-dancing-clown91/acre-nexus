@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[post("/admin/roles", data = "<body>")]
 pub async fn create_role(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     body: Json<CreateRoleReq>,
 ) -> ApiResult<Json<RoleDto>> {
@@ -36,11 +37,11 @@ pub async fn create_role(
         description: Set(body.description.clone()),
         is_system: Set(false),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
-    replace_role_permissions(&state.db, id, &body.permissions).await?;
+    replace_role_permissions(&db, id, &body.permissions).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ROLE_CREATE,
         Some("role"),

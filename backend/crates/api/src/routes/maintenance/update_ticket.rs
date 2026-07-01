@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[patch("/tickets/<id>", data = "<body>")]
 pub async fn update_ticket(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -26,7 +27,7 @@ pub async fn update_ticket(
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let existing = MaintenanceTicket::find_by_id(tid)
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
     let b = body.into_inner();
@@ -69,7 +70,7 @@ pub async fn update_ticket(
         am.cost_cents = Set(Some(v));
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
 
     // Log the status transition on the ticket timeline (best-effort).
     if let Some(new_status) = &status_changed {
@@ -82,13 +83,13 @@ pub async fn update_ticket(
             body: Set(format!("Status -> {}", new_status)),
             created_at: Set(Utc::now().into()),
         };
-        if let Err(e) = comment.insert(&state.db).await {
+        if let Err(e) = comment.insert(&db).await {
             tracing::error!("failed to log status comment: {e}");
         }
     }
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::TICKET_UPDATE,
         Some("maintenance_ticket"),

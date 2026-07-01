@@ -12,7 +12,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Public Website")]
 #[get("/public/listings/<id>")]
 pub async fn listing_detail(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     tenant: PublicTenant,
     id: &str,
 ) -> ApiResult<Json<ListingResp>> {
@@ -20,7 +21,7 @@ pub async fn listing_detail(
     let l = Listing::find_by_id(lid)
         .filter(entity::listing::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::listing::Column::IsPublic.eq(true))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("listing not found".into()))?;
     Ok(Json(ListingResp::from(l)))

@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Rentals")]
 #[get("/leases?<status>&<property_id>")]
 pub async fn list_leases(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     status: Option<String>,
@@ -30,7 +31,7 @@ pub async fn list_leases(
     }
     let rows = query
         .order_by_desc(entity::lease::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(LeaseDto::from).collect()))
 }

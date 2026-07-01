@@ -9,9 +9,8 @@
 //! ```
 
 use crate::error::ApiResult;
-use crate::state::AppState;
 use entity::prelude::{BankAccount, Domain, Llc, Membership, Property, Theme};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -83,9 +82,7 @@ const STEPS: &[StepDef] = &[
 ];
 
 /// Evaluate every step predicate for `tenant_id` and derive the state.
-pub async fn compute(state: &AppState, tenant_id: Uuid) -> ApiResult<WorkflowSnapshot> {
-    let db = &state.db;
-
+pub async fn compute(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<WorkflowSnapshot> {
     // ---- gather the facts each predicate needs ----
     let memberships = Membership::find()
         .filter(entity::membership::Column::TenantId.eq(tenant_id))

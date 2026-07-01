@@ -12,7 +12,8 @@ use sea_orm::EntityTrait;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[delete("/admin/user-roles/<id>")]
 pub async fn revoke_role(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -20,6 +21,6 @@ pub async fn revoke_role(
     let urid: i64 = id
         .parse()
         .map_err(|_| ApiError::BadRequest("invalid assignment id".into()))?;
-    UserRole::delete_by_id(urid).exec(&state.db).await?;
+    UserRole::delete_by_id(urid).exec(&db).await?;
     Ok(Json(serde_json::json!({ "revoked": true })))
 }

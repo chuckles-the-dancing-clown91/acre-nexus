@@ -14,7 +14,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Entities")]
 #[get("/entities?<kind>")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     kind: Option<String>,
@@ -29,7 +30,7 @@ pub async fn list(
     }
     let rows = q
         .order_by_asc(entity::counterparty::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(CounterpartyDto::from).collect()))
 }

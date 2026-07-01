@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[get("/admin/users?<tenant_id>&<q>")]
 pub async fn list_users(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     tenant_id: Option<String>,
     q: Option<String>,
@@ -34,7 +35,7 @@ pub async fn list_users(
     }
     let users = query
         .order_by_asc(entity::user::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(
         users

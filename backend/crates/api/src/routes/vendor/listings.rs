@@ -13,14 +13,15 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Vendor API")]
 #[get("/api/v1/listings")]
 pub async fn listings(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     principal: ApiPrincipal,
 ) -> ApiResult<Json<Vec<VendorListing>>> {
     principal.require(Permission::ListingRead)?;
     let rows = Listing::find()
         .filter(entity::listing::Column::TenantId.eq(principal.tenant_id))
         .order_by_desc(entity::listing::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(
         rows.into_iter()

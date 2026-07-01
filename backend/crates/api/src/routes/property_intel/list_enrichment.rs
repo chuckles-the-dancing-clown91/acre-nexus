@@ -17,7 +17,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Property Intelligence")]
 #[get("/properties/<id>/enrichment?<limit>")]
 pub async fn list_enrichment(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -27,7 +28,7 @@ pub async fn list_enrichment(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -35,7 +36,7 @@ pub async fn list_enrichment(
         .filter(entity::enrichment_run::Column::PropertyId.eq(pid))
         .order_by_desc(entity::enrichment_run::Column::CreatedAt)
         .limit(limit.unwrap_or(50).min(200))
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(EnrichmentRunDto::from).collect()))
 }

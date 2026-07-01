@@ -15,6 +15,7 @@
 //! [`crate::main`]).
 
 use crate::auth::AuthUser;
+use crate::db::RequestDb;
 use crate::error::ApiError;
 use crate::guards::ClientIp;
 use crate::routes::domains::resolve::HostHeader;
@@ -90,6 +91,7 @@ header_only_guard!(TenantScope);
 header_only_guard!(PublicTenant);
 header_only_guard!(HostHeader);
 header_only_guard!(ClientIp);
+header_only_guard!(RequestDb);
 
 impl OpenApiResponderInner for ApiError {
     fn responses(_gen: &mut OpenApiGenerator) -> Result<Responses> {

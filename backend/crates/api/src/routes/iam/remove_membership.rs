@@ -13,13 +13,14 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[delete("/admin/memberships/<id>")]
 pub async fn remove_membership(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Permission::MemberManage)?;
     let mid =
         Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid membership id".into()))?;
-    Membership::delete_by_id(mid).exec(&state.db).await?;
+    Membership::delete_by_id(mid).exec(&db).await?;
     Ok(Json(serde_json::json!({ "deleted": true })))
 }

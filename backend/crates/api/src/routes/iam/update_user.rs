@@ -3,11 +3,9 @@ use super::helpers::load_user_detail;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
-use crate::state::AppState;
 use entity::prelude::*;
 use rocket::patch;
 use rocket::serde::json::Json;
-use rocket::State;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use uuid::Uuid;
 
@@ -15,7 +13,7 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[patch("/admin/users/<id>", data = "<body>")]
 pub async fn update_user(
-    state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
     body: Json<UpdateUserReq>,
@@ -23,7 +21,7 @@ pub async fn update_user(
     user.require(Permission::UserManage)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
     let u = User::find_by_id(uid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
     let body = body.into_inner();
@@ -37,6 +35,6 @@ pub async fn update_user(
     if let Some(status) = body.status {
         am.status = Set(status);
     }
-    am.update(&state.db).await?;
-    load_user_detail(state, uid).await
+    am.update(&db).await?;
+    load_user_detail(&db, uid).await
 }

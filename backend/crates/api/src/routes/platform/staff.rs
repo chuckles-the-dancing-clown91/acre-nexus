@@ -18,14 +18,15 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/staff")]
 pub async fn staff(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<PlatformStaffSummary>>> {
     user.require(Permission::PlatformAdmin)?;
-    let rows = PlatformStaff::find().all(&state.db).await?;
+    let rows = PlatformStaff::find().all(&db).await?;
 
     let mut users: HashMap<Uuid, (String, String)> = HashMap::new();
-    for u in User::find().all(&state.db).await? {
+    for u in User::find().all(&db).await? {
         users.insert(u.id, (u.email, u.name));
     }
 

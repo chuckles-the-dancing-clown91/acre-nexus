@@ -13,7 +13,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Title")]
 #[delete("/ownership/<id>")]
 pub async fn delete_ownership(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -22,12 +23,12 @@ pub async fn delete_ownership(
     let oid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Ownership::find_by_id(oid)
         .filter(entity::ownership::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ownership not found".into()))?;
-    Ownership::delete_by_id(oid).exec(&state.db).await?;
+    Ownership::delete_by_id(oid).exec(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::OWNERSHIP_DELETE,
         Some("ownership"),

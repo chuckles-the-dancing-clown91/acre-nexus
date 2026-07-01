@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[get("/tickets?<status>&<property_id>&<priority>")]
 pub async fn list_tickets(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     status: Option<String>,
@@ -37,7 +38,7 @@ pub async fn list_tickets(
     }
     let rows = q
         .order_by_desc(entity::maintenance_ticket::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(TicketDto::from).collect()))
 }

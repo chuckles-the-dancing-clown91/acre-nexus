@@ -1,10 +1,9 @@
 use super::dto::{MembershipSummary, UserResp, WorkspaceSummary};
 use crate::auth::{hash_secret, random_secret};
 use crate::error::{ApiError, ApiResult};
-use crate::state::AppState;
 use chrono::{Duration, Utc};
 use entity::prelude::{Membership, RolePermission, Tenant, UserRole};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -18,7 +17,7 @@ use uuid::Uuid;
 /// `crate::tenancy::resolve` — so a contract bookkeeper scoped to one LLC does
 /// not gain firm-wide permissions.
 pub(crate) async fn permissions_for(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
     active_tenant: Option<Uuid>,
 ) -> Result<Vec<String>, ApiError> {
@@ -58,7 +57,7 @@ pub(crate) async fn permissions_for(
 
 /// Load a user's personas, resolving tenant slug/name for display.
 pub(crate) async fn load_memberships(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
 ) -> Result<Vec<MembershipSummary>, ApiError> {
     let rows = Membership::find()
@@ -120,7 +119,7 @@ pub(crate) fn workspaces_from(
 
 /// Assemble a [`UserResp`] for `user` scoped to `active_tenant`.
 pub(crate) async fn build_user_resp(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl ConnectionTrait,
     user: &entity::user::Model,
     active_tenant: Option<Uuid>,
     perms: Vec<String>,
@@ -140,17 +139,21 @@ pub(crate) async fn build_user_resp(
     })
 }
 
-pub(crate) async fn issue_refresh_token(state: &AppState, user_id: Uuid) -> ApiResult<String> {
+pub(crate) async fn issue_refresh_token(
+    db: &impl ConnectionTrait,
+    refresh_ttl_secs: i64,
+    user_id: Uuid,
+) -> ApiResult<String> {
     let secret = random_secret(32);
     let now = Utc::now();
     let model = entity::refresh_token::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(user_id),
         token_hash: Set(hash_secret(&secret)),
-        expires_at: Set((now + Duration::seconds(state.config.refresh_ttl_secs)).into()),
+        expires_at: Set((now + Duration::seconds(refresh_ttl_secs)).into()),
         revoked_at: Set(None),
         created_at: Set(now.into()),
     };
-    model.insert(&state.db).await?;
+    model.insert(db).await?;
     Ok(secret)
 }

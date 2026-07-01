@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[post("/tickets/<id>/comments", data = "<body>")]
 pub async fn add_comment(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn add_comment(
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     MaintenanceTicket::find_by_id(tid)
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
     let b = body.into_inner();
@@ -38,9 +39,9 @@ pub async fn add_comment(
         body: Set(b.body),
         created_at: Set(Utc::now().into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::TICKET_COMMENT_ADD,
         Some("maintenance_ticket"),

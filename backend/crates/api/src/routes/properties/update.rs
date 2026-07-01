@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Properties")]
 #[patch("/properties/<id>", data = "<body>")]
 pub async fn update(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -23,14 +24,14 @@ pub async fn update(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let p = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     // Scoped authorization: a firm-wide `property:write` grant passes; so does a
     // narrower grant (entity/portfolio/property) that covers this property — so a
     // contract bookkeeper scoped to one LLC can edit only that LLC's properties.
     let resource = crate::rbac::scope::ResourceScope::property(p.id, p.portfolio_id, p.llc_id);
-    crate::tenancy::resolve::require_scoped(&state.db, &user, Permission::PropertyWrite, &resource)
+    crate::tenancy::resolve::require_scoped(&db, &user, Permission::PropertyWrite, &resource)
         .await?;
     let mut am: entity::property::ActiveModel = p.into();
     let b = body.into_inner();
@@ -49,9 +50,9 @@ pub async fn update(
     if let Some(v) = b.manager {
         am.manager = Set(v);
     }
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::PROPERTY_UPDATE,
         Some("property"),

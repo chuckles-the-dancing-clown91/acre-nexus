@@ -119,11 +119,55 @@ and audits. Provisioning a firm (`POST /platform/provision`) creates the tenant
 shell, default theme, reserved `{slug}.acrenexus.com` subdomain, the firm owner
 (membership + `tenant_owner` role at tenant scope), and this workflow row.
 
+## Database enforcement: Row-Level Security (the second wall)
+
+Tenant isolation has **two walls**. The **primary wall** is the application: every
+tenant-scoped query filters by `tenant_id` (via `TenantScope` / the scope
+resolver). The **second wall** is Postgres RLS, which enforces isolation *even if a
+handler forgets its filter* — so a bug can't silently leak or cross-write another
+tenant's rows.
+
+**How it is enforced** (migration `m20240101_000015_rls_enforce`):
+
+- Every table with a `NOT NULL tenant_id` column gets `ENABLE` **and `FORCE ROW
+  LEVEL SECURITY`**. `FORCE` matters: the API connects as the tables' owner, and a
+  plain `ENABLE` policy is bypassed for the owner — `FORCE` makes the policy bite
+  regardless.
+- Each such table carries one policy with **both** `USING` (reads / updates /
+  deletes) and `WITH CHECK` (inserts / updated rows), so a row can neither be
+  *seen* nor *written* outside the active tenant. The predicate is:
+
+  ```sql
+  current_setting('app.tenant_id', true) IS NULL
+  OR tenant_id::text = current_setting('app.tenant_id', true)
+  ```
+
+- Coverage is discovered **dynamically** from `information_schema` at migration
+  time, so it can't drift as new tenant-owned tables are added.
+
+**How the tenant is bound per request** (`backend/crates/api/src/db.rs`): with a
+connection pool, `SET LOCAL` is the only way to pin a GUC to the exact connection
+running a request. The `RequestDb` guard therefore runs **each request inside one
+transaction**, resolves the tenant (JWT `tid` → `X-Tenant` → `Host`), and sets
+`app.tenant_id` via `set_config(_, _, true)` (= `SET LOCAL`). It implements
+`ConnectionTrait`, so handlers use `&db` exactly like the old `&state.db`; the
+`TxCommit` fairing commits on a 2xx response and rolls back otherwise.
+
+**The platform plane is the deliberate exception.** When `app.tenant_id` is unset
+(platform staff at Acre HQ, the pre-auth login path, background jobs) the policy's
+`IS NULL` branch allows all rows — exactly the cross-tenant access those paths
+need. Identity/global tables (`app_user`, `audit_log`, `membership`, `user_role`
+— nullable `tenant_id` — and `tenant`, `role`, `role_permission`, `refresh_token`
+— no `tenant_id`) are intentionally **excluded** from RLS so login and RBAC keep
+working with no tenant context.
+
 ## Invariants (do not regress)
 
-1. **RLS always on** — every new tenant-owned table (`owner`, `entity_ownership`,
-   `bank_account`, `portfolio`, `domain`, `onboarding_workflow`) carries
-   `tenant_id` + an isolation policy keyed on `app.tenant_id`.
+1. **RLS on, and enforced** — every tenant-owned table (`NOT NULL tenant_id`)
+   carries `ENABLE` + **`FORCE`** RLS and an isolation policy with both `USING`
+   and `WITH CHECK` keyed on `app.tenant_id`, set per request via `SET LOCAL` by
+   the `RequestDb` transaction guard (see *Database enforcement* above). Nullable-
+   /absent-`tenant_id` identity tables stay excluded.
 2. **Trust accounting: no commingling** — enforced in `accounting`, not just UI.
 3. **Platform staff are not tenant members** — tenant access only via an
    `impersonation_session` (time-boxed, reason-logged, revocable).

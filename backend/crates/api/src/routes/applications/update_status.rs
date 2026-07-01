@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Applications")]
 #[patch("/applications/<id>", data = "<body>")]
 pub async fn update_status(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -28,7 +29,7 @@ pub async fn update_status(
     let aid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let a = Application::find_by_id(aid)
         .filter(entity::application::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("application not found".into()))?;
 
@@ -36,10 +37,10 @@ pub async fn update_status(
     let previous_status = a.status.clone();
     let mut am: entity::application::ActiveModel = a.clone().into();
     am.status = Set(new_status.clone());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::APPLICATION_UPDATE,
         Some("application"),
@@ -51,7 +52,7 @@ pub async fn update_status(
 
     if new_status == "Approved" {
         let _ = scheduler::enqueue(
-            &state.db,
+            &db,
             scope.tenant_id,
             "auto_email",
             json!({ "template": "application_approved", "to": saved.email }),

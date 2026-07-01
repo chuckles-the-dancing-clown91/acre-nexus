@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Properties")]
 #[get("/properties/<id>")]
 pub async fn profile(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -27,7 +28,7 @@ pub async fn profile(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let p = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -46,7 +47,7 @@ pub async fn profile(
     // ---- Financing: debt service, levered cash flow, equity ----
     let mortgages = Mortgage::find()
         .filter(entity::mortgage::Column::PropertyId.eq(pid))
-        .all(&state.db)
+        .all(&db)
         .await?;
     let active: Vec<_> = mortgages
         .iter()
@@ -67,7 +68,7 @@ pub async fn profile(
     let latest_value = PropertyValuation::find()
         .filter(entity::property_valuation::Column::PropertyId.eq(pid))
         .order_by_desc(entity::property_valuation::Column::CreatedAt)
-        .one(&state.db)
+        .one(&db)
         .await?
         .and_then(|v| v.estimated_value_cents)
         .or(p.purchase_price_cents)
