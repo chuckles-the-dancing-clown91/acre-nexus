@@ -19,6 +19,7 @@ import type {
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { AssignmentsCard } from "@/components/AssignmentsCard";
+import { logError } from "@/lib/log";
 
 export default function PropertyProfilePage() {
   const params = useParams<{ id: string }>();
@@ -42,11 +43,11 @@ export default function PropertyProfilePage() {
     api
       .propertyIntel(id)
       .then(setIntel)
-      .catch(() => {});
+      .catch((e) => logError("failed to load property intel", e));
     api
       .propertyEnrichment(id)
       .then(setRuns)
-      .catch(() => {});
+      .catch((e) => logError("failed to load enrichment runs", e));
   }, [id]);
 
   const loadFinancing = useCallback(() => {
@@ -54,21 +55,22 @@ export default function PropertyProfilePage() {
     api
       .mortgages(id)
       .then(setMortgages)
-      .catch(() => {});
+      .catch((e) => logError("failed to load mortgages", e));
     api
       .workflow(id)
       .then(setWorkflow)
-      .catch(() => {});
+      .catch((e) => logError("failed to load workflow", e));
   }, [id]);
 
   const loadOps = useCallback(() => {
     if (!id) return;
-    const swallow = () => {};
-    api.units(id).then(setUnits).catch(swallow);
-    api.propertyLeases(id).then(setLeases).catch(swallow);
-    api.propertyTickets(id).then(setTickets).catch(swallow);
-    api.ownership(id).then(setOwnership).catch(swallow);
-    api.liens(id).then(setLiens).catch(swallow);
+    const logFailure = (what: string) => (e: unknown) =>
+      logError(`failed to load ${what}`, e);
+    api.units(id).then(setUnits).catch(logFailure("units"));
+    api.propertyLeases(id).then(setLeases).catch(logFailure("leases"));
+    api.propertyTickets(id).then(setTickets).catch(logFailure("tickets"));
+    api.ownership(id).then(setOwnership).catch(logFailure("ownership"));
+    api.liens(id).then(setLiens).catch(logFailure("liens"));
   }, [id]);
 
   useEffect(() => {
@@ -92,9 +94,12 @@ export default function PropertyProfilePage() {
         api
           .property(id)
           .then(setP)
-          .catch(() => {});
-      } catch {
-        // ignore — the stage tracker stays as-is on failure
+          .catch((e) =>
+            logError("failed to refresh property after advance", e)
+          );
+      } catch (e) {
+        // The stage tracker stays as-is on failure — but still log it.
+        logError("failed to advance workflow", e);
       }
     },
     [id]

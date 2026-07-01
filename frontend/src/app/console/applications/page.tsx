@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+import { logError } from "@/lib/log";
 
 export default function ApplicationsPage() {
   const { can } = useAuth();
@@ -36,11 +37,11 @@ export default function ApplicationsPage() {
     api
       .properties()
       .then(setProperties)
-      .catch(() => {});
+      .catch((e) => logError("failed to load properties", e));
     api
       .applicationWorkflowCatalog()
       .then(setCatalog)
-      .catch(() => {});
+      .catch((e) => logError("failed to load application workflow catalog", e));
     // Reuse affordances only appear when the workspace setting is on.
     api
       .settings()
@@ -48,7 +49,7 @@ export default function ApplicationsPage() {
         const r = s.find((x) => x.key === "application_reuse.enabled");
         setReuseEnabled(Boolean(r?.value));
       })
-      .catch(() => {});
+      .catch((e) => logError("failed to load settings", e));
   }, []);
 
   // status -> allowed next statuses, from the workflow catalog.

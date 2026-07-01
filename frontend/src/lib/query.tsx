@@ -8,12 +8,18 @@
 
 import { useState } from "react";
 import {
+  MutationCache,
+  QueryCache,
   QueryClient,
   QueryClientProvider,
   type QueryClientConfig,
 } from "@tanstack/react-query";
+import { logError } from "./log";
 
-export const queryClientConfig: QueryClientConfig = {
+export const queryClientConfig: Omit<
+  QueryClientConfig,
+  "queryCache" | "mutationCache"
+> = {
   defaultOptions: {
     queries: {
       staleTime: 30_000, // 30s — data is "fresh" briefly to avoid refetch storms
@@ -24,7 +30,23 @@ export const queryClientConfig: QueryClientConfig = {
 };
 
 export function makeQueryClient() {
-  return new QueryClient(queryClientConfig);
+  return new QueryClient({
+    ...queryClientConfig,
+    // Safety net: logs any query/mutation failure, even one whose hook forgot
+    // its own onError. Individual hooks that already toast (queries.ts) still
+    // do — this only adds visibility, it doesn't change UX.
+    queryCache: new QueryCache({
+      onError: (error, query) =>
+        logError(`query failed: ${JSON.stringify(query.queryKey)}`, error),
+    }),
+    mutationCache: new MutationCache({
+      onError: (error, _vars, _ctx, mutation) =>
+        logError(
+          `mutation failed${mutation.options.mutationKey ? `: ${JSON.stringify(mutation.options.mutationKey)}` : ""}`,
+          error
+        ),
+    }),
+  });
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {

@@ -49,6 +49,7 @@ import type {
   Workflow,
   Workspace,
 } from "./types";
+import { logError } from "./log";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -141,12 +142,22 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     }
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: opts.method ?? "GET",
-    headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: opts.method ?? "GET",
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      cache: "no-store",
+    });
+  } catch (e) {
+    // A network-level failure (offline, DNS, CORS, connection refused) has no
+    // legitimate "expected" case anywhere it's called from, unlike a 4xx/5xx
+    // response — log it centrally here so it's visible even when a caller's
+    // own `.catch` doesn't, then re-throw for the caller to handle as usual.
+    logError(`${opts.method ?? "GET"} ${path} failed`, e);
+    throw e;
+  }
 
   if (!res.ok) {
     let code = "error";

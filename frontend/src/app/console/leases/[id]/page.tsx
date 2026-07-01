@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   api,
+  ApiError,
   type ChargesResp,
   type LeaseChargeDto,
   type LeaseDocDto,
@@ -13,6 +14,7 @@ import {
 import type { LeaseDetail } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+import { logError } from "@/lib/log";
 
 const CHARGE_KINDS = ["fee", "discount", "rebate", "amenity"];
 
@@ -38,15 +40,22 @@ export default function LeaseDetailPage() {
     api
       .leaseCharges(id)
       .then(setCharges)
-      .catch(() => {});
+      .catch((e) => logError("failed to load lease charges", e));
     api
       .vehicles({ lease_id: id })
       .then(setVehicles)
-      .catch(() => {});
+      .catch((e) => logError("failed to load lease vehicles", e));
     api
       .leaseDoc(id)
       .then(setDoc)
-      .catch(() => setDoc(null)); // 404 = not generated yet
+      .catch((e) => {
+        setDoc(null);
+        // A 404 just means the document hasn't been generated yet; anything
+        // else (network, 500, …) is unexpected and worth a trace.
+        if (!(e instanceof ApiError && e.status === 404)) {
+          logError("failed to load lease document", e);
+        }
+      });
   }, [id]);
 
   useEffect(() => {

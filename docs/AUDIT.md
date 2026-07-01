@@ -55,7 +55,7 @@ below):
 | Area | Actions |
 |------|---------|
 | Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.switch_workspace` |
-| Properties | `property.create`, `property.update`, `property.onboard`, `llc.create` |
+| Properties | `property.create`, `property.update`, `property.onboard`, `property.enrich`, `property.enrichment_run`, `llc.create` |
 | Leasing | `application.submit` (public), `application.advance`, `application.convert`, `application.reuse` |
 | Settings | `theme.update`, `module.toggle`, `setting.update` |
 | Vendor tokens | `apitoken.create`, `apitoken.revoke` |
@@ -68,6 +68,18 @@ The full taxonomy lives in `audit/actions.rs`.
 records only which fields were touched (`fields_set: [...]`), never their
 values; `pii.reveal` likewise logs the *fact* of an SSN/gov-id read, not the
 decrypted value.
+
+### 3. Background-job mutations
+
+Not every mutation happens inside an HTTP request — the Tokio [scheduler](../backend/crates/api/src/scheduler.rs)
+runs jobs (enrichment, screening, automated email) with no request, and so no
+actor, behind them. `property.enrich` (recorded when `POST
+/properties/<id>/enrich` **enqueues** the job) only proves someone asked; it's
+`property.enrichment_run` — recorded once per source in the job handler's
+`record_run()`, actor `None` — that proves property data actually changed (or
+didn't, and why: `metadata.status` is `succeeded` or `failed`). The screening/
+auto-email jobs make no database mutations, so they have nothing to audit
+beyond the request-level trail.
 
 ---
 
@@ -135,3 +147,38 @@ max 500), with the actor's display name resolved and every column above. The
 platform viewer (`/console/platform/audit`) renders domain events and request
 events together, colour-coding HTTP status and labelling the principal kind, and
 offers a client-side filter by action.
+
+---
+
+## Client-side logging (frontend)
+
+The frontend has no telemetry SDK wired up (no Sentry/PostHog/etc. —
+`frontend/src/lib/log.ts` is the one place to add one later); today "logging"
+means making sure a failure is at least visible in the browser console instead
+of vanishing, which is what used to happen at ~20 call sites that caught a
+failed data load and did nothing with it.
+
+- **`logError(context, err)`** (`lib/log.ts`) is the single logging call site —
+  every fix below routes through it.
+- **`request()`** (`lib/api.ts`), the one function every API call goes through,
+  logs network-level failures (offline, DNS, CORS) centrally — the frontend
+  analogue of the backend's request fairing, since there's no legitimate
+  "expected" case for those the way there is for a 4xx response.
+- **Secondary/best-effort data loads** (property intel, mortgages, workflow,
+  units, leases, tickets, ownership, liens, the application/workflow catalog,
+  tenant branding, …) now log their failure instead of silently leaving the
+  panel empty. Expected non-errors (e.g. a 404 meaning "lease document not
+  generated yet") are still handled without logging — only checked by status
+  code, not assumed from a bare catch.
+- **`QueryClient`** (`lib/query.tsx`) has a `QueryCache`/`MutationCache`
+  `onError` safety net that logs any `useQuery`/`useMutation` failure a hook
+  didn't already handle — visibility only, it doesn't add/duplicate toasts.
+- **`error.tsx` / `global-error.tsx`** (`app/`) are Next.js App Router error
+  boundaries: an uncaught render exception is logged and shown a "Try again"
+  screen instead of a blank page. `global-error.tsx` covers failures in the
+  root layout itself (the one place `error.tsx` can't reach) and renders
+  standalone, since the layout that would style it is what failed.
+- Deliberately left alone: a stale/expired session on `/auth/me` and a missing
+  `tenant:manage` permission on the module list are both frequent, expected
+  outcomes of normal use, not bugs — logging them as errors on every affected
+  page load would be noise, not signal.

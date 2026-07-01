@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { MaintenanceTicket, Property } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
+import { logError } from "@/lib/log";
 import { Badge, Card } from "@/components/ui";
 
 const STATUSES = [
@@ -65,7 +66,7 @@ export default function MaintenancePage() {
     api
       .properties()
       .then(setProperties)
-      .catch(() => {});
+      .catch((e) => logError("failed to load properties", e));
   }, []);
 
   const propName = useMemo(() => {

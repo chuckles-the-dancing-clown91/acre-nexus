@@ -18,6 +18,10 @@ pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";
 pub const PROPERTY_ENRICH: &str = "property.enrich";
+/// A background enrichment source finished writing property data (or gave up
+/// retrying). Distinct from [`PROPERTY_ENRICH`], which only logs the request
+/// that *enqueued* the job — this is the actual data mutation.
+pub const PROPERTY_ENRICHMENT_RUN: &str = "property.enrichment_run";
 pub const PROPERTY_ONBOARD: &str = "property.onboard";
 pub const LLC_CREATE: &str = "llc.create";
 

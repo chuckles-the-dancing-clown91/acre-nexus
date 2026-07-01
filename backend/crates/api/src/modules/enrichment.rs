@@ -171,7 +171,11 @@ async fn orchestrate(db: &DatabaseConnection, job: &entity::background_job::Mode
     JobOutcome::completed(json!({ "scheduled": scheduled }))
 }
 
-/// Record an `enrichment_run` row (best-effort).
+/// Record an `enrichment_run` row (best-effort) and a matching audit event —
+/// this is the actual property-data mutation, run by the scheduler with no
+/// HTTP request (and so no actor) behind it. `PROPERTY_ENRICH` (recorded when
+/// the job is *enqueued*) only proves someone asked for enrichment; this
+/// proves data actually changed (or that it didn't, and why).
 async fn record_run<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
@@ -194,4 +198,15 @@ async fn record_run<C: ConnectionTrait>(
     if let Err(e) = row.insert(db).await {
         tracing::error!("failed to record enrichment_run: {e}");
     }
+
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::PROPERTY_ENRICHMENT_RUN,
+        Some("property"),
+        Some(property.id.to_string()),
+        Some(property.tenant_id),
+        Some(json!({ "source": source.as_str(), "status": status, "job_id": job_id })),
+    )
+    .await;
 }
