@@ -43,6 +43,7 @@ import type {
   CreateAssignmentInput,
   PortfolioSummary,
   Property,
+  SettingView,
 } from "./types";
 
 /** Centralised, hierarchical query keys. */
@@ -65,6 +66,7 @@ export const queryKeys = {
     ["iam", "audit", params ?? {}] as const,
   assignments: (subjectType: AssignmentSubject, id: string) =>
     ["assignments", subjectType, id] as const,
+  settings: ["settings"] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -292,6 +294,31 @@ export function useDeleteAssignment(
       toast.success("Removed");
     },
     onError: notifyError("Couldn't remove assignment"),
+  });
+}
+
+// ---- System settings -------------------------------------------------------
+
+/** The per-tenant settings catalog with effective values. */
+export function useSettings(opts?: QueryOpts<SettingView[]>) {
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => api.settings(),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+/** Override one setting; refreshes the settings list. */
+export function useSetSetting() {
+  const qc = useQueryClient();
+  return useMutation<SettingView, Error, { key: string; value: unknown }>({
+    mutationFn: ({ key, value }) => api.setSetting(key, value),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.settings });
+      toast.success("Setting saved");
+    },
+    onError: notifyError("Couldn't save setting"),
   });
 }
 

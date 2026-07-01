@@ -31,6 +31,49 @@ Public application ──▶ screening (bg job) ──▶ Approve ──▶ Conv
    the lease to `active`, and **syncs occupancy** (unit → `occupied`, property
    `occupied_units` recomputed).
 
+## Application workflow (pipeline)
+
+An application's `status` is a stage in a validated state machine
+(`crate::app_workflow`), so the applications inbox is a real pipeline with an
+auditable history rather than a free-text field:
+
+```
+New ──▶ Screening ──▶ Approved ──▶ Leased          (main path)
+   ╲        │            │
+    ╲       ▼            ▼
+     ──▶ Declined / Withdrawn  ◀── (off-ramps; re-openable to Screening)
+```
+
+- `GET /applications/workflow/catalog` — the stages, off-ramps, and legal
+  transitions (drives the UI's advance buttons).
+- `GET /applications/<id>/workflow` — one application's current stage, reached
+  stages, allowed next stages, and full transition history.
+- `POST /applications/<id>/advance` `{ to_status, note? }` — moves the
+  application, validating the transition, recording an immutable
+  `application_event`, and (→ `Approved`) enqueuing the welcome email.
+  `PATCH /applications/<id>` uses the same validated path.
+
+Every transition is stored in `application_event` (mirrors `workflow_event` for
+properties) and audited.
+
+## Reusable applications (configurable)
+
+When the **`application_reuse.enabled`** system setting is on (see
+[TENANCY.md](./TENANCY.md#system-settings-setting) → System settings), a recent
+application can be used for any property in the firm without re-applying — bounded
+by `application_reuse.window_days` (default 30):
+
+- **Staff**: `GET /applications/reusable?email=` lists an applicant's recent
+  reusable applications; `POST /applications/reuse { source_application_id,
+  listing_id? }` clones one (carrying the screening result) so it can be converted
+  to any property. From the applications page, "Reuse" duplicates an application
+  for another property.
+- **Public**: on `POST /public/applications`, if the applicant's email already
+  has a recent **approved** application in the window, the new application is
+  pre-approved and skips re-screening.
+
+Disabling the setting reverts both paths to normal per-listing screening.
+
 ## Conditional fees, discounts & amenities
 
 The landlord configures a **fee schedule** (`/fees`) — a reusable catalog. Each

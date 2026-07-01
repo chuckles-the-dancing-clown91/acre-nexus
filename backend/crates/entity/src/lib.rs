@@ -19,6 +19,7 @@ pub mod prelude;
 
 pub mod api_token;
 pub mod application;
+pub mod application_event;
 pub mod assignment;
 pub mod audit_log;
 pub mod background_job;
@@ -56,6 +57,7 @@ pub mod property_valuation;
 pub mod refresh_token;
 pub mod role;
 pub mod role_permission;
+pub mod setting;
 pub mod tenant;
 pub mod tenant_module;
 pub mod theme;

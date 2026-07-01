@@ -429,6 +429,59 @@ export interface CreateAssignmentInput {
   notes?: string;
 }
 
+// ---- System settings ------------------------------------------------------
+
+/** One setting merged with its catalog metadata + the tenant's value. */
+export interface SettingView {
+  key: string;
+  label: string;
+  description: string;
+  group: string;
+  /** "bool" | "int" | "text". */
+  kind: string;
+  value: unknown;
+  default: unknown;
+}
+
+// ---- Application workflow --------------------------------------------------
+
+export interface AppWorkflowStage {
+  key: string;
+  label: string;
+  terminal: boolean;
+  reached: boolean;
+  current: boolean;
+}
+
+export interface ApplicationEvent {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  note: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface ApplicationWorkflow {
+  current_status: string;
+  stages: AppWorkflowStage[];
+  offramps: AppWorkflowStage[];
+  allowed_next: string[];
+  history: ApplicationEvent[];
+}
+
+export interface AppWorkflowCatalogStage {
+  key: string;
+  label: string;
+  terminal: boolean;
+  transitions: string[];
+}
+
+export interface AppWorkflowCatalog {
+  stages: AppWorkflowCatalogStage[];
+  offramps: AppWorkflowCatalogStage[];
+}
+
 // ---- Rentals: units, leases, payments -------------------------------------
 
 export interface Unit {

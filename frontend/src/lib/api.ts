@@ -6,10 +6,13 @@
 
 import type {
   Application,
+  ApplicationWorkflow,
+  AppWorkflowCatalog,
   ApplyResponse,
   Assignment,
   CreateAssignmentInput,
   Counterparty,
+  SettingView,
   CounterpartyDetail,
   CounterpartyNote,
   CreateCounterpartyInput,
@@ -467,6 +470,44 @@ export const api = {
       method: "POST",
       auth: true,
       body,
+    }),
+
+  // ---- application workflow ----
+  applicationWorkflowCatalog: () =>
+    request<AppWorkflowCatalog>("/applications/workflow/catalog", {
+      auth: true,
+    }),
+  applicationWorkflow: (id: string) =>
+    request<ApplicationWorkflow>(`/applications/${id}/workflow`, {
+      auth: true,
+    }),
+  advanceApplication: (id: string, to_status: string, note?: string) =>
+    request<Application>(`/applications/${id}/advance`, {
+      method: "POST",
+      auth: true,
+      body: { to_status, ...(note ? { note } : {}) },
+    }),
+
+  // ---- application reuse (gated by the application_reuse setting) ----
+  reusableApplications: (email: string) =>
+    request<Application[]>(
+      `/applications/reusable?email=${encodeURIComponent(email)}`,
+      { auth: true }
+    ),
+  reuseApplication: (source_application_id: string, listing_id?: string) =>
+    request<Application>("/applications/reuse", {
+      method: "POST",
+      auth: true,
+      body: { source_application_id, ...(listing_id ? { listing_id } : {}) },
+    }),
+
+  // ---- system settings ----
+  settings: () => request<SettingView[]>("/settings", { auth: true }),
+  setSetting: (key: string, value: unknown) =>
+    request<SettingView>(`/settings/${key}`, {
+      method: "PUT",
+      auth: true,
+      body: { value },
     }),
 
   tenantHistory: () =>

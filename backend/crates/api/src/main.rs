@@ -22,6 +22,7 @@
 extern crate rocket;
 
 mod accounting;
+mod app_workflow;
 mod audit;
 mod auth;
 mod config;
@@ -40,6 +41,7 @@ mod rentals_occupancy;
 mod routes;
 mod scheduler;
 mod seed;
+mod settings;
 mod state;
 mod tenancy;
 mod tokens;

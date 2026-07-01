@@ -144,6 +144,25 @@ and audits. Provisioning a firm (`POST /platform/provision`) creates the tenant
 shell, default theme, reserved `{slug}.acrenexus.com` subdomain, the firm owner
 (membership + `tenant_owner` role at tenant scope), and this workflow row.
 
+## System settings (`setting`)
+
+Per-firm configuration lives in a **code-defined catalog** with values stored per
+tenant — the same shape as the RBAC/workflow catalogs. The catalog
+(`crate::settings::CATALOG`) defines each key's type, default, label, and group;
+the `setting` table holds only overrides, so a fresh tenant is fully configured
+from defaults and adding a knob never needs a backfill.
+
+- `GET /settings` — the catalog merged with the tenant's effective values.
+- `PUT /settings/<key>` `{ value }` — validated (type-checked against the catalog)
+  upsert. Both gated by `tenant:manage`; edited on the **Settings** page.
+- Typed accessors (`settings::get_bool` / `get_i64`) read a setting inside any
+  handler; unknown keys and type mismatches are rejected.
+
+First entries: `application_reuse.enabled` (bool) and `application_reuse.window_days`
+(int) — see [LEASING.md](./LEASING.md#reusable-applications-configurable). The
+`setting` table is tenant-owned with the same enforced RLS as every other tenant
+table.
+
 ## Database enforcement: Row-Level Security (the second wall)
 
 Tenant isolation has **two walls**. The **primary wall** is the application: every

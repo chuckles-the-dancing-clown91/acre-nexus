@@ -174,6 +174,21 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
+          {can("tenant:manage") && (
+            <Link
+              href="/console/settings"
+              className={clsx(
+                "mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+                pathname.startsWith("/console/settings")
+                  ? "bg-accent-soft text-accent-2"
+                  : "text-ink-2 hover:bg-surface-2"
+              )}
+            >
+              <Icon name="shield" size={17} />
+              Settings
+            </Link>
+          )}
+
           {user.is_platform_staff && (
             <div className="mt-3 space-y-1">
               <Link

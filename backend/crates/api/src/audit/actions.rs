@@ -66,7 +66,6 @@ pub const LIEN_DELETE: &str = "lien.delete";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
-pub const APPLICATION_UPDATE: &str = "application.update";
 
 // ---- Settings ----
 pub const THEME_UPDATE: &str = "theme.update";
@@ -98,3 +97,6 @@ pub const BANK_ACCOUNT_CREATE: &str = "bank_account.create";
 pub const ONBOARDING_ADVANCE: &str = "onboarding.advance";
 pub const ASSIGNMENT_CREATE: &str = "assignment.create";
 pub const ASSIGNMENT_REMOVE: &str = "assignment.remove";
+pub const SETTING_UPDATE: &str = "setting.update";
+pub const APPLICATION_ADVANCE: &str = "application.advance";
+pub const APPLICATION_REUSE: &str = "application.reuse";
