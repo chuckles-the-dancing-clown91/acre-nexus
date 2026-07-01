@@ -7,19 +7,19 @@
 //! reverted to `vacant` when none does (leaving `make_ready`/`down` untouched).
 
 use entity::prelude::{Lease, Property, Unit};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use std::collections::HashSet;
 use uuid::Uuid;
 
 /// Recompute occupancy for one property. Best-effort: errors are logged, not
 /// propagated, so the underlying lease mutation never fails on a sync hiccup.
-pub async fn sync_property_occupancy(db: &DatabaseConnection, property_id: Uuid) {
+pub async fn sync_property_occupancy(db: &impl ConnectionTrait, property_id: Uuid) {
     if let Err(e) = try_sync(db, property_id).await {
         tracing::warn!("occupancy sync for {property_id} failed: {e}");
     }
 }
 
-async fn try_sync(db: &DatabaseConnection, property_id: Uuid) -> Result<(), sea_orm::DbErr> {
+async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), sea_orm::DbErr> {
     let leases = Lease::find()
         .filter(entity::lease::Column::PropertyId.eq(property_id))
         .all(db)

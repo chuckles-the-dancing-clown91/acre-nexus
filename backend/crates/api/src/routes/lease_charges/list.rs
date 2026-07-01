@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Lease Charges")]
 #[get("/leases/<id>/charges")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -27,14 +28,14 @@ pub async fn list(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let charges = LeaseCharge::find()
         .filter(entity::lease_charge::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease_charge::Column::LeaseId.eq(lid))
         .order_by_asc(entity::lease_charge::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
     let total = monthly_total_cents(&lease, &charges);
     Ok(Json(ChargesResp {

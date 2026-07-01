@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[patch("/admin/roles/<id>", data = "<body>")]
 pub async fn update_role(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
     body: Json<UpdateRoleReq>,
@@ -23,7 +24,7 @@ pub async fn update_role(
     user.require(Permission::RoleManage)?;
     let rid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid role id".into()))?;
     let role = Role::find_by_id(rid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("role not found".into()))?;
     let body = body.into_inner();
@@ -35,15 +36,15 @@ pub async fn update_role(
     if let Some(desc) = body.description.clone() {
         am.description = Set(desc);
     }
-    am.update(&state.db).await?;
+    am.update(&db).await?;
 
     if let Some(perms) = &body.permissions {
         validate_permissions(perms)?;
-        replace_role_permissions(&state.db, rid, perms).await?;
+        replace_role_permissions(&db, rid, perms).await?;
     }
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ROLE_UPDATE,
         Some("role"),
@@ -52,8 +53,8 @@ pub async fn update_role(
         None,
     )
     .await;
-    let updated = Role::find_by_id(rid).one(&state.db).await?.unwrap();
-    let perms = role_permissions(&state.db, rid).await?;
+    let updated = Role::find_by_id(rid).one(&db).await?.unwrap();
+    let perms = role_permissions(&db, rid).await?;
     Ok(Json(RoleDto {
         id: updated.id,
         scope: updated.scope,

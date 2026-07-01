@@ -18,18 +18,19 @@ use std::collections::HashMap;
 #[rocket_okapi::openapi(tag = "Tenant History")]
 #[get("/tenant-history")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<TenantHistoryRow>>> {
     user.require(Permission::LeaseRead)?;
     let leases = Lease::find()
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?;
     let prop_names: HashMap<_, _> = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(|p| (p.id, p.name))

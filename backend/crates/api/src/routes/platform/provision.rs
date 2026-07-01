@@ -15,7 +15,7 @@ use chrono::Utc;
 use entity::prelude::{Role, Tenant};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -23,7 +23,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[post("/platform/provision", data = "<body>")]
 pub async fn provision(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     body: Json<ProvisionReq>,
 ) -> ApiResult<Json<ProvisionResp>> {
@@ -44,7 +45,7 @@ pub async fn provision(
     // Slug uniqueness (the column is unique, but give a friendly error first).
     if Tenant::find()
         .filter(entity::tenant::Column::Slug.eq(slug.clone()))
-        .one(&state.db)
+        .one(&db)
         .await?
         .is_some()
     {
@@ -55,7 +56,7 @@ pub async fn provision(
     let owner_role = Role::find()
         .filter(entity::role::Column::Key.eq("tenant_owner"))
         .filter(entity::role::Column::IsSystem.eq(true))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("tenant_owner system role missing")))?;
 
@@ -69,7 +70,9 @@ pub async fn provision(
     let pw_hash = hash_password(&temp_password).map_err(ApiError::Internal)?;
     let hostname = format!("{slug}.acrenexus.com");
 
-    let txn = state.db.begin().await?;
+    // The whole request runs inside one RLS-scoped transaction (see `crate::db`);
+    // provision is a platform-staff op (null tenant GUC), so RLS permits the
+    // cross-tenant inserts that stand up the new firm.
 
     // ---- tenant shell (provisioning) ----
     entity::tenant::ActiveModel {
@@ -82,7 +85,7 @@ pub async fn provision(
         parent_org_id: Set(None),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // ---- default theme ----
@@ -97,7 +100,7 @@ pub async fn provision(
         legal_templates: Set(json!({})),
         updated_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // ---- reserved subdomain (admin audience) ----
@@ -112,7 +115,7 @@ pub async fn provision(
         tls_status: Set("active".into()),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // ---- onboarding workflow ----
@@ -124,7 +127,7 @@ pub async fn provision(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // ---- firm owner: user + membership + scoped role ----
@@ -140,7 +143,7 @@ pub async fn provision(
         last_login_at: Set(None),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     entity::membership::ActiveModel {
@@ -154,7 +157,7 @@ pub async fn provision(
         is_primary: Set(true),
         created_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     entity::user_role::ActiveModel {
@@ -165,13 +168,11 @@ pub async fn provision(
         scope: Set("tenant".into()),
         scope_ref_id: Set(None),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
-    txn.commit().await?;
-
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::TENANT_PROVISION,
         Some("tenant"),

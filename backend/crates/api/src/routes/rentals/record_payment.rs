@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Rentals")]
 #[post("/leases/<id>/payments", data = "<body>")]
 pub async fn record_payment(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -26,7 +27,7 @@ pub async fn record_payment(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let b = body.into_inner();
@@ -46,7 +47,7 @@ pub async fn record_payment(
         method: Set(b.method),
         created_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
 
     // A settled payment draws down the lease's outstanding balance and may
     // restore the resident to current standing.
@@ -61,11 +62,11 @@ pub async fn record_payment(
         am.balance_cents = Set(new_balance);
         am.payment_status = Set(payment_status.to_string());
         am.updated_at = Set(now.into());
-        am.update(&state.db).await?;
+        am.update(&db).await?;
     }
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_PAYMENT_RECORD,
         Some("lease_payment"),

@@ -15,7 +15,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "LLCs")]
 #[get("/llcs")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<LlcResp>>> {
@@ -23,7 +24,7 @@ pub async fn list(
     let rows = Llc::find()
         .filter(entity::llc::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::llc::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(LlcResp::from).collect()))
 }

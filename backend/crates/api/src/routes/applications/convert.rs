@@ -16,14 +16,15 @@ use chrono::Utc;
 use entity::prelude::{Application, Lease, Property, Vehicle};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 /// `POST /applications/<id>/convert-to-lease` — create a lease from an application.
 #[rocket_okapi::openapi(tag = "Applications")]
 #[post("/applications/<id>/convert-to-lease", data = "<body>")]
 pub async fn convert(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -36,7 +37,7 @@ pub async fn convert(
 
     let app = Application::find_by_id(aid)
         .filter(entity::application::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("application not found".into()))?;
     if app.status != "Approved" {
@@ -47,7 +48,7 @@ pub async fn convert(
     // The lease's property must belong to the tenant.
     Property::find_by_id(b.property_id)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
 
@@ -56,7 +57,7 @@ pub async fn convert(
     if Lease::find()
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::lease::Column::ApplicationId.eq(aid))
-        .one(&state.db)
+        .one(&db)
         .await?
         .is_some()
     {
@@ -73,8 +74,8 @@ pub async fn convert(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| app.move_in.clone());
 
-    let txn = state.db.begin().await?;
-
+    // The whole request runs inside one RLS-scoped transaction (see `crate::db`),
+    // so `&db` already gives us atomicity here.
     let lease = entity::lease::ActiveModel {
         id: Set(lease_id),
         tenant_id: Set(scope.tenant_id),
@@ -98,7 +99,7 @@ pub async fn convert(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&txn)
+    .insert(&db)
     .await?;
 
     // Re-link vehicles captured during application to the new lease (tenant-scoped
@@ -106,27 +107,25 @@ pub async fn convert(
     let app_vehicles = Vehicle::find()
         .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::vehicle::Column::ApplicationId.eq(aid))
-        .all(&txn)
+        .all(&db)
         .await?;
     for v in app_vehicles {
         let mut vm: entity::vehicle::ActiveModel = v.into();
         vm.lease_id = Set(Some(lease_id));
         vm.updated_at = Set(now.into());
-        vm.update(&txn).await?;
+        vm.update(&db).await?;
     }
 
     // Mark the application as leased so it can't be converted again / re-shown.
     let mut am: entity::application::ActiveModel = app.clone().into();
     am.status = Set("Leased".into());
-    am.update(&txn).await?;
+    am.update(&db).await?;
 
     // Auto-apply the conditional fee schedule (pet fee, military discount, …).
-    let applied = apply_to_lease(&txn, scope.tenant_id, &lease).await?;
-
-    txn.commit().await?;
+    let applied = apply_to_lease(&db, scope.tenant_id, &lease).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::APPLICATION_CONVERT,
         Some("lease"),

@@ -14,14 +14,15 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 #[rocket_okapi::openapi(tag = "Portfolio")]
 #[get("/portfolio/summary")]
 pub async fn summary(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<PortfolioSummary>> {
     user.require(Permission::PropertyRead)?;
     let props = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?;
 
     let count = props.len() as i64;

@@ -13,20 +13,21 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/tenants")]
 pub async fn tenants(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<TenantSummary>>> {
     user.require(Permission::PlatformAdmin)?;
     let all = Tenant::find()
         .order_by_asc(entity::tenant::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
 
     let mut out = Vec::new();
     for t in all {
         let props = Property::find()
             .filter(entity::property::Column::TenantId.eq(t.id))
-            .all(&state.db)
+            .all(&db)
             .await?;
         let revenue: i64 = props.iter().map(|p| p.monthly_rent_cents).sum();
         out.push(TenantSummary {

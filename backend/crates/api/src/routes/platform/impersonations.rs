@@ -19,18 +19,19 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/impersonations")]
 pub async fn list_impersonations(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<ImpersonationSummary>>> {
     user.require(Permission::PlatformAdmin)?;
     let rows = ImpersonationSession::find()
         .order_by_desc(entity::impersonation_session::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?;
 
     // Resolve tenant names in one pass.
     let mut names: HashMap<Uuid, String> = HashMap::new();
-    for t in Tenant::find().all(&state.db).await? {
+    for t in Tenant::find().all(&db).await? {
         names.insert(t.id, t.name);
     }
 
@@ -59,24 +60,25 @@ pub async fn list_impersonations(
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[delete("/platform/impersonations/<id>")]
 pub async fn revoke_impersonation(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Permission::ImpersonateTenant)?;
     let sid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid session id".into()))?;
     let session = ImpersonationSession::find_by_id(sid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("session not found".into()))?;
 
     let tenant_id = session.tenant_id;
     let mut am: entity::impersonation_session::ActiveModel = session.into();
     am.revoked_at = Set(Some(Utc::now().into()));
-    am.update(&state.db).await?;
+    am.update(&db).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::IMPERSONATION_REVOKE,
         Some("impersonation_session"),

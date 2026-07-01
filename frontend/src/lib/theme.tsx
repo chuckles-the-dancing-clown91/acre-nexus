@@ -9,6 +9,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { api, DEFAULT_TENANT } from "./api";
+import { logError } from "./log";
 import type { PublicTheme } from "./types";
 
 interface ThemeCtx {
@@ -69,9 +70,9 @@ export function ThemeProvider({
         setBrandState(t);
         applyBrand(t);
       })
-      .catch(() => {
-        /* fall back to default brand */
-      });
+      .catch((e) =>
+        logError("failed to load tenant branding, using default", e)
+      );
     return () => {
       cancelled = true;
     };

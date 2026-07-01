@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Lease Documents")]
 #[get("/leases/<id>/document")]
 pub async fn get(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -27,7 +28,7 @@ pub async fn get(
         .filter(entity::lease_document::Column::LeaseId.eq(lid))
         .filter(entity::lease_document::Column::TenantId.eq(scope.tenant_id))
         .order_by_desc(entity::lease_document::Column::GeneratedAt)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("no document generated for this lease".into()))?;
     Ok(Json(LeaseDocDto::from(doc)))

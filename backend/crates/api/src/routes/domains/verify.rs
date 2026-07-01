@@ -23,7 +23,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Domains")]
 #[post("/domains/<id>/verify")]
 pub async fn verify(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -33,17 +34,17 @@ pub async fn verify(
     let domain = Domain::find()
         .filter(entity::domain::Column::Id.eq(did))
         .filter(entity::domain::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("domain not found".into()))?;
 
     let mut am: entity::domain::ActiveModel = domain.into();
     am.verified_at = Set(Some(Utc::now().into()));
     am.tls_status = Set("active".into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::DOMAIN_VERIFY,
         Some("domain"),

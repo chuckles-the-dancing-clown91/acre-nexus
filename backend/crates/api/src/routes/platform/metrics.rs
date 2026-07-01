@@ -3,19 +3,18 @@ use crate::auth::AuthUser;
 use crate::dto::usd;
 use crate::error::ApiResult;
 use crate::rbac::Permission;
-use crate::state::AppState;
 use entity::prelude::{Property, Tenant};
+use rocket::get;
 use rocket::serde::json::Json;
-use rocket::{get, State};
 use sea_orm::EntityTrait;
 
 /// `GET /platform/metrics` — top-line platform metrics (MRR-style overview).
 #[rocket_okapi::openapi(tag = "Platform Admin")]
 #[get("/platform/metrics")]
-pub async fn metrics(state: &State<AppState>, user: AuthUser) -> ApiResult<Json<PlatformMetrics>> {
+pub async fn metrics(db: crate::db::RequestDb, user: AuthUser) -> ApiResult<Json<PlatformMetrics>> {
     user.require(Permission::PlatformAdmin)?;
-    let tenants = Tenant::find().all(&state.db).await?;
-    let props = Property::find().all(&state.db).await?;
+    let tenants = Tenant::find().all(&db).await?;
+    let props = Property::find().all(&db).await?;
     let revenue: i64 = props.iter().map(|p| p.monthly_rent_cents).sum();
     Ok(Json(PlatformMetrics {
         tenant_count: tenants.len() as i64,

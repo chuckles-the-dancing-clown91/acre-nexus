@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[get("/tickets/<id>")]
 pub async fn get_ticket(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -23,13 +24,13 @@ pub async fn get_ticket(
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let ticket = MaintenanceTicket::find_by_id(tid)
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
     let comments = TicketComment::find()
         .filter(entity::ticket_comment::Column::TicketId.eq(tid))
         .order_by_desc(entity::ticket_comment::Column::CreatedAt)
-        .all(&state.db)
+        .all(&db)
         .await?
         .into_iter()
         .map(TicketCommentDto::from)

@@ -10,7 +10,7 @@ use entity::prelude::*;
 use rocket::post;
 use rocket::serde::json::Json;
 use rocket::State;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 /// `POST /members` — invite a member into the active tenant with a persona; the
@@ -18,7 +18,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[post("/members", data = "<body>")]
 pub async fn invite_member(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<InviteMemberReq>,
@@ -30,11 +31,11 @@ pub async fn invite_member(
     // Reuse or create the underlying user account.
     let existing = User::find()
         .filter(entity::user::Column::Email.eq(email.clone()))
-        .one(&state.db)
+        .one(&db)
         .await?;
-    let txn = state.db.begin().await?;
-    let uid = match existing {
-        Some(u) => u.id,
+    // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
+    let (uid, created_user) = match existing {
+        Some(u) => (u.id, false),
         None => {
             let uid = Uuid::new_v4();
             let pw = hash_password(&random_secret(24)).map_err(ApiError::Internal)?;
@@ -50,19 +51,46 @@ pub async fn invite_member(
                 last_login_at: Set(None),
                 created_at: Set(Utc::now().into()),
             }
-            .insert(&txn)
+            .insert(&db)
             .await?;
-            uid
+            (uid, true)
         }
     };
+
+    if created_user {
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::USER_CREATE,
+            Some("user"),
+            Some(uid.to_string()),
+            Some(scope.tenant_id),
+            Some(serde_json::json!({ "via": "invite_member", "name": body.name })),
+        )
+        .await;
+    }
+
     let m = NewMembership {
         scope: rbac::SCOPE_TENANT.to_string(),
         tenant_id: Some(scope.tenant_id),
         profile_type: body.profile_type.clone(),
         title: body.title.clone(),
     };
-    let membership = add_membership_inner(&txn, uid, &m, false).await?;
-    txn.commit().await?;
+    let membership = add_membership_inner(&db, uid, &m, false).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::MEMBERSHIP_ADD,
+        Some("user"),
+        Some(uid.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({
+            "membership_id": membership.id,
+            "profile_type": membership.profile_type,
+        })),
+    )
+    .await;
 
     Ok(Json(MemberDto {
         membership_id: membership.id,

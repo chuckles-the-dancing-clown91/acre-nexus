@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Vehicles")]
 #[post("/vehicles", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateVehicleReq>,
@@ -28,7 +29,7 @@ pub async fn create(
     }
     // Linked lease/application must belong to this tenant (prevents injecting a
     // vehicle into another tenant's lease document + fee evaluation).
-    super::assert_links_in_tenant(&state.db, scope.tenant_id, b.lease_id, b.application_id).await?;
+    super::assert_links_in_tenant(&db, scope.tenant_id, b.lease_id, b.application_id).await?;
     let now = Utc::now();
     let saved = entity::vehicle::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -46,10 +47,10 @@ pub async fn create(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::VEHICLE_CREATE,
         Some("vehicle"),

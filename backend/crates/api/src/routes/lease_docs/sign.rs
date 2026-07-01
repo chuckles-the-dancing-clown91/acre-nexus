@@ -28,7 +28,8 @@ fn body_hash(body: &str) -> String {
 #[rocket_okapi::openapi(tag = "Lease Documents")]
 #[post("/leases/<id>/document/sign", data = "<body>")]
 pub async fn sign(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     client_ip: ClientIp,
@@ -43,14 +44,14 @@ pub async fn sign(
     }
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let doc = LeaseDocument::find()
         .filter(entity::lease_document::Column::LeaseId.eq(lid))
         .filter(entity::lease_document::Column::TenantId.eq(scope.tenant_id))
         .order_by_desc(entity::lease_document::Column::GeneratedAt)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("generate a document before signing".into()))?;
     if doc.status == "signed" {
@@ -65,7 +66,7 @@ pub async fn sign(
     dm.signed_by = Set(Some(b.signed_by.clone()));
     dm.signed_hash = Set(Some(hash));
     dm.signed_ip = Set(client_ip.0.clone());
-    let saved = dm.update(&state.db).await?;
+    let saved = dm.update(&db).await?;
 
     // Signing activates the tenancy.
     let property_id = lease.property_id;
@@ -73,12 +74,12 @@ pub async fn sign(
         let mut lm: entity::lease::ActiveModel = lease.into();
         lm.status = Set("active".into());
         lm.updated_at = Set(now.into());
-        lm.update(&state.db).await?;
+        lm.update(&db).await?;
     }
-    crate::rentals_occupancy::sync_property_occupancy(&state.db, property_id).await;
+    crate::rentals_occupancy::sync_property_occupancy(&db, property_id).await;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_DOC_SIGN,
         Some("lease_document"),

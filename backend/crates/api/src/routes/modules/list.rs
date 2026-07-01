@@ -12,7 +12,8 @@ use rocket::{get, State};
 #[rocket_okapi::openapi(tag = "Modules")]
 #[get("/modules")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     tenant: TenantScope,
 ) -> ApiResult<Json<Vec<ModuleInfo>>> {
@@ -21,7 +22,7 @@ pub async fn list(
     let mut out = Vec::new();
     for m in registry() {
         let man = m.manifest();
-        let enabled = modules::is_enabled(&state.db, tenant.tenant_id, man.key).await;
+        let enabled = modules::is_enabled(&db, tenant.tenant_id, man.key).await;
         out.push(ModuleInfo {
             key: man.key.to_string(),
             name: man.name.to_string(),

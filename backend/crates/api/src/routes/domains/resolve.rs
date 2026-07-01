@@ -33,6 +33,7 @@ impl<'r> FromRequest<'r> for HostHeader {
 #[get("/public/resolve?<host>")]
 pub async fn resolve(
     state: &State<AppState>,
+    db: crate::db::RequestDb,
     host: Option<String>,
     header: HostHeader,
 ) -> ApiResult<Json<ResolveResp>> {
@@ -44,12 +45,12 @@ pub async fn resolve(
         .ok_or_else(|| ApiError::NotFound("host not mapped".into()))?;
 
     let tenant = Tenant::find_by_id(resolved.tenant_id)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("tenant not found".into()))?;
     let theme = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(resolved.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?;
     let (company_name, primary_color, accent_color) = match theme {
         Some(t) => (t.company_name, t.primary_color, t.accent_color),

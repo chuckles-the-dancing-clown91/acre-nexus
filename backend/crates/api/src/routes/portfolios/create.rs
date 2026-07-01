@@ -16,7 +16,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Portfolio")]
 #[post("/portfolios", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreatePortfolioReq>,
@@ -34,11 +35,11 @@ pub async fn create(
         strategy: Set(b.strategy.unwrap_or_default()),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::PORTFOLIO_CREATE,
         Some("portfolio"),

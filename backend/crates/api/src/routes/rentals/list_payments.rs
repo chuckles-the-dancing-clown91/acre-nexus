@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Rentals")]
 #[get("/leases/<id>/payments")]
 pub async fn list_payments(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -23,13 +24,13 @@ pub async fn list_payments(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let rows = LeasePayment::find()
         .filter(entity::lease_payment::Column::LeaseId.eq(lid))
         .order_by_desc(entity::lease_payment::Column::DueDate)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(LeasePaymentDto::from).collect()))
 }

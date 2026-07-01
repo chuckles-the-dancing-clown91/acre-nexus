@@ -12,6 +12,7 @@
 
 pub mod api_tokens;
 pub mod applications;
+pub mod assignments;
 pub mod auth;
 pub mod banking;
 pub mod cap_table;
@@ -33,6 +34,7 @@ pub mod properties;
 pub mod property_intel;
 pub mod public;
 pub mod rentals;
+pub mod settings;
 pub mod tenant_history;
 pub mod theme;
 pub mod title;
@@ -77,6 +79,9 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // module management (tenant software settings)
         modules::list::list,
         modules::set::set,
+        // per-tenant system settings
+        settings::list::list,
+        settings::set::set,
         // IAM — Acre admin: users, profiles/PII, roles, permissions, memberships
         iam::permissions::permissions,
         iam::profile_types::profile_types,

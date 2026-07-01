@@ -10,6 +10,7 @@ import {
   type LegalEntity,
 } from "@/lib/api";
 import { Badge, Card, statusTone } from "@/components/ui";
+import { AssignmentsCard } from "@/components/AssignmentsCard";
 
 const OWNER_KINDS = ["individual", "company", "firm"];
 const OWNER_ROLES = ["investor", "member", "manager"];
@@ -289,6 +290,13 @@ export default function LlcDetailPage() {
           </button>
         </form>
       </Card>
+
+      {/* Team / assignments (entity-scope; covers the LLC's properties) */}
+      <AssignmentsCard
+        subjectType="entity"
+        subjectId={id}
+        writePermission="entity:manage"
+      />
     </div>
   );
 }

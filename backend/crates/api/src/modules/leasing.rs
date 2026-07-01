@@ -38,6 +38,13 @@ impl PlatformModule for LeasingModule {
             public::apply::apply,
             applications::list::list,
             applications::update_status::update_status,
+            // application workflow (pipeline + history + advance)
+            applications::workflow::catalog,
+            applications::workflow::get_workflow,
+            applications::workflow::advance,
+            // application reuse (recent application → any property), gated by setting
+            applications::reuse::reusable,
+            applications::reuse::reuse,
         ]
     }
 

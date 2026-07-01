@@ -14,7 +14,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 #[rocket_okapi::openapi(tag = "IAM")]
 #[get("/admin/audit?<limit>&<action>")]
 pub async fn list_audit(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     limit: Option<u64>,
     action: Option<String>,
@@ -24,14 +25,11 @@ pub async fn list_audit(
     if let Some(a) = action.filter(|s| !s.is_empty()) {
         q = q.filter(entity::audit_log::Column::Action.eq(a));
     }
-    let rows = q
-        .limit(limit.unwrap_or(100).min(500))
-        .all(&state.db)
-        .await?;
+    let rows = q.limit(limit.unwrap_or(100).min(500)).all(&db).await?;
     let mut out = Vec::new();
     for r in rows {
         let actor_name = match r.actor_user_id {
-            Some(aid) => User::find_by_id(aid).one(&state.db).await?.map(|u| u.name),
+            Some(aid) => User::find_by_id(aid).one(&db).await?.map(|u| u.name),
             None => None,
         };
         out.push(AuditEntry {

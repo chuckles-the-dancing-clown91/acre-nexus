@@ -2,6 +2,8 @@
 
 pub use super::api_token::Entity as ApiToken;
 pub use super::application::Entity as Application;
+pub use super::application_event::Entity as ApplicationEvent;
+pub use super::assignment::Entity as Assignment;
 pub use super::audit_log::Entity as AuditLog;
 pub use super::background_job::Entity as BackgroundJob;
 pub use super::bank_account::Entity as BankAccount;
@@ -38,6 +40,7 @@ pub use super::property_valuation::Entity as PropertyValuation;
 pub use super::refresh_token::Entity as RefreshToken;
 pub use super::role::Entity as Role;
 pub use super::role_permission::Entity as RolePermission;
+pub use super::setting::Entity as Setting;
 pub use super::tenant::Entity as Tenant;
 pub use super::tenant_module::Entity as TenantModule;
 pub use super::theme::Entity as Theme;

@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Rentals")]
 #[post("/properties/<id>/leases", data = "<body>")]
 pub async fn create_lease(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn create_lease(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let b = body.into_inner();
@@ -61,11 +62,11 @@ pub async fn create_lease(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     // Reflect the new tenancy on the property + unit immediately.
-    crate::rentals_occupancy::sync_property_occupancy(&state.db, pid).await;
+    crate::rentals_occupancy::sync_property_occupancy(&db, pid).await;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_CREATE,
         Some("lease"),

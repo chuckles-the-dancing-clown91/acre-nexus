@@ -22,7 +22,8 @@ const VALID_KINDS: &[&str] = &["operating", "trust"];
 #[rocket_okapi::openapi(tag = "Legal Entities")]
 #[post("/entities/<entity_id>/bank-accounts", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     entity_id: &str,
@@ -42,7 +43,7 @@ pub async fn create(
     }
 
     Llc::find_by_id(eid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .filter(|l| l.tenant_id == scope.tenant_id)
         .ok_or_else(|| ApiError::NotFound("legal entity not found".into()))?;
@@ -64,11 +65,11 @@ pub async fn create(
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::BANK_ACCOUNT_CREATE,
         Some("bank_account"),

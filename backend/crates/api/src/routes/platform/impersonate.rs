@@ -26,6 +26,7 @@ const IMPERSONATION_TTL_SECS: i64 = 30 * 60;
 #[post("/platform/impersonate", data = "<body>")]
 pub async fn impersonate(
     state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     body: Json<ImpersonateReq>,
 ) -> ApiResult<Json<ImpersonationResp>> {
@@ -38,7 +39,7 @@ pub async fn impersonate(
     // The actor must be on the platform plane (have a platform_staff row).
     let staff = PlatformStaff::find()
         .filter(entity::platform_staff::Column::UserId.eq(user.user_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::Forbidden("not a platform-staff member".into()))?;
     if staff.status != "active" {
@@ -51,11 +52,7 @@ pub async fn impersonate(
     let tenant_id = resolve_tenant_ref(state, &b.tenant)
         .await
         .ok_or_else(|| ApiError::NotFound("tenant not found".into()))?;
-    if Tenant::find_by_id(tenant_id)
-        .one(&state.db)
-        .await?
-        .is_none()
-    {
+    if Tenant::find_by_id(tenant_id).one(&db).await?.is_none() {
         return Err(ApiError::NotFound("tenant not found".into()));
     }
 
@@ -71,16 +68,16 @@ pub async fn impersonate(
         revoked_at: Set(None),
         created_at: Set(now.into()),
     }
-    .insert(&state.db)
+    .insert(&db)
     .await?;
 
     // Mint a tenant-scoped token carrying the staff actor's platform permissions.
-    let perms = permissions_for(&state.db, user.user_id, Some(tenant_id)).await?;
+    let perms = permissions_for(&db, user.user_id, Some(tenant_id)).await?;
     let access = issue_access_token(&state.config, user.user_id, Some(tenant_id), true, perms)
         .map_err(ApiError::Internal)?;
 
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::IMPERSONATION_START,
         Some("impersonation_session"),

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { Lease, Property } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
+import { logError } from "@/lib/log";
 import { Badge, Card } from "@/components/ui";
 
 const STATUSES = ["active", "upcoming", "notice", "expired", "ended"];
@@ -39,7 +40,7 @@ export default function LeasesPage() {
     api
       .properties()
       .then(setProperties)
-      .catch(() => {});
+      .catch((e) => logError("failed to load properties", e));
   }, []);
 
   const propName = useMemo(() => {

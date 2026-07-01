@@ -44,7 +44,7 @@ use chrono::{DateTime, Utc};
 use entity::background_job;
 use entity::prelude::TenantModule;
 use rocket::Route;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 /// Static description of a module, surfaced to operators and the settings UI.
@@ -186,7 +186,7 @@ pub fn module_for_job_kind(kind: &str) -> Option<Box<dyn PlatformModule>> {
 
 /// Whether `module_key` is enabled for `tenant_id`. Falls back to the module's
 /// `default_enabled` when the tenant has no explicit override row.
-pub async fn is_enabled(db: &DatabaseConnection, tenant_id: Uuid, module_key: &str) -> bool {
+pub async fn is_enabled(db: &impl ConnectionTrait, tenant_id: Uuid, module_key: &str) -> bool {
     let default = registry()
         .iter()
         .find(|m| m.manifest().key == module_key)
@@ -211,7 +211,7 @@ pub async fn is_enabled(db: &DatabaseConnection, tenant_id: Uuid, module_key: &s
 /// Guard helper for routes belonging to an optional module: returns
 /// `403 module_disabled` when the module is off for the active tenant.
 pub async fn require_enabled(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     tenant_id: Uuid,
     module_key: &str,
 ) -> ApiResult<()> {

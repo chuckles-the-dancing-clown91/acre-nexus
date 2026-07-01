@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Rentals")]
 #[patch("/units/<id>", data = "<body>")]
 pub async fn update_unit(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn update_unit(
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let existing = Unit::find_by_id(uid)
         .filter(entity::unit::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("unit not found".into()))?;
     let b = body.into_inner();
@@ -49,9 +50,9 @@ pub async fn update_unit(
         am.status = Set(v);
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::UNIT_UPDATE,
         Some("unit"),

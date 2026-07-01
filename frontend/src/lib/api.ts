@@ -6,8 +6,13 @@
 
 import type {
   Application,
+  ApplicationWorkflow,
+  AppWorkflowCatalog,
   ApplyResponse,
+  Assignment,
+  CreateAssignmentInput,
   Counterparty,
+  SettingView,
   CounterpartyDetail,
   CounterpartyNote,
   CreateCounterpartyInput,
@@ -44,6 +49,7 @@ import type {
   Workflow,
   Workspace,
 } from "./types";
+import { logError } from "./log";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -136,12 +142,22 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     }
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: opts.method ?? "GET",
-    headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: opts.method ?? "GET",
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      cache: "no-store",
+    });
+  } catch (e) {
+    // A network-level failure (offline, DNS, CORS, connection refused) has no
+    // legitimate "expected" case anywhere it's called from, unlike a 4xx/5xx
+    // response — log it centrally here so it's visible even when a caller's
+    // own `.catch` doesn't, then re-throw for the caller to handle as usual.
+    logError(`${opts.method ?? "GET"} ${path} failed`, e);
+    throw e;
+  }
 
   if (!res.ok) {
     let code = "error";
@@ -219,6 +235,35 @@ export const api = {
       auth: true,
       body,
     }),
+  // ---- staff assignments (property + LLC) ----
+  propertyAssignments: (propertyId: string) =>
+    request<Assignment[]>(`/properties/${propertyId}/assignments`, {
+      auth: true,
+    }),
+  createPropertyAssignment: (propertyId: string, body: CreateAssignmentInput) =>
+    request<Assignment>(`/properties/${propertyId}/assignments`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deletePropertyAssignment: (propertyId: string, assignmentId: string) =>
+    request<{ removed: boolean }>(
+      `/properties/${propertyId}/assignments/${assignmentId}`,
+      { method: "DELETE", auth: true }
+    ),
+  entityAssignments: (entityId: string) =>
+    request<Assignment[]>(`/entities/${entityId}/assignments`, { auth: true }),
+  createEntityAssignment: (entityId: string, body: CreateAssignmentInput) =>
+    request<Assignment>(`/entities/${entityId}/assignments`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteEntityAssignment: (entityId: string, assignmentId: string) =>
+    request<{ removed: boolean }>(
+      `/entities/${entityId}/assignments/${assignmentId}`,
+      { method: "DELETE", auth: true }
+    ),
   // ---- financing (mortgages) ----
   mortgages: (propertyId: string) =>
     request<Mortgage[]>(`/properties/${propertyId}/mortgages`, { auth: true }),
@@ -436,6 +481,44 @@ export const api = {
       method: "POST",
       auth: true,
       body,
+    }),
+
+  // ---- application workflow ----
+  applicationWorkflowCatalog: () =>
+    request<AppWorkflowCatalog>("/applications/workflow/catalog", {
+      auth: true,
+    }),
+  applicationWorkflow: (id: string) =>
+    request<ApplicationWorkflow>(`/applications/${id}/workflow`, {
+      auth: true,
+    }),
+  advanceApplication: (id: string, to_status: string, note?: string) =>
+    request<Application>(`/applications/${id}/advance`, {
+      method: "POST",
+      auth: true,
+      body: { to_status, ...(note ? { note } : {}) },
+    }),
+
+  // ---- application reuse (gated by the application_reuse setting) ----
+  reusableApplications: (email: string) =>
+    request<Application[]>(
+      `/applications/reusable?email=${encodeURIComponent(email)}`,
+      { auth: true }
+    ),
+  reuseApplication: (source_application_id: string, listing_id?: string) =>
+    request<Application>("/applications/reuse", {
+      method: "POST",
+      auth: true,
+      body: { source_application_id, ...(listing_id ? { listing_id } : {}) },
+    }),
+
+  // ---- system settings ----
+  settings: () => request<SettingView[]>("/settings", { auth: true }),
+  setSetting: (key: string, value: unknown) =>
+    request<SettingView>(`/settings/${key}`, {
+      method: "PUT",
+      auth: true,
+      body: { value },
     }),
 
   tenantHistory: () =>

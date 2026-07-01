@@ -13,14 +13,15 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[delete("/admin/roles/<id>")]
 pub async fn delete_role(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
 ) -> ApiResult<Json<serde_json::Value>> {
     user.require(Permission::RoleManage)?;
     let rid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid role id".into()))?;
     let role = Role::find_by_id(rid)
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("role not found".into()))?;
     if role.is_system {
@@ -28,15 +29,15 @@ pub async fn delete_role(
     }
     RolePermission::delete_many()
         .filter(entity::role_permission::Column::RoleId.eq(rid))
-        .exec(&state.db)
+        .exec(&db)
         .await?;
     UserRole::delete_many()
         .filter(entity::user_role::Column::RoleId.eq(rid))
-        .exec(&state.db)
+        .exec(&db)
         .await?;
-    Role::delete_by_id(rid).exec(&state.db).await?;
+    Role::delete_by_id(rid).exec(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ROLE_DELETE,
         Some("role"),

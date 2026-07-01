@@ -6,12 +6,12 @@
 //! calling request. Request-context columns are left `NULL` here; those are
 //! filled only by the per-request fairing ([`super::request_log`]).
 
-use sea_orm::{ActiveModelTrait, DatabaseConnection, NotSet, Set};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, NotSet, Set};
 use uuid::Uuid;
 
 /// Record a domain audit entry. Best-effort: errors are logged, not propagated.
 pub async fn record(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     actor: Option<Uuid>,
     action: &str,
     target_type: Option<&str>,

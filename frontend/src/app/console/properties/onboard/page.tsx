@@ -8,7 +8,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { OnboardInput, OnboardMortgageInput } from "@/lib/types";
+import { ASSIGNABLE_RELATIONSHIPS } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
+import { useMembers } from "@/lib/queries";
 import { Button, Card } from "@/components/ui";
 
 // ---- Options ---------------------------------------------------------------
@@ -94,7 +96,14 @@ function emptyMortgage(): MortgageForm {
 const FIELD_CLASS =
   "rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink";
 
-const STEPS = ["Property", "Financing", "Review"] as const;
+const STEPS = ["Property", "Financing", "Team", "Review"] as const;
+
+/** A row in the onboarding Team step. */
+interface TeamRow {
+  user_id: string;
+  relationship: string;
+  is_primary: boolean;
+}
 
 // ---- Conversion helpers ----------------------------------------------------
 /** Dollars string → integer cents, or undefined if blank/NaN. */
@@ -262,12 +271,14 @@ export default function OnboardPropertyPage() {
   const { can } = useAuth();
   const router = useRouter();
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [property, setProperty] = useState<PropertyForm>(EMPTY_PROPERTY);
   const [mortgages, setMortgages] = useState<MortgageForm[]>([]);
+  const [team, setTeam] = useState<TeamRow[]>([]);
   const [enrich, setEnrich] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: members } = useMembers();
 
   if (!can("property:write")) {
     return (
@@ -293,6 +304,24 @@ export default function OnboardPropertyPage() {
 
   const removeMortgage = (idx: number) =>
     setMortgages((prev) => prev.filter((_, i) => i !== idx));
+
+  const addPerson = () =>
+    setTeam((prev) => [
+      ...prev,
+      {
+        user_id: "",
+        relationship: ASSIGNABLE_RELATIONSHIPS[0].key,
+        is_primary: false,
+      },
+    ]);
+
+  const setPerson = (idx: number, patch: Partial<TeamRow>) =>
+    setTeam((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
+
+  const removePerson = (idx: number) =>
+    setTeam((prev) => prev.filter((_, i) => i !== idx));
+
+  const populatedTeam = team.filter((t) => t.user_id !== "");
 
   const step1Valid =
     property.name.trim() !== "" &&
@@ -325,6 +354,13 @@ export default function OnboardPropertyPage() {
     if (price !== undefined) input.purchase_price_cents = price;
     const acquired = toStr(property.acquired_on);
     if (acquired !== undefined) input.acquired_on = acquired;
+    if (populatedTeam.length > 0) {
+      input.assignments = populatedTeam.map((t) => ({
+        user_id: t.user_id,
+        relationship: t.relationship,
+        is_primary: t.is_primary,
+      }));
+    }
     return input;
   };
 
@@ -358,7 +394,7 @@ export default function OnboardPropertyPage() {
       {/* Step indicator */}
       <div className="flex flex-wrap items-center gap-3">
         {STEPS.map((label, i) => {
-          const n = (i + 1) as 1 | 2 | 3;
+          const n = (i + 1) as 1 | 2 | 3 | 4;
           const active = n === step;
           const done = n < step;
           return (
@@ -584,8 +620,97 @@ export default function OnboardPropertyPage() {
         </Card>
       )}
 
-      {/* Step 3: Review & submit */}
+      {/* Step 3: Team */}
       {step === 3 && (
+        <Card className="space-y-5 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-lg font-bold">Team</h2>
+              <p className="text-sm text-ink-3">
+                Assign staff to this property. Each assignment also grants that
+                person access to it. Optional — you can add more later.
+              </p>
+            </div>
+            <Button variant="outline" onClick={addPerson}>
+              Add person
+            </Button>
+          </div>
+
+          {team.length === 0 ? (
+            <p className="text-sm text-ink-3">
+              No one assigned. Add a property manager or landlord, or continue.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {team.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="grid items-end gap-4 rounded-xl border border-line p-4 sm:grid-cols-[1.4fr_1fr_auto]"
+                >
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
+                    <span>Person</span>
+                    <select
+                      value={t.user_id}
+                      onChange={(e) =>
+                        setPerson(idx, { user_id: e.target.value })
+                      }
+                      className={FIELD_CLASS}
+                    >
+                      <option value="">— Select member —</option>
+                      {(members ?? []).map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.name} · {m.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
+                    <span>Relationship</span>
+                    <select
+                      value={t.relationship}
+                      onChange={(e) =>
+                        setPerson(idx, { relationship: e.target.value })
+                      }
+                      className={FIELD_CLASS}
+                    >
+                      {ASSIGNABLE_RELATIONSHIPS.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex items-center gap-3 pb-1">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-ink-2">
+                      <input
+                        type="checkbox"
+                        checked={t.is_primary}
+                        onChange={(e) =>
+                          setPerson(idx, { is_primary: e.target.checked })
+                        }
+                      />
+                      Primary
+                    </label>
+                    <Button variant="ghost" onClick={() => removePerson(idx)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep(2)}>
+              Back
+            </Button>
+            <Button onClick={() => setStep(4)}>Next</Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 4: Review & submit */}
+      {step === 4 && (
         <Card className="space-y-5 p-5">
           <h2 className="font-display text-lg font-bold">
             Review &amp; submit
@@ -655,6 +780,40 @@ export default function OnboardPropertyPage() {
             )}
           </div>
 
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-ink-2">
+              Team ({populatedTeam.length})
+            </h3>
+            {populatedTeam.length === 0 ? (
+              <p className="text-sm text-ink-3">No one assigned.</p>
+            ) : (
+              <div className="space-y-2">
+                {populatedTeam.map((t, idx) => {
+                  const m = (members ?? []).find(
+                    (x) => x.user_id === t.user_id
+                  );
+                  const rel = ASSIGNABLE_RELATIONSHIPS.find(
+                    (r) => r.key === t.relationship
+                  );
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-line p-3 text-sm"
+                    >
+                      <span className="font-semibold">
+                        {m?.name ?? "Member"}
+                      </span>{" "}
+                      <span className="text-ink-3">
+                        · {rel?.label ?? t.relationship}
+                        {t.is_primary ? " · Primary" : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-sm font-semibold text-ink-2">
             <input
               type="checkbox"
@@ -670,7 +829,7 @@ export default function OnboardPropertyPage() {
           <div className="flex justify-between">
             <Button
               variant="outline"
-              onClick={() => setStep(2)}
+              onClick={() => setStep(3)}
               disabled={submitting}
             >
               Back

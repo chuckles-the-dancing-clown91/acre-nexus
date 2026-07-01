@@ -22,10 +22,12 @@
 extern crate rocket;
 
 mod accounting;
+mod app_workflow;
 mod audit;
 mod auth;
 mod config;
 mod cors;
+mod db;
 mod dto;
 mod enrichment;
 mod error;
@@ -39,6 +41,7 @@ mod rentals_occupancy;
 mod routes;
 mod scheduler;
 mod seed;
+mod settings;
 mod state;
 mod tenancy;
 mod tokens;
@@ -56,13 +59,28 @@ use state::AppState;
 
 #[launch]
 async fn rocket() -> _ {
-    // Structured logging.
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,sqlx=warn".into()),
-        )
-        .try_init();
+    // Structured logging. `LOG_FORMAT=json` switches to newline-delimited JSON
+    // (for shipping to a log aggregator, where each line's `request_id` field —
+    // when present, see `error::ApiError`'s Responder — joins it to the matching
+    // `audit_log` row written by `AuditFairing`); anything else stays
+    // human-readable `fmt` output for local development.
+    let env_filter = || {
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "info,sqlx=warn".into())
+    };
+    let json_logs = std::env::var("LOG_FORMAT")
+        .map(|v| v.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+    let _ = if json_logs {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(env_filter())
+            .try_init()
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter())
+            .try_init()
+    };
 
     let config = Config::from_env();
     tracing::info!("connecting to database…");
@@ -88,6 +106,7 @@ async fn rocket() -> _ {
     let mut app = rocket::build()
         .manage(state)
         .attach(cors::Cors)
+        .attach(db::TxCommit)
         .attach(audit::AuditFairing);
 
     let (core_routes, core_spec) = routes::core_api();

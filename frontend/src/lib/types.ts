@@ -376,6 +376,7 @@ export interface OnboardInput {
   purchase_price_cents?: number;
   acquired_on?: string;
   mortgages: OnboardMortgageInput[];
+  assignments?: CreateAssignmentInput[];
   enrich: boolean;
 }
 
@@ -385,7 +386,100 @@ export interface OnboardResponse {
   workflow_stage: string;
   mortgages_created: number;
   lenders_created: number;
+  assignments_created: number;
   enrich_job_id: string | null;
+}
+
+// ---- Staff assignments (property / LLC) -----------------------------------
+
+/** The subject an assignment targets. */
+export type AssignmentSubject = "property" | "entity";
+
+/** Relationships a person can be assigned as. Each maps to a tenant role that is
+ * granted at the subject's scope, so assigning also confers access. */
+export const ASSIGNABLE_RELATIONSHIPS: { key: string; label: string }[] = [
+  { key: "property_manager", label: "Property Manager" },
+  { key: "landlord", label: "Landlord / Owner" },
+  { key: "maintenance", label: "Maintenance" },
+  { key: "leasing_agent", label: "Leasing Agent" },
+  { key: "back_office", label: "Back-office Staff" },
+];
+
+export interface Assignment {
+  id: string;
+  subject_type: AssignmentSubject;
+  subject_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  relationship: string;
+  relationship_label: string;
+  role_id: string | null;
+  is_primary: boolean;
+  title: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreateAssignmentInput {
+  user_id: string;
+  relationship: string;
+  is_primary?: boolean;
+  title?: string;
+  notes?: string;
+}
+
+// ---- System settings ------------------------------------------------------
+
+/** One setting merged with its catalog metadata + the tenant's value. */
+export interface SettingView {
+  key: string;
+  label: string;
+  description: string;
+  group: string;
+  /** "bool" | "int" | "text". */
+  kind: string;
+  value: unknown;
+  default: unknown;
+}
+
+// ---- Application workflow --------------------------------------------------
+
+export interface AppWorkflowStage {
+  key: string;
+  label: string;
+  terminal: boolean;
+  reached: boolean;
+  current: boolean;
+}
+
+export interface ApplicationEvent {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  note: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface ApplicationWorkflow {
+  current_status: string;
+  stages: AppWorkflowStage[];
+  offramps: AppWorkflowStage[];
+  allowed_next: string[];
+  history: ApplicationEvent[];
+}
+
+export interface AppWorkflowCatalogStage {
+  key: string;
+  label: string;
+  terminal: boolean;
+  transitions: string[];
+}
+
+export interface AppWorkflowCatalog {
+  stages: AppWorkflowCatalogStage[];
+  offramps: AppWorkflowCatalogStage[];
 }
 
 // ---- Rentals: units, leases, payments -------------------------------------

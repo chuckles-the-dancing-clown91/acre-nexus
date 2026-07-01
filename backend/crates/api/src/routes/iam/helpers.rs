@@ -2,16 +2,14 @@ use super::dto::{MembershipDto, NewMembership, ProfileDto, ProfileInput, UserDet
 use crate::error::{ApiError, ApiResult};
 use crate::pii;
 use crate::rbac;
-use crate::state::AppState;
 use chrono::{NaiveDate, Utc};
 use entity::prelude::*;
 use rocket::serde::json::Json;
-use rocket::State;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 pub(crate) async fn role_permissions(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     role_id: Uuid,
 ) -> Result<Vec<String>, ApiError> {
     Ok(RolePermission::find()
@@ -24,7 +22,7 @@ pub(crate) async fn role_permissions(
 }
 
 pub(crate) async fn replace_role_permissions(
-    db: &sea_orm::DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     role_id: Uuid,
     perms: &[String],
 ) -> Result<(), ApiError> {
@@ -57,22 +55,22 @@ pub(crate) fn validate_permissions(perms: &[String]) -> Result<(), ApiError> {
 }
 
 pub(crate) async fn load_user_detail(
-    state: &State<AppState>,
+    db: &impl sea_orm::ConnectionTrait,
     uid: Uuid,
 ) -> ApiResult<Json<UserDetail>> {
     let u = User::find_by_id(uid)
-        .one(&state.db)
+        .one(db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
 
     let profile = UserProfile::find_by_id(uid)
-        .one(&state.db)
+        .one(db)
         .await?
         .map(ProfileDto::from);
 
     let memberships = Membership::find()
         .filter(entity::membership::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(db)
         .await?
         .into_iter()
         .map(|m| MembershipDto {
@@ -89,11 +87,11 @@ pub(crate) async fn load_user_detail(
     // Roles, joined to their key/name.
     let urs = UserRole::find()
         .filter(entity::user_role::Column::UserId.eq(uid))
-        .all(&state.db)
+        .all(db)
         .await?;
     let mut roles = Vec::new();
     for ur in urs {
-        if let Some(r) = Role::find_by_id(ur.role_id).one(&state.db).await? {
+        if let Some(r) = Role::find_by_id(ur.role_id).one(db).await? {
             roles.push(UserRoleDto {
                 id: ur.id,
                 role_id: r.id,
@@ -185,6 +183,47 @@ pub(crate) async fn add_membership_inner<C: sea_orm::ConnectionTrait>(
         }
     }
     Ok(model)
+}
+
+/// Which `ProfileInput` fields carry a value, for audit metadata. Names only —
+/// never the values themselves (some of these are PII, and SSN/gov-id are
+/// sealed at rest specifically so they don't end up sitting in plaintext
+/// anywhere else, including the audit log).
+pub(crate) fn profile_fields_touched(input: &ProfileInput) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    macro_rules! note {
+        ($field:ident) => {
+            if input.$field.is_some() {
+                fields.push(stringify!($field));
+            }
+        };
+    }
+    note!(legal_first_name);
+    note!(legal_middle_name);
+    note!(legal_last_name);
+    note!(preferred_name);
+    note!(date_of_birth);
+    note!(phone);
+    note!(address_line1);
+    note!(address_line2);
+    note!(city);
+    note!(region);
+    note!(postal_code);
+    note!(country);
+    note!(photo_url);
+    note!(gov_id_type);
+    if input.ssn.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+        fields.push("ssn");
+    }
+    if input
+        .gov_id_number
+        .as_deref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+    {
+        fields.push("gov_id_number");
+    }
+    fields
 }
 
 /// Insert or update a user's profile, encrypting SSN / gov-ID when provided.

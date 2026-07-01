@@ -89,7 +89,8 @@ pub async fn apply_to_lease<C: ConnectionTrait>(
 #[rocket_okapi::openapi(tag = "Lease Charges")]
 #[post("/leases/<id>/apply-fees")]
 pub async fn apply_fees(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -98,12 +99,12 @@ pub async fn apply_fees(
     let lid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let lease = Lease::find_by_id(lid)
         .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
-    let created = apply_to_lease(&state.db, scope.tenant_id, &lease).await?;
+    let created = apply_to_lease(&db, scope.tenant_id, &lease).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::LEASE_FEES_APPLY,
         Some("lease"),

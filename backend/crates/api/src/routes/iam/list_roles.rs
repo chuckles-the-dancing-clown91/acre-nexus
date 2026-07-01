@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "IAM")]
 #[get("/admin/roles?<tenant_id>&<scope>")]
 pub async fn list_roles(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     tenant_id: Option<String>,
     scope: Option<String>,
@@ -32,13 +33,10 @@ pub async fn list_roles(
                 .or(entity::role::Column::TenantId.is_null()),
         );
     }
-    let roles = q
-        .order_by_asc(entity::role::Column::Name)
-        .all(&state.db)
-        .await?;
+    let roles = q.order_by_asc(entity::role::Column::Name).all(&db).await?;
     let mut out = Vec::new();
     for r in roles {
-        let perms = role_permissions(&state.db, r.id).await?;
+        let perms = role_permissions(&db, r.id).await?;
         out.push(RoleDto {
             id: r.id,
             scope: r.scope,

@@ -19,6 +19,9 @@ mod m20240101_000011_platform_plane;
 mod m20240101_000012_domains_onboarding;
 mod m20240101_000013_leasing_lifecycle;
 mod m20240101_000014_lease_doc_signature;
+mod m20240101_000015_rls_enforce;
+mod m20240101_000016_assignments;
+mod m20240101_000017_settings_app_workflow;
 
 pub struct Migrator;
 
@@ -40,6 +43,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000012_domains_onboarding::Migration),
             Box::new(m20240101_000013_leasing_lifecycle::Migration),
             Box::new(m20240101_000014_lease_doc_signature::Migration),
+            Box::new(m20240101_000015_rls_enforce::Migration),
+            Box::new(m20240101_000016_assignments::Migration),
+            Box::new(m20240101_000017_settings_app_workflow::Migration),
         ]
     }
 }

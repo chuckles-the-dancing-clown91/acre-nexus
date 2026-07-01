@@ -15,7 +15,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Portfolio")]
 #[get("/portfolios")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<PortfolioResp>>> {
@@ -23,11 +24,11 @@ pub async fn list(
     let portfolios = Portfolio::find()
         .filter(entity::portfolio::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::portfolio::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
     let props = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?;
 
     let out = portfolios

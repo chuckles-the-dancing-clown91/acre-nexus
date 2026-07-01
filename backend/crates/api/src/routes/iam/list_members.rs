@@ -14,18 +14,19 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 #[rocket_okapi::openapi(tag = "IAM")]
 #[get("/members")]
 pub async fn list_members(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<MemberDto>>> {
     user.require(Permission::MemberRead)?;
     let memberships = Membership::find()
         .filter(entity::membership::Column::TenantId.eq(scope.tenant_id))
-        .all(&state.db)
+        .all(&db)
         .await?;
     let mut out = Vec::new();
     for m in memberships {
-        if let Some(u) = User::find_by_id(m.user_id).one(&state.db).await? {
+        if let Some(u) = User::find_by_id(m.user_id).one(&db).await? {
             out.push(MemberDto {
                 membership_id: m.id,
                 user_id: u.id,

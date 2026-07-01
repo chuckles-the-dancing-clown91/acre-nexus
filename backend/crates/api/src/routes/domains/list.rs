@@ -15,7 +15,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Domains")]
 #[get("/domains")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<DomainResp>>> {
@@ -23,7 +24,7 @@ pub async fn list(
     let rows = Domain::find()
         .filter(entity::domain::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::domain::Column::Hostname)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(DomainResp::from).collect()))
 }

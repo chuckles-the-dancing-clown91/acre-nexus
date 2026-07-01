@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "API Tokens")]
 #[post("/api-tokens", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateTokenReq>,
@@ -36,9 +37,9 @@ pub async fn create(
         revoked_at: Set(None),
         created_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::TOKEN_CREATE,
         Some("api_token"),

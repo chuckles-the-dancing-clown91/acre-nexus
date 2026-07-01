@@ -1,5 +1,5 @@
 use super::dto::{ProfileDto, ProfileInput};
-use super::helpers::upsert_profile_inner;
+use super::helpers::{profile_fields_touched, upsert_profile_inner};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
@@ -16,16 +16,33 @@ use uuid::Uuid;
 #[put("/admin/users/<id>/profile", data = "<body>")]
 pub async fn put_profile(
     state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     id: &str,
     body: Json<ProfileInput>,
 ) -> ApiResult<Json<ProfileDto>> {
     user.require(Permission::ProfileWrite)?;
     let uid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid user id".into()))?;
-    if User::find_by_id(uid).one(&state.db).await?.is_none() {
-        return Err(ApiError::NotFound("user not found".into()));
-    }
-    upsert_profile_inner(&state.db, &state.config.pii_key, uid, &body.into_inner()).await?;
-    let p = UserProfile::find_by_id(uid).one(&state.db).await?.unwrap();
+    let target = User::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
+    let input = body.into_inner();
+    let fields = profile_fields_touched(&input);
+
+    upsert_profile_inner(&db, &state.config.pii_key, uid, &input).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::PROFILE_WRITE,
+        Some("user"),
+        Some(uid.to_string()),
+        target.tenant_id,
+        Some(serde_json::json!({ "fields_set": fields })),
+    )
+    .await;
+
+    let p = UserProfile::find_by_id(uid).one(&db).await?.unwrap();
     Ok(Json(p.into()))
 }

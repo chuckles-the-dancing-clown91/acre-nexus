@@ -14,7 +14,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Entities")]
 #[post("/entities", data = "<body>")]
 pub async fn create(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<CreateCounterpartyReq>,
@@ -41,9 +42,9 @@ pub async fn create(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::ENTITY_CREATE,
         Some("counterparty"),

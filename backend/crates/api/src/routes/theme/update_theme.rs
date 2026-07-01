@@ -14,7 +14,8 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 #[rocket_okapi::openapi(tag = "Theming")]
 #[put("/theme", data = "<body>")]
 pub async fn update_theme(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     body: Json<UpdateThemeReq>,
@@ -22,7 +23,7 @@ pub async fn update_theme(
     user.require(Permission::ThemeWrite)?;
     let t = Theme::find()
         .filter(entity::theme::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("theme not configured".into()))?;
     let mut am: entity::theme::ActiveModel = t.into();
@@ -46,9 +47,9 @@ pub async fn update_theme(
         am.legal_templates = Set(v);
     }
     am.updated_at = Set(Utc::now().into());
-    let saved = am.update(&state.db).await?;
+    let saved = am.update(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::THEME_UPDATE,
         Some("theme"),

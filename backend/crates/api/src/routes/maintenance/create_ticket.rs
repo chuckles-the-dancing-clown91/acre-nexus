@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[post("/properties/<id>/tickets", data = "<body>")]
 pub async fn create_ticket(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -25,7 +26,7 @@ pub async fn create_ticket(
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let b = body.into_inner();
@@ -57,9 +58,9 @@ pub async fn create_ticket(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
-    let saved = model.insert(&state.db).await?;
+    let saved = model.insert(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::TICKET_CREATE,
         Some("maintenance_ticket"),

@@ -15,7 +15,8 @@ use uuid::Uuid;
 #[rocket_okapi::openapi(tag = "Fee Schedule")]
 #[delete("/fees/<id>")]
 pub async fn delete(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     id: &str,
@@ -24,12 +25,12 @@ pub async fn delete(
     let fid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let fee = FeeSchedule::find_by_id(fid)
         .filter(entity::fee_schedule::Column::TenantId.eq(scope.tenant_id))
-        .one(&state.db)
+        .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("fee not found".into()))?;
-    fee.delete(&state.db).await?;
+    fee.delete(&db).await?;
     crate::audit::record(
-        &state.db,
+        &db,
         Some(user.user_id),
         crate::audit::actions::FEE_SCHEDULE_DELETE,
         Some("fee_schedule"),

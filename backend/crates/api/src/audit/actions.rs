@@ -18,6 +18,10 @@ pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";
 pub const PROPERTY_ENRICH: &str = "property.enrich";
+/// A background enrichment source finished writing property data (or gave up
+/// retrying). Distinct from [`PROPERTY_ENRICH`], which only logs the request
+/// that *enqueued* the job — this is the actual data mutation.
+pub const PROPERTY_ENRICHMENT_RUN: &str = "property.enrichment_run";
 pub const PROPERTY_ONBOARD: &str = "property.onboard";
 pub const LLC_CREATE: &str = "llc.create";
 
@@ -66,7 +70,6 @@ pub const LIEN_DELETE: &str = "lien.delete";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
-pub const APPLICATION_UPDATE: &str = "application.update";
 
 // ---- Settings ----
 pub const THEME_UPDATE: &str = "theme.update";
@@ -78,10 +81,15 @@ pub const TOKEN_REVOKE: &str = "apitoken.revoke";
 
 // ---- IAM (also referenced from the iam routes) ----
 pub const USER_CREATE: &str = "user.create";
+pub const USER_UPDATE: &str = "user.update";
 pub const ROLE_CREATE: &str = "role.create";
 pub const ROLE_UPDATE: &str = "role.update";
 pub const ROLE_DELETE: &str = "role.delete";
 pub const ROLE_ASSIGN: &str = "role.assign";
+pub const ROLE_REVOKE: &str = "role.revoke";
+pub const MEMBERSHIP_ADD: &str = "membership.add";
+pub const MEMBERSHIP_REMOVE: &str = "membership.remove";
+pub const PROFILE_WRITE: &str = "profile.write";
 pub const PII_REVEAL: &str = "pii.reveal";
 
 // ---- Tenancy spec: provisioning, platform plane, routing, multi-entity ----
@@ -96,3 +104,8 @@ pub const OWNER_CREATE: &str = "owner.create";
 pub const ENTITY_OWNERSHIP_ADD: &str = "entity_ownership.add";
 pub const BANK_ACCOUNT_CREATE: &str = "bank_account.create";
 pub const ONBOARDING_ADVANCE: &str = "onboarding.advance";
+pub const ASSIGNMENT_CREATE: &str = "assignment.create";
+pub const ASSIGNMENT_REMOVE: &str = "assignment.remove";
+pub const SETTING_UPDATE: &str = "setting.update";
+pub const APPLICATION_ADVANCE: &str = "application.advance";
+pub const APPLICATION_REUSE: &str = "application.reuse";

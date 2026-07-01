@@ -12,13 +12,14 @@ use sea_orm::{EntityTrait, QueryOrder};
 #[rocket_okapi::openapi(tag = "IAM")]
 #[get("/admin/profile-types")]
 pub async fn profile_types(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<ProfileTypeDto>>> {
     user.require(Permission::MemberRead)?;
     let rows = entity::profile_type::Entity::find()
         .order_by_asc(entity::profile_type::Column::Scope)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(
         rows.into_iter()

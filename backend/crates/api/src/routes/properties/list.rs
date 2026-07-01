@@ -13,7 +13,8 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 #[rocket_okapi::openapi(tag = "Properties")]
 #[get("/properties")]
 pub async fn list(
-    state: &State<AppState>,
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<PropertyResp>>> {
@@ -21,7 +22,7 @@ pub async fn list(
     let rows = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .order_by_asc(entity::property::Column::Name)
-        .all(&state.db)
+        .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(PropertyResp::from).collect()))
 }
