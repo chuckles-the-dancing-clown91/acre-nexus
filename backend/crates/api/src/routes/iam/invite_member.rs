@@ -34,8 +34,8 @@ pub async fn invite_member(
         .one(&db)
         .await?;
     // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
-    let uid = match existing {
-        Some(u) => u.id,
+    let (uid, created_user) = match existing {
+        Some(u) => (u.id, false),
         None => {
             let uid = Uuid::new_v4();
             let pw = hash_password(&random_secret(24)).map_err(ApiError::Internal)?;
@@ -53,9 +53,23 @@ pub async fn invite_member(
             }
             .insert(&db)
             .await?;
-            uid
+            (uid, true)
         }
     };
+
+    if created_user {
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::USER_CREATE,
+            Some("user"),
+            Some(uid.to_string()),
+            Some(scope.tenant_id),
+            Some(serde_json::json!({ "via": "invite_member", "name": body.name })),
+        )
+        .await;
+    }
+
     let m = NewMembership {
         scope: rbac::SCOPE_TENANT.to_string(),
         tenant_id: Some(scope.tenant_id),
@@ -63,6 +77,20 @@ pub async fn invite_member(
         title: body.title.clone(),
     };
     let membership = add_membership_inner(&db, uid, &m, false).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::MEMBERSHIP_ADD,
+        Some("user"),
+        Some(uid.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({
+            "membership_id": membership.id,
+            "profile_type": membership.profile_type,
+        })),
+    )
+    .await;
 
     Ok(Json(MemberDto {
         membership_id: membership.id,

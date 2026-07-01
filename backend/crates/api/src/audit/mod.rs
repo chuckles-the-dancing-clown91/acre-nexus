@@ -32,5 +32,6 @@ pub mod record;
 pub mod request_log;
 pub mod skip;
 
+pub(crate) use fairing::current_request_id;
 pub use fairing::AuditFairing;
 pub use record::record;

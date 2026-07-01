@@ -26,7 +26,24 @@ pub async fn add_membership(
     if User::find_by_id(uid).one(&db).await?.is_none() {
         return Err(ApiError::NotFound("user not found".into()));
     }
-    let m = add_membership_inner(&db, uid, &body.into_inner(), false).await?;
+    let body = body.into_inner();
+    let m = add_membership_inner(&db, uid, &body, false).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::MEMBERSHIP_ADD,
+        Some("user"),
+        Some(uid.to_string()),
+        m.tenant_id,
+        Some(serde_json::json!({
+            "membership_id": m.id,
+            "profile_type": m.profile_type,
+            "scope": m.scope,
+        })),
+    )
+    .await;
+
     Ok(Json(MembershipDto {
         id: m.id,
         scope: m.scope,

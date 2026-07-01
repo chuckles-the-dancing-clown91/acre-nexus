@@ -21,6 +21,27 @@ pub async fn revoke_role(
     let urid: i64 = id
         .parse()
         .map_err(|_| ApiError::BadRequest("invalid assignment id".into()))?;
+    // Fetch first so the audit entry captures which grant was revoked.
+    let ur = UserRole::find_by_id(urid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("role assignment not found".into()))?;
     UserRole::delete_by_id(urid).exec(&db).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::ROLE_REVOKE,
+        Some("user"),
+        Some(ur.user_id.to_string()),
+        ur.tenant_id,
+        Some(serde_json::json!({
+            "role_id": ur.role_id,
+            "scope": ur.scope,
+            "scope_ref_id": ur.scope_ref_id,
+        })),
+    )
+    .await;
+
     Ok(Json(serde_json::json!({ "revoked": true })))
 }

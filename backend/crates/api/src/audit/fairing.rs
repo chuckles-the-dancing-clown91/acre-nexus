@@ -27,6 +27,17 @@ struct Trace {
     request_id: Uuid,
 }
 
+/// The current request's audit correlation id, if the fairing traced it (i.e.
+/// the path wasn't skipped — see [`super::skip`]). Lets any code holding a
+/// `&Request` — notably [`crate::error::ApiError`]'s `Responder` impl — tag its
+/// `tracing` logs with the same id that ends up in the `audit_log` row, so a log
+/// line and its audit entry can be joined by `request_id`.
+pub(crate) fn current_request_id(req: &Request<'_>) -> Option<Uuid> {
+    req.local_cache(|| None::<Trace>)
+        .as_ref()
+        .map(|t| t.request_id)
+}
+
 /// Records every (non-skipped) HTTP request to the audit log.
 pub struct AuditFairing;
 

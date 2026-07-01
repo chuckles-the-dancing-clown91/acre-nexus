@@ -48,18 +48,26 @@ stable dotted action key and structured `metadata`. These are the
 human-readable "what changed" entries. They leave the request-context columns
 `NULL`.
 
-Wired into **every** mutating API:
+Wired into **every** mutating API — including every membership/role/profile
+mutation in IAM, which previously left the domain trail blank (fixed; see
+below):
 
 | Area | Actions |
 |------|---------|
 | Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.switch_workspace` |
-| Properties | `property.create`, `property.update`, `llc.create` |
-| Leasing | `application.submit` (public), `application.update` |
-| Settings | `theme.update`, `module.toggle` |
+| Properties | `property.create`, `property.update`, `property.onboard`, `llc.create` |
+| Leasing | `application.submit` (public), `application.advance`, `application.convert`, `application.reuse` |
+| Settings | `theme.update`, `module.toggle`, `setting.update` |
 | Vendor tokens | `apitoken.create`, `apitoken.revoke` |
-| IAM | `user.create`, `role.create`, `role.update`, `role.delete`, `pii.reveal` |
+| IAM | `user.create`, `user.update`, `role.create`, `role.update`, `role.delete`, `role.assign`, `role.revoke`, `membership.add`, `membership.remove`, `profile.write`, `pii.reveal` |
+| Assignments | `assignment.create`, `assignment.remove` |
 
 The full taxonomy lives in `audit/actions.rs`.
+
+**Sensitive metadata**: writers never put raw PII in `metadata`. `profile.write`
+records only which fields were touched (`fields_set: [...]`), never their
+values; `pii.reveal` likewise logs the *fact* of an SSN/gov-id read, not the
+decrypted value.
 
 ---
 
@@ -69,6 +77,26 @@ Both writers are **best-effort**: a failed audit insert is logged (`tracing`)
 and swallowed — it can never block or fail the underlying operation. The
 per-request write is additionally dispatched off the request path (a spawned
 task), so auditing adds no latency to the response.
+
+---
+
+## Logging ↔ audit correlation
+
+The two systems are tied together by the same **`request_id`** the fairing
+generates: it's stored in the request's `audit_log` row, returned as the
+`X-Request-Id` response header, *and* available to any code holding a
+`&Request` via `crate::audit::current_request_id(req)` (it reads the same
+per-request cache slot the fairing populates in `on_request`). `error::ApiError`'s
+`Responder` uses this to tag its `tracing::error!` calls for `Db`/`Internal`
+failures with `request_id`, so a stack-trace-bearing log line can be joined
+back to the exact audit row (and every other request-scoped fact — actor,
+tenant, latency) by that id.
+
+**Log format**: `tracing-subscriber` defaults to human-readable text for local
+development. Set `LOG_FORMAT=json` to switch to newline-delimited JSON (one
+object per line, with a `fields.request_id` entry on tagged lines) for shipping
+to a log aggregator that can index/query on `request_id` alongside `audit_log`.
+The level filter is still controlled by `RUST_LOG` (default `info,sqlx=warn`).
 
 ---
 

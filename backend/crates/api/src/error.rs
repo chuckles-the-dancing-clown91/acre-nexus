@@ -51,18 +51,21 @@ impl ApiError {
 }
 
 impl<'r> Responder<'r, 'static> for ApiError {
-    fn respond_to(self, _req: &'r Request<'_>) -> response::Result<'static> {
+    fn respond_to(self, req: &'r Request<'_>) -> response::Result<'static> {
         let status = self.status();
         // Don't leak internal/database detail to clients.
         let message = match &self {
             ApiError::Internal(_) | ApiError::Db(_) => "Internal server error".to_string(),
             other => other.to_string(),
         };
+        // Tag the log line with the same id that lands in the audit_log row for
+        // this request, so the two can be joined by `request_id`.
+        let request_id = crate::audit::current_request_id(req);
         if let ApiError::Db(e) = &self {
-            tracing::error!("db error: {e}");
+            tracing::error!(request_id = ?request_id, "db error: {e}");
         }
         if let ApiError::Internal(e) = &self {
-            tracing::error!("internal error: {e:?}");
+            tracing::error!(request_id = ?request_id, "internal error: {e:?}");
         }
         let body = serde_json::json!({
             "error": { "code": self.code(), "message": message }

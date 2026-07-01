@@ -77,10 +77,15 @@ pub const TOKEN_REVOKE: &str = "apitoken.revoke";
 
 // ---- IAM (also referenced from the iam routes) ----
 pub const USER_CREATE: &str = "user.create";
+pub const USER_UPDATE: &str = "user.update";
 pub const ROLE_CREATE: &str = "role.create";
 pub const ROLE_UPDATE: &str = "role.update";
 pub const ROLE_DELETE: &str = "role.delete";
 pub const ROLE_ASSIGN: &str = "role.assign";
+pub const ROLE_REVOKE: &str = "role.revoke";
+pub const MEMBERSHIP_ADD: &str = "membership.add";
+pub const MEMBERSHIP_REMOVE: &str = "membership.remove";
+pub const PROFILE_WRITE: &str = "profile.write";
 pub const PII_REVEAL: &str = "pii.reveal";
 
 // ---- Tenancy spec: provisioning, platform plane, routing, multi-entity ----

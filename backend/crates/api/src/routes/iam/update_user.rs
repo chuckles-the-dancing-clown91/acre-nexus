@@ -24,6 +24,12 @@ pub async fn update_user(
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
+    let before = serde_json::json!({
+        "name": u.name,
+        "username": u.username,
+        "status": u.status,
+    });
+    let tenant_id = u.tenant_id;
     let body = body.into_inner();
     let mut am: entity::user::ActiveModel = u.into();
     if let Some(name) = body.name {
@@ -35,6 +41,25 @@ pub async fn update_user(
     if let Some(status) = body.status {
         am.status = Set(status);
     }
-    am.update(&db).await?;
+    let saved = am.update(&db).await?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::USER_UPDATE,
+        Some("user"),
+        Some(uid.to_string()),
+        tenant_id,
+        Some(serde_json::json!({
+            "before": before,
+            "after": {
+                "name": saved.name,
+                "username": saved.username,
+                "status": saved.status,
+            },
+        })),
+    )
+    .await;
+
     load_user_detail(&db, uid).await
 }
