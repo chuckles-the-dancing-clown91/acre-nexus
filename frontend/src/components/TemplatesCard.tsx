@@ -88,8 +88,8 @@ export function TemplatesCard() {
         application updates, e-signature requests, and more. Placeholders like{" "}
         <code className="rounded bg-surface-2 px-1">{"{signer}"}</code> or{" "}
         <code className="rounded bg-surface-2 px-1">{"{sign_url}"}</code> fill
-        in at send time. Import the platform catalog to hold editable copies,
-        or edit individual templates below.
+        in at send time. Import the platform catalog to hold editable copies, or
+        edit individual templates below.
       </p>
 
       {error && <p className="mb-2 text-sm text-bad">{error}</p>}
@@ -103,9 +103,7 @@ export function TemplatesCard() {
               template={t}
               busy={busy === `save-${t.key}`}
               onCancel={() => setOpenKey(null)}
-              onReset={
-                t.customized ? () => reset(t.key) : undefined
-              }
+              onReset={t.customized ? () => reset(t.key) : undefined}
               onSave={async (fields) => {
                 setBusy(`save-${t.key}`);
                 setError(null);

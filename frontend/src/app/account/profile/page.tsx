@@ -81,8 +81,10 @@ export default function MyProfilePage() {
     }
   }
 
-  const set = (k: keyof ProfileInput, v: string | boolean | number | undefined) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const set = (
+    k: keyof ProfileInput,
+    v: string | boolean | number | undefined
+  ) => setForm((f) => ({ ...f, [k]: v }));
 
   const field =
     "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm";
@@ -119,11 +121,14 @@ export default function MyProfilePage() {
             <Card className="p-5">
               <h2 className="mb-3 font-display text-lg font-bold">Contact</h2>
               <p className="mb-3 text-sm text-ink-3">
-                Account email: <span className="font-semibold">{view.email}</span>
+                Account email:{" "}
+                <span className="font-semibold">{view.email}</span>
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">
-                  <span className="mb-1 block text-ink-3">Legal first name</span>
+                  <span className="mb-1 block text-ink-3">
+                    Legal first name
+                  </span>
                   <input
                     value={form.legal_first_name ?? ""}
                     onChange={(e) => set("legal_first_name", e.target.value)}
@@ -260,7 +265,9 @@ export default function MyProfilePage() {
                     className={field}
                   >
                     <option value="">Choose…</option>
-                    <option value="drivers_license">Driver&apos;s license</option>
+                    <option value="drivers_license">
+                      Driver&apos;s license
+                    </option>
                     <option value="passport">Passport</option>
                     <option value="state_id">State ID</option>
                   </select>

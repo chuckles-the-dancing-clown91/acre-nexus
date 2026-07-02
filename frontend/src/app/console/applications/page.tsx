@@ -95,8 +95,8 @@ export default function ApplicationsPage() {
           </h1>
           <p className="text-ink-3">
             Every intake door — public website, renter portal, back office —
-            lands here and moves through the same pipeline: Screening →
-            Approved → Leased. Approve, then convert to a lease.
+            lands here and moves through the same pipeline: Screening → Approved
+            → Leased. Approve, then convert to a lease.
           </p>
         </div>
         {canWrite && !intaking && (

@@ -44,9 +44,7 @@ export default function MyApplicationsPage() {
 
         {!loading && !user && (
           <Card className="p-8 text-center">
-            <p className="mb-3 text-ink-2">
-              Sign in to see your applications.
-            </p>
+            <p className="mb-3 text-ink-2">Sign in to see your applications.</p>
             <Link
               href="/login"
               className="inline-block rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-on-accent"

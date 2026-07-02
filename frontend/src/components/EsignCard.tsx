@@ -296,9 +296,7 @@ function ComposeForm({
   onSend: (body: { message?: string; signers: EsignSignerInput[] }) => void;
 }) {
   const [signers, setSigners] = useState<EsignSignerInput[]>(
-    defaults.length > 0
-      ? defaults
-      : [{ role: "resident", name: "", email: "" }]
+    defaults.length > 0 ? defaults : [{ role: "resident", name: "", email: "" }]
   );
   const [message, setMessage] = useState("");
 
@@ -361,14 +359,19 @@ function ComposeForm({
       ))}
       <button
         onClick={() =>
-          setSigners((list) => [...list, { role: "other", name: "", email: "" }])
+          setSigners((list) => [
+            ...list,
+            { role: "other", name: "", email: "" },
+          ])
         }
         className="text-xs font-semibold text-ink-3 underline"
       >
         + Add signer
       </button>
       <label className="block text-sm">
-        <span className="mb-1 block text-ink-3">Message to signers (optional)</span>
+        <span className="mb-1 block text-ink-3">
+          Message to signers (optional)
+        </span>
         <input
           value={message}
           onChange={(e) => setMessage(e.target.value)}

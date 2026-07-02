@@ -268,9 +268,7 @@ export default function PropertyProfilePage() {
                 {workflow.strategy_description}
               </p>
             </div>
-            {!can("property:write") && (
-              <Badge tone="neutral">view only</Badge>
-            )}
+            {!can("property:write") && <Badge tone="neutral">view only</Badge>}
           </div>
           <div className="flex flex-wrap gap-2">
             {workflow.stages.map((s) =>

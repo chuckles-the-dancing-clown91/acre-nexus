@@ -12,7 +12,13 @@ import { Badge, Card } from "@/components/ui";
 
 export default function SignPage() {
   return (
-    <Suspense fallback={<Shell><p className="text-ink-3">Loading…</p></Shell>}>
+    <Suspense
+      fallback={
+        <Shell>
+          <p className="text-ink-3">Loading…</p>
+        </Shell>
+      }
+    >
       <SignPageInner />
     </Suspense>
   );
@@ -102,7 +108,8 @@ function SignPageInner() {
   const envelopeOpen =
     view.envelope_status === "sent" ||
     view.envelope_status === "partially_signed";
-  const canSign = envelopeOpen && me.status !== "signed" && me.status !== "declined";
+  const canSign =
+    envelopeOpen && me.status !== "signed" && me.status !== "declined";
 
   return (
     <Shell company={view.company}>
