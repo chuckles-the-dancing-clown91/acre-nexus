@@ -79,6 +79,30 @@ pub const MODULE_TOGGLE: &str = "module.toggle";
 pub const TOKEN_CREATE: &str = "apitoken.create";
 pub const TOKEN_REVOKE: &str = "apitoken.revoke";
 
+// ---- Integrations: secrets, documents, notifications, providers, webhooks ----
+// Secrets log the *fact* and the key name, never the value (docs/AUDIT.md).
+pub const SECRET_SET: &str = "secret.set";
+pub const SECRET_ROTATE: &str = "secret.rotate";
+pub const SECRET_DELETE: &str = "secret.delete";
+pub const DOCUMENT_UPLOAD: &str = "document.upload";
+/// The fact a download URL was issued — not the content (same discipline as
+/// `pii.reveal`).
+pub const DOCUMENT_DOWNLOAD: &str = "document.download";
+pub const DOCUMENT_DELETE: &str = "document.delete";
+pub const NOTIFICATION_SEND: &str = "notification.send";
+/// One event fanned out to staff (in-app + push + chat) — recipients counted
+/// in metadata; individual sends audit separately as `notification.send`.
+pub const NOTIFICATION_BROADCAST: &str = "notification.broadcast";
+pub const NOTIFICATION_PROVIDER_CREATE: &str = "notification_provider.create";
+pub const NOTIFICATION_PROVIDER_UPDATE: &str = "notification_provider.update";
+pub const NOTIFICATION_PROVIDER_DELETE: &str = "notification_provider.delete";
+pub const PUSH_SUBSCRIBE: &str = "push.subscribe";
+pub const PUSH_UNSUBSCRIBE: &str = "push.unsubscribe";
+/// One outbound provider invocation (simulated or live) by the job runner.
+pub const PROVIDER_CALL: &str = "provider.call";
+/// A signature-verified inbound webhook was accepted and enqueued.
+pub const WEBHOOK_RECEIVED: &str = "webhook.received";
+
 // ---- IAM (also referenced from the iam routes) ----
 pub const USER_CREATE: &str = "user.create";
 pub const USER_UPDATE: &str = "user.update";

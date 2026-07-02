@@ -170,6 +170,28 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "integrations:manage",
+        category: "Settings",
+        label: "Manage integrations",
+        description: "Store/rotate/delete integration credentials and view the \
+                      notification log. Credential plaintext is never readable.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "document:read",
+        category: "Documents",
+        label: "View documents",
+        description: "List documents and download them via short-lived signed URLs.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "document:manage",
+        category: "Documents",
+        label: "Manage documents",
+        description: "Upload new documents/versions and delete documents.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "billing:read",
         category: "Billing",
         label: "View billing",

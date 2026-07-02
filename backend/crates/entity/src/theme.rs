@@ -21,6 +21,10 @@ pub struct Model {
     pub default_mode: String,
     /// Legal jargon / boilerplate verbiage, keyed by template name (JSON object).
     pub legal_templates: Json,
+    /// Tenant overrides for notification templates, keyed by template name.
+    /// Values are either a body string or `{ "subject": …, "body": … }`;
+    /// platform defaults live in `api::notify` and apply when a key is absent.
+    pub notification_templates: Json,
     pub updated_at: DateTimeWithTimeZone,
 }
 

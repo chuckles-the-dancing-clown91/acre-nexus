@@ -66,12 +66,20 @@ pub(crate) async fn apply_transition(
     .await;
 
     // Approving an application still kicks off the automated welcome email.
+    // The owner/trigger fields give the notification engine its idempotency
+    // key, so re-approving (or a retried job) can't double-send.
     if to_status == "Approved" {
         let _ = crate::scheduler::enqueue(
             db,
             tenant_id,
             "auto_email",
-            json!({ "template": "application_approved", "to": saved.email }),
+            json!({
+                "template": "application_approved",
+                "to": saved.email,
+                "owner_type": "application",
+                "owner_id": saved.id,
+                "trigger": "approved",
+            }),
             0,
         )
         .await;

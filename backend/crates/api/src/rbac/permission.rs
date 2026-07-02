@@ -33,6 +33,13 @@ pub enum Permission {
     ApplicationWrite,
     ThemeWrite,
     ApiTokenManage,
+    /// Integration credentials + integrations settings (write-only: set /
+    /// rotate / delete — plaintext is never read back).
+    IntegrationsManage,
+    /// Documents: list + download via signed URL.
+    DocumentRead,
+    /// Documents: upload, version, delete.
+    DocumentManage,
     BillingRead,
     // Tenant administration.
     TenantManage,
@@ -83,6 +90,9 @@ impl Permission {
             Permission::ApplicationWrite => "application:write",
             Permission::ThemeWrite => "theme:write",
             Permission::ApiTokenManage => "apitoken:manage",
+            Permission::IntegrationsManage => "integrations:manage",
+            Permission::DocumentRead => "document:read",
+            Permission::DocumentManage => "document:manage",
             Permission::BillingRead => "billing:read",
             Permission::TenantManage => "tenant:manage",
             Permission::UserRead => "user:read",
@@ -129,6 +139,9 @@ pub const ALL_PERMS: &[Permission] = &[
     ApplicationWrite,
     ThemeWrite,
     ApiTokenManage,
+    IntegrationsManage,
+    DocumentRead,
+    DocumentManage,
     BillingRead,
     TenantManage,
     UserRead,

@@ -69,5 +69,20 @@ pub async fn create_ticket(
         Some(serde_json::json!({ "property_id": saved.property_id, "category": saved.category, "priority": saved.priority })),
     )
     .await;
+
+    // Integrated notifications: maintenance staff get an in-app entry + web
+    // push (+ the workspace chat channel), except the actor who opened it.
+    crate::notify::notify_staff(
+        &db,
+        scope.tenant_id,
+        "maintenance:read",
+        "ticket_created",
+        serde_json::json!({ "title": saved.title, "priority": saved.priority }),
+        Some(("maintenance_ticket", saved.id)),
+        "created",
+        Some(user.user_id),
+    )
+    .await;
+
     Ok(Json(TicketDto::from(saved)))
 }

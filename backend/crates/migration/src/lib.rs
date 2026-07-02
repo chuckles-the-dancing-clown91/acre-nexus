@@ -22,6 +22,8 @@ mod m20240101_000014_lease_doc_signature;
 mod m20240101_000015_rls_enforce;
 mod m20240101_000016_assignments;
 mod m20240101_000017_settings_app_workflow;
+mod m20240101_000018_integrations;
+mod m20240101_000019_notifications;
 
 pub struct Migrator;
 
@@ -46,6 +48,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000015_rls_enforce::Migration),
             Box::new(m20240101_000016_assignments::Migration),
             Box::new(m20240101_000017_settings_app_workflow::Migration),
+            Box::new(m20240101_000018_integrations::Migration),
+            Box::new(m20240101_000019_notifications::Migration),
         ]
     }
 }

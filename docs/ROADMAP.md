@@ -23,23 +23,31 @@ registry, financing (mortgages → cash flow + equity), investment workflows;
 
 ---
 
-## Phase 1 — Shared integration substrate ⬜  *(enables 3, 4, 5, 6, real-1, real-2)*
+## Phase 1 — Shared integration substrate ✅  *(enables 3, 4, 5, 6, real-1, real-2)*
 
 Build the cross-cutting plumbing once so every external integration is uniform.
+**Shipped** — see [`INTEGRATIONS.md`](INTEGRATIONS.md) and
+[`NOTIFICATIONS.md`](NOTIFICATIONS.md) for the as-built design.
 
 - **Secrets/KMS**: per-tenant + platform credential storage (encrypted), surfaced
-  to provider clients. Extend the existing PII-key pattern.
-- **Object storage + `document` service**: S3-compatible store; a `document`
-  entity (polymorphic owner: property / lease / application / entity / deal),
-  MIME, size, version, checksum, signed-URL access, retention/expiry, and audit.
+  to provider clients. Extends the PII-key pattern under a dedicated,
+  fail-closed `SECRETS_ENC_KEY`.
+- **Object storage + `document` service**: S3-compatible store (local dev/CI
+  backend + SigV4 presigning); a `document` entity (polymorphic owner: property /
+  lease / application / entity / deal), MIME, size, version, checksum,
+  signed-URL access, retention/expiry, and audit.
 - **Outbound provider framework**: a typed `Provider` trait + a **webhook
   ingestion** endpoint + signature verification, all riding the retrying queue
   (the enrichment engine is the reference pattern).
-- **Notifications**: transactional email + SMS provider behind the `auto_email`
-  job kind; templated, audited.
+- **Notifications** (shipped beyond original scope): templated email + SMS +
+  **Web Push** (VAPID/RFC 8291) + **chat** (Slack/Discord) + a per-user
+  **in-app inbox**, with tenant-configurable delivery providers (Resend,
+  SendGrid, Postmark, Twilio) behind the `auto_email`/`auto_sms`/`auto_push`/
+  `auto_chat` job kinds; templated, idempotent, audited.
 
-**DoD:** upload/download a versioned document attached to any entity; a sandbox
-webhook round-trips through the queue; a templated email/SMS sends in a test.
+**DoD (met):** upload/download a versioned document attached to any entity; a
+sandbox webhook round-trips through the queue; a templated email/SMS sends in a
+test.
 
 ---
 

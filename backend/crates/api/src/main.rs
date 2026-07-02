@@ -34,15 +34,19 @@ mod error;
 mod guards;
 mod leasedoc;
 mod modules;
+mod notify;
 mod openapi;
 mod pii;
+mod providers;
 mod rbac;
 mod rentals_occupancy;
 mod routes;
 mod scheduler;
+mod secrets;
 mod seed;
 mod settings;
 mod state;
+mod storage;
 mod tenancy;
 mod tokens;
 mod workflow;
@@ -82,7 +86,7 @@ async fn rocket() -> _ {
             .try_init()
     };
 
-    let config = Config::from_env();
+    let config = Config::global().clone();
     tracing::info!("connecting to database…");
     let db = Database::connect(&config.database_url)
         .await
@@ -103,7 +107,13 @@ async fn rocket() -> _ {
     // first, then every pluggable module's routes — each module contributes both
     // its routes and a matching spec fragment.
     let mut spec = OpenApi::new();
-    let mut app = rocket::build()
+    // Raise the default body limits: document uploads (`Vec<u8>` blobs, 25 MiB
+    // to match `routes::documents::MAX_SIZE_BYTES`) and raw webhook payloads
+    // (`String`, 1 MiB) both exceed Rocket's 8 KiB defaults.
+    let figment = rocket::Config::figment()
+        .merge(("limits.bytes", "25MiB"))
+        .merge(("limits.string", "1MiB"));
+    let mut app = rocket::custom(figment)
         .manage(state)
         .attach(cors::Cors)
         .attach(db::TxCommit)
