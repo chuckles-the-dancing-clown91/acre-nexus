@@ -17,6 +17,7 @@ This repository contains:
 | `ARCHITECTURE.md` | How the system is put together and why. |
 | `docs/API.md` | REST API reference (auth, tenancy, endpoints, vendor API). |
 | `docs/AUDIT.md` | The audit logging system (per-request fairing + domain events). |
+| `docs/INTEGRATIONS.md` | **Design doc, not yet built** — the Phase 1 integration substrate (secrets/KMS, provider + webhook framework, document service, notifications); the spec for issue #5. |
 | `docs/PROPERTY_DATA.md` | Property intelligence: rich data tables + the enrichment engine. |
 | `docs/INVESTING.md` | Investor onboarding, entities registry, financing, and workflows. |
 | `docs/RENTALS.md` | Rentals (units/leases/payments), maintenance work orders, and title (ownership/liens). |

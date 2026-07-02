@@ -26,6 +26,8 @@ registry, financing (mortgages → cash flow + equity), investment workflows;
 ## Phase 1 — Shared integration substrate ⬜  *(enables 3, 4, 5, 6, real-1, real-2)*
 
 Build the cross-cutting plumbing once so every external integration is uniform.
+Full design, grounded in the existing enrichment-engine/audit/PII patterns this
+extends: [`docs/INTEGRATIONS.md`](./INTEGRATIONS.md).
 
 - **Secrets/KMS**: per-tenant + platform credential storage (encrypted), surfaced
   to provider clients. Extend the existing PII-key pattern.
