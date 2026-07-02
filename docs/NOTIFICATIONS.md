@@ -91,17 +91,19 @@ is configured. Fan-outs audit once as `notification.broadcast` with the
 recipient count.
 
 Wired events: **application submitted** → everyone with `application:read`;
-**maintenance ticket created** → everyone with `maintenance:read`;
-**e-signature progress** (a signer signed / declined, envelope completed) →
-everyone with `lease:read`. Renewals and reminders ride the same helper as
-they land.
+**screening finished** (when auto-approve is off) → everyone with
+`application:read`; **maintenance ticket created** → everyone with
+`maintenance:read`; **e-signature progress** (a signer signed / declined,
+envelope completed) → everyone with `lease:read`. Renewals and reminders ride
+the same helper as they land.
 
 ## Templates
 
 The `{placeholder}` engine from lease documents renders every channel:
 platform defaults live in `api/src/notify/mod.rs` (`application_approved`,
-`application_received`, `application_submitted`, `ticket_created`,
-`test_notification`, and the e-signature set below), and tenants override per
+`application_received`, `application_submitted`, `application_screened`,
+`application_declined`, `ticket_created`, `test_notification`, and the
+e-signature set below), and tenants override per
 key via `theme.notification_templates` — a body string, or
 `{ "subject": …, "body": …, "sms": … }` merged field by field. Email uses
 `subject` + `body`; SMS and chat use the short `sms` text; push and in-app

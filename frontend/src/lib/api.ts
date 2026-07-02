@@ -7,6 +7,11 @@
 import type {
   Application,
   ApplicationWorkflow,
+  ConsoleListing,
+  CreateApplicationInput,
+  CreateListingInput,
+  PortalApplyInput,
+  UpdateListingInput,
   AppWorkflowCatalog,
   ApplyResponse,
   Assignment,
@@ -388,11 +393,45 @@ export const api = {
       body,
     }),
   applications: () => request<Application[]>("/applications", { auth: true }),
+  /** Back-office intake: staff enter an application on an applicant's behalf. */
+  createApplication: (body: CreateApplicationInput) =>
+    request<Application>("/applications", { method: "POST", auth: true, body }),
   updateApplication: (id: string, status: string) =>
     request<Application>(`/applications/${id}`, {
       method: "PATCH",
       auth: true,
       body: { status },
+    }),
+
+  // ---- renter portal: apply + track as the signed-in user ----
+  myApplications: () =>
+    request<Application[]>("/my/applications", { auth: true }),
+  myApply: (body: PortalApplyInput) =>
+    request<Application>("/my/applications", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- console listing management ----
+  consoleListings: (params: { property_id?: string; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<ConsoleListing[]>(`/listings${suffix}`, { auth: true });
+  },
+  createListing: (propertyId: string, body: CreateListingInput) =>
+    request<ConsoleListing>(`/properties/${propertyId}/listings`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateListing: (id: string, body: UpdateListingInput) =>
+    request<ConsoleListing>(`/listings/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
     }),
 
   // ---- API tokens ----

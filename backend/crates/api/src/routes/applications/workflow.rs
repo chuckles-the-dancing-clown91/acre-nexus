@@ -194,7 +194,7 @@ pub async fn advance(
     let saved = super::apply_transition(
         &db,
         scope.tenant_id,
-        user.user_id,
+        Some(user.user_id),
         app,
         &b.to_status,
         b.note,

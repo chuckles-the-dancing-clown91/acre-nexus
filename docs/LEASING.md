@@ -1,35 +1,80 @@
-# Leasing Lifecycle — application → onboarding → lease signing
+# Leasing Lifecycle — listing → application → screening → lease → signing
 
-The end-to-end resident journey, with templated lease documents, conditional fees
-and discounts, vehicle profiles, occupancy that reflects reality, and a tenant
-history view. Built on the existing rentals domain (units / leases / payments).
+The end-to-end resident journey, designed as **one pipeline**: advertise a
+property, take an application through any door, screen it, approve, convert to
+a lease with the agreement auto-generated, sign electronically, and watch the
+listing, occupancy, and property workflow close out on their own. Built on the
+rentals domain (units / leases / payments), the document service, and the
+notification substrate.
 
-## The flow
+## The pipeline
 
 ```
-Public application ──▶ screening (bg job) ──▶ Approve ──▶ Convert to lease
-   (/public/applications)                      (PATCH)      (POST /applications/<id>/convert-to-lease)
-                                                                 │
-                                                                 ▼
-                          draft lease  ──▶ apply fee schedule ──▶ generate document ──▶ sign
-                          (status=upcoming)   (auto charges)        (templated)         (status=active,
-                                                                                         occupancy synced)
+1. LIST      console: POST /properties/<id>/listings   → public website shows it
+                │
+2. APPLY     three doors, one pipeline (application.source):
+                • public website     POST /public/applications      (anonymous)
+                • renter portal      POST /my/applications          (signed-in, linked to the account)
+                • back office        POST /applications             (staff intake)
+                │   applicant emailed "application received" · staff fan-out (in-app/push/chat)
+                ▼
+3. SCREEN    background_check job → screening_status + screened_at land on the application
+                │   auto-approve setting ON + cleared  → Approved automatically (applicant emailed)
+                │   otherwise                          → staff notified: "screening finished, review"
+                ▼
+4. DECIDE    Approved (applicant emailed) │ Declined (applicant emailed) │ Withdrawn
+                ▼
+5. CONVERT   POST /applications/<id>/convert-to-lease
+                • draft lease (upcoming) + identity/attributes/vehicles copied
+                • fee schedule auto-applied · application → Leased (event recorded)
+                • listing → Pending · lease agreement AUTO-GENERATED (draft)
+                ▼
+6. SIGN      e-signature envelope (docs: E-signature envelopes below)
+                • signers emailed/texted links → view → sign (ESIGN audit trail)
+                • or in person: POST /leases/<id>/document/sign
+                ▼
+7. CLOSE-OUT automatic on the final signature:
+                • lease → active · occupancy synced · signed PDF stored on the lease
+                • listing → Leased + unpublished · property workflow → "leased"
+                • signers + staff notified
 ```
 
-1. **Apply** — `POST /public/applications` captures the applicant plus the
-   attributes that drive the rest of the flow: `has_pet` / `pet_details`,
-   `is_military`. Vehicles can be attached to the application (`POST /vehicles`
-   with `application_id`). A screening job runs as before.
-2. **Approve** — `PATCH /applications/<id>` → `Approved`.
-3. **Convert** — `POST /applications/<id>/convert-to-lease` creates a **draft**
-   lease (`status = upcoming`) from the application: copies identity + attributes,
-   re-links any application vehicles to the lease, links `lease.application_id`,
-   and **auto-applies the fee schedule** — all in one transaction.
-4. **Build the lease** — review/adjust charges (`/leases/<id>/charges`), add
-   vehicles, then **generate** the lease document.
-5. **Sign** — `POST /leases/<id>/document/sign` records a typed signature, flips
-   the lease to `active`, and **syncs occupancy** (unit → `occupied`, property
-   `occupied_units` recomputed).
+Every step is visible: the application's pipeline (`application_event`), the
+property's process tracker (`workflow_event`), the envelope's ESIGN trail
+(`esign_event`), and the audit log all record who did what, when.
+
+1. **List** — `POST /properties/<id>/listings` advertises a property (address
+   from the property, beds/baths/sqft defaulted from enrichment); `GET
+   /listings` + `PATCH /listings/<id>` manage price, copy, status
+   (`Available`/`New`/`Pending`/`Leased`) and public visibility from the
+   console's Listings page. The pipeline retires listings automatically
+   (`crate::listing_sync`) — `Pending` on conversion, `Leased` + unpublished
+   when the lease activates.
+2. **Apply** — all three doors run the same `applications::intake`: persist
+   (with `source`), audit, staff fan-out, the applicant's confirmation email,
+   and the screening job. Portal applications force the account's email and
+   prefill name/phone from the user profile, and are linked via
+   `applicant_user_id` — renters track them at `/account/applications`.
+   Applications capture the attributes that drive the rest of the flow
+   (`has_pet`/`pet_details`, `is_military`, vehicles via `POST /vehicles`).
+3. **Screen** — the screening job's completion writes `screening_status` /
+   `screened_at` onto the application. With the **`applications.auto_approve`
+   setting** on, a cleared check advances the application to `Approved` on the
+   spot (automated transition, `actor = None`); otherwise staff get an
+   "application screened" notification and decide.
+4. **Decide** — `POST /applications/<id>/advance` (or `PATCH`) through the
+   validated state machine; approval and decline each email the applicant.
+5. **Convert** — `POST /applications/<id>/convert-to-lease` creates a **draft**
+   lease (`status = upcoming`), copies identity + attributes, re-links
+   vehicles, **auto-applies the fee schedule**, marks the listing `Pending`,
+   records the application's `Leased` event, and **auto-generates the lease
+   agreement** (opt out with `generate_document: false`) — ready to send for
+   signature in one step.
+6. **Sign** — send the e-signature envelope (each signer gets an email/SMS
+   link) or capture a typed signature in person.
+7. **Close-out** — the final signature activates the lease, syncs occupancy,
+   stores the signed PDF, closes the listing, advances the property workflow
+   to `leased`, and notifies everyone.
 
 ## Application workflow (pipeline)
 

@@ -34,6 +34,7 @@ mod error;
 mod esign;
 mod guards;
 mod leasedoc;
+mod listing_sync;
 mod modules;
 mod notify;
 mod openapi;

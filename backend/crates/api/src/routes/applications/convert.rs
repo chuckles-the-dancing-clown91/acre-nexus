@@ -116,13 +116,42 @@ pub async fn convert(
         vm.update(&db).await?;
     }
 
-    // Mark the application as leased so it can't be converted again / re-shown.
+    // Mark the application as leased so it can't be converted again / re-shown,
+    // recording the transition in the application's history like any other.
     let mut am: entity::application::ActiveModel = app.clone().into();
     am.status = Set("Leased".into());
     am.update(&db).await?;
+    entity::application_event::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(scope.tenant_id),
+        application_id: Set(aid),
+        from_status: Set(Some(app.status.clone())),
+        to_status: Set("Leased".into()),
+        note: Set(Some("Converted to lease".into())),
+        actor_user_id: Set(Some(user.user_id)),
+        created_at: Set(now.into()),
+    }
+    .insert(&db)
+    .await?;
+
+    // The advertised listing (if any) is now under contract.
+    crate::listing_sync::mark_pending_on_convert(&db, scope.tenant_id, aid).await;
 
     // Auto-apply the conditional fee schedule (pet fee, military discount, …).
     let applied = apply_to_lease(&db, scope.tenant_id, &lease).await?;
+
+    // Generate the first draft of the lease agreement so the file is ready to
+    // review and send for signature the moment conversion finishes. Opt out
+    // with `generate_document: false` (e.g. when using external paperwork).
+    if b.generate_document.unwrap_or(true) {
+        crate::routes::lease_docs::generate::generate_for_lease(
+            &db,
+            scope.tenant_id,
+            &lease,
+            Some(user.user_id),
+        )
+        .await?;
+    }
 
     crate::audit::record(
         &db,
@@ -134,6 +163,7 @@ pub async fn convert(
         Some(serde_json::json!({
             "application_id": aid,
             "charges_applied": applied.len(),
+            "document_generated": b.generate_document.unwrap_or(true),
         })),
     )
     .await;

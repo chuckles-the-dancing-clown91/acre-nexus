@@ -146,9 +146,16 @@ export const MODULES: ModuleDef[] = [
   {
     key: "leasing",
     label: "Leasing & Listings",
-    description: "Public listings website, applications, and tenant screening.",
+    description:
+      "Public listings website, listing management, applications (website, renter portal, back office), and tenant screening.",
     defaultEnabled: true,
     nav: [
+      {
+        href: "/console/listings",
+        label: "Listings",
+        icon: "globe",
+        permission: "listing:read",
+      },
       {
         href: "/console/applications",
         label: "Applications",

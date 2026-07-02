@@ -25,6 +25,7 @@ export default function ApplicationsPage() {
   const [converting, setConverting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [intaking, setIntaking] = useState(false);
 
   const load = () =>
     api
@@ -87,18 +88,38 @@ export default function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">
-          Applications
-        </h1>
-        <p className="text-ink-3">
-          Applicants submitted through your public website move through the
-          pipeline: New → Screening → Approved → Leased. Approve, then convert
-          to a lease.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">
+            Applications
+          </h1>
+          <p className="text-ink-3">
+            Every intake door — public website, renter portal, back office —
+            lands here and moves through the same pipeline: Screening →
+            Approved → Leased. Approve, then convert to a lease.
+          </p>
+        </div>
+        {canWrite && !intaking && (
+          <button
+            onClick={() => setIntaking(true)}
+            className="rounded-xl bg-accent px-4 py-2.5 text-sm font-bold text-on-accent"
+          >
+            New application
+          </button>
+        )}
       </div>
 
       {error && <p className="text-bad">{error}</p>}
+
+      {intaking && (
+        <IntakeForm
+          onDone={() => {
+            setIntaking(false);
+            load();
+          }}
+          onCancel={() => setIntaking(false)}
+        />
+      )}
 
       <Card className="overflow-hidden">
         <div className="divide-y divide-line">
@@ -128,6 +149,19 @@ export default function ApplicationsPage() {
                   <div className="hidden text-sm text-ink-2 sm:block">
                     {a.annual_income_label}/yr
                   </div>
+                  {a.source !== "public" && (
+                    <Badge tone="neutral">
+                      {a.source === "portal" ? "portal" : "back office"}
+                    </Badge>
+                  )}
+                  {a.screening_status && (
+                    <Badge
+                      tone={a.screening_status === "cleared" ? "good" : "bad"}
+                      className="hidden sm:inline-flex"
+                    >
+                      screening {a.screening_status}
+                    </Badge>
+                  )}
                   <Badge tone={statusTone(a.status)}>{a.status}</Badge>
 
                   <button
@@ -192,6 +226,128 @@ export default function ApplicationsPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Back-office intake: staff enter an application taken by phone / walk-in. */
+function IntakeForm({
+  onDone,
+  onCancel,
+}: {
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [income, setIncome] = useState("");
+  const [moveIn, setMoveIn] = useState("");
+  const [hasPet, setHasPet] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.includes("@")) {
+      setErr("Name and a valid email are required.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.createApplication({
+        applicant_name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        annual_income_cents: income
+          ? Math.round(parseFloat(income) * 100)
+          : undefined,
+        move_in: moveIn.trim() || undefined,
+        has_pet: hasPet,
+      });
+      onDone();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 font-display text-lg font-bold">New application</h2>
+      <p className="mb-3 text-sm text-ink-3">
+        Enters the same pipeline as the website: the applicant is emailed a
+        confirmation and screening starts right away.
+      </p>
+      {err && <p className="mb-2 text-sm text-bad">{err}</p>}
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <label className="flex-1 min-w-[160px] text-sm">
+          <span className="mb-1 block text-ink-3">Applicant name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+          />
+        </label>
+        <label className="flex-1 min-w-[180px] text-sm">
+          <span className="mb-1 block text-ink-3">Email</span>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-3">Phone</span>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-36 rounded-lg border border-line bg-surface px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-3">Income $/yr</span>
+          <input
+            value={income}
+            onChange={(e) => setIncome(e.target.value)}
+            inputMode="decimal"
+            className="w-28 rounded-lg border border-line bg-surface px-3 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-3">Move-in</span>
+          <input
+            value={moveIn}
+            onChange={(e) => setMoveIn(e.target.value)}
+            placeholder="YYYY-MM-DD"
+            className="w-32 rounded-lg border border-line bg-surface px-3 py-2"
+          />
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input
+            type="checkbox"
+            checked={hasPet}
+            onChange={(e) => setHasPet(e.target.checked)}
+          />
+          <span className="text-ink-2">Has pet</span>
+        </label>
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-accent px-4 py-2 font-semibold text-on-accent disabled:opacity-50"
+        >
+          {busy ? "Submitting…" : "Submit & screen"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-line px-3 py-2 text-sm text-ink-3"
+        >
+          Cancel
+        </button>
+      </form>
+    </Card>
   );
 }
 

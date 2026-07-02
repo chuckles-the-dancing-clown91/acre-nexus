@@ -1,20 +1,25 @@
+//! `POST /public/applications` — the anonymous website intake door.
+//!
+//! One of three doors into the same application pipeline (see
+//! [`crate::routes::applications::intake`]); the others are the renter
+//! portal (`POST /my/applications`) and back-office intake
+//! (`POST /applications`).
+
 use super::dto::{ApplyReq, ApplyResp};
 use crate::error::ApiResult;
-use crate::scheduler;
+use crate::routes::applications::{intake, IntakeInput};
 use crate::state::AppState;
 use crate::tenancy::PublicTenant;
-use chrono::Utc;
 use entity::prelude::Application;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
-use serde_json::json;
-use uuid::Uuid;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
 /// `POST /public/applications` — submit a rental application.
 ///
 /// Persists the application and enqueues a background-screening job that the
-/// Tokio scheduler advances asynchronously (submit → await callback → completed).
+/// Tokio scheduler advances asynchronously; the screening outcome lands back
+/// on the application (and can auto-approve, per the workspace setting).
 #[rocket_okapi::openapi(tag = "Public Website")]
 #[post("/public/applications", data = "<body>")]
 pub async fn apply(
@@ -25,7 +30,6 @@ pub async fn apply(
 ) -> ApiResult<Json<ApplyResp>> {
     let b = body.into_inner();
     let email = b.email.trim().to_lowercase();
-    let app_id = Uuid::new_v4();
 
     // Reuse: if the workspace allows it and this applicant already has a recent
     // *approved* application, carry that screening result forward — the new
@@ -45,96 +49,36 @@ pub async fn apply(
             None => None,
         };
 
-    let status = if reused_from.is_some() {
-        "Approved"
-    } else {
-        "Screening"
-    };
-    // Prefer a carried-forward credit score when the applicant didn't supply one.
-    let credit_score = b
-        .credit_score
-        .or_else(|| reused_from.as_ref().and_then(|r| r.credit_score));
-
-    let model = entity::application::ActiveModel {
-        id: Set(app_id),
-        tenant_id: Set(tenant.tenant_id),
-        listing_id: Set(b.listing_id),
-        applicant_name: Set(b.applicant_name.clone()),
-        email: Set(email.clone()),
-        phone: Set(b.phone.unwrap_or_default()),
-        annual_income_cents: Set(b.annual_income_cents.unwrap_or(0)),
-        credit_score: Set(credit_score),
-        status: Set(status.into()),
-        move_in: Set(b.move_in.unwrap_or_default()),
-        has_pet: Set(b.has_pet.unwrap_or(false)),
-        pet_details: Set(b.pet_details.clone()),
-        is_military: Set(b.is_military.unwrap_or(false)),
-        created_at: Set(Utc::now().into()),
-    };
-    model.insert(&db).await?;
-
-    crate::audit::record(
-        &db,
-        None,
-        crate::audit::actions::APPLICATION_SUBMIT,
-        Some("application"),
-        Some(app_id.to_string()),
-        Some(tenant.tenant_id),
-        Some(serde_json::json!({ "applicant": b.applicant_name })),
-    )
-    .await;
-
-    // Integrated notifications: every staff member who can read applications
-    // gets an in-app inbox entry + a web push, and the tenant's chat channel
-    // (if configured) gets one message.
-    crate::notify::notify_staff(
+    let (saved, job_id) = intake(
         &db,
         tenant.tenant_id,
-        "application:read",
-        "application_submitted",
-        json!({ "applicant": b.applicant_name }),
-        Some(("application", app_id)),
-        "submitted",
+        IntakeInput {
+            listing_id: b.listing_id,
+            applicant_name: b.applicant_name,
+            email,
+            phone: b.phone.unwrap_or_default(),
+            annual_income_cents: b.annual_income_cents.unwrap_or(0),
+            credit_score: b.credit_score,
+            move_in: b.move_in.unwrap_or_default(),
+            has_pet: b.has_pet.unwrap_or(false),
+            pet_details: b.pet_details,
+            is_military: b.is_military.unwrap_or(false),
+        },
+        "public",
         None,
+        None,
+        reused_from.as_ref(),
     )
-    .await;
+    .await?;
 
-    // Pre-approved (reused) applicants skip re-screening; everyone else enters the
-    // background-check pipeline. Either way we kick off a job and return its id.
-    let (job_id, message) = if reused_from.is_some() {
-        let jid = scheduler::enqueue(
-            &db,
-            tenant.tenant_id,
-            "auto_email",
-            json!({
-                "template": "application_approved",
-                "to": email,
-                "owner_type": "application",
-                "owner_id": app_id,
-                "trigger": "pre_approved",
-            }),
-            0,
-        )
-        .await?;
-        (
-            jid,
-            "Welcome back — your recent application was reused and pre-approved for this listing.",
-        )
+    let message = if reused_from.is_some() {
+        "Welcome back — your recent application was reused and pre-approved for this listing."
     } else {
-        let jid = scheduler::enqueue(
-            &db,
-            tenant.tenant_id,
-            "background_check",
-            json!({ "application_id": app_id, "applicant": b.applicant_name }),
-            0,
-        )
-        .await?;
-        (jid, "Application received — screening in progress")
+        "Application received — screening in progress"
     };
-
     Ok(Json(ApplyResp {
-        application_id: app_id,
-        status: status.into(),
+        application_id: saved.id,
+        status: saved.status,
         screening_job_id: job_id,
         message: message.into(),
     }))

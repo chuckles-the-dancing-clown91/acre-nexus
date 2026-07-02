@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 
 /** Public website header — shows tenant branding (white-label). */
 export function SiteHeader() {
   const { brand } = useTheme();
+  const { user } = useAuth();
   return (
     <header className="sticky top-0 z-40 flex h-[60px] items-center gap-4 border-b border-line bg-surface/80 px-5 backdrop-blur">
       <Link href="/" className="flex items-center gap-2.5">
@@ -27,13 +29,30 @@ export function SiteHeader() {
         >
           Listings
         </Link>
+        {user && (
+          <Link
+            href="/account/applications"
+            className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 sm:block"
+          >
+            My applications
+          </Link>
+        )}
         <ThemeToggle />
-        <Link
-          href="/login"
-          className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-on-accent hover:opacity-90"
-        >
-          Sign in
-        </Link>
+        {user ? (
+          <Link
+            href="/console"
+            className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-on-accent hover:opacity-90"
+          >
+            {user.name.split(" ")[0] ?? "Account"}
+          </Link>
+        ) : (
+          <Link
+            href="/login"
+            className="rounded-xl bg-accent px-4 py-2 text-sm font-bold text-on-accent hover:opacity-90"
+          >
+            Sign in
+          </Link>
+        )}
       </nav>
     </header>
   );

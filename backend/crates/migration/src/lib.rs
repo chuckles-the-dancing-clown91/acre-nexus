@@ -25,6 +25,7 @@ mod m20240101_000017_settings_app_workflow;
 mod m20240101_000018_integrations;
 mod m20240101_000019_notifications;
 mod m20240101_000020_esign;
+mod m20240101_000021_application_pipeline;
 
 pub struct Migrator;
 
@@ -52,6 +53,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000018_integrations::Migration),
             Box::new(m20240101_000019_notifications::Migration),
             Box::new(m20240101_000020_esign::Migration),
+            Box::new(m20240101_000021_application_pipeline::Migration),
         ]
     }
 }

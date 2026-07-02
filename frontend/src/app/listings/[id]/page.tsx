@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { gradFor } from "@/lib/gradients";
+import { useAuth } from "@/lib/auth";
 
 export default function ListingDetailPage() {
   const params = useParams<{ id: string }>();
@@ -93,6 +94,10 @@ export default function ListingDetailPage() {
 }
 
 function ApplyForm({ listingId }: { listingId: string }) {
+  // A signed-in user applies through their account (the renter-portal door):
+  // identity comes from the profile and the application is tracked under
+  // "My applications".
+  const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +109,16 @@ function ApplyForm({ listingId }: { listingId: string }) {
     move_in: "",
   });
 
+  useEffect(() => {
+    if (user) {
+      setForm((f) => ({
+        ...f,
+        applicant_name: f.applicant_name || user.name,
+        email: user.email,
+      }));
+    }
+  }, [user]);
+
   const update =
     (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -113,15 +128,34 @@ function ApplyForm({ listingId }: { listingId: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.apply({
-        listing_id: listingId,
-        applicant_name: form.applicant_name,
-        email: form.email,
-        phone: form.phone,
-        annual_income_cents: form.income ? Number(form.income) * 100 : 0,
-        move_in: form.move_in,
-      });
-      setResult(res);
+      if (user) {
+        const app = await api.myApply({
+          listing_id: listingId,
+          applicant_name: form.applicant_name || undefined,
+          phone: form.phone || undefined,
+          annual_income_cents: form.income ? Number(form.income) * 100 : 0,
+          move_in: form.move_in || undefined,
+        });
+        setResult({
+          application_id: app.id,
+          status: app.status,
+          screening_job_id: "",
+          message:
+            app.status === "Approved"
+              ? "Welcome back — your recent application was reused and pre-approved."
+              : "Application received — screening in progress. Track it under My applications.",
+        });
+      } else {
+        const res = await api.apply({
+          listing_id: listingId,
+          applicant_name: form.applicant_name,
+          email: form.email,
+          phone: form.phone,
+          annual_income_cents: form.income ? Number(form.income) * 100 : 0,
+          move_in: form.move_in,
+        });
+        setResult(res);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
     } finally {
@@ -136,9 +170,14 @@ function ApplyForm({ listingId }: { listingId: string }) {
           <Icon name="check" size={18} /> Application received
         </div>
         <p className="text-sm">{result.message}</p>
-        <p className="mt-2 font-mono text-xs opacity-80">
-          Screening job: {result.screening_job_id.slice(0, 8)}…
-        </p>
+        {user && (
+          <Link
+            href="/account/applications"
+            className="mt-2 inline-block text-sm font-semibold underline"
+          >
+            View my applications
+          </Link>
+        )}
       </div>
     );
   }
@@ -162,7 +201,18 @@ function ApplyForm({ listingId }: { listingId: string }) {
         className={field}
         value={form.email}
         onChange={update("email")}
+        disabled={!!user}
+        title={user ? "Applying as your signed-in account" : undefined}
       />
+      {user && (
+        <p className="text-xs text-ink-3">
+          Applying as {user.email} — track progress under{" "}
+          <Link href="/account/applications" className="underline">
+            My applications
+          </Link>
+          .
+        </p>
+      )}
       <input
         placeholder="Phone"
         className={field}

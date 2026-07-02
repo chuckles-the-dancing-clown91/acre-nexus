@@ -262,15 +262,19 @@ pub async fn complete_envelope(
     dm.signed_ip = Set(last_ip);
     dm.update(db).await?;
 
-    // 2. Signing activates the tenancy (same rule as in-person signing).
+    // 2. Signing activates the tenancy (same rule as in-person signing); the
+    //    advertised listing (if the lease came from one) closes out.
     let property_id = lease.property_id;
-    if lease.status != "active" {
+    let lease = if lease.status != "active" {
         let mut lm: entity::lease::ActiveModel = lease.into();
         lm.status = Set("active".into());
         lm.updated_at = Set(now.into());
-        lm.update(db).await?;
-    }
+        lm.update(db).await?
+    } else {
+        lease
+    };
     crate::rentals_occupancy::sync_property_occupancy(db, property_id).await;
+    crate::listing_sync::close_on_lease_activation(db, tenant_id, &lease).await;
 
     // 3. Store the signed rendition (body + signature certificate) as a PDF in
     //    the document service, versioned like any other upload.

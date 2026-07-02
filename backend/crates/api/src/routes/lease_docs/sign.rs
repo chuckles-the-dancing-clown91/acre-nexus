@@ -68,15 +68,18 @@ pub async fn sign(
     dm.signed_ip = Set(client_ip.0.clone());
     let saved = dm.update(&db).await?;
 
-    // Signing activates the tenancy.
+    // Signing activates the tenancy; the advertised listing (if any) closes out.
     let property_id = lease.property_id;
-    if lease.status != "active" {
+    let lease = if lease.status != "active" {
         let mut lm: entity::lease::ActiveModel = lease.into();
         lm.status = Set("active".into());
         lm.updated_at = Set(now.into());
-        lm.update(&db).await?;
-    }
+        lm.update(&db).await?
+    } else {
+        lease
+    };
     crate::rentals_occupancy::sync_property_occupancy(&db, property_id).await;
+    crate::listing_sync::close_on_lease_activation(&db, scope.tenant_id, &lease).await;
 
     crate::audit::record(
         &db,

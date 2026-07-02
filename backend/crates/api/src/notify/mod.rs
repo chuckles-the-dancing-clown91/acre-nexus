@@ -93,6 +93,23 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "New application from {applicant} — review it in the console.",
     },
     DefaultTemplate {
+        key: "application_screened",
+        subject: "Screening finished for {applicant}: {result}",
+        body: "Hi {recipient},\n\nBackground screening for {applicant} has finished with \
+               result: {result}. Review the application and make a decision in the \
+               applications inbox.\n\n— {company}",
+        sms: "Screening finished for {applicant}: {result} — review in the console.",
+    },
+    DefaultTemplate {
+        key: "application_declined",
+        subject: "Update on your application with {company}",
+        body: "Hi {recipient},\n\nThank you for applying with {company}. After careful \
+               review we're unable to move forward with your application at this time.\n\n\
+               If you have questions, just reply to this email.\n\n— {company}",
+        sms: "{company}: unfortunately we can't move forward with your application at \
+              this time.",
+    },
+    DefaultTemplate {
         key: "ticket_created",
         subject: "New maintenance ticket: {title}",
         body: "Hi {recipient},\n\nA new {priority}-priority maintenance ticket was opened: \

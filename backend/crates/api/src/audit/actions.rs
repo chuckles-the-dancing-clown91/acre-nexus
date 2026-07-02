@@ -80,6 +80,8 @@ pub const LIEN_DELETE: &str = "lien.delete";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
+pub const LISTING_CREATE: &str = "listing.create";
+pub const LISTING_UPDATE: &str = "listing.update";
 
 // ---- Settings ----
 pub const THEME_UPDATE: &str = "theme.update";

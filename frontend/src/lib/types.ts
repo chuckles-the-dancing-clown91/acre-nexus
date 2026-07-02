@@ -704,6 +704,82 @@ export interface Application {
   has_pet: boolean;
   pet_details: string | null;
   is_military: boolean;
+  /** Intake door: public | portal | back_office. */
+  source: string;
+  /** Background-check outcome once screening finishes: cleared | flagged. */
+  screening_status: string | null;
+  screened_at: string | null;
+  created_at: string;
+}
+
+/** A listing as the console sees it (includes visibility). */
+export interface ConsoleListing {
+  id: string;
+  property_id: string | null;
+  title: string;
+  address: string;
+  city: string;
+  beds: number;
+  baths: number;
+  sqft: number;
+  rent_cents: number;
+  rent_label: string;
+  /** Available | New | Pending | Leased. */
+  status: string;
+  available_on: string;
+  description: string;
+  is_public: boolean;
+  created_at: string;
+}
+
+export interface CreateListingInput {
+  title?: string;
+  rent_cents: number;
+  beds?: number;
+  baths?: number;
+  sqft?: number;
+  available_on?: string;
+  description?: string;
+  is_public?: boolean;
+}
+
+export interface UpdateListingInput {
+  title?: string;
+  rent_cents?: number;
+  beds?: number;
+  baths?: number;
+  sqft?: number;
+  available_on?: string;
+  description?: string;
+  status?: string;
+  is_public?: boolean;
+}
+
+/** Back-office application intake. */
+export interface CreateApplicationInput {
+  listing_id?: string;
+  applicant_name: string;
+  email: string;
+  phone?: string;
+  annual_income_cents?: number;
+  credit_score?: number;
+  move_in?: string;
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
+}
+
+/** Renter-portal application (identity comes from the account). */
+export interface PortalApplyInput {
+  listing_id?: string;
+  applicant_name?: string;
+  phone?: string;
+  annual_income_cents?: number;
+  credit_score?: number;
+  move_in?: string;
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
 }
 
 export interface ApplyResponse {
