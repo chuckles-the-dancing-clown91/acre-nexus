@@ -19,6 +19,7 @@ pub mod cap_table;
 pub mod documents;
 pub mod domains;
 pub mod entities;
+pub mod esign;
 pub mod fees;
 pub mod iam;
 pub mod integrations;

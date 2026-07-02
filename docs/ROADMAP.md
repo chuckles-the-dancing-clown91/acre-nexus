@@ -51,18 +51,30 @@ test.
 
 ---
 
-## Phase 2 — Documents & e-signature (contract signing) ⬜  *(Pillars 3 & 4)*
+## Phase 2 — Documents & e-signature (contract signing) ✅  *(Pillars 3 & 4)*
 
-- **Template → document generation**: render leases/agreements from the theming
-  layer's `legal_templates` (merge fields: landlord, tenant, property, terms).
-- **E-signature**: native envelope flow (or DocuSign/Dropbox Sign connector) with
-  signer roles, status tracking (sent → viewed → signed → completed), and the
-  signed PDF stored in the document service. ESIGN/UETA audit trail.
-- **Document tracking UI**: per-property/lease/deal document drawer with status,
-  versions, and expirations.
+**Shipped** — see [`LEASING.md`](LEASING.md#e-signature-envelopes) for the
+as-built design.
 
-**DoD:** generate a lease from a template, send for signature, capture the
-completed signed PDF + audit trail, and see it on the property/lease.
+- **Template → document generation** ✅: leases render from the theming layer's
+  `legal_templates` (merge fields: landlord, tenant, property, terms, charges,
+  pets, vehicles).
+- **E-signature** ✅: native envelope flow (`esign_envelope` / `esign_signer` /
+  `esign_event`) with signer roles (resident / landlord / guarantor / other),
+  status tracking (sent → viewed → signed → completed, plus declined/voided),
+  tokenized public signing links delivered by **email + SMS** through the
+  Phase 1 notification substrate, a hand-rolled text→PDF writer, and the signed
+  PDF stored in the document service. Full ESIGN/UETA audit trail (typed
+  signature + consent + IP + user agent + SHA-256 body hash pinned at send).
+  Completion auto-activates the lease, syncs occupancy, and advances the
+  property's workflow to `leased`.
+- **Document tracking UI** ✅: per-property and per-lease document drawer with
+  status, version chains, and expirations; envelope card with per-signer
+  status, reminders (token-rotating), void, and the audit trail; public
+  `/sign/<token>` signing page.
+
+**DoD (met):** generate a lease from a template, send for signature, capture
+the completed signed PDF + audit trail, and see it on the property/lease.
 
 ---
 

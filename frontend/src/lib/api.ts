@@ -603,6 +603,49 @@ export const api = {
       body: { signed_by },
     }),
 
+  // ---- e-signature envelopes ----
+  leaseEnvelope: (leaseId: string) =>
+    request<EsignEnvelope>(`/leases/${leaseId}/envelope`, { auth: true }),
+  createEnvelope: (
+    leaseId: string,
+    body: { message?: string; signers?: EsignSignerInput[] }
+  ) =>
+    request<CreateEnvelopeResponse>(`/leases/${leaseId}/envelope`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  remindEnvelope: (envelopeId: string) =>
+    request<RemindEnvelopeResponse>(`/esign/envelopes/${envelopeId}/remind`, {
+      method: "POST",
+      auth: true,
+    }),
+  voidEnvelope: (envelopeId: string, reason?: string) =>
+    request<EsignEnvelope>(`/esign/envelopes/${envelopeId}/void`, {
+      method: "POST",
+      auth: true,
+      body: { reason },
+    }),
+  // Public signer endpoints (tokenized link — no auth).
+  publicSignView: (token: string, tenant = DEFAULT_TENANT) =>
+    request<PublicSignView>(`/public/sign/${token}`, { tenant }),
+  publicSign: (token: string, signed_name: string, tenant = DEFAULT_TENANT) =>
+    request<PublicSignView>(`/public/sign/${token}`, {
+      method: "POST",
+      body: { signed_name, consent: true },
+      tenant,
+    }),
+  publicDeclineSign: (
+    token: string,
+    reason: string | undefined,
+    tenant = DEFAULT_TENANT
+  ) =>
+    request<PublicSignView>(`/public/sign/${token}/decline`, {
+      method: "POST",
+      body: { reason },
+      tenant,
+    }),
+
   convertApplication: (applicationId: string, body: ConvertInput) =>
     request<Lease>(`/applications/${applicationId}/convert-to-lease`, {
       method: "POST",
@@ -1321,6 +1364,97 @@ export interface LeaseDocDto {
   signed_at: string | null;
   signed_by: string | null;
   signed_hash: string | null;
+}
+
+// ---- e-signature envelopes ----
+
+/** One party on an envelope, with their signing state + signature record. */
+export interface EsignSigner {
+  id: string;
+  /** resident | landlord | guarantor | other */
+  role: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  /** sent | viewed | signed | declined */
+  status: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signed_name: string | null;
+  decline_reason: string | null;
+}
+
+/** One entry in the envelope's ESIGN/UETA audit trail. */
+export interface EsignEvent {
+  id: string;
+  signer_id: string | null;
+  /** sent | viewed | signed | declined | reminded | completed | voided */
+  event: string;
+  detail: Record<string, unknown>;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface EsignEnvelope {
+  id: string;
+  lease_id: string;
+  lease_document_id: string;
+  title: string;
+  message: string | null;
+  /** sent | partially_signed | completed | declined | voided */
+  status: string;
+  body_hash: string;
+  signed_document_id: string | null;
+  sent_at: string;
+  completed_at: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  signers: EsignSigner[];
+  events: EsignEvent[];
+}
+
+export interface EsignSignerInput {
+  role?: string;
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+/** A freshly minted signing link — returned once, never retrievable again. */
+export interface EsignSignerLink {
+  signer_id: string;
+  name: string;
+  email: string;
+  sign_url: string;
+}
+
+export interface CreateEnvelopeResponse {
+  envelope: EsignEnvelope;
+  sign_links: EsignSignerLink[];
+}
+
+export interface RemindEnvelopeResponse {
+  reminded: number;
+  sign_links: EsignSignerLink[];
+}
+
+export interface PublicCoSigner {
+  name: string;
+  role: string;
+  status: string;
+}
+
+/** The public signing page's view, scoped to one signer's token. */
+export interface PublicSignView {
+  company: string;
+  envelope_status: string;
+  document_title: string;
+  document_body: string | null;
+  body_hash: string;
+  message: string | null;
+  signer: EsignSigner;
+  co_signers: PublicCoSigner[];
 }
 
 export interface ConvertInput {

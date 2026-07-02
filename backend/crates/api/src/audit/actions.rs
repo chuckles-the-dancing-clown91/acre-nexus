@@ -50,6 +50,16 @@ pub const LEASE_CHARGE_REMOVE: &str = "lease_charge.remove";
 pub const LEASE_FEES_APPLY: &str = "lease.apply_fees";
 pub const LEASE_DOC_GENERATE: &str = "lease_document.generate";
 pub const LEASE_DOC_SIGN: &str = "lease_document.sign";
+
+// ---- E-signature envelopes (Phase 2) ----
+pub const ESIGN_SEND: &str = "esign.send";
+pub const ESIGN_VIEW: &str = "esign.view";
+pub const ESIGN_SIGN: &str = "esign.sign";
+pub const ESIGN_DECLINE: &str = "esign.decline";
+pub const ESIGN_REMIND: &str = "esign.remind";
+pub const ESIGN_COMPLETE: &str = "esign.complete";
+pub const ESIGN_VOID: &str = "esign.void";
+
 pub const VEHICLE_CREATE: &str = "vehicle.create";
 pub const VEHICLE_UPDATE: &str = "vehicle.update";
 pub const VEHICLE_DELETE: &str = "vehicle.delete";

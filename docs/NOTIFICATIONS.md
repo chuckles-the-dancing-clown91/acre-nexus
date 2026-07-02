@@ -90,19 +90,31 @@ permission: an in-app entry each (immediate), an `auto_push` job each
 is configured. Fan-outs audit once as `notification.broadcast` with the
 recipient count.
 
-First wired event: **application submitted** → everyone with
-`application:read`. Renewals, reminders, and maintenance events ride the
-same helper as they land.
+Wired events: **application submitted** → everyone with `application:read`;
+**maintenance ticket created** → everyone with `maintenance:read`;
+**e-signature progress** (a signer signed / declined, envelope completed) →
+everyone with `lease:read`. Renewals and reminders ride the same helper as
+they land.
 
 ## Templates
 
 The `{placeholder}` engine from lease documents renders every channel:
 platform defaults live in `api/src/notify/mod.rs` (`application_approved`,
-`application_received`, `application_submitted`, `test_notification`), and
-tenants override per key via `theme.notification_templates` — a body string,
-or `{ "subject": …, "body": …, "sms": … }` merged field by field. Email uses
+`application_received`, `application_submitted`, `ticket_created`,
+`test_notification`, and the e-signature set below), and tenants override per
+key via `theme.notification_templates` — a body string, or
+`{ "subject": …, "body": …, "sms": … }` merged field by field. Email uses
 `subject` + `body`; SMS and chat use the short `sms` text; push and in-app
 use `subject` as the title with the `sms` text as the body.
+
+**E-signature templates** (roadmap Phase 2 — see
+[`LEASING.md`](LEASING.md#e-signature-envelopes)): signers receive
+`esign_request` (the signing link, by email + SMS when a mobile is on file),
+`esign_reminder` (re-sent links), `esign_completed` (fully executed), and
+`esign_voided` (request cancelled); staff receive `esign_signed_staff`
+(per-signature progress), `esign_completed_staff`, and `esign_declined_staff`
+through the fan-out. The signing link interpolates as `{sign_url}`, built from
+`PUBLIC_APP_URL`.
 
 ## Idempotency & audit
 

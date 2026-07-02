@@ -17,7 +17,7 @@
 use crate::auth::AuthUser;
 use crate::db::RequestDb;
 use crate::error::ApiError;
-use crate::guards::ClientIp;
+use crate::guards::{ClientIp, UserAgent};
 use crate::routes::domains::resolve::HostHeader;
 use crate::tenancy::{PublicTenant, TenantScope};
 use crate::tokens::ApiPrincipal;
@@ -91,6 +91,7 @@ header_only_guard!(TenantScope);
 header_only_guard!(PublicTenant);
 header_only_guard!(HostHeader);
 header_only_guard!(ClientIp);
+header_only_guard!(UserAgent);
 header_only_guard!(RequestDb);
 
 impl OpenApiResponderInner for ApiError {

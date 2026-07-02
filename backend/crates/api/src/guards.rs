@@ -13,3 +13,19 @@ impl<'r> FromRequest<'r> for ClientIp {
         Outcome::Success(ClientIp(req.client_ip().map(|ip| ip.to_string())))
     }
 }
+
+/// The request's `User-Agent` header (truncated to something storable), for the
+/// e-signature audit trail. Never fails — absent header is `None`.
+pub struct UserAgent(pub Option<String>);
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for UserAgent {
+    type Error = ();
+    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        Outcome::Success(UserAgent(
+            req.headers()
+                .get_one("User-Agent")
+                .map(|s| s.chars().take(512).collect()),
+        ))
+    }
+}

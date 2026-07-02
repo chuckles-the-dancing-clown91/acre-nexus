@@ -330,6 +330,8 @@ export interface WorkflowEvent {
   to_stage: string;
   note: string | null;
   actor_user_id: string | null;
+  /** Display name of the actor; null for automated transitions. */
+  actor_name: string | null;
   created_at: string;
 }
 
