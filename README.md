@@ -1,25 +1,145 @@
-# CODING AGENTS: READ THIS FIRST
+# Acre Nexus
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+[![CI](https://github.com/chuckles-the-dancing-clown91/acre-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/chuckles-the-dancing-clown91/acre-nexus/actions/workflows/ci.yml)
+![Rust](https://img.shields.io/badge/backend-Rust%20%2B%20Rocket-orange)
+![Next.js](https://img.shields.io/badge/frontend-Next.js%2015%20%2B%20React%2019-black)
+![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-336791)
+![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+A multi-tenant **property-management and real-estate investment platform**.
+Acre Nexus gives property-management firms a white-label back office and public
+leasing site, and gives investor-operators the acquisition, financing, and
+portfolio tooling that incumbent PM software treats as an afterthought.
 
-## What you should do — IMPORTANT
+## Features
 
-**Read the chat transcripts first.** There are 3 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+- **Multi-tenant core** — shared-schema tenancy with application-layer guards
+  *and* enforced Postgres row-level security; per-tenant white-label domains,
+  branding, and legal templates.
+- **IAM & RBAC** — JWT auth, fine-grained permissions, seeded system roles and
+  personas, field-level PII encryption (AES-256-GCM), and a full audit trail of
+  every state change.
+- **Pluggable modules** — each feature area (properties, rentals, leasing,
+  maintenance, title, flips, integrations …) is a self-contained module a
+  tenant can toggle from settings; adding one is "a file plus a registry line".
+- **Property management** — portfolio and LLC holding entities, property
+  profiles, units, leases and the rent ledger, conditional fee schedules,
+  templated lease documents, maintenance work orders, and tenant history.
+- **Property intelligence** — automated enrichment (geocoding, parcel, tax,
+  valuation, schools, utilities) behind a provider interface with deterministic
+  simulated sources and a live geocoder.
+- **Leasing funnel** — public listings site, applications, screening pipeline,
+  and an auditable application workflow.
+- **Integration substrate** — encrypted credential vault, typed outbound
+  provider framework, signature-verified inbound webhooks, S3-compatible
+  document storage with signed URLs and versioning, and templated email/SMS
+  notifications — all riding a durable background-job queue with retries.
+- **Vendor API** — scoped, revocable API tokens and a public `/api/v1` surface,
+  documented via OpenAPI (Swagger UI + RapiDoc).
 
-**Read `project/Acre.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## Architecture
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```
+┌────────────────────────┐         ┌─────────────────────────────┐
+│  frontend/  (Next.js)  │  HTTPS  │  backend/   (Rust)          │
+│  console + public site │ ──────► │  Rocket API + OpenAPI       │
+│  Tailwind, TanStack    │         │  SeaORM ► PostgreSQL (RLS)  │
+└────────────────────────┘         │  Tokio job scheduler        │
+                                   │  Pluggable platform modules │
+                                   └─────────────────────────────┘
+```
 
-## About the design files
+- **Backend** — Rust workspace (`api`, `entity`, `migration` crates) on Rocket,
+  SeaORM, and Tokio. Every module contributes routes, permissions, background
+  job kinds, and an OpenAPI fragment.
+- **Frontend** — Next.js App Router + React + TypeScript + Tailwind CSS, with a
+  module registry mirroring the backend so navigation and gating stay in sync.
+- **Database** — PostgreSQL with per-tenant row-level security as defence in
+  depth behind application-layer tenancy guards.
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+## Getting started
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+### Prerequisites
 
-## Bundle contents
+- Rust (stable, 1.94+)
+- Node.js 22+
+- PostgreSQL 14+
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Property Management System` project files (HTML prototypes, assets, components)
+### Backend
+
+```bash
+cd backend
+cp .env.example .env          # set DATABASE_URL, JWT_SECRET, …
+cargo run -p api              # migrates, seeds demo data, serves on :8000
+```
+
+Interactive API docs are served at `http://localhost:8000/swagger-ui` and
+`/rapidoc`. Demo logins are seeded (see `backend/README.md`); all demo users
+share the password `password`.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local   # points at http://localhost:8000 by default
+npm run dev                        # serves on :3000
+```
+
+### Tests & checks
+
+```bash
+# backend
+cd backend && cargo fmt --all -- --check && cargo clippy --workspace --all-targets && cargo test --workspace
+
+# frontend
+cd frontend && npm run lint && npm run typecheck && npm run test && npm run build
+```
+
+CI runs the same suite on every push and pull request.
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `backend/` | Rust workspace: `crates/api` (Rocket app), `crates/entity` (SeaORM models), `crates/migration` (schema + RLS) |
+| `frontend/` | Next.js app: console, public leasing site, module registry |
+| `docs/` | Deep-dive documentation (see below) |
+| `project/` | Original HTML design prototypes the UI was built from |
+| `ARCHITECTURE.md` | System design overview |
+| `IMPLEMENTATION.md` | Implementation notes and conventions |
+
+## Documentation
+
+| Doc | Topic |
+| --- | --- |
+| [`docs/PRODUCT.md`](docs/PRODUCT.md) | Product vision and personas |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | System architecture |
+| [`docs/TENANCY.md`](docs/TENANCY.md) | Multi-tenancy, domains, provisioning |
+| [`docs/IAM.md`](docs/IAM.md) | Users, roles, permissions, PII |
+| [`docs/MODULES.md`](docs/MODULES.md) | The pluggable module system |
+| [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) | Secrets vault, providers, webhooks, documents, notifications |
+| [`docs/PROPERTY_DATA.md`](docs/PROPERTY_DATA.md) | Property intelligence & enrichment |
+| [`docs/RENTALS.md`](docs/RENTALS.md) | Units, leases, ledger, maintenance, title |
+| [`docs/LEASING.md`](docs/LEASING.md) | Listings, applications, screening |
+| [`docs/INVESTING.md`](docs/INVESTING.md) | Entities, financing, workflows |
+| [`docs/AUDIT.md`](docs/AUDIT.md) | Audit trail & logging |
+| [`docs/API.md`](docs/API.md) | API conventions & vendor tokens |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased roadmap to GA |
+
+## Roadmap
+
+Development is tracked in [GitHub issues](https://github.com/chuckles-the-dancing-clown91/acre-nexus/issues)
+against the [roadmap](docs/ROADMAP.md): hardening (T0), integration substrate
+(Phase 1, shipped), documents & e-signature, payments + accounting core,
+screening, resident portal, helpdesk, real data providers, and reporting/GA.
+
+## Topics
+
+`property-management` · `real-estate` · `proptech` · `saas` · `multi-tenant` ·
+`rust` · `rocket` · `sea-orm` · `postgresql` · `nextjs` · `react` ·
+`typescript` · `tailwindcss` · `rest-api` · `openapi`
+
+## License
+
+Proprietary — all rights reserved.
