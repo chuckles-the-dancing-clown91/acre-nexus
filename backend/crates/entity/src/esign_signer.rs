@@ -1,8 +1,9 @@
 //! One **signer** on an e-signature envelope: a named party (resident,
 //! landlord, guarantor, …) who receives a tokenized signing link by email/SMS.
-//! Only a SHA-256 hash of the signing token is stored — the raw token exists
-//! solely inside the link sent to the signer, so possession of the link *is*
-//! the credential (like a presigned URL). The signer's row carries the full
+//! Possession of the link *is* the credential (like a presigned URL). The
+//! token is stored two ways: a SHA-256 hash for lookup, and an AES-256-GCM
+//! seal under the integration-secrets key so reminders can re-send the *same*
+//! link (never plaintext at rest). The signer's row carries the full
 //! per-party signature record: typed name, timestamp, IP, and user agent.
 
 use sea_orm::entity::prelude::*;
@@ -21,8 +22,13 @@ pub struct Model {
     pub email: String,
     /// Optional mobile number — when present the signing link also goes by SMS.
     pub phone: Option<String>,
-    /// SHA-256 (hex) of the signing-link token.
+    /// SHA-256 (hex) of the signing-link token — the lookup key.
     pub token_hash: String,
+    /// The raw token sealed with AES-256-GCM under `SECRETS_ENC_KEY`
+    /// (base64), so reminders re-send the original link.
+    pub token_ciphertext: String,
+    /// The seal's 96-bit nonce (base64).
+    pub token_nonce: String,
     /// `sent` | `viewed` | `signed` | `declined`.
     pub status: String,
     pub viewed_at: Option<DateTimeWithTimeZone>,

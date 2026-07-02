@@ -106,6 +106,10 @@ pub const NOTIFICATION_BROADCAST: &str = "notification.broadcast";
 pub const NOTIFICATION_PROVIDER_CREATE: &str = "notification_provider.create";
 pub const NOTIFICATION_PROVIDER_UPDATE: &str = "notification_provider.update";
 pub const NOTIFICATION_PROVIDER_DELETE: &str = "notification_provider.delete";
+// Message-template settings: edits log the key, never the rendered content.
+pub const NOTIFICATION_TEMPLATE_UPDATE: &str = "notification_template.update";
+pub const NOTIFICATION_TEMPLATE_RESET: &str = "notification_template.reset";
+pub const NOTIFICATION_TEMPLATE_IMPORT: &str = "notification_template.import";
 pub const PUSH_SUBSCRIBE: &str = "push.subscribe";
 pub const PUSH_UNSUBSCRIBE: &str = "push.unsubscribe";
 /// One outbound provider invocation (simulated or live) by the job runner.

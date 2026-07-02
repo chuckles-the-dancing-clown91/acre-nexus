@@ -10,6 +10,7 @@ pub mod list_notifications;
 pub mod list_providers;
 pub mod list_secrets;
 pub mod set_secret;
+pub mod templates;
 pub mod test_provider;
 pub mod update_provider;
 pub mod webhook;

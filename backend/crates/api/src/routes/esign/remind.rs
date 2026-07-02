@@ -1,6 +1,8 @@
 //! `POST /esign/envelopes/<id>/remind` — nudge every signer who hasn't signed
-//! yet. Each pending signer's token is **rotated** (we never store raw tokens,
-//! so a reminder mints a fresh link and the old one stops working).
+//! yet, re-sending the **same** link they originally received (tokens are
+//! stored sealed under the secrets key, so earlier emails keep working). If a
+//! signer's seal cannot be opened (e.g. the key was rotated), that signer's
+//! token is re-minted instead so the reminder still goes out.
 
 use super::dto::{RemindResp, SignerLink};
 use crate::auth::AuthUser;
@@ -57,12 +59,22 @@ pub async fn remind(
         if !matches!(s.status.as_str(), "sent" | "viewed") {
             continue;
         }
-        // Rotate the token: mint a fresh link, invalidate the old one.
-        let (raw, hash) = esign::generate_token();
-        let mut am: entity::esign_signer::ActiveModel = s.clone().into();
-        am.token_hash = Set(hash);
-        am.updated_at = Set(now.into());
-        let saved = am.update(&db).await?;
+        // Re-send the original link. Only if the seal can't be opened (key
+        // rotation, legacy row) do we mint a replacement token.
+        let (raw, saved) = match esign::unseal_token(&s.token_ciphertext, &s.token_nonce) {
+            Ok(raw) => (raw, s),
+            Err(e) => {
+                tracing::warn!("re-minting signing token for {} (unseal failed: {e})", s.id);
+                let (raw, hash) = esign::generate_token();
+                let (ct, nonce) = esign::seal_token(&raw)?;
+                let mut am: entity::esign_signer::ActiveModel = s.into();
+                am.token_hash = Set(hash);
+                am.token_ciphertext = Set(ct);
+                am.token_nonce = Set(nonce);
+                am.updated_at = Set(now.into());
+                (raw, am.update(&db).await?)
+            }
+        };
 
         let sign_url = esign::sign_url(&slug, &raw);
         esign::record_event(

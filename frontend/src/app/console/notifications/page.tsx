@@ -13,6 +13,7 @@ import {
   pushSupported,
 } from "@/lib/push";
 import { Badge, Card } from "@/components/ui";
+import { TemplatesCard } from "@/components/TemplatesCard";
 import { useAuth } from "@/lib/auth";
 
 /** Channel → provider kinds + which config fields each needs. */
@@ -518,6 +519,8 @@ export default function NotificationsPage() {
           </div>
         </Card>
       )}
+
+      {manage && <TemplatesCard />}
     </div>
   );
 }

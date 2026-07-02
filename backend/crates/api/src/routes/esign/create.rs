@@ -108,6 +108,7 @@ pub async fn create(
     let mut saved_signers = Vec::with_capacity(signers.len());
     for s in signers {
         let (raw, hash) = esign::generate_token();
+        let (token_ciphertext, token_nonce) = esign::seal_token(&raw)?;
         let saved = entity::esign_signer::ActiveModel {
             id: Set(Uuid::new_v4()),
             tenant_id: Set(scope.tenant_id),
@@ -117,6 +118,8 @@ pub async fn create(
             email: Set(s.email),
             phone: Set(s.phone),
             token_hash: Set(hash),
+            token_ciphertext: Set(token_ciphertext),
+            token_nonce: Set(token_nonce),
             status: Set("sent".into()),
             viewed_at: Set(None),
             signed_at: Set(None),

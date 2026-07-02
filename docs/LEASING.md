@@ -136,8 +136,9 @@ is sent as an *envelope* to one or more *signers* — resident, landlord,
 guarantor, other — each of whom receives a **tokenized signing link** by email
 (and SMS when a mobile is on file) through the notification substrate
 ([`NOTIFICATIONS.md`](NOTIFICATIONS.md)). Possession of the link is the
-credential: only the token's SHA-256 is stored (the API-token pattern), and
-reminders **rotate** the token, invalidating older links.
+credential. The token is stored two ways, never in plaintext: a SHA-256 hash
+for lookup, plus an AES-256-GCM seal under `SECRETS_ENC_KEY` (the vault
+pattern) so reminders re-send the **same** link — earlier emails keep working.
 
 ```
 envelope: sent ──→ partially_signed ──→ completed      signer: sent ──→ viewed ──→ signed
@@ -151,7 +152,9 @@ Console endpoints (mounted by `lease_builder`):
   SHA-256 of the document body so every party provably signs the same text.
   Signing links are returned **once** and delivered to each signer.
 - `GET /leases/<id>/envelope` (`lease:read`) — signers + the full audit trail.
-- `POST /esign/envelopes/<id>/remind` — re-send to pending signers (rotates links).
+- `POST /esign/envelopes/<id>/remind` — re-send the original links to pending
+  signers (a token is re-minted only if its seal can't be opened, e.g. after a
+  key rotation).
 - `POST /esign/envelopes/<id>/void` — cancel; pending signers are notified and
   the document returns to `draft`.
 

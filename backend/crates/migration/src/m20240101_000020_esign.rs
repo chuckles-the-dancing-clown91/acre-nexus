@@ -5,8 +5,10 @@
 //!   collective state (`sent` → `partially_signed` → `completed`, or
 //!   `declined` / `voided`) and pins a SHA-256 of the body at send time.
 //! * `esign_signer` — one party on the envelope (resident / landlord /
-//!   guarantor / other). Stores only the SHA-256 hash of the tokenized signing
-//!   link plus the party's signature record (typed name, timestamp, IP, UA).
+//!   guarantor / other). The signing-link token is stored as a SHA-256 hash
+//!   (lookup) plus an AES-256-GCM seal under `SECRETS_ENC_KEY` (so reminders
+//!   re-send the same link — never plaintext at rest), alongside the party's
+//!   signature record (typed name, timestamp, IP, UA).
 //! * `esign_event` — the append-only ESIGN/UETA audit trail (sent, viewed,
 //!   signed, declined, reminded, completed, voided) with IP + user agent.
 //!
@@ -105,8 +107,11 @@ impl MigrationTrait for Migration {
                     .col(col("name").string().not_null())
                     .col(col("email").string().not_null())
                     .col(col("phone").string().null())
-                    // The raw token never persists — only its SHA-256.
+                    // The token persists hashed (lookup) + sealed (re-delivery),
+                    // never in plaintext.
                     .col(col("token_hash").string().not_null().unique_key())
+                    .col(col("token_ciphertext").text().not_null())
+                    .col(col("token_nonce").string().not_null())
                     .col(col("status").string().not_null())
                     .col(col("viewed_at").timestamp_with_time_zone().null())
                     .col(col("signed_at").timestamp_with_time_zone().null())

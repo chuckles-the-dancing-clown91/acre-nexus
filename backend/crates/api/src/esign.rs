@@ -3,8 +3,10 @@
 //! A generated lease document is sent out as an *envelope* to one or more
 //! *signers* (resident, landlord, guarantor, …). Each signer receives a
 //! tokenized signing link by email (and SMS when a phone is on file) through
-//! the Phase 1 notification substrate; the raw token lives only in that link
-//! and only its SHA-256 is stored, exactly like the API-token pattern.
+//! the Phase 1 notification substrate. The token is stored hashed (SHA-256,
+//! for lookup) plus sealed under the integration-secrets key (AES-256-GCM,
+//! for re-delivery) — never plaintext at rest — so reminders re-send the
+//! **same** link rather than invalidating earlier emails.
 //!
 //! State machine:
 //!
@@ -44,7 +46,7 @@ pub const SIGNED_PDF_FILENAME: &str = "signed-lease-agreement.pdf";
 // ---------------------------------------------------------------------------
 
 /// Mint a signing-link token: 32 random bytes, hex — returned raw (for the
-/// link) plus its SHA-256 (the only form we persist).
+/// link) plus its SHA-256 (the lookup form we persist).
 pub fn generate_token() -> (String, String) {
     let mut buf = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut buf);
@@ -56,6 +58,23 @@ pub fn generate_token() -> (String, String) {
 /// SHA-256 (hex) of a raw signing token.
 pub fn hash_token(raw: &str) -> String {
     sha256_hex(raw.as_bytes())
+}
+
+/// Seal a raw token with AES-256-GCM under the integration-secrets key
+/// (never plaintext at rest) → `(ciphertext_b64, nonce_b64)`. Reminders
+/// unseal it to re-send the **same** link instead of rotating it.
+pub fn seal_token(raw: &str) -> anyhow::Result<(String, String)> {
+    let sealed = crate::pii::encrypt(&crate::config::Config::global().secrets_key, raw)?;
+    Ok((sealed.ciphertext, sealed.nonce))
+}
+
+/// Recover a signer's raw token from its seal.
+pub fn unseal_token(ciphertext_b64: &str, nonce_b64: &str) -> anyhow::Result<String> {
+    crate::pii::decrypt(
+        &crate::config::Config::global().secrets_key,
+        ciphertext_b64,
+        nonce_b64,
+    )
 }
 
 /// The public signing URL for a token: `{PUBLIC_APP_URL}/sign/{token}?tenant={slug}`.
@@ -464,6 +483,17 @@ mod tests {
     }
 
     #[test]
+    fn sealed_tokens_roundtrip_and_are_not_plaintext() {
+        let (raw, _) = generate_token();
+        let (ct, nonce) = seal_token(&raw).unwrap();
+        assert_ne!(ct, raw, "ciphertext must not be the raw token");
+        assert_eq!(unseal_token(&ct, &nonce).unwrap(), raw);
+        // A seal under a different nonce must not decrypt.
+        let (_, other_nonce) = seal_token(&raw).unwrap();
+        assert!(unseal_token(&ct, &other_nonce).is_err());
+    }
+
+    #[test]
     fn sign_url_carries_token_and_tenant() {
         let url = sign_url("northwind", "abc123");
         assert!(url.ends_with("/sign/abc123?tenant=northwind"));
@@ -480,6 +510,8 @@ mod tests {
             email: "jordan@example.com".into(),
             phone: None,
             token_hash: "x".into(),
+            token_ciphertext: "ct".into(),
+            token_nonce: "n".into(),
             status: status.into(),
             viewed_at: None,
             signed_at: Some(now.into()),

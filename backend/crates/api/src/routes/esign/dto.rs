@@ -130,8 +130,8 @@ pub struct CreateEnvelopeReq {
     pub signers: Option<Vec<SignerReq>>,
 }
 
-/// One signer's freshly-minted signing link. **Returned exactly once** (at
-/// send/remind time) — only the token's hash is stored.
+/// One signer's signing link. Surfaced at send/remind time; tokens are stored
+/// sealed (never plaintext), so a reminder re-yields the same link.
 #[derive(Serialize, schemars::JsonSchema)]
 pub struct SignerLink {
     pub signer_id: Uuid,
@@ -155,7 +155,8 @@ pub struct VoidReq {
 #[derive(Serialize, schemars::JsonSchema)]
 pub struct RemindResp {
     pub reminded: usize,
-    /// Fresh signing links (reminders rotate each pending signer's token).
+    /// The pending signers' links — the **same** links originally sent
+    /// (earlier emails keep working).
     pub sign_links: Vec<SignerLink>,
 }
 

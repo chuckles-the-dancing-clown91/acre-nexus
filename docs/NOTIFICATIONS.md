@@ -110,11 +110,33 @@ use `subject` as the title with the `sms` text as the body.
 **E-signature templates** (roadmap Phase 2 — see
 [`LEASING.md`](LEASING.md#e-signature-envelopes)): signers receive
 `esign_request` (the signing link, by email + SMS when a mobile is on file),
-`esign_reminder` (re-sent links), `esign_completed` (fully executed), and
-`esign_voided` (request cancelled); staff receive `esign_signed_staff`
+`esign_reminder` (the same link, re-sent), `esign_completed` (fully executed),
+and `esign_voided` (request cancelled); staff receive `esign_signed_staff`
 (per-signature progress), `esign_completed_staff`, and `esign_declined_staff`
 through the fan-out. The signing link interpolates as `{sign_url}`, built from
 `PUBLIC_APP_URL`.
+
+## Editing templates
+
+Templates are workspace-editable through the settings API (mounted by the
+`integrations` module, gated by `integrations:manage`):
+
+- `GET /integrations/templates` — the platform catalog with the workspace's
+  edits layered in (`customized` / `has_default` flags per key).
+- `PUT /integrations/templates/<key>` — set the workspace's copy (`subject`,
+  `body`, `sms` — omitted fields keep falling back to the platform default).
+  Unknown keys create workspace-defined custom templates.
+- `DELETE /integrations/templates/<key>` — drop the copy; sends fall back to
+  the platform default.
+- `POST /integrations/templates/import` — copy every un-customized platform
+  default into `theme.notification_templates` as a full, editable DB copy
+  (existing edits are never clobbered).
+
+The console's **Notifications → Message templates** card fronts these:
+import-all, per-template editing of subject / email body / short text, and
+reset-to-default. Edits take effect on the next send; template mutations audit
+as `notification_template.update` / `.reset` / `.import` (key only, never the
+content).
 
 ## Idempotency & audit
 

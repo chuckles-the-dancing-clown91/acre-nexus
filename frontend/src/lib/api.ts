@@ -473,6 +473,28 @@ export const api = {
       { method: "POST", auth: true, body: { to } }
     ),
 
+  // ---- message templates (platform catalog + workspace copies) ----
+  notificationTemplates: () =>
+    request<NotificationTemplate[]>("/integrations/templates", { auth: true }),
+  updateNotificationTemplate: (
+    key: string,
+    body: { subject?: string; body?: string; sms?: string }
+  ) =>
+    request<NotificationTemplate>(
+      `/integrations/templates/${encodeURIComponent(key)}`,
+      { method: "PUT", auth: true, body }
+    ),
+  resetNotificationTemplate: (key: string) =>
+    request<{ reset: boolean; key: string }>(
+      `/integrations/templates/${encodeURIComponent(key)}`,
+      { method: "DELETE", auth: true }
+    ),
+  importNotificationTemplates: () =>
+    request<{ imported: number; total: number }>(
+      "/integrations/templates/import",
+      { method: "POST", auth: true }
+    ),
+
   // ---- in-app inbox + web push ----
   inbox: (limit = 50) =>
     request<InboxEntry[]>(`/notifications/inbox?limit=${limit}`, {
@@ -1215,6 +1237,24 @@ export interface UpdateNotificationProviderInput {
   credential?: string;
   enabled?: boolean;
   is_default?: boolean;
+}
+
+/**
+ * One notification message template: the effective fields (workspace copy
+ * layered over the platform default) plus where each came from.
+ */
+export interface NotificationTemplate {
+  key: string;
+  /** Email subject; doubles as the push/in-app title. */
+  subject: string;
+  /** Long email body. */
+  body: string;
+  /** Short text used for SMS, chat, push, and in-app renditions. */
+  sms: string;
+  /** The workspace holds its own editable copy. */
+  customized: boolean;
+  /** A platform default exists (reset restores it). */
+  has_default: boolean;
 }
 
 /** One in-app inbox entry for the signed-in user. */

@@ -51,11 +51,18 @@ pub const PROVIDER_CHANNELS: &[(&str, &[&str])] = &[
 
 /// One default template: rendered bodies per channel, overridable per tenant
 /// via `theme.notification_templates`.
-struct DefaultTemplate {
-    key: &'static str,
-    subject: &'static str,
-    body: &'static str,
-    sms: &'static str,
+pub struct DefaultTemplate {
+    pub key: &'static str,
+    pub subject: &'static str,
+    pub body: &'static str,
+    pub sms: &'static str,
+}
+
+/// The platform template catalog — every default the engine ships. The
+/// templates settings API merges tenant overrides over these and lets a
+/// workspace import them as editable DB copies.
+pub fn default_templates() -> &'static [DefaultTemplate] {
+    DEFAULT_TEMPLATES
 }
 
 /// Platform default templates. A tenant override with the same key (a plain
@@ -114,7 +121,6 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         subject: "Reminder — {document_title} is awaiting your signature",
         body: "Hi {signer},\n\nA friendly reminder that \"{document_title}\" from {company} \
                is still awaiting your signature.\n\nReview and sign here:\n{sign_url}\n\n\
-               (Any earlier signing link you received has been replaced by this one.)\n\n\
                — {company}",
         sms: "{company}: reminder — {document_title} is awaiting your signature. Sign: {sign_url}",
     },

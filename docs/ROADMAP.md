@@ -70,8 +70,9 @@ as-built design.
   property's workflow to `leased`.
 - **Document tracking UI** ✅: per-property and per-lease document drawer with
   status, version chains, and expirations; envelope card with per-signer
-  status, reminders (token-rotating), void, and the audit trail; public
-  `/sign/<token>` signing page.
+  status, reminders, void, and the audit trail; public `/sign/<token>` signing
+  page. Notification templates are importable into the workspace and editable
+  from the console.
 
 **DoD (met):** generate a lease from a template, send for signature, capture
 the completed signed PDF + audit trail, and see it on the property/lease.
