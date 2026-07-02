@@ -35,6 +35,67 @@ pub struct SetSecretReq {
     pub value: String,
 }
 
+/// A configured notification delivery provider, credential masked.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct ProviderDto {
+    pub id: Uuid,
+    /// `email` | `sms` | `chat`.
+    pub channel: String,
+    /// `resend` | `sendgrid` | `postmark` | `twilio` | `slack` | `discord`.
+    pub kind: String,
+    /// Non-secret settings (from address, account sid, …).
+    pub config: serde_json::Value,
+    pub enabled: bool,
+    pub is_default: bool,
+    /// Last four characters of the vaulted credential, when one is stored.
+    pub credential_last4: Option<String>,
+    pub created_at: String,
+}
+
+impl ProviderDto {
+    pub fn from_model(p: entity::notification_provider::Model, last4: Option<String>) -> Self {
+        ProviderDto {
+            id: p.id,
+            channel: p.channel,
+            kind: p.kind,
+            config: p.config,
+            enabled: p.enabled,
+            is_default: p.is_default,
+            credential_last4: last4,
+            created_at: p.created_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct CreateProviderReq {
+    /// `email` | `sms` | `chat`.
+    pub channel: String,
+    /// Provider service, e.g. `resend`, `twilio`, `slack`.
+    pub kind: String,
+    /// Non-secret settings, e.g. `{ "from": "hello@acme.com" }`.
+    pub config: Option<serde_json::Value>,
+    /// The API key / auth token / webhook URL. Stored in the secrets vault.
+    pub credential: Option<String>,
+    pub is_default: Option<bool>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct UpdateProviderReq {
+    pub config: Option<serde_json::Value>,
+    /// Rotates the vaulted credential when set.
+    pub credential: Option<String>,
+    pub enabled: Option<bool>,
+    pub is_default: Option<bool>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct TestProviderReq {
+    /// Recipient override: defaults to your account email for email tests;
+    /// required for SMS (a phone number). Ignored for chat.
+    pub to: Option<String>,
+}
+
 /// One outbound notification (email/SMS) from the send history.
 #[derive(Serialize, schemars::JsonSchema)]
 pub struct NotificationDto {

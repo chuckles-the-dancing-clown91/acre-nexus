@@ -1,8 +1,9 @@
 //! **Integrations** module — the cross-cutting integration substrate
 //! (roadmap Phase 1, issues #15–#19): encrypted credential storage, the
-//! document service, transactional notifications, and inbound webhook
-//! ingestion. On by default — this is foundational plumbing every tenant
-//! needs, not an optional add-on.
+//! document service, multi-channel notifications (email / SMS / Web Push /
+//! chat / in-app inbox) with tenant-configurable delivery providers, and
+//! inbound webhook ingestion. On by default — this is foundational plumbing
+//! every tenant needs, not an optional add-on.
 //!
 //! It owns the notification job kinds (`auto_email` moved here from `leasing`
 //! — reminders, renewal notices, and statutory notices all send mail and have
@@ -11,7 +12,7 @@
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{documents, integrations};
+use crate::routes::{documents, integrations, notifications};
 use crate::storage::ObjectStore;
 use entity::prelude::Document;
 use rocket::Route;
@@ -29,8 +30,9 @@ impl PlatformModule for IntegrationsModule {
         ModuleManifest {
             key: "integrations",
             name: "Integrations",
-            description: "Credential vault, document storage, notifications (email/SMS), \
-                 and inbound webhooks — the substrate external integrations ride on.",
+            description: "Credential vault, document storage, notifications (email, SMS, \
+                 web push, chat, in-app) with configurable delivery providers, and inbound \
+                 webhooks — the substrate external integrations ride on.",
             permissions: &[
                 Permission::IntegrationsManage,
                 Permission::DocumentRead,
@@ -39,6 +41,8 @@ impl PlatformModule for IntegrationsModule {
             job_kinds: &[
                 "auto_email",
                 "auto_sms",
+                "auto_push",
+                "auto_chat",
                 "webhook_event",
                 "document_retention",
             ],
@@ -55,6 +59,22 @@ impl PlatformModule for IntegrationsModule {
             integrations::delete_secret::delete_secret,
             // notification send history
             integrations::list_notifications::list_notifications,
+            // notification delivery providers (Resend/SendGrid/Postmark,
+            // Twilio, Slack/Discord) — end-user configurable
+            integrations::list_providers::list_providers,
+            integrations::create_provider::create_provider,
+            integrations::update_provider::update_provider,
+            integrations::delete_provider::delete_provider,
+            integrations::test_provider::test_provider,
+            // in-app inbox + web push subscriptions
+            notifications::inbox::inbox,
+            notifications::inbox::unread_count,
+            notifications::inbox::mark_read,
+            notifications::inbox::mark_all_read,
+            notifications::push::vapid_key,
+            notifications::push::subscribe,
+            notifications::push::unsubscribe,
+            notifications::push::test_push,
             // inbound webhooks (signature-verified, queue-backed)
             integrations::webhook::receive,
             // document service
@@ -70,7 +90,9 @@ impl PlatformModule for IntegrationsModule {
 
     async fn handle_job(&self, ctx: &JobContext<'_>) -> Option<JobOutcome> {
         match ctx.job.kind.as_str() {
-            "auto_email" | "auto_sms" => Some(crate::notify::handle_job(ctx.db, ctx.job).await),
+            "auto_email" | "auto_sms" | "auto_push" | "auto_chat" => {
+                Some(crate::notify::handle_job(ctx.db, ctx.job).await)
+            }
             "document_retention" => Some(retention(ctx.db, ctx.job).await),
             // Phase 1 has no event consumers yet: a verified event is recorded
             // as processed; providers landing in later phases (#35/#36/#8)

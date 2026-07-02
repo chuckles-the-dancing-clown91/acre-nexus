@@ -16,8 +16,12 @@ the durable `background_job` queue with retries + exponential backoff.
 | Secrets / KMS | #15 | `api/src/secrets.rs`, `entity/src/secret.rs` |
 | Provider trait + webhooks | #16 | `api/src/providers/` |
 | Object storage + documents | #17 | `api/src/storage.rs`, `api/src/routes/documents/` |
-| Notifications | #18 | `api/src/notify.rs`, `entity/src/notification.rs` |
+| Notifications | #18 | `api/src/notify/`, `entity/src/notification.rs` |
 | The `integrations` module | #19 | `api/src/modules/integrations.rs` |
+
+The notification layer has since grown past #18's scope — configurable
+delivery providers (Resend/SendGrid/Postmark, Twilio, Slack/Discord), Web
+Push, and the in-app inbox live in [`NOTIFICATIONS.md`](NOTIFICATIONS.md).
 
 ## 1. Secrets / KMS (#15)
 

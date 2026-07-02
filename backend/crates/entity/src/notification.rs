@@ -1,8 +1,9 @@
-//! One **outbound notification** (transactional email or SMS): the rendered
-//! message, who it went to, and how delivery went. Rows are written by the
-//! `auto_email` / `auto_sms` background-job handlers so the send history is
-//! durable and auditable, and `idempotency_key` keeps a retried job or a
-//! duplicate trigger from double-sending.
+//! One **outbound notification** (email, SMS, Web Push, chat message, or
+//! in-app inbox entry): the rendered message, who it went to, and how delivery
+//! went. Rows are written by the notification job handlers (and directly for
+//! in-app) so the send history is durable and auditable; `idempotency_key`
+//! keeps a retried job or a duplicate trigger from double-sending, and
+//! `user_id` + `read_at` power the per-user in-app inbox.
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub tenant_id: Uuid,
-    /// `email` | `sms`.
+    /// `email` | `sms` | `push` | `chat` | `in_app`.
     pub channel: String,
     /// Template that produced the body, e.g. `application_approved`.
     pub template_key: String,
@@ -31,6 +32,10 @@ pub struct Model {
     pub background_job_id: Option<Uuid>,
     /// Natural de-duplication key: `{template}:{owner_type}:{owner_id}:{trigger}`.
     pub idempotency_key: Option<String>,
+    /// The addressed user, for user-directed channels (`in_app`, `push`).
+    pub user_id: Option<Uuid>,
+    /// When the user read this in-app notification (unread while `NULL`).
+    pub read_at: Option<DateTimeWithTimeZone>,
     pub last_error: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

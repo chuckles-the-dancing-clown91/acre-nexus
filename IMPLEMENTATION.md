@@ -77,6 +77,16 @@ pattern the remaining roles plug into:
   or contractors with a status timeline; and the full title picture (ownership /
   deed holders + liens). Tenants/leases and a maintenance board ship in the
   console; the property profile shows the complete dossier. See `docs/RENTALS.md`.
+- **Integration substrate** — encrypted credential vault (dedicated
+  `SECRETS_ENC_KEY`, fail-closed in prod), a typed `Provider` trait
+  (call/simulate), signature-verified inbound webhooks riding the job queue,
+  and an S3-compatible document service (signed URLs, versioning, retention).
+  See `docs/INTEGRATIONS.md`.
+- **Notifications** — templated email/SMS/Web Push (VAPID + RFC 8291)/chat
+  plus a per-user in-app inbox with a console bell; tenants connect their own
+  delivery providers (Resend, SendGrid, Postmark, Twilio, Slack, Discord) from
+  the console, with simulated senders as the dev/CI default. See
+  `docs/NOTIFICATIONS.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

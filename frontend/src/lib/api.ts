@@ -444,6 +444,71 @@ export const api = {
       auth: true,
     }),
 
+  // ---- notification delivery providers (end-user configurable) ----
+  notificationProviders: () =>
+    request<NotificationProvider[]>("/integrations/providers", { auth: true }),
+  createNotificationProvider: (body: CreateNotificationProviderInput) =>
+    request<NotificationProvider>("/integrations/providers", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateNotificationProvider: (
+    id: string,
+    body: UpdateNotificationProviderInput
+  ) =>
+    request<NotificationProvider>(`/integrations/providers/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  deleteNotificationProvider: (id: string) =>
+    request<{ deleted: boolean }>(`/integrations/providers/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  testNotificationProvider: (id: string, to?: string) =>
+    request<{ queued: boolean; job_id: string }>(
+      `/integrations/providers/${id}/test`,
+      { method: "POST", auth: true, body: { to } }
+    ),
+
+  // ---- in-app inbox + web push ----
+  inbox: (limit = 50) =>
+    request<InboxEntry[]>(`/notifications/inbox?limit=${limit}`, {
+      auth: true,
+    }),
+  unreadCount: () =>
+    request<{ unread: number }>("/notifications/unread_count", { auth: true }),
+  markNotificationRead: (id: string) =>
+    request<InboxEntry>(`/notifications/${id}/read`, {
+      method: "POST",
+      auth: true,
+    }),
+  markAllNotificationsRead: () =>
+    request<{ marked: number }>("/notifications/read_all", {
+      method: "POST",
+      auth: true,
+    }),
+  vapidKey: () =>
+    request<{ key: string }>("/notifications/vapid_key", { auth: true }),
+  subscribePush: (body: { endpoint: string; p256dh: string; auth: string }) =>
+    request<{ subscribed: boolean }>("/notifications/push_subscriptions", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  unsubscribePush: (endpoint: string) =>
+    request<{ unsubscribed: boolean }>(
+      `/notifications/push_subscriptions?endpoint=${encodeURIComponent(endpoint)}`,
+      { method: "DELETE", auth: true }
+    ),
+  testPush: () =>
+    request<{ queued: boolean; job_id: string }>("/notifications/test_push", {
+      method: "POST",
+      auth: true,
+    }),
+
   // ---- documents (object storage) ----
   documents: (params: { owner_type?: string; owner_id?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -1079,6 +1144,43 @@ export interface NotificationEntry {
   subject: string | null;
   body: string | null;
   last_error: string | null;
+  created_at: string;
+}
+
+/** A configured delivery provider (credential masked to last4). */
+export interface NotificationProvider {
+  id: string;
+  channel: string;
+  kind: string;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  is_default: boolean;
+  credential_last4: string | null;
+  created_at: string;
+}
+
+export interface CreateNotificationProviderInput {
+  channel: string;
+  kind: string;
+  config?: Record<string, unknown>;
+  credential?: string;
+  is_default?: boolean;
+}
+
+export interface UpdateNotificationProviderInput {
+  config?: Record<string, unknown>;
+  credential?: string;
+  enabled?: boolean;
+  is_default?: boolean;
+}
+
+/** One in-app inbox entry for the signed-in user. */
+export interface InboxEntry {
+  id: string;
+  template_key: string;
+  subject: string | null;
+  body: string | null;
+  read_at: string | null;
   created_at: string;
 }
 

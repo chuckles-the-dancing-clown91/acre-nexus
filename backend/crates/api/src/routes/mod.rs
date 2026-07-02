@@ -28,6 +28,7 @@ pub mod llcs;
 pub mod maintenance;
 pub mod modules;
 pub mod mortgages;
+pub mod notifications;
 pub mod onboarding;
 pub mod platform;
 pub mod portfolio;

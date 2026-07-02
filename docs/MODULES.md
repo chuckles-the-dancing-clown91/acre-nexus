@@ -22,7 +22,7 @@ what a module is and how it is gated.
 | `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening jobs |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |
-| `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/notifications`, `/documents`, `/webhooks/{provider}` + the `auto_email`/`auto_sms`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`) |
+| `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/providers`, `/integrations/notifications`, `/notifications/*` (inbox + web push), `/documents`, `/webhooks/{provider}` + the `auto_email`/`auto_sms`/`auto_push`/`auto_chat`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`, `docs/NOTIFICATIONS.md`) |
 | `flips` | Acquisitions & Flips | **off (preview)** | `/modules/flips/pipeline` |
 
 ## Backend contract

@@ -209,6 +209,12 @@ export const MODULES: ModuleDef[] = [
     defaultEnabled: true,
     nav: [
       {
+        href: "/console/notifications",
+        label: "Notifications",
+        icon: "bell",
+        // No permission: every signed-in user has an inbox.
+      },
+      {
         href: "/console/integrations",
         label: "Integrations",
         icon: "key",

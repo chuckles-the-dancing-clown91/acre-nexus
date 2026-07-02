@@ -31,9 +31,13 @@ portfolio tooling that incumbent PM software treats as an afterthought.
 - **Leasing funnel** — public listings site, applications, screening pipeline,
   and an auditable application workflow.
 - **Integration substrate** — encrypted credential vault, typed outbound
-  provider framework, signature-verified inbound webhooks, S3-compatible
-  document storage with signed URLs and versioning, and templated email/SMS
-  notifications — all riding a durable background-job queue with retries.
+  provider framework, signature-verified inbound webhooks, and S3-compatible
+  document storage with signed URLs and versioning — all riding a durable
+  background-job queue with retries.
+- **Notifications** — templated email, SMS, browser Web Push (VAPID +
+  RFC 8291), Slack/Discord chat, and a per-user in-app inbox with unread
+  badges; tenants connect their own delivery providers (Resend, SendGrid,
+  Postmark, Twilio) from the console, with simulated senders as the default.
 - **Vendor API** — scoped, revocable API tokens and a public `/api/v1` surface,
   documented via OpenAPI (Swagger UI + RapiDoc).
 
@@ -118,7 +122,8 @@ CI runs the same suite on every push and pull request.
 | [`docs/TENANCY.md`](docs/TENANCY.md) | Multi-tenancy, domains, provisioning |
 | [`docs/IAM.md`](docs/IAM.md) | Users, roles, permissions, PII |
 | [`docs/MODULES.md`](docs/MODULES.md) | The pluggable module system |
-| [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) | Secrets vault, providers, webhooks, documents, notifications |
+| [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) | Secrets vault, providers, webhooks, documents |
+| [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md) | Email/SMS/push/chat delivery, providers, in-app inbox |
 | [`docs/PROPERTY_DATA.md`](docs/PROPERTY_DATA.md) | Property intelligence & enrichment |
 | [`docs/RENTALS.md`](docs/RENTALS.md) | Units, leases, ledger, maintenance, title |
 | [`docs/LEASING.md`](docs/LEASING.md) | Listings, applications, screening |

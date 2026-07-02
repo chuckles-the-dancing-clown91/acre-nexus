@@ -84,6 +84,20 @@ pub async fn apply(
     )
     .await;
 
+    // Integrated notifications: every staff member who can read applications
+    // gets an in-app inbox entry + a web push, and the tenant's chat channel
+    // (if configured) gets one message.
+    crate::notify::notify_staff(
+        &db,
+        tenant.tenant_id,
+        "application:read",
+        "application_submitted",
+        json!({ "applicant": b.applicant_name }),
+        Some(("application", app_id)),
+        "submitted",
+    )
+    .await;
+
     // Pre-approved (reused) applicants skip re-screening; everyone else enters the
     // background-check pipeline. Either way we kick off a job and return its id.
     let (job_id, message) = if reused_from.is_some() {
