@@ -95,6 +95,7 @@ pub async fn apply(
         json!({ "applicant": b.applicant_name }),
         Some(("application", app_id)),
         "submitted",
+        None,
     )
     .await;
 

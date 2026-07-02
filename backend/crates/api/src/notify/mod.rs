@@ -86,6 +86,13 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "New application from {applicant} — review it in the console.",
     },
     DefaultTemplate {
+        key: "ticket_created",
+        subject: "New maintenance ticket: {title}",
+        body: "Hi {recipient},\n\nA new {priority}-priority maintenance ticket was opened: \
+               {title}. Review it on the maintenance board.\n\n— {company}",
+        sms: "New {priority} maintenance ticket: {title}",
+    },
+    DefaultTemplate {
         key: "test_notification",
         subject: "Test notification from {company}",
         body: "Hi {recipient},\n\nThis is a test notification from {company}. If you're reading \
@@ -569,7 +576,9 @@ pub async fn in_app(
 /// Fan a tenant event out to every staff member holding `permission_key`:
 /// an in-app inbox entry each (written now), a Web Push job each, and one
 /// chat message when a chat provider is configured. This is the "integrated
-/// notifications" path real events call.
+/// notifications" path real events call. `exclude_user` skips the actor who
+/// caused the event (no point notifying yourself).
+#[allow(clippy::too_many_arguments)]
 pub async fn notify_staff(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
@@ -578,6 +587,7 @@ pub async fn notify_staff(
     vars_json: serde_json::Value,
     owner: Option<(&str, Uuid)>,
     trigger: &str,
+    exclude_user: Option<Uuid>,
 ) {
     let users = match staff_with_permission(db, tenant_id, permission_key).await {
         Ok(u) => u,
@@ -586,6 +596,10 @@ pub async fn notify_staff(
             return;
         }
     };
+    let users: Vec<entity::user::Model> = users
+        .into_iter()
+        .filter(|u| Some(u.id) != exclude_user)
+        .collect();
 
     let owner_fields = |payload: &mut serde_json::Map<String, serde_json::Value>| {
         if let Some((otype, oid)) = owner {
