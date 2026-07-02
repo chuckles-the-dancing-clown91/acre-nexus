@@ -50,6 +50,16 @@ pub const LEASE_CHARGE_REMOVE: &str = "lease_charge.remove";
 pub const LEASE_FEES_APPLY: &str = "lease.apply_fees";
 pub const LEASE_DOC_GENERATE: &str = "lease_document.generate";
 pub const LEASE_DOC_SIGN: &str = "lease_document.sign";
+
+// ---- E-signature envelopes (Phase 2) ----
+pub const ESIGN_SEND: &str = "esign.send";
+pub const ESIGN_VIEW: &str = "esign.view";
+pub const ESIGN_SIGN: &str = "esign.sign";
+pub const ESIGN_DECLINE: &str = "esign.decline";
+pub const ESIGN_REMIND: &str = "esign.remind";
+pub const ESIGN_COMPLETE: &str = "esign.complete";
+pub const ESIGN_VOID: &str = "esign.void";
+
 pub const VEHICLE_CREATE: &str = "vehicle.create";
 pub const VEHICLE_UPDATE: &str = "vehicle.update";
 pub const VEHICLE_DELETE: &str = "vehicle.delete";
@@ -70,6 +80,8 @@ pub const LIEN_DELETE: &str = "lien.delete";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
+pub const LISTING_CREATE: &str = "listing.create";
+pub const LISTING_UPDATE: &str = "listing.update";
 
 // ---- Settings ----
 pub const THEME_UPDATE: &str = "theme.update";
@@ -96,6 +108,10 @@ pub const NOTIFICATION_BROADCAST: &str = "notification.broadcast";
 pub const NOTIFICATION_PROVIDER_CREATE: &str = "notification_provider.create";
 pub const NOTIFICATION_PROVIDER_UPDATE: &str = "notification_provider.update";
 pub const NOTIFICATION_PROVIDER_DELETE: &str = "notification_provider.delete";
+// Message-template settings: edits log the key, never the rendered content.
+pub const NOTIFICATION_TEMPLATE_UPDATE: &str = "notification_template.update";
+pub const NOTIFICATION_TEMPLATE_RESET: &str = "notification_template.reset";
+pub const NOTIFICATION_TEMPLATE_IMPORT: &str = "notification_template.import";
 pub const PUSH_SUBSCRIBE: &str = "push.subscribe";
 pub const PUSH_UNSUBSCRIBE: &str = "push.unsubscribe";
 /// One outbound provider invocation (simulated or live) by the job runner.

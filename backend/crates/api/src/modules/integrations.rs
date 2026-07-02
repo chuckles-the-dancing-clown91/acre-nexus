@@ -66,6 +66,11 @@ impl PlatformModule for IntegrationsModule {
             integrations::update_provider::update_provider,
             integrations::delete_provider::delete_provider,
             integrations::test_provider::test_provider,
+            // message templates (platform catalog + workspace copies)
+            integrations::templates::list_templates,
+            integrations::templates::update_template,
+            integrations::templates::reset_template,
+            integrations::templates::import_templates,
             // in-app inbox + web push subscriptions
             notifications::inbox::inbox,
             notifications::inbox::unread_count,

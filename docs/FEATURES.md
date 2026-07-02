@@ -55,7 +55,7 @@ The biggest gap for "total" management — most operators live in their books.
 |---|---|---|---|
 | **Resident portal** (pay, requests, docs, messages) | ⬜ | P1 | renter persona exists in RBAC |
 | Applicant → tenant **conversion** | ⬜ | P1 | one action: approved app → lease |
-| **Lease generation** from templates + **e-sign** | ⬜ | P1 | theming stores legal templates already |
+| **Lease generation** from templates + **e-sign** | ✅ | — | envelopes, signer links, ESIGN audit trail, signed PDF |
 | Renewals, amendments, addenda | ⬜ | P2 | versioned docs + e-sign |
 | **Security deposit** mgmt + disposition + statements | ⬜ | P1 | escrow accounting tie-in |
 | Renters **insurance** tracking / requirement | ⬜ | P2 | policy expiry reminders |
@@ -96,7 +96,7 @@ The biggest gap for "total" management — most operators live in their books.
 
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
-| **Document management** (storage, versions, expiry) | ⬜ | P1 | unblocks many areas |
+| **Document management** (storage, versions, expiry) | ✅ | — | document service + per-record drawer UI |
 | Notices (late/cure/entry/eviction) generation + delivery | ⬜ | P2 | templated + audit |
 | **Eviction** case tracking | ⬜ | P2 | |
 | Licenses / permits / rental registrations + renewals | ⬜ | P2 | expiry reminders |
@@ -138,7 +138,7 @@ The biggest gap for "total" management — most operators live in their books.
 | White-label theming + **custom domains** | 🟡 | P2 | `custom_domain` field exists |
 | Durable background job queue | ✅ | — | retrying, scheduled |
 | **Notifications** (email/SMS/push) + preferences | 🟡 | P1 | auto-email seed |
-| **Document storage + e-sign** | ⬜ | P1 | the substrate unlock |
+| **Document storage + e-sign** | ✅ | — | Phase 1 storage + Phase 2 envelopes |
 | **Payments** processor + webhooks | ⬜ | P1 | |
 | Outbound integration / webhook framework + **secrets/KMS** | ⬜ | P1 | enables every real provider |
 | Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API exists |

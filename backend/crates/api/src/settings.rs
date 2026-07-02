@@ -26,6 +26,8 @@ use uuid::Uuid;
 pub const APPLICATION_REUSE_ENABLED: &str = "application_reuse.enabled";
 /// How many days a prior application stays reusable.
 pub const APPLICATION_REUSE_WINDOW_DAYS: &str = "application_reuse.window_days";
+/// Auto-approve an application the moment its background screening clears.
+pub const APPLICATION_AUTO_APPROVE: &str = "applications.auto_approve";
 
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +87,16 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Applications",
         kind: SettingKind::Int,
         default: || json!(30),
+    },
+    SettingDef {
+        key: APPLICATION_AUTO_APPROVE,
+        label: "Auto-approve cleared screenings",
+        description: "Approve an application automatically the moment its \
+                      background screening clears (the applicant is emailed). \
+                      Off = screening results wait for a staff decision.",
+        group: "Applications",
+        kind: SettingKind::Bool,
+        default: || json!(false),
     },
 ];
 

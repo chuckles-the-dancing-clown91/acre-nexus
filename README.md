@@ -136,8 +136,9 @@ CI runs the same suite on every push and pull request.
 
 Development is tracked in [GitHub issues](https://github.com/chuckles-the-dancing-clown91/acre-nexus/issues)
 against the [roadmap](docs/ROADMAP.md): hardening (T0), integration substrate
-(Phase 1, shipped), documents & e-signature, payments + accounting core,
-screening, resident portal, helpdesk, real data providers, and reporting/GA.
+(Phase 1, shipped), documents & e-signature (Phase 2, shipped), payments +
+accounting core, screening, resident portal, helpdesk, real data providers,
+and reporting/GA.
 
 ## Topics
 

@@ -17,13 +17,21 @@ pub struct Model {
     /// Stated annual income in cents.
     pub annual_income_cents: i64,
     pub credit_score: Option<i32>,
-    /// `New` | `Screening` | `Approved` | `Declined`.
+    /// `New` | `Screening` | `Approved` | `Leased` | `Declined` | `Withdrawn`.
     pub status: String,
     pub move_in: String,
     /// Applicant attributes that carry into the lease + drive conditional charges.
     pub has_pet: bool,
     pub pet_details: Option<String>,
     pub is_military: bool,
+    /// Intake door: `public` (anonymous website) | `portal` (authenticated
+    /// renter) | `back_office` (staff intake).
+    pub source: String,
+    /// The platform user who applied, when authenticated (renter portal).
+    pub applicant_user_id: Option<Uuid>,
+    /// Background-check outcome recorded on completion: `cleared` | `flagged`.
+    pub screening_status: Option<String>,
+    pub screened_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
 }
 

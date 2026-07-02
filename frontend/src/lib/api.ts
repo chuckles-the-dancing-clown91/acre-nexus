@@ -7,6 +7,11 @@
 import type {
   Application,
   ApplicationWorkflow,
+  ConsoleListing,
+  CreateApplicationInput,
+  CreateListingInput,
+  PortalApplyInput,
+  UpdateListingInput,
   AppWorkflowCatalog,
   ApplyResponse,
   Assignment,
@@ -388,11 +393,62 @@ export const api = {
       body,
     }),
   applications: () => request<Application[]>("/applications", { auth: true }),
+  /** Back-office intake: staff enter an application on an applicant's behalf. */
+  createApplication: (body: CreateApplicationInput) =>
+    request<Application>("/applications", { method: "POST", auth: true, body }),
   updateApplication: (id: string, status: string) =>
     request<Application>(`/applications/${id}`, {
       method: "PATCH",
       auth: true,
       body: { status },
+    }),
+
+  // ---- renter portal: apply + track as the signed-in user ----
+  myApplications: () =>
+    request<Application[]>("/my/applications", { auth: true }),
+  myApply: (body: PortalApplyInput) =>
+    request<Application>("/my/applications", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- self-service profile + vehicles (white-glove source of truth) ----
+  myProfile: () => request<MyProfileView>("/my/profile", { auth: true }),
+  updateMyProfile: (body: ProfileInput) =>
+    request<MyProfileView>("/my/profile", { method: "PUT", auth: true, body }),
+  myVehicles: () => request<VehicleProfile[]>("/my/vehicles", { auth: true }),
+  addMyVehicle: (body: CreateVehicleInput) =>
+    request<VehicleProfile>("/my/vehicles", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteMyVehicle: (id: string) =>
+    request<{ deleted: boolean }>(`/my/vehicles/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+
+  // ---- console listing management ----
+  consoleListings: (params: { property_id?: string; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<ConsoleListing[]>(`/listings${suffix}`, { auth: true });
+  },
+  createListing: (propertyId: string, body: CreateListingInput) =>
+    request<ConsoleListing>(`/properties/${propertyId}/listings`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateListing: (id: string, body: UpdateListingInput) =>
+    request<ConsoleListing>(`/listings/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
     }),
 
   // ---- API tokens ----
@@ -471,6 +527,28 @@ export const api = {
     request<{ queued: boolean; job_id: string }>(
       `/integrations/providers/${id}/test`,
       { method: "POST", auth: true, body: { to } }
+    ),
+
+  // ---- message templates (platform catalog + workspace copies) ----
+  notificationTemplates: () =>
+    request<NotificationTemplate[]>("/integrations/templates", { auth: true }),
+  updateNotificationTemplate: (
+    key: string,
+    body: { subject?: string; body?: string; sms?: string }
+  ) =>
+    request<NotificationTemplate>(
+      `/integrations/templates/${encodeURIComponent(key)}`,
+      { method: "PUT", auth: true, body }
+    ),
+  resetNotificationTemplate: (key: string) =>
+    request<{ reset: boolean; key: string }>(
+      `/integrations/templates/${encodeURIComponent(key)}`,
+      { method: "DELETE", auth: true }
+    ),
+  importNotificationTemplates: () =>
+    request<{ imported: number; total: number }>(
+      "/integrations/templates/import",
+      { method: "POST", auth: true }
     ),
 
   // ---- in-app inbox + web push ----
@@ -601,6 +679,49 @@ export const api = {
       method: "POST",
       auth: true,
       body: { signed_by },
+    }),
+
+  // ---- e-signature envelopes ----
+  leaseEnvelope: (leaseId: string) =>
+    request<EsignEnvelope>(`/leases/${leaseId}/envelope`, { auth: true }),
+  createEnvelope: (
+    leaseId: string,
+    body: { message?: string; signers?: EsignSignerInput[] }
+  ) =>
+    request<CreateEnvelopeResponse>(`/leases/${leaseId}/envelope`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  remindEnvelope: (envelopeId: string) =>
+    request<RemindEnvelopeResponse>(`/esign/envelopes/${envelopeId}/remind`, {
+      method: "POST",
+      auth: true,
+    }),
+  voidEnvelope: (envelopeId: string, reason?: string) =>
+    request<EsignEnvelope>(`/esign/envelopes/${envelopeId}/void`, {
+      method: "POST",
+      auth: true,
+      body: { reason },
+    }),
+  // Public signer endpoints (tokenized link — no auth).
+  publicSignView: (token: string, tenant = DEFAULT_TENANT) =>
+    request<PublicSignView>(`/public/sign/${token}`, { tenant }),
+  publicSign: (token: string, signed_name: string, tenant = DEFAULT_TENANT) =>
+    request<PublicSignView>(`/public/sign/${token}`, {
+      method: "POST",
+      body: { signed_name, consent: true },
+      tenant,
+    }),
+  publicDeclineSign: (
+    token: string,
+    reason: string | undefined,
+    tenant = DEFAULT_TENANT
+  ) =>
+    request<PublicSignView>(`/public/sign/${token}/decline`, {
+      method: "POST",
+      body: { reason },
+      tenant,
     }),
 
   convertApplication: (applicationId: string, body: ConvertInput) =>
@@ -964,6 +1085,11 @@ export interface ProfileDto {
   photo_url: string | null;
   has_ssn: boolean;
   has_gov_id: boolean;
+  /** Renter attributes — drive application auto-fill + conditional charges. */
+  has_pet: boolean;
+  pet_details: string | null;
+  is_military: boolean;
+  annual_income_cents: number | null;
 }
 
 /** Editable profile payload (PUT). Sensitive fields are write-only. */
@@ -984,6 +1110,21 @@ export interface ProfileInput {
   ssn?: string;
   gov_id_number?: string;
   gov_id_type?: string;
+  /** Renter attributes (application auto-fill). */
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
+  annual_income_cents?: number;
+}
+
+/** Everything the "My profile" page needs in one fetch. */
+export interface MyProfileView {
+  /** Account display name. */
+  name: string;
+  /** Account email (identity — applications always use this). */
+  email: string;
+  profile: ProfileDto;
+  vehicles: VehicleProfile[];
 }
 
 /** A user's membership in a scope/tenant under a given persona. */
@@ -1174,6 +1315,24 @@ export interface UpdateNotificationProviderInput {
   is_default?: boolean;
 }
 
+/**
+ * One notification message template: the effective fields (workspace copy
+ * layered over the platform default) plus where each came from.
+ */
+export interface NotificationTemplate {
+  key: string;
+  /** Email subject; doubles as the push/in-app title. */
+  subject: string;
+  /** Long email body. */
+  body: string;
+  /** Short text used for SMS, chat, push, and in-app renditions. */
+  sms: string;
+  /** The workspace holds its own editable copy. */
+  customized: boolean;
+  /** A platform default exists (reset restores it). */
+  has_default: boolean;
+}
+
 /** One in-app inbox entry for the signed-in user. */
 export interface InboxEntry {
   id: string;
@@ -1321,6 +1480,97 @@ export interface LeaseDocDto {
   signed_at: string | null;
   signed_by: string | null;
   signed_hash: string | null;
+}
+
+// ---- e-signature envelopes ----
+
+/** One party on an envelope, with their signing state + signature record. */
+export interface EsignSigner {
+  id: string;
+  /** resident | landlord | guarantor | other */
+  role: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  /** sent | viewed | signed | declined */
+  status: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signed_name: string | null;
+  decline_reason: string | null;
+}
+
+/** One entry in the envelope's ESIGN/UETA audit trail. */
+export interface EsignEvent {
+  id: string;
+  signer_id: string | null;
+  /** sent | viewed | signed | declined | reminded | completed | voided */
+  event: string;
+  detail: Record<string, unknown>;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface EsignEnvelope {
+  id: string;
+  lease_id: string;
+  lease_document_id: string;
+  title: string;
+  message: string | null;
+  /** sent | partially_signed | completed | declined | voided */
+  status: string;
+  body_hash: string;
+  signed_document_id: string | null;
+  sent_at: string;
+  completed_at: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+  signers: EsignSigner[];
+  events: EsignEvent[];
+}
+
+export interface EsignSignerInput {
+  role?: string;
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+/** A freshly minted signing link — returned once, never retrievable again. */
+export interface EsignSignerLink {
+  signer_id: string;
+  name: string;
+  email: string;
+  sign_url: string;
+}
+
+export interface CreateEnvelopeResponse {
+  envelope: EsignEnvelope;
+  sign_links: EsignSignerLink[];
+}
+
+export interface RemindEnvelopeResponse {
+  reminded: number;
+  sign_links: EsignSignerLink[];
+}
+
+export interface PublicCoSigner {
+  name: string;
+  role: string;
+  status: string;
+}
+
+/** The public signing page's view, scoped to one signer's token. */
+export interface PublicSignView {
+  company: string;
+  envelope_status: string;
+  document_title: string;
+  document_body: string | null;
+  body_hash: string;
+  message: string | null;
+  signer: EsignSigner;
+  co_signers: PublicCoSigner[];
 }
 
 export interface ConvertInput {

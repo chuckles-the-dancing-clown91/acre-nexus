@@ -90,19 +90,55 @@ permission: an in-app entry each (immediate), an `auto_push` job each
 is configured. Fan-outs audit once as `notification.broadcast` with the
 recipient count.
 
-First wired event: **application submitted** → everyone with
-`application:read`. Renewals, reminders, and maintenance events ride the
-same helper as they land.
+Wired events: **application submitted** → everyone with `application:read`;
+**screening finished** (when auto-approve is off) → everyone with
+`application:read`; **maintenance ticket created** → everyone with
+`maintenance:read`; **e-signature progress** (a signer signed / declined,
+envelope completed) → everyone with `lease:read`. Renewals and reminders ride
+the same helper as they land.
 
 ## Templates
 
 The `{placeholder}` engine from lease documents renders every channel:
 platform defaults live in `api/src/notify/mod.rs` (`application_approved`,
-`application_received`, `application_submitted`, `test_notification`), and
-tenants override per key via `theme.notification_templates` — a body string,
-or `{ "subject": …, "body": …, "sms": … }` merged field by field. Email uses
+`application_received`, `application_submitted`, `application_screened`,
+`application_declined`, `ticket_created`, `test_notification`, and the
+e-signature set below), and tenants override per
+key via `theme.notification_templates` — a body string, or
+`{ "subject": …, "body": …, "sms": … }` merged field by field. Email uses
 `subject` + `body`; SMS and chat use the short `sms` text; push and in-app
 use `subject` as the title with the `sms` text as the body.
+
+**E-signature templates** (roadmap Phase 2 — see
+[`LEASING.md`](LEASING.md#e-signature-envelopes)): signers receive
+`esign_request` (the signing link, by email + SMS when a mobile is on file),
+`esign_reminder` (the same link, re-sent), `esign_completed` (fully executed),
+and `esign_voided` (request cancelled); staff receive `esign_signed_staff`
+(per-signature progress), `esign_completed_staff`, and `esign_declined_staff`
+through the fan-out. The signing link interpolates as `{sign_url}`, built from
+`PUBLIC_APP_URL`.
+
+## Editing templates
+
+Templates are workspace-editable through the settings API (mounted by the
+`integrations` module, gated by `integrations:manage`):
+
+- `GET /integrations/templates` — the platform catalog with the workspace's
+  edits layered in (`customized` / `has_default` flags per key).
+- `PUT /integrations/templates/<key>` — set the workspace's copy (`subject`,
+  `body`, `sms` — omitted fields keep falling back to the platform default).
+  Unknown keys create workspace-defined custom templates.
+- `DELETE /integrations/templates/<key>` — drop the copy; sends fall back to
+  the platform default.
+- `POST /integrations/templates/import` — copy every un-customized platform
+  default into `theme.notification_templates` as a full, editable DB copy
+  (existing edits are never clobbered).
+
+The console's **Notifications → Message templates** card fronts these:
+import-all, per-template editing of subject / email body / short text, and
+reset-to-default. Edits take effect on the next send; template mutations audit
+as `notification_template.update` / `.reset` / `.import` (key only, never the
+content).
 
 ## Idempotency & audit
 

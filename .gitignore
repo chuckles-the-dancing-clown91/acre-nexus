@@ -21,3 +21,6 @@
 *.swp
 .idea/
 .vscode/
+
+# Local object store (document service dev backend)
+/backend/data/

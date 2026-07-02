@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type MyProfileView } from "@/lib/api";
 import type { ApplyResponse, Listing } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { gradFor } from "@/lib/gradients";
+import { useAuth } from "@/lib/auth";
 
 export default function ListingDetailPage() {
   const params = useParams<{ id: string }>();
@@ -93,6 +94,11 @@ export default function ListingDetailPage() {
 }
 
 function ApplyForm({ listingId }: { listingId: string }) {
+  // A signed-in user applies through their account (the renter-portal door):
+  // white glove — everything auto-fills from their profile (name, phone,
+  // pets, income, vehicles), so the form is a single move-in date.
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<MyProfileView | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +110,15 @@ function ApplyForm({ listingId }: { listingId: string }) {
     move_in: "",
   });
 
+  useEffect(() => {
+    if (user) {
+      api
+        .myProfile()
+        .then(setProfile)
+        .catch(() => setProfile(null));
+    }
+  }, [user]);
+
   const update =
     (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -113,15 +128,32 @@ function ApplyForm({ listingId }: { listingId: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.apply({
-        listing_id: listingId,
-        applicant_name: form.applicant_name,
-        email: form.email,
-        phone: form.phone,
-        annual_income_cents: form.income ? Number(form.income) * 100 : 0,
-        move_in: form.move_in,
-      });
-      setResult(res);
+      if (user) {
+        // Only the move-in date travels — the rest comes from the profile.
+        const app = await api.myApply({
+          listing_id: listingId,
+          move_in: form.move_in || undefined,
+        });
+        setResult({
+          application_id: app.id,
+          status: app.status,
+          screening_job_id: "",
+          message:
+            app.status === "Approved"
+              ? "Welcome back — your recent application was reused and pre-approved."
+              : "Application received — screening in progress. Track it under My applications.",
+        });
+      } else {
+        const res = await api.apply({
+          listing_id: listingId,
+          applicant_name: form.applicant_name,
+          email: form.email,
+          phone: form.phone,
+          annual_income_cents: form.income ? Number(form.income) * 100 : 0,
+          move_in: form.move_in,
+        });
+        setResult(res);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
     } finally {
@@ -136,15 +168,68 @@ function ApplyForm({ listingId }: { listingId: string }) {
           <Icon name="check" size={18} /> Application received
         </div>
         <p className="text-sm">{result.message}</p>
-        <p className="mt-2 font-mono text-xs opacity-80">
-          Screening job: {result.screening_job_id.slice(0, 8)}…
-        </p>
+        {user && (
+          <Link
+            href="/account/applications"
+            className="mt-2 inline-block text-sm font-semibold underline"
+          >
+            View my applications
+          </Link>
+        )}
       </div>
     );
   }
 
   const field =
     "w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm outline-none focus:border-accent";
+
+  // White glove for signed-in users: everything comes from the profile.
+  if (user) {
+    const p = profile?.profile;
+    return (
+      <form onSubmit={submit} className="space-y-3">
+        <div className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
+          <p className="mb-2 font-semibold">
+            Applying as {profile?.name ?? user.name}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge tone="neutral">{user.email}</Badge>
+            {p?.phone && <Badge tone="neutral">{p.phone}</Badge>}
+            {p?.annual_income_cents != null && (
+              <Badge tone="neutral">
+                ${Math.round(p.annual_income_cents / 100).toLocaleString()}/yr
+              </Badge>
+            )}
+            <Badge tone={p?.has_pet ? "warn" : "neutral"}>
+              {p?.has_pet ? `pets: ${p.pet_details ?? "yes"}` : "no pets"}
+            </Badge>
+            {p?.is_military && <Badge tone="info">military</Badge>}
+            <Badge tone="neutral">
+              {profile?.vehicles.length ?? 0} vehicle
+              {(profile?.vehicles.length ?? 0) === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-ink-3">
+            Pulled from{" "}
+            <Link href="/account/profile" className="underline">
+              your profile
+            </Link>{" "}
+            — update it there and re-apply anywhere with one click.
+          </p>
+        </div>
+        <input
+          placeholder="Desired move-in (e.g. Aug 1)"
+          className={field}
+          value={form.move_in}
+          onChange={update("move_in")}
+        />
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <Button type="submit" disabled={submitting} className="w-full">
+          {submitting ? "Submitting…" : "Apply with my profile"}
+        </Button>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={submit} className="space-y-2.5">

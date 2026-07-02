@@ -73,6 +73,15 @@ impl ObjectStore {
             ObjectStore::S3(s) => s.delete(key).await,
         }
     }
+
+    /// Store `bytes` at `key` **server-side** — for system-generated artifacts
+    /// (e.g. signed PDFs) that never pass through the client upload flow.
+    pub async fn put_bytes(&self, key: &str, bytes: &[u8]) -> anyhow::Result<()> {
+        match self {
+            ObjectStore::Local(s) => s.put_bytes(key, bytes),
+            ObjectStore::S3(s) => s.put_bytes(key, bytes).await,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +328,18 @@ impl S3Store {
             url: format!("{base_url}?{canonical_query}&X-Amz-Signature={signature}"),
             expires_at: now + chrono::Duration::seconds(expires),
         })
+    }
+
+    /// Store an object by executing a presigned `PUT` server-side.
+    pub async fn put_bytes(&self, key: &str, bytes: &[u8]) -> anyhow::Result<()> {
+        let signed = self.presign("PUT", key, 60, Utc::now())?;
+        let client = crate::providers::client::build_http_client()
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let resp = client.put(&signed.url).body(bytes.to_vec()).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("s3 put failed: HTTP {}", resp.status());
+        }
+        Ok(())
     }
 
     /// Delete an object by executing a presigned `DELETE` server-side.

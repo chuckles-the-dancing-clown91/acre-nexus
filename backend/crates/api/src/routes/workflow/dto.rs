@@ -22,21 +22,10 @@ pub struct WorkflowEventDto {
     pub to_stage: String,
     pub note: Option<String>,
     pub actor_user_id: Option<Uuid>,
+    /// Display name of the actor; `None` for automated transitions (e.g. a
+    /// lease e-signature completing).
+    pub actor_name: Option<String>,
     pub created_at: String,
-}
-
-impl From<entity::workflow_event::Model> for WorkflowEventDto {
-    fn from(e: entity::workflow_event::Model) -> Self {
-        WorkflowEventDto {
-            id: e.id,
-            strategy: e.strategy,
-            from_stage: e.from_stage,
-            to_stage: e.to_stage,
-            note: e.note,
-            actor_user_id: e.actor_user_id,
-            created_at: e.created_at.to_rfc3339(),
-        }
-    }
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -56,11 +45,13 @@ pub struct AdvanceReq {
     pub note: Option<String>,
 }
 
-/// Render a [`WorkflowResp`] from a property's strategy + current stage + history.
+/// Render a [`WorkflowResp`] from a property's strategy + current stage +
+/// history, resolving actor ids to display names via `actors`.
 pub(crate) fn build(
     strategy_key: &str,
     current_stage: &str,
     history: Vec<entity::workflow_event::Model>,
+    actors: &std::collections::HashMap<Uuid, String>,
 ) -> WorkflowResp {
     let strat = crate::workflow::strategy(strategy_key);
     let strategy_label = strat.map(|s| s.label.to_string()).unwrap_or_default();
@@ -91,6 +82,38 @@ pub(crate) fn build(
         strategy_description,
         current_stage: current_stage.to_string(),
         stages,
-        history: history.into_iter().map(WorkflowEventDto::from).collect(),
+        history: history
+            .into_iter()
+            .map(|e| WorkflowEventDto {
+                id: e.id,
+                strategy: e.strategy,
+                from_stage: e.from_stage,
+                to_stage: e.to_stage,
+                note: e.note,
+                actor_name: e.actor_user_id.and_then(|id| actors.get(&id).cloned()),
+                actor_user_id: e.actor_user_id,
+                created_at: e.created_at.to_rfc3339(),
+            })
+            .collect(),
     }
+}
+
+/// Display names for every actor appearing in `history`.
+pub(crate) async fn actor_names(
+    db: &impl sea_orm::ConnectionTrait,
+    history: &[entity::workflow_event::Model],
+) -> std::collections::HashMap<Uuid, String> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let mut ids: Vec<Uuid> = history.iter().filter_map(|e| e.actor_user_id).collect();
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
+        return Default::default();
+    }
+    entity::prelude::User::find()
+        .filter(entity::user::Column::Id.is_in(ids))
+        .all(db)
+        .await
+        .map(|users| users.into_iter().map(|u| (u.id, u.name)).collect())
+        .unwrap_or_default()
 }

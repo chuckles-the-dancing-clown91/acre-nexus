@@ -137,6 +137,12 @@ pub async fn reuse(
         has_pet: Set(src.has_pet),
         pet_details: Set(src.pet_details.clone()),
         is_military: Set(src.is_military),
+        // Staff-initiated reuse: same door metadata + screening carry-over as
+        // the source application.
+        source: Set("back_office".into()),
+        applicant_user_id: Set(src.applicant_user_id),
+        screening_status: Set(src.screening_status.clone()),
+        screened_at: Set(src.screened_at),
         created_at: Set(now.into()),
     }
     .insert(&db)

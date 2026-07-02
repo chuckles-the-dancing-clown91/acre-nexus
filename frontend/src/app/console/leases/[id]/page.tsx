@@ -15,13 +15,15 @@ import type { LeaseDetail } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
+import { DocumentsCard } from "@/components/DocumentsCard";
+import { EsignCard } from "@/components/EsignCard";
 
 const CHARGE_KINDS = ["fee", "discount", "rebate", "amenity"];
 
 export default function LeaseDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const manage = can("lease:manage");
 
   const [lease, setLease] = useState<LeaseDetail | null>(null);
@@ -242,6 +244,31 @@ export default function LeaseDetailPage() {
           </div>
         )}
       </Card>
+
+      {/* Remote signing (e-signature envelope) */}
+      <EsignCard
+        leaseId={id}
+        manage={manage}
+        hasDocument={doc !== null}
+        documentSigned={doc?.status === "signed"}
+        defaultSigners={[
+          {
+            role: "resident",
+            name: lease.tenant_name,
+            email: lease.tenant_email ?? "",
+            phone: lease.tenant_phone ?? undefined,
+          },
+          {
+            role: "landlord",
+            name: user?.name ?? "",
+            email: user?.email ?? "",
+          },
+        ]}
+        onChanged={load}
+      />
+
+      {/* Stored files: signed PDFs, addenda, move-in photos, … */}
+      <DocumentsCard ownerType="lease" ownerId={id} title="Documents" />
 
       {/* Payment ledger */}
       <Card className="overflow-hidden">

@@ -19,11 +19,13 @@ pub mod cap_table;
 pub mod documents;
 pub mod domains;
 pub mod entities;
+pub mod esign;
 pub mod fees;
 pub mod iam;
 pub mod integrations;
 pub mod lease_charges;
 pub mod lease_docs;
+pub mod listings;
 pub mod llcs;
 pub mod maintenance;
 pub mod modules;
@@ -106,5 +108,8 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // IAM — tenant member management (client admins)
         iam::list_members::list_members,
         iam::invite_member::invite_member,
+        // Self-service profile (renter portal / any signed-in user)
+        iam::self_profile::my_profile,
+        iam::self_profile::update_my_profile,
     ]
 }

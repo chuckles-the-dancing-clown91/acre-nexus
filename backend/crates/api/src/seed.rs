@@ -1136,6 +1136,10 @@ async fn seed_profile(
         gov_id_nonce: Set(None),
         gov_id_last4: Set(None),
         photo_url: Set(None),
+        has_pet: Set(false),
+        pet_details: Set(None),
+        is_military: Set(false),
+        annual_income_cents: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

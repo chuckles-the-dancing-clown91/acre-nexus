@@ -1,11 +1,14 @@
 //! **Lease Builder & Tenancy** module — the application→onboarding→lease-signing
 //! lifecycle: the conditional fee/discount/amenity schedule, resident vehicle
-//! profiles, per-lease charges, templated lease-document generation + signing,
-//! application→lease conversion, and the tenant-history view.
+//! profiles, per-lease charges, templated lease-document generation + signing
+//! (in person, or remotely via e-signature envelopes), application→lease
+//! conversion, and the tenant-history view.
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{applications, fees, lease_charges, lease_docs, tenant_history, vehicles};
+use crate::routes::{
+    applications, esign, fees, lease_charges, lease_docs, tenant_history, vehicles,
+};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -44,6 +47,10 @@ impl PlatformModule for LeaseBuilderModule {
             vehicles::create::create,
             vehicles::update::update,
             vehicles::delete::delete,
+            // self-service: the signed-in person's own vehicles
+            vehicles::portal::my_vehicles,
+            vehicles::portal::add_my_vehicle,
+            vehicles::portal::delete_my_vehicle,
             // lease charges
             lease_charges::list::list,
             lease_charges::add::add,
@@ -53,6 +60,14 @@ impl PlatformModule for LeaseBuilderModule {
             lease_docs::generate::generate,
             lease_docs::get::get,
             lease_docs::sign::sign,
+            // e-signature envelopes (remote signing)
+            esign::create::create,
+            esign::get::get,
+            esign::remind::remind,
+            esign::void::void,
+            esign::public::view,
+            esign::public::sign,
+            esign::public::decline,
             // application -> lease
             applications::convert::convert,
             // tenant history

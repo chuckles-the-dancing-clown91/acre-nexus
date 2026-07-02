@@ -36,7 +36,7 @@ pub async fn update_status(
     let saved = super::apply_transition(
         &db,
         scope.tenant_id,
-        user.user_id,
+        Some(user.user_id),
         a,
         &body.into_inner().status,
         None,

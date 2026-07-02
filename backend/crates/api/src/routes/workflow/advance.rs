@@ -1,7 +1,7 @@
 //! `POST /properties/<id>/workflow/advance` — move a property to a new stage in
 //! its strategy's workflow, recording the transition.
 
-use super::dto::{build, AdvanceReq, WorkflowResp};
+use super::dto::{actor_names, build, AdvanceReq, WorkflowResp};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
@@ -81,5 +81,6 @@ pub async fn advance(
         .all(&db)
         .await?;
 
-    Ok(Json(build(&strategy, &req.to_stage, history)))
+    let actors = actor_names(&db, &history).await;
+    Ok(Json(build(&strategy, &req.to_stage, history, &actors)))
 }

@@ -284,14 +284,28 @@ function EditProfileDialog({ user }: { user: UserDetail }) {
       postal_code: p?.postal_code ?? "",
       country: p?.country ?? "",
       gov_id_type: p?.gov_id_type ?? "",
+      has_pet: p?.has_pet ?? false,
+      pet_details: p?.pet_details ?? "",
+      is_military: p?.is_military ?? false,
+      annual_income:
+        p?.annual_income_cents != null
+          ? String(p.annual_income_cents / 100)
+          : "",
     },
   });
 
   const onSubmit = handleSubmit(async (values) => {
     // Only forward non-empty fields so blanks don't clobber existing data.
-    const body: ProfileInput = {};
-    for (const [key, val] of Object.entries(values)) {
-      if (val) (body as Record<string, string>)[key] = val as string;
+    const { has_pet, is_military, annual_income, ...texts } = values;
+    const body: ProfileInput = {
+      has_pet: has_pet ?? false,
+      is_military: is_military ?? false,
+      annual_income_cents: annual_income
+        ? Math.round(parseFloat(annual_income) * 100)
+        : undefined,
+    };
+    for (const [key, val] of Object.entries(texts)) {
+      if (val) (body as unknown as Record<string, string>)[key] = val as string;
     }
     await putProfile.mutateAsync(body, { onSuccess: () => setOpen(false) });
   });
@@ -358,6 +372,33 @@ function EditProfileDialog({ user }: { user: UserDetail }) {
               <FormField label="Country">
                 <Input {...register("country")} />
               </FormField>
+            </div>
+
+            <div className="border-t border-line pt-4">
+              <p className="mb-3 text-sm font-bold text-ink-2">
+                Rental details
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Annual income (USD)">
+                  <Input inputMode="decimal" {...register("annual_income")} />
+                </FormField>
+                <FormField label="Pet details">
+                  <Input
+                    placeholder="e.g. one 30lb corgi"
+                    {...register("pet_details")}
+                  />
+                </FormField>
+              </div>
+              <div className="mt-3 flex items-center gap-6 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" {...register("has_pet")} />
+                  <span>Has pet(s)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" {...register("is_military")} />
+                  <span>Military / veteran</span>
+                </label>
+              </div>
             </div>
 
             <div className="border-t border-line pt-4">

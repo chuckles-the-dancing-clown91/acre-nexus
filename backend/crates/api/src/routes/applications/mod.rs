@@ -1,8 +1,12 @@
-//! Landlord/PM application management (tenant-scoped, RBAC-gated).
+//! Landlord/PM application management (tenant-scoped, RBAC-gated) plus the
+//! shared **intake** and **transition** machinery every application door and
+//! status change goes through.
 
 pub mod convert;
+pub mod create;
 pub mod dto;
 pub mod list;
+pub mod portal;
 pub mod reuse;
 pub mod update_status;
 pub mod workflow;
@@ -15,12 +19,14 @@ use uuid::Uuid;
 
 /// Apply a validated status transition to an application: checks the
 /// [`crate::app_workflow`] state machine, updates `status`, records an immutable
-/// `application_event`, audits, and fires the approval side-effect. Shared by the
-/// `PATCH /applications/<id>` and `POST /applications/<id>/advance` handlers.
+/// `application_event`, audits, and fires the applicant-facing side-effects
+/// (approval + decline emails). Shared by the `PATCH /applications/<id>` and
+/// `POST /applications/<id>/advance` handlers and the screening pipeline
+/// (`actor = None` for automated transitions).
 pub(crate) async fn apply_transition(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
-    actor: Uuid,
+    actor: Option<Uuid>,
     app: entity::application::Model,
     to_status: &str,
     note: Option<String>,
@@ -48,7 +54,7 @@ pub(crate) async fn apply_transition(
         from_status: Set(Some(from.clone())),
         to_status: Set(to_status.to_string()),
         note: Set(note.clone()),
-        actor_user_id: Set(Some(actor)),
+        actor_user_id: Set(actor),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
@@ -56,7 +62,7 @@ pub(crate) async fn apply_transition(
 
     crate::audit::record(
         db,
-        Some(actor),
+        actor,
         crate::audit::actions::APPLICATION_ADVANCE,
         Some("application"),
         Some(saved.id.to_string()),
@@ -65,25 +71,208 @@ pub(crate) async fn apply_transition(
     )
     .await;
 
-    // Approving an application still kicks off the automated welcome email.
-    // The owner/trigger fields give the notification engine its idempotency
-    // key, so re-approving (or a retried job) can't double-send.
-    if to_status == "Approved" {
-        let _ = crate::scheduler::enqueue(
+    // Applicant-facing side-effects. The owner/trigger fields give the
+    // notification engine its idempotency key, so re-running a transition (or
+    // a retried job) can't double-send.
+    match to_status {
+        "Approved" => {
+            let _ = crate::scheduler::enqueue(
+                db,
+                tenant_id,
+                "auto_email",
+                json!({
+                    "template": "application_approved",
+                    "to": saved.email,
+                    "owner_type": "application",
+                    "owner_id": saved.id,
+                    "trigger": "approved",
+                    "vars": { "applicant": saved.applicant_name },
+                }),
+                0,
+            )
+            .await;
+        }
+        "Declined" => {
+            let _ = crate::scheduler::enqueue(
+                db,
+                tenant_id,
+                "auto_email",
+                json!({
+                    "template": "application_declined",
+                    "to": saved.email,
+                    "owner_type": "application",
+                    "owner_id": saved.id,
+                    "trigger": "declined",
+                    "vars": { "applicant": saved.applicant_name },
+                }),
+                0,
+            )
+            .await;
+        }
+        _ => {}
+    }
+
+    Ok(saved)
+}
+
+// ---------------------------------------------------------------------------
+// Intake — the one path every application door goes through
+// ---------------------------------------------------------------------------
+
+/// The normalized applicant data an intake door collects.
+pub(crate) struct IntakeInput {
+    pub listing_id: Option<Uuid>,
+    pub applicant_name: String,
+    pub email: String,
+    pub phone: String,
+    pub annual_income_cents: i64,
+    pub credit_score: Option<i32>,
+    pub move_in: String,
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
+}
+
+/// Create an application and run the standard submission side-effects,
+/// identically for every door (public website, renter portal, back office):
+///
+/// 1. persist the row (status `Screening`, or `Approved` when a reusable prior
+///    approval is carried forward),
+/// 2. audit the submission,
+/// 3. fan the event out to staff holding `application:read` (in-app + push +
+///    chat), excluding the acting staff member on back-office intake,
+/// 4. email the applicant — "application received", or "approved" when reused,
+/// 5. enqueue the background-screening job (skipped when pre-approved).
+///
+/// Returns the saved application plus the id of the job it kicked off.
+pub(crate) async fn intake(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    input: IntakeInput,
+    source: &str,
+    applicant_user_id: Option<Uuid>,
+    actor_user_id: Option<Uuid>,
+    reused_from: Option<&entity::application::Model>,
+) -> ApiResult<(entity::application::Model, Uuid)> {
+    let name = input.applicant_name.trim().to_string();
+    if name.is_empty() {
+        return Err(ApiError::BadRequest("applicant name is required".into()));
+    }
+    let email = input.email.trim().to_lowercase();
+    if !email.contains('@') {
+        return Err(ApiError::BadRequest(format!(
+            "invalid applicant email '{email}'"
+        )));
+    }
+
+    let app_id = Uuid::new_v4();
+    let status = if reused_from.is_some() {
+        "Approved"
+    } else {
+        "Screening"
+    };
+    // Prefer a carried-forward credit score when the applicant didn't supply one.
+    let credit_score = input
+        .credit_score
+        .or_else(|| reused_from.and_then(|r| r.credit_score));
+
+    let saved = entity::application::ActiveModel {
+        id: Set(app_id),
+        tenant_id: Set(tenant_id),
+        listing_id: Set(input.listing_id),
+        applicant_name: Set(name.clone()),
+        email: Set(email.clone()),
+        phone: Set(input.phone.trim().to_string()),
+        annual_income_cents: Set(input.annual_income_cents),
+        credit_score: Set(credit_score),
+        status: Set(status.into()),
+        move_in: Set(input.move_in),
+        has_pet: Set(input.has_pet),
+        pet_details: Set(input.pet_details),
+        is_military: Set(input.is_military),
+        source: Set(source.to_string()),
+        applicant_user_id: Set(applicant_user_id),
+        // A reused approval carries the prior screening outcome forward.
+        screening_status: Set(reused_from.and_then(|r| r.screening_status.clone())),
+        screened_at: Set(reused_from.and_then(|r| r.screened_at)),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+
+    crate::audit::record(
+        db,
+        actor_user_id,
+        crate::audit::actions::APPLICATION_SUBMIT,
+        Some("application"),
+        Some(app_id.to_string()),
+        Some(tenant_id),
+        Some(json!({ "applicant": name, "source": source })),
+    )
+    .await;
+
+    // Integrated notifications: every staff member who can read applications
+    // gets an in-app inbox entry + a web push, and the tenant's chat channel
+    // (if configured) gets one message.
+    crate::notify::notify_staff(
+        db,
+        tenant_id,
+        "application:read",
+        "application_submitted",
+        json!({ "applicant": name }),
+        Some(("application", app_id)),
+        "submitted",
+        actor_user_id,
+    )
+    .await;
+
+    // The applicant always hears back immediately, and pre-approved (reused)
+    // applicants skip re-screening while everyone else enters the
+    // background-check pipeline. The returned job id is the pipeline's next
+    // step: the screening job, or the approval email when there is nothing to
+    // screen.
+    let job_id = if reused_from.is_some() {
+        // Pre-approved: skip "received", go straight to the good news.
+        crate::scheduler::enqueue(
             db,
             tenant_id,
             "auto_email",
             json!({
                 "template": "application_approved",
-                "to": saved.email,
+                "to": email,
                 "owner_type": "application",
-                "owner_id": saved.id,
-                "trigger": "approved",
+                "owner_id": app_id,
+                "trigger": "pre_approved",
+                "vars": { "applicant": name },
+            }),
+            0,
+        )
+        .await?
+    } else {
+        let _ = crate::scheduler::enqueue(
+            db,
+            tenant_id,
+            "auto_email",
+            json!({
+                "template": "application_received",
+                "to": email,
+                "owner_type": "application",
+                "owner_id": app_id,
+                "trigger": "submitted",
+                "vars": { "applicant": name },
             }),
             0,
         )
         .await;
-    }
+        crate::scheduler::enqueue(
+            db,
+            tenant_id,
+            "background_check",
+            json!({ "application_id": app_id, "applicant": name }),
+            0,
+        )
+        .await?
+    };
 
-    Ok(saved)
+    Ok((saved, job_id))
 }

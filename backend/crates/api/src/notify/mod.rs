@@ -51,11 +51,18 @@ pub const PROVIDER_CHANNELS: &[(&str, &[&str])] = &[
 
 /// One default template: rendered bodies per channel, overridable per tenant
 /// via `theme.notification_templates`.
-struct DefaultTemplate {
-    key: &'static str,
-    subject: &'static str,
-    body: &'static str,
-    sms: &'static str,
+pub struct DefaultTemplate {
+    pub key: &'static str,
+    pub subject: &'static str,
+    pub body: &'static str,
+    pub sms: &'static str,
+}
+
+/// The platform template catalog — every default the engine ships. The
+/// templates settings API merges tenant overrides over these and lets a
+/// workspace import them as editable DB copies.
+pub fn default_templates() -> &'static [DefaultTemplate] {
+    DEFAULT_TEMPLATES
 }
 
 /// Platform default templates. A tenant override with the same key (a plain
@@ -86,6 +93,23 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "New application from {applicant} — review it in the console.",
     },
     DefaultTemplate {
+        key: "application_screened",
+        subject: "Screening finished for {applicant}: {result}",
+        body: "Hi {recipient},\n\nBackground screening for {applicant} has finished with \
+               result: {result}. Review the application and make a decision in the \
+               applications inbox.\n\n— {company}",
+        sms: "Screening finished for {applicant}: {result} — review in the console.",
+    },
+    DefaultTemplate {
+        key: "application_declined",
+        subject: "Update on your application with {company}",
+        body: "Hi {recipient},\n\nThank you for applying with {company}. After careful \
+               review we're unable to move forward with your application at this time.\n\n\
+               If you have questions, just reply to this email.\n\n— {company}",
+        sms: "{company}: unfortunately we can't move forward with your application at \
+              this time.",
+    },
+    DefaultTemplate {
         key: "ticket_created",
         subject: "New maintenance ticket: {title}",
         body: "Hi {recipient},\n\nA new {priority}-priority maintenance ticket was opened: \
@@ -98,6 +122,64 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         body: "Hi {recipient},\n\nThis is a test notification from {company}. If you're reading \
                this, delivery is working.\n\n— {company}",
         sms: "{company}: test notification — delivery is working.",
+    },
+    // ---- E-signature envelopes (Phase 2) ----
+    DefaultTemplate {
+        key: "esign_request",
+        subject: "Signature requested: {document_title}",
+        body: "Hi {signer},\n\n{company} has requested your signature on \
+               \"{document_title}\".\n\nReview and sign here:\n{sign_url}\n\nThis link is \
+               unique to you — please do not forward it. By signing you agree to transact \
+               electronically (ESIGN/UETA).\n\n— {company}",
+        sms: "{company}: your signature is requested on {document_title}. Sign: {sign_url}",
+    },
+    DefaultTemplate {
+        key: "esign_reminder",
+        subject: "Reminder — {document_title} is awaiting your signature",
+        body: "Hi {signer},\n\nA friendly reminder that \"{document_title}\" from {company} \
+               is still awaiting your signature.\n\nReview and sign here:\n{sign_url}\n\n\
+               — {company}",
+        sms: "{company}: reminder — {document_title} is awaiting your signature. Sign: {sign_url}",
+    },
+    DefaultTemplate {
+        key: "esign_signed_staff",
+        subject: "{signer} signed {document_title}",
+        body: "Hi {recipient},\n\n{signer} has signed \"{document_title}\" \
+               ({signed_count}/{signer_count} signatures in). You'll be notified when \
+               everyone has signed.\n\n— {company}",
+        sms: "{signer} signed {document_title} ({signed_count}/{signer_count} signatures in).",
+    },
+    DefaultTemplate {
+        key: "esign_completed",
+        subject: "Fully signed: {document_title}",
+        body: "Hi {signer},\n\nAll parties have now signed \"{document_title}\". The fully \
+               executed copy is kept with the lease records at {company} — you can request \
+               a copy at any time.\n\n— {company}",
+        sms: "{company}: {document_title} is fully signed. The executed copy is on file.",
+    },
+    DefaultTemplate {
+        key: "esign_completed_staff",
+        subject: "{document_title} fully signed",
+        body: "Hi {recipient},\n\n\"{document_title}\" is fully executed — signed by \
+               {signed_by}. The signed PDF is stored on the lease and the lease is now \
+               active.\n\n— {company}",
+        sms: "{document_title} fully executed — signed by {signed_by}. Lease activated.",
+    },
+    DefaultTemplate {
+        key: "esign_declined_staff",
+        subject: "{signer} declined to sign {document_title}",
+        body: "Hi {recipient},\n\n{signer} declined to sign \"{document_title}\"{reason_line}. \
+               The envelope is closed; you can revise the document and send a new one.\n\n\
+               — {company}",
+        sms: "{signer} declined to sign {document_title}.",
+    },
+    DefaultTemplate {
+        key: "esign_voided",
+        subject: "Signature request cancelled: {document_title}",
+        body: "Hi {signer},\n\nThe signature request for \"{document_title}\" from {company} \
+               has been cancelled — no further action is needed. Your signing link no longer \
+               works.\n\n— {company}",
+        sms: "{company}: the signature request for {document_title} was cancelled.",
     },
 ];
 
@@ -764,6 +846,53 @@ mod tests {
         let r = render(&json!({}), "chat", "test_notification", &map(&pairs)).unwrap();
         assert!(r.subject.is_none());
         assert!(r.body.contains("test notification"));
+    }
+
+    #[test]
+    fn esign_templates_render_the_signing_link() {
+        let pairs = vec![
+            ("recipient".into(), "jordan@example.com".into()),
+            ("company".into(), "Northwind Property Group".into()),
+            ("signer".into(), "Jordan Renter".into()),
+            (
+                "document_title".into(),
+                "Residential Lease Agreement".into(),
+            ),
+            (
+                "sign_url".into(),
+                "https://app.example.com/sign/tok123?tenant=northwind".into(),
+            ),
+        ];
+        let r = render(&json!({}), "email", "esign_request", &map(&pairs)).unwrap();
+        assert_eq!(
+            r.subject.as_deref(),
+            Some("Signature requested: Residential Lease Agreement")
+        );
+        assert!(r.body.contains("Hi Jordan Renter"));
+        assert!(r
+            .body
+            .contains("https://app.example.com/sign/tok123?tenant=northwind"));
+
+        let sms = render(&json!({}), "sms", "esign_request", &map(&pairs)).unwrap();
+        assert!(sms.subject.is_none());
+        assert!(sms
+            .body
+            .contains("Sign: https://app.example.com/sign/tok123?tenant=northwind"));
+
+        // The reminder + completion variants also resolve.
+        for key in [
+            "esign_reminder",
+            "esign_signed_staff",
+            "esign_completed",
+            "esign_completed_staff",
+            "esign_declined_staff",
+            "esign_voided",
+        ] {
+            assert!(
+                render(&json!({}), "email", key, &map(&pairs)).is_some(),
+                "template {key} missing"
+            );
+        }
     }
 
     #[test]

@@ -19,10 +19,13 @@ import type {
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { AssignmentsCard } from "@/components/AssignmentsCard";
+import { DocumentsCard } from "@/components/DocumentsCard";
+import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 
 export default function PropertyProfilePage() {
   const params = useParams<{ id: string }>();
+  const { can } = useAuth();
   const [p, setP] = useState<PropertyProfile | null>(null);
   const [intel, setIntel] = useState<PropertyIntel | null>(null);
   const [runs, setRuns] = useState<EnrichmentRun[]>([]);
@@ -252,53 +255,80 @@ export default function PropertyProfilePage() {
         writePermission="property:write"
       />
 
-      {/* Investment workflow */}
+      {/* Process tracker: where this property stands and every step so far.
+          Visible to every workspace member; advancing needs property:write. */}
       {workflow && workflow.stages.length > 0 && (
         <Card className="p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="font-display text-lg font-bold">
-                {workflow.strategy_label || "Workflow"}
+                Process — {workflow.strategy_label || "Workflow"}
               </h2>
               <p className="text-sm text-ink-3">
                 {workflow.strategy_description}
               </p>
             </div>
+            {!can("property:write") && <Badge tone="neutral">view only</Badge>}
           </div>
           <div className="flex flex-wrap gap-2">
-            {workflow.stages.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => advance(s.key)}
-                className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                  s.current
-                    ? "bg-accent text-on-accent"
-                    : s.reached
-                      ? "bg-good-soft text-good"
-                      : "bg-surface-2 text-ink-2 hover:bg-surface"
-                }`}
-                title={s.current ? "Current stage" : `Move to ${s.label}`}
-              >
-                {s.reached && !s.current ? "✓ " : ""}
-                {s.label}
-              </button>
-            ))}
+            {workflow.stages.map((s) =>
+              can("property:write") ? (
+                <button
+                  key={s.key}
+                  onClick={() => advance(s.key)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                    s.current
+                      ? "bg-accent text-on-accent"
+                      : s.reached
+                        ? "bg-good-soft text-good"
+                        : "bg-surface-2 text-ink-2 hover:bg-surface"
+                  }`}
+                  title={s.current ? "Current stage" : `Move to ${s.label}`}
+                >
+                  {s.reached && !s.current ? "✓ " : ""}
+                  {s.label}
+                </button>
+              ) : (
+                <span
+                  key={s.key}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                    s.current
+                      ? "bg-accent text-on-accent"
+                      : s.reached
+                        ? "bg-good-soft text-good"
+                        : "bg-surface-2 text-ink-2"
+                  }`}
+                >
+                  {s.reached && !s.current ? "✓ " : ""}
+                  {s.label}
+                </span>
+              )
+            )}
           </div>
           {workflow.history.length > 0 && (
-            <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-xs text-ink-3">
-              {workflow.history.slice(0, 5).map((h) => (
-                <div key={h.id} className="flex items-center gap-2">
-                  <span className="font-semibold text-ink-2">{h.to_stage}</span>
-                  {h.from_stage && <span>← {h.from_stage}</span>}
-                  <span className="ml-auto font-mono">
-                    {formatTimestamp(h.created_at)}
-                  </span>
+            <div className="mt-4 space-y-2 border-t border-line pt-3 text-xs text-ink-3">
+              {workflow.history.slice(0, 8).map((h) => (
+                <div key={h.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-ink-2">
+                      {h.to_stage}
+                    </span>
+                    {h.from_stage && <span>← {h.from_stage}</span>}
+                    <span>· {h.actor_name ?? "automated"}</span>
+                    <span className="ml-auto font-mono">
+                      {formatTimestamp(h.created_at)}
+                    </span>
+                  </div>
+                  {h.note && <div className="pl-1 italic">{h.note}</div>}
                 </div>
               ))}
             </div>
           )}
         </Card>
       )}
+
+      {/* Document drawer: leases, deeds, photos, signed agreements, … */}
+      <DocumentsCard ownerType="property" ownerId={id} title="Documents" />
 
       {/* Financing */}
       {(mortgages.length > 0 || p.financed) && (

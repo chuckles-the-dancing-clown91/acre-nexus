@@ -33,5 +33,6 @@ pub mod put_profile;
 pub mod remove_membership;
 pub mod reveal_pii;
 pub mod revoke_role;
+pub mod self_profile;
 pub mod update_role;
 pub mod update_user;
