@@ -36,6 +36,8 @@ jsonwebtoken = "9"
 argon2 = "0.5"
 rand = "0.8"
 sha2 = "0.10"
+# Constant-time HMAC-SHA256 for webhook signature verification + signed URLs.
+hmac = "0.12"
 # Field-level PII encryption at rest (SSN / government IDs).
 aes-gcm = "0.10"
 base64 = "0.22"

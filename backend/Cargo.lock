@@ -146,6 +146,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "entity",
+ "hmac",
  "jsonwebtoken",
  "migration",
  "rand 0.8.6",

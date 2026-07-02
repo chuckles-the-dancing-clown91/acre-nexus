@@ -1187,6 +1187,8 @@ async fn seed_theme(
             "late_fee": "A late fee of {late_fee} applies after a {grace_days}-day grace period.",
             "privacy": "We respect your privacy. Personal data is processed per our policy."
         })),
+        // Platform defaults (api::notify) apply until a tenant overrides a key.
+        notification_templates: Set(json!({})),
         updated_at: Set(Utc::now().into()),
     }
     .insert(db)

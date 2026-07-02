@@ -202,6 +202,21 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    key: "integrations",
+    label: "Integrations",
+    description:
+      "Credential vault, document storage, notifications (email/SMS), and inbound webhooks.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/integrations",
+        label: "Integrations",
+        icon: "key",
+        permission: "integrations:manage",
+      },
+    ],
+  },
+  {
     key: "flips",
     label: "Acquisitions & Flips",
     description: "Buy/flip deal pipeline with underwriting (preview).",

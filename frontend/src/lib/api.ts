@@ -425,6 +425,68 @@ export const api = {
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
 
+  // ---- integrations: credential vault, notification log ----
+  integrationSecrets: () =>
+    request<IntegrationSecret[]>("/integrations/secrets", { auth: true }),
+  setIntegrationSecret: (key: string, value: string) =>
+    request<IntegrationSecret>("/integrations/secrets", {
+      method: "PUT",
+      auth: true,
+      body: { key, value },
+    }),
+  deleteIntegrationSecret: (key: string) =>
+    request<{ deleted: boolean }>(
+      `/integrations/secrets/${encodeURIComponent(key)}`,
+      { method: "DELETE", auth: true }
+    ),
+  notifications: (limit = 100) =>
+    request<NotificationEntry[]>(`/integrations/notifications?limit=${limit}`, {
+      auth: true,
+    }),
+
+  // ---- documents (object storage) ----
+  documents: (params: { owner_type?: string; owner_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.owner_type) qs.set("owner_type", params.owner_type);
+    if (params.owner_id) qs.set("owner_id", params.owner_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<DocumentEntry[]>(`/documents${suffix}`, { auth: true });
+  },
+  registerDocument: (body: RegisterDocumentInput) =>
+    request<UploadDocumentResponse>("/documents", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  documentDownloadUrl: (id: string) =>
+    request<{ url: string; expires_at: string }>(`/documents/${id}/download`, {
+      auth: true,
+    }),
+  deleteDocument: (id: string) =>
+    request<{ deleted: boolean }>(`/documents/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  /**
+   * Full upload flow: register the metadata, then PUT the bytes straight to
+   * the signed URL the backend minted (local store or S3 — same contract).
+   */
+  uploadDocument: async (
+    meta: Omit<RegisterDocumentInput, "size_bytes">,
+    file: File | Blob
+  ): Promise<DocumentEntry> => {
+    const reg = await api.registerDocument({ ...meta, size_bytes: file.size });
+    const res = await fetch(reg.upload_url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": meta.mime_type },
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, "upload_failed", "file upload failed");
+    }
+    return reg.document;
+  },
+
   // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
   fees: () => request<Fee[]>("/fees", { auth: true }),
   createFee: (body: CreateFeeInput) =>
@@ -994,6 +1056,60 @@ export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
   deals: unknown[];
+}
+
+// ---- integrations: secrets, notifications, documents ----
+
+/** A stored credential, masked — the plaintext is never sent back. */
+export interface IntegrationSecret {
+  id: string;
+  key: string;
+  last4: string;
+  created_at: string;
+  rotated_at: string | null;
+}
+
+export interface NotificationEntry {
+  id: string;
+  channel: string;
+  template_key: string;
+  recipient: string;
+  status: string;
+  provider_message_id: string | null;
+  subject: string | null;
+  body: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+export interface DocumentEntry {
+  id: string;
+  owner_type: string;
+  owner_id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  checksum: string | null;
+  version: number;
+  previous_version_id: string | null;
+  status: string;
+  retention_expires_at: string | null;
+  created_at: string;
+}
+
+export interface RegisterDocumentInput {
+  owner_type: string;
+  owner_id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes?: number;
+  retention_days?: number;
+}
+
+export interface UploadDocumentResponse {
+  document: DocumentEntry;
+  upload_url: string;
+  upload_url_expires_at: string;
 }
 
 // ---- leasing lifecycle ----

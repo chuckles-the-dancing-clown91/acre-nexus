@@ -98,6 +98,7 @@ pub async fn provision(
         accent_color: Set("#F5451F".into()),
         default_mode: Set("light".into()),
         legal_templates: Set(json!({})),
+        notification_templates: Set(json!({})),
         updated_at: Set(now.into()),
     }
     .insert(&db)

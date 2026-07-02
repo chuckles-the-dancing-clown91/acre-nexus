@@ -1,6 +1,7 @@
 //! **Leasing** module — the public white-label website (listings + the apply
 //! funnel) and the back-office applications inbox. It owns the tenant-screening
-//! and automated-email background jobs that the apply funnel enqueues.
+//! background jobs the apply funnel enqueues; the `auto_email` jobs it enqueues
+//! are owned by the `integrations` module (which renders and delivers them).
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
@@ -24,7 +25,7 @@ impl PlatformModule for LeasingModule {
                 Permission::ApplicationRead,
                 Permission::ApplicationWrite,
             ],
-            job_kinds: &["background_check", "screening", "auto_email"],
+            job_kinds: &["background_check", "screening"],
             default_enabled: true,
             preview: false,
         }
@@ -48,7 +49,7 @@ impl PlatformModule for LeasingModule {
         ]
     }
 
-    /// Durable screening state machine plus fire-and-complete auto emails.
+    /// Durable screening state machine.
     async fn handle_job(&self, ctx: &JobContext<'_>) -> Option<JobOutcome> {
         let now = chrono::Utc::now();
         match (ctx.job.kind.as_str(), ctx.job.status.as_str()) {
@@ -64,11 +65,6 @@ impl PlatformModule for LeasingModule {
                     "completed_at": now.to_rfc3339(),
                 })))
             }
-            // Automated email: fire-and-complete.
-            ("auto_email", _) => Some(JobOutcome::completed(json!({
-                "sent": true,
-                "sent_at": now.to_rfc3339(),
-            }))),
             _ => None,
         }
     }

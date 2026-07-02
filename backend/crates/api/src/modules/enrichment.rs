@@ -101,11 +101,9 @@ impl PlatformModule for EnrichmentModule {
     }
 }
 
-/// Exponential backoff (seconds) for transient enrichment failures.
-fn backoff(attempts: i32) -> i64 {
-    let exp = attempts.clamp(0, 6) as u32;
-    4_i64 * 2_i64.pow(exp)
-}
+/// Exponential backoff (seconds) for transient enrichment failures — the
+/// shared provider-framework formula.
+use crate::providers::backoff;
 
 /// Parse the `property_id` from a job payload.
 fn payload_property_id(job: &entity::background_job::Model) -> Option<Uuid> {

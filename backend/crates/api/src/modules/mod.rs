@@ -29,6 +29,7 @@ pub mod domains;
 pub mod enrichment;
 pub mod entities;
 pub mod flips;
+pub mod integrations;
 pub mod lease_builder;
 pub mod leasing;
 pub mod maintenance;
@@ -173,6 +174,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(vendor_api::VendorApiModule),
         Box::new(theming::ThemingModule),
         Box::new(domains::DomainsModule),
+        Box::new(integrations::IntegrationsModule),
         Box::new(flips::FlipsModule),
     ]
 }

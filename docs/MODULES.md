@@ -19,9 +19,10 @@ what a module is and how it is gated.
 | `rentals` | Rentals & Leasing | on | `/properties/{id}/units`, `/leases`, `/leases/{id}/payments` (see `docs/RENTALS.md`) |
 | `maintenance` | Maintenance & Work Orders | on | `/tickets`, `/properties/{id}/tickets`, `/tickets/{id}/comments` (see `docs/RENTALS.md`) |
 | `title` | Title & Ownership | on | `/properties/{id}/ownership`, `/properties/{id}/liens` (see `docs/RENTALS.md`) |
-| `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening/auto-email jobs |
+| `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening jobs |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |
+| `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/notifications`, `/documents`, `/webhooks/{provider}` + the `auto_email`/`auto_sms`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`) |
 | `flips` | Acquisitions & Flips | **off (preview)** | `/modules/flips/pipeline` |
 
 ## Backend contract

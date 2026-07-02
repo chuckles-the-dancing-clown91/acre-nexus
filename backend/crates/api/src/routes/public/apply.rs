@@ -91,7 +91,13 @@ pub async fn apply(
             &db,
             tenant.tenant_id,
             "auto_email",
-            json!({ "template": "application_approved", "to": email }),
+            json!({
+                "template": "application_approved",
+                "to": email,
+                "owner_type": "application",
+                "owner_id": app_id,
+                "trigger": "pre_approved",
+            }),
             0,
         )
         .await?;
