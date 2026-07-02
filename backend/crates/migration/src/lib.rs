@@ -26,6 +26,7 @@ mod m20240101_000018_integrations;
 mod m20240101_000019_notifications;
 mod m20240101_000020_esign;
 mod m20240101_000021_application_pipeline;
+mod m20240101_000022_renter_profile;
 
 pub struct Migrator;
 
@@ -54,6 +55,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000019_notifications::Migration),
             Box::new(m20240101_000020_esign::Migration),
             Box::new(m20240101_000021_application_pipeline::Migration),
+            Box::new(m20240101_000022_renter_profile::Migration),
         ]
     }
 }

@@ -6,6 +6,7 @@ pub mod create;
 pub mod delete;
 pub mod dto;
 pub mod list;
+pub mod portal;
 pub mod update;
 
 use crate::error::{ApiError, ApiResult};

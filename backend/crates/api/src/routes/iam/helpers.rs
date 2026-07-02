@@ -212,6 +212,10 @@ pub(crate) fn profile_fields_touched(input: &ProfileInput) -> Vec<&'static str> 
     note!(country);
     note!(photo_url);
     note!(gov_id_type);
+    note!(has_pet);
+    note!(pet_details);
+    note!(is_military);
+    note!(annual_income_cents);
     if input.ssn.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
         fields.push("ssn");
     }
@@ -263,6 +267,10 @@ pub(crate) async fn upsert_profile_inner<C: sea_orm::ConnectionTrait>(
             am.postal_code = Set(input.postal_code.clone());
             am.country = Set(input.country.clone());
             am.photo_url = Set(input.photo_url.clone());
+            am.has_pet = Set(input.has_pet.unwrap_or(false));
+            am.pet_details = Set(input.pet_details.clone());
+            am.is_military = Set(input.is_military.unwrap_or(false));
+            am.annual_income_cents = Set(input.annual_income_cents);
             am.gov_id_type = Set(input.gov_id_type.clone());
             // Only overwrite sensitive fields when a new value was supplied.
             if input.ssn.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
@@ -306,6 +314,10 @@ pub(crate) async fn upsert_profile_inner<C: sea_orm::ConnectionTrait>(
                 gov_id_nonce: Set(gid_nonce),
                 gov_id_last4: Set(gid_last4),
                 photo_url: Set(input.photo_url.clone()),
+                has_pet: Set(input.has_pet.unwrap_or(false)),
+                pet_details: Set(input.pet_details.clone()),
+                is_military: Set(input.is_military.unwrap_or(false)),
+                annual_income_cents: Set(input.annual_income_cents),
                 created_at: Set(now.into()),
                 updated_at: Set(now.into()),
             }

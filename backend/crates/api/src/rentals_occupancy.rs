@@ -59,9 +59,22 @@ async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), se
         if p.units > 0 && occupied > p.units {
             occupied = p.units;
         }
-        if p.occupied_units != occupied {
+        // The availability-facing status flips with real occupancy so a leased
+        // home stops presenting as available: Vacant ↔ Stabilized only —
+        // operational statuses (rehab, down, …) stay staff-owned and untouched.
+        let next_status = if occupied > 0 && p.status == "Vacant" {
+            Some("Stabilized")
+        } else if occupied == 0 && p.status == "Stabilized" {
+            Some("Vacant")
+        } else {
+            None
+        };
+        if p.occupied_units != occupied || next_status.is_some() {
             let mut am: entity::property::ActiveModel = p.into();
             am.occupied_units = Set(occupied);
+            if let Some(status) = next_status {
+                am.status = Set(status.into());
+            }
             am.update(db).await?;
         }
     }

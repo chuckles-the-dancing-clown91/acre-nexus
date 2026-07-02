@@ -18,6 +18,9 @@ pub async fn listings(
     let rows = Listing::find()
         .filter(entity::listing::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::listing::Column::IsPublic.eq(true))
+        // A leased home is never advertised, even if someone forgot to
+        // unpublish it (the pipeline normally does both).
+        .filter(entity::listing::Column::Status.ne("Leased"))
         .order_by_desc(entity::listing::Column::CreatedAt)
         .all(&db)
         .await?;

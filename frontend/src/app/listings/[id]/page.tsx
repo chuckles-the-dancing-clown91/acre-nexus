@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, type MyProfileView } from "@/lib/api";
 import type { ApplyResponse, Listing } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
@@ -95,9 +95,10 @@ export default function ListingDetailPage() {
 
 function ApplyForm({ listingId }: { listingId: string }) {
   // A signed-in user applies through their account (the renter-portal door):
-  // identity comes from the profile and the application is tracked under
-  // "My applications".
+  // white glove — everything auto-fills from their profile (name, phone,
+  // pets, income, vehicles), so the form is a single move-in date.
   const { user } = useAuth();
+  const [profile, setProfile] = useState<MyProfileView | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ApplyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,11 +112,10 @@ function ApplyForm({ listingId }: { listingId: string }) {
 
   useEffect(() => {
     if (user) {
-      setForm((f) => ({
-        ...f,
-        applicant_name: f.applicant_name || user.name,
-        email: user.email,
-      }));
+      api
+        .myProfile()
+        .then(setProfile)
+        .catch(() => setProfile(null));
     }
   }, [user]);
 
@@ -129,11 +129,9 @@ function ApplyForm({ listingId }: { listingId: string }) {
     setError(null);
     try {
       if (user) {
+        // Only the move-in date travels — the rest comes from the profile.
         const app = await api.myApply({
           listing_id: listingId,
-          applicant_name: form.applicant_name || undefined,
-          phone: form.phone || undefined,
-          annual_income_cents: form.income ? Number(form.income) * 100 : 0,
           move_in: form.move_in || undefined,
         });
         setResult({
@@ -185,6 +183,54 @@ function ApplyForm({ listingId }: { listingId: string }) {
   const field =
     "w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm outline-none focus:border-accent";
 
+  // White glove for signed-in users: everything comes from the profile.
+  if (user) {
+    const p = profile?.profile;
+    return (
+      <form onSubmit={submit} className="space-y-3">
+        <div className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
+          <p className="mb-2 font-semibold">
+            Applying as {profile?.name ?? user.name}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge tone="neutral">{user.email}</Badge>
+            {p?.phone && <Badge tone="neutral">{p.phone}</Badge>}
+            {p?.annual_income_cents != null && (
+              <Badge tone="neutral">
+                ${Math.round(p.annual_income_cents / 100).toLocaleString()}/yr
+              </Badge>
+            )}
+            <Badge tone={p?.has_pet ? "warn" : "neutral"}>
+              {p?.has_pet ? `pets: ${p.pet_details ?? "yes"}` : "no pets"}
+            </Badge>
+            {p?.is_military && <Badge tone="info">military</Badge>}
+            <Badge tone="neutral">
+              {profile?.vehicles.length ?? 0} vehicle
+              {(profile?.vehicles.length ?? 0) === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-ink-3">
+            Pulled from{" "}
+            <Link href="/account/profile" className="underline">
+              your profile
+            </Link>{" "}
+            — update it there and re-apply anywhere with one click.
+          </p>
+        </div>
+        <input
+          placeholder="Desired move-in (e.g. Aug 1)"
+          className={field}
+          value={form.move_in}
+          onChange={update("move_in")}
+        />
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <Button type="submit" disabled={submitting} className="w-full">
+          {submitting ? "Submitting…" : "Apply with my profile"}
+        </Button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={submit} className="space-y-2.5">
       <input
@@ -201,18 +247,7 @@ function ApplyForm({ listingId }: { listingId: string }) {
         className={field}
         value={form.email}
         onChange={update("email")}
-        disabled={!!user}
-        title={user ? "Applying as your signed-in account" : undefined}
       />
-      {user && (
-        <p className="text-xs text-ink-3">
-          Applying as {user.email} — track progress under{" "}
-          <Link href="/account/applications" className="underline">
-            My applications
-          </Link>
-          .
-        </p>
-      )}
       <input
         placeholder="Phone"
         className={field}

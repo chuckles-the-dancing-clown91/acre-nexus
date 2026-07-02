@@ -125,6 +125,11 @@ pub struct ProfileInput {
     /// Plaintext government-ID number — encrypted before storage.
     pub gov_id_number: Option<String>,
     pub photo_url: Option<String>,
+    // Renter attributes (application auto-fill).
+    pub has_pet: Option<bool>,
+    pub pet_details: Option<String>,
+    pub is_military: Option<bool>,
+    pub annual_income_cents: Option<i64>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -170,6 +175,11 @@ pub struct ProfileDto {
     pub photo_url: Option<String>,
     pub has_ssn: bool,
     pub has_gov_id: bool,
+    // Renter attributes (drive application auto-fill + conditional charges).
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
+    pub annual_income_cents: Option<i64>,
 }
 
 impl From<entity::user_profile::Model> for ProfileDto {
@@ -193,6 +203,10 @@ impl From<entity::user_profile::Model> for ProfileDto {
             photo_url: p.photo_url,
             has_ssn: p.ssn_ciphertext.is_some(),
             has_gov_id: p.gov_id_ciphertext.is_some(),
+            has_pet: p.has_pet,
+            pet_details: p.pet_details,
+            is_military: p.is_military,
+            annual_income_cents: p.annual_income_cents,
         }
     }
 }

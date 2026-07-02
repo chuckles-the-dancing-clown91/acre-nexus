@@ -108,5 +108,8 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // IAM — tenant member management (client admins)
         iam::list_members::list_members,
         iam::invite_member::invite_member,
+        // Self-service profile (renter portal / any signed-in user)
+        iam::self_profile::my_profile,
+        iam::self_profile::update_my_profile,
     ]
 }

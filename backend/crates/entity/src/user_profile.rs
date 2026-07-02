@@ -47,6 +47,14 @@ pub struct Model {
     pub gov_id_last4: Option<String>,
 
     pub photo_url: Option<String>,
+
+    // --- Renter attributes (drive application auto-fill + conditional charges) ---
+    pub has_pet: bool,
+    pub pet_details: Option<String>,
+    pub is_military: bool,
+    /// Stated annual income in cents.
+    pub annual_income_cents: Option<i64>,
+
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

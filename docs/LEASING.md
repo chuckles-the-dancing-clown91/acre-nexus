@@ -52,11 +52,17 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    when the lease activates.
 2. **Apply** — all three doors run the same `applications::intake`: persist
    (with `source`), audit, staff fan-out, the applicant's confirmation email,
-   and the screening job. Portal applications force the account's email and
-   prefill name/phone from the user profile, and are linked via
-   `applicant_user_id` — renters track them at `/account/applications`.
+   and the screening job. Portal applications are **white-glove**: the
+   account's email is forced, and name, phone, pets, military status, and
+   stated income all auto-fill from the person's **profile** (`GET/PUT
+   /my/profile`), with their profile vehicles (`/my/vehicles`) snapshotted
+   onto the application — the tenant only keeps their profile current and
+   applies with a move-in date. Renters track applications at
+   `/account/applications` and maintain everything at `/account/profile`;
+   staff can correct any of it (pets, income, government ID — encrypted at
+   rest) through the IAM profile routes (`PUT /admin/users/<id>/profile`).
    Applications capture the attributes that drive the rest of the flow
-   (`has_pet`/`pet_details`, `is_military`, vehicles via `POST /vehicles`).
+   (`has_pet`/`pet_details`, `is_military`, vehicles).
 3. **Screen** — the screening job's completion writes `screening_status` /
    `screened_at` onto the application. With the **`applications.auto_approve`
    setting** on, a cleared check advances the application to `Approved` on the
@@ -72,9 +78,12 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    signature in one step.
 6. **Sign** — send the e-signature envelope (each signer gets an email/SMS
    link) or capture a typed signature in person.
-7. **Close-out** — the final signature activates the lease, syncs occupancy,
-   stores the signed PDF, closes the listing, advances the property workflow
-   to `leased`, and notifies everyone.
+7. **Close-out** — the final signature activates the lease, syncs occupancy
+   (which also flips the property's availability status `Vacant` →
+   `Stabilized`), stores the signed PDF, closes the listing (`Leased` +
+   unpublished — and the public site never shows `Leased` listings even if
+   one is left public by hand), advances the property workflow to `leased`,
+   and notifies everyone.
 
 ## Application workflow (pipeline)
 

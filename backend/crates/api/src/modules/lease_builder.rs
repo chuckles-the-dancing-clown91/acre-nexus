@@ -47,6 +47,10 @@ impl PlatformModule for LeaseBuilderModule {
             vehicles::create::create,
             vehicles::update::update,
             vehicles::delete::delete,
+            // self-service: the signed-in person's own vehicles
+            vehicles::portal::my_vehicles,
+            vehicles::portal::add_my_vehicle,
+            vehicles::portal::delete_my_vehicle,
             // lease charges
             lease_charges::list::list,
             lease_charges::add::add,

@@ -3,6 +3,12 @@
 //! tracks their applications' progress. No staff permission required — the
 //! data is scoped to the signed-in user (their linked applications, plus any
 //! older ones submitted with the same email through the public site).
+//!
+//! **White-glove**: everything auto-fills from the profile — name, phone,
+//! pets, military status, stated income — and the person's vehicles are
+//! snapshotted onto the application (parking / garage amenities / lease
+//! verbiage need them). The tenant only has to keep their profile current;
+//! staff can correct any of it through the IAM profile routes.
 
 use super::dto::{ApplicationResp, PortalApplyReq};
 use crate::auth::AuthUser;
@@ -88,15 +94,39 @@ pub async fn my_apply(
         None => None,
     };
 
+    // White-glove auto-fill: explicit values win, the profile fills the rest.
+    let profile_name = profile.as_ref().and_then(|p| {
+        p.preferred_name
+            .clone()
+            .or_else(|| match (&p.legal_first_name, &p.legal_last_name) {
+                (Some(f), Some(l)) => Some(format!("{f} {l}")),
+                _ => None,
+            })
+    });
     let name = b
         .applicant_name
         .filter(|n| !n.trim().is_empty())
+        .or(profile_name)
         .unwrap_or_else(|| me.name.clone());
     let phone = b
         .phone
         .filter(|p| !p.trim().is_empty())
-        .or_else(|| profile.and_then(|p| p.phone))
+        .or_else(|| profile.as_ref().and_then(|p| p.phone.clone()))
         .unwrap_or_default();
+    let has_pet = b
+        .has_pet
+        .unwrap_or_else(|| profile.as_ref().map(|p| p.has_pet).unwrap_or(false));
+    let pet_details = b
+        .pet_details
+        .filter(|d| !d.trim().is_empty())
+        .or_else(|| profile.as_ref().and_then(|p| p.pet_details.clone()));
+    let is_military = b
+        .is_military
+        .unwrap_or_else(|| profile.as_ref().map(|p| p.is_military).unwrap_or(false));
+    let annual_income_cents = b
+        .annual_income_cents
+        .or_else(|| profile.as_ref().and_then(|p| p.annual_income_cents))
+        .unwrap_or(0);
 
     let (saved, _job) = super::intake(
         &db,
@@ -106,12 +136,12 @@ pub async fn my_apply(
             applicant_name: name,
             email,
             phone,
-            annual_income_cents: b.annual_income_cents.unwrap_or(0),
+            annual_income_cents,
             credit_score: b.credit_score,
             move_in: b.move_in.unwrap_or_default(),
-            has_pet: b.has_pet.unwrap_or(false),
-            pet_details: b.pet_details,
-            is_military: b.is_military.unwrap_or(false),
+            has_pet,
+            pet_details,
+            is_military,
         },
         "portal",
         Some(user.user_id),
@@ -119,6 +149,33 @@ pub async fn my_apply(
         reused_from.as_ref(),
     )
     .await?;
+
+    // Snapshot the person's vehicles onto the application: convert re-links
+    // application vehicles to the lease, so these copies flow all the way into
+    // parking amenities and lease verbiage. The profile rows stay the master.
+    let own = crate::routes::iam::self_profile::own_vehicles(&db, user.user_id).await?;
+    let now = chrono::Utc::now();
+    for v in own {
+        let copy = entity::vehicle::ActiveModel {
+            id: sea_orm::Set(uuid::Uuid::new_v4()),
+            tenant_id: sea_orm::Set(scope.tenant_id),
+            lease_id: sea_orm::Set(None),
+            application_id: sea_orm::Set(Some(saved.id)),
+            user_id: sea_orm::Set(None),
+            make: sea_orm::Set(v.make),
+            model: sea_orm::Set(v.model),
+            year: sea_orm::Set(v.year),
+            color: sea_orm::Set(v.color),
+            license_plate: sea_orm::Set(v.license_plate),
+            plate_state: sea_orm::Set(v.plate_state),
+            notes: sea_orm::Set(v.notes),
+            created_at: sea_orm::Set(now.into()),
+            updated_at: sea_orm::Set(now.into()),
+        };
+        if let Err(e) = sea_orm::ActiveModelTrait::insert(copy, &db).await {
+            tracing::warn!("failed to snapshot vehicle onto application: {e}");
+        }
+    }
 
     Ok(Json(ApplicationResp::from(saved)))
 }

@@ -413,6 +413,23 @@ export const api = {
       body,
     }),
 
+  // ---- self-service profile + vehicles (white-glove source of truth) ----
+  myProfile: () => request<MyProfileView>("/my/profile", { auth: true }),
+  updateMyProfile: (body: ProfileInput) =>
+    request<MyProfileView>("/my/profile", { method: "PUT", auth: true, body }),
+  myVehicles: () => request<VehicleProfile[]>("/my/vehicles", { auth: true }),
+  addMyVehicle: (body: CreateVehicleInput) =>
+    request<VehicleProfile>("/my/vehicles", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteMyVehicle: (id: string) =>
+    request<{ deleted: boolean }>(`/my/vehicles/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+
   // ---- console listing management ----
   consoleListings: (params: { property_id?: string; status?: string } = {}) => {
     const qs = new URLSearchParams();
@@ -1068,6 +1085,11 @@ export interface ProfileDto {
   photo_url: string | null;
   has_ssn: boolean;
   has_gov_id: boolean;
+  /** Renter attributes — drive application auto-fill + conditional charges. */
+  has_pet: boolean;
+  pet_details: string | null;
+  is_military: boolean;
+  annual_income_cents: number | null;
 }
 
 /** Editable profile payload (PUT). Sensitive fields are write-only. */
@@ -1088,6 +1110,21 @@ export interface ProfileInput {
   ssn?: string;
   gov_id_number?: string;
   gov_id_type?: string;
+  /** Renter attributes (application auto-fill). */
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
+  annual_income_cents?: number;
+}
+
+/** Everything the "My profile" page needs in one fetch. */
+export interface MyProfileView {
+  /** Account display name. */
+  name: string;
+  /** Account email (identity — applications always use this). */
+  email: string;
+  profile: ProfileDto;
+  vehicles: VehicleProfile[];
 }
 
 /** A user's membership in a scope/tenant under a given persona. */

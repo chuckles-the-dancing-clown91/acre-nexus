@@ -76,6 +76,11 @@ export const profileFormSchema = z.object({
   ssn: optionalText,
   gov_id_type: optionalText,
   gov_id_number: optionalText,
+  // Renter attributes (application auto-fill).
+  has_pet: z.boolean().optional(),
+  pet_details: optionalText,
+  is_military: z.boolean().optional(),
+  annual_income: optionalText,
 });
 
 export type ProfileFormInput = z.infer<typeof profileFormSchema>;
