@@ -231,13 +231,19 @@ pub(crate) fn profile_fields_touched(input: &ProfileInput) -> Vec<&'static str> 
 }
 
 /// Insert or update a user's profile, encrypting SSN / gov-ID when provided.
+///
+/// Updates use **merge semantics** so partial clients can never silently wipe
+/// data another surface recorded (the renter portal and the IAM dialog both
+/// write here): an omitted field (`None`) keeps its stored value, a non-empty
+/// value replaces it, and an explicit empty string clears it. SSN / gov-ID
+/// remain write-only: only a non-empty value overwrites them.
 pub(crate) async fn upsert_profile_inner<C: sea_orm::ConnectionTrait>(
     db: &C,
     pii_key: &[u8],
     user_id: Uuid,
     input: &ProfileInput,
 ) -> Result<(), ApiError> {
-    let dob = match &input.date_of_birth {
+    let dob = match input.date_of_birth.as_deref().map(str::trim) {
         Some(s) if !s.is_empty() => Some(
             NaiveDate::parse_from_str(s, "%Y-%m-%d")
                 .map_err(|_| ApiError::BadRequest("date_of_birth must be YYYY-MM-DD".into()))?,
@@ -254,24 +260,41 @@ pub(crate) async fn upsert_profile_inner<C: sea_orm::ConnectionTrait>(
     match existing {
         Some(p) => {
             let mut am: entity::user_profile::ActiveModel = p.into();
-            am.legal_first_name = Set(input.legal_first_name.clone());
-            am.legal_middle_name = Set(input.legal_middle_name.clone());
-            am.legal_last_name = Set(input.legal_last_name.clone());
-            am.preferred_name = Set(input.preferred_name.clone());
-            am.date_of_birth = Set(dob);
-            am.phone = Set(input.phone.clone());
-            am.address_line1 = Set(input.address_line1.clone());
-            am.address_line2 = Set(input.address_line2.clone());
-            am.city = Set(input.city.clone());
-            am.region = Set(input.region.clone());
-            am.postal_code = Set(input.postal_code.clone());
-            am.country = Set(input.country.clone());
-            am.photo_url = Set(input.photo_url.clone());
-            am.has_pet = Set(input.has_pet.unwrap_or(false));
-            am.pet_details = Set(input.pet_details.clone());
-            am.is_military = Set(input.is_military.unwrap_or(false));
-            am.annual_income_cents = Set(input.annual_income_cents);
-            am.gov_id_type = Set(input.gov_id_type.clone());
+            // None = keep; "" = clear; non-empty = replace.
+            macro_rules! merge {
+                ($field:ident) => {
+                    if let Some(v) = &input.$field {
+                        let v = v.trim();
+                        am.$field = Set((!v.is_empty()).then(|| v.to_string()));
+                    }
+                };
+            }
+            merge!(legal_first_name);
+            merge!(legal_middle_name);
+            merge!(legal_last_name);
+            merge!(preferred_name);
+            merge!(phone);
+            merge!(address_line1);
+            merge!(address_line2);
+            merge!(city);
+            merge!(region);
+            merge!(postal_code);
+            merge!(country);
+            merge!(photo_url);
+            merge!(pet_details);
+            merge!(gov_id_type);
+            if input.date_of_birth.is_some() {
+                am.date_of_birth = Set(dob);
+            }
+            if let Some(v) = input.has_pet {
+                am.has_pet = Set(v);
+            }
+            if let Some(v) = input.is_military {
+                am.is_military = Set(v);
+            }
+            if let Some(v) = input.annual_income_cents {
+                am.annual_income_cents = Set(Some(v));
+            }
             // Only overwrite sensitive fields when a new value was supplied.
             if input.ssn.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
                 am.ssn_ciphertext = Set(ssn_ct);

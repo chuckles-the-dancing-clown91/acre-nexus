@@ -241,7 +241,10 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
         key: "renter",
         scope: SCOPE_TENANT,
         name: "Renter",
-        description: "Resident / applicant portal access.",
-        permissions: &[ListingRead, VehicleRead, VehicleManage],
+        description: "Resident / applicant portal access. Renters browse the \
+                      public website and use the /my/* self-service routes, so \
+                      they hold no console-read permissions (listing:read would \
+                      expose unpublished drafts via GET /listings).",
+        permissions: &[VehicleRead, VehicleManage],
     },
 ];

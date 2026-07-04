@@ -6,6 +6,10 @@
 //!   visible, flagged as under contract).
 //! * Lease **activation** (e-signature completion or in-person signing) marks
 //!   it `Leased` and unpublishes it.
+//! * A **declined** envelope reopens a `Pending` listing (`Available`) — the
+//!   deal died from the resident's side, so the home goes back on the market.
+//!   (A staff **void** leaves the listing alone: staff are actively managing
+//!   the deal and may re-send.)
 //!
 //! Best-effort like [`crate::rentals_occupancy`]: failures are logged, never
 //! propagated — a listing badge must not fail a signing.
@@ -51,6 +55,33 @@ pub async fn mark_pending_on_convert(
     am.status = Set("Pending".into());
     if let Err(e) = am.update(db).await {
         tracing::warn!("failed to mark listing {id} pending: {e}");
+    }
+}
+
+/// Deal death (resident declined to sign): a listing parked at `Pending` by
+/// conversion goes back on the market.
+pub async fn reopen_on_deal_death(db: &impl ConnectionTrait, tenant_id: Uuid, lease_id: Uuid) {
+    let Ok(Some(lease)) = entity::prelude::Lease::find_by_id(lease_id)
+        .filter(entity::lease::Column::TenantId.eq(tenant_id))
+        .one(db)
+        .await
+    else {
+        return;
+    };
+    let Some(app_id) = lease.application_id else {
+        return;
+    };
+    let Some(listing) = listing_for_application(db, tenant_id, app_id).await else {
+        return;
+    };
+    if listing.status != "Pending" {
+        return;
+    }
+    let id = listing.id;
+    let mut am: entity::listing::ActiveModel = listing.into();
+    am.status = Set("Available".into());
+    if let Err(e) = am.update(db).await {
+        tracing::warn!("failed to reopen listing {id} after declined envelope: {e}");
     }
 }
 

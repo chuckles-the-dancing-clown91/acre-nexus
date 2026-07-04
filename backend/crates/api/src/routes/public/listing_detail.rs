@@ -21,6 +21,7 @@ pub async fn listing_detail(
     let l = Listing::find_by_id(lid)
         .filter(entity::listing::Column::TenantId.eq(tenant.tenant_id))
         .filter(entity::listing::Column::IsPublic.eq(true))
+        .filter(entity::listing::Column::Status.ne("Leased"))
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("listing not found".into()))?;

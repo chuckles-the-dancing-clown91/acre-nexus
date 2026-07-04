@@ -49,7 +49,8 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    (`Available`/`New`/`Pending`/`Leased`) and public visibility from the
    console's Listings page. The pipeline retires listings automatically
    (`crate::listing_sync`) — `Pending` on conversion, `Leased` + unpublished
-   when the lease activates.
+   when the lease activates, and back to `Available` when the resident
+   declines the envelope.
 2. **Apply** — all three doors run the same `applications::intake`: persist
    (with `source`), audit, staff fan-out, the applicant's confirmation email,
    and the screening job. Portal applications are **white-glove**: the
@@ -213,10 +214,15 @@ Console endpoints (mounted by `lease_builder`):
   the document returns to `draft`.
 
 Public (tokenized) endpoints, resolved via `X-Tenant`/`?tenant=` like the apply
-funnel: `GET /public/sign/<token>` (first open marks `viewed`),
-`POST /public/sign/<token>` (typed name + explicit ESIGN/UETA consent), and
-`POST /public/sign/<token>/decline`. The frontend serves the signing page at
-`/sign/<token>?tenant=<slug>` (`PUBLIC_APP_URL` builds the link).
+funnel: `GET /public/sign/<token>` (read-only — link scanners and previews
+don't pollute the trail), `POST /public/sign/<token>/viewed` (the page calls
+it on the signer's **first interaction**, marking `viewed` with IP + user
+agent), `POST /public/sign/<token>` (typed name + explicit ESIGN/UETA
+consent), and `POST /public/sign/<token>/decline` — which also puts a listing
+parked at `Pending` back to `Available`, since the deal died from the
+resident's side (a staff **void** leaves the listing alone). The frontend
+serves the signing page at `/sign/<token>?tenant=<slug>` (`PUBLIC_APP_URL`
+builds the link).
 
 Every act lands in `esign_event` — the **ESIGN/UETA audit trail** — with signer,
 IP, and user agent. When the last signer signs, completion is automatic: the
@@ -226,7 +232,13 @@ certificate) is rendered by the in-tree text→PDF writer (`api/src/pdf.rs`) and
 stored in the document service as `signed-lease-agreement.pdf` on the lease,
 the property's workflow auto-advances to `leased` (when its strategy has that
 stage and it hasn't reached it), and signers + staff are notified
-(`esign_completed` / `esign_completed_staff`).
+(`esign_completed` / `esign_completed_staff`). Two racing final signatures
+can't wedge the envelope — signing locks the envelope row (`SELECT … FOR
+UPDATE`) so completions serialize — and if the PDF store hiccups, completion
+still goes through and the store is retried by a deferred `esign_store_pdf`
+job. Signing **in person** voids any envelope still out on the document (and
+a live envelope refuses to sign a document already signed outside it), so an
+emailed link can never overwrite an in-person signature record.
 
 Schema (migration `m20240101_000020`): `esign_envelope`, `esign_signer`,
 `esign_event` — tenant-scoped with enforced RLS.

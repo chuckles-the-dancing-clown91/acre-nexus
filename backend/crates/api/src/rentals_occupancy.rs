@@ -19,6 +19,29 @@ pub async fn sync_property_occupancy(db: &impl ConnectionTrait, property_id: Uui
     }
 }
 
+/// The one rule both signing paths (e-signature completion and in-person)
+/// share: signing **activates the tenancy** — the lease flips to `active`,
+/// occupancy re-syncs, and the advertised listing (if the lease came from one)
+/// closes out. Returns the up-to-date lease.
+pub async fn activate_lease_on_signing(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    lease: entity::lease::Model,
+) -> Result<entity::lease::Model, sea_orm::DbErr> {
+    let property_id = lease.property_id;
+    let lease = if lease.status != "active" {
+        let mut lm: entity::lease::ActiveModel = lease.into();
+        lm.status = Set("active".into());
+        lm.updated_at = Set(chrono::Utc::now().into());
+        lm.update(db).await?
+    } else {
+        lease
+    };
+    sync_property_occupancy(db, property_id).await;
+    crate::listing_sync::close_on_lease_activation(db, tenant_id, &lease).await;
+    Ok(lease)
+}
+
 async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), sea_orm::DbErr> {
     let leases = Lease::find()
         .filter(entity::lease::Column::PropertyId.eq(property_id))

@@ -15,7 +15,7 @@ use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
-use entity::prelude::{Application, Listing, User, UserProfile};
+use entity::prelude::{Application, User, UserProfile, Vehicle};
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
 use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder};
@@ -69,30 +69,9 @@ pub async fn my_apply(
         .one(&db)
         .await?;
 
-    // A referenced listing must be this workspace's.
-    if let Some(lid) = b.listing_id {
-        Listing::find_by_id(lid)
-            .filter(entity::listing::Column::TenantId.eq(scope.tenant_id))
-            .one(&db)
-            .await?
-            .ok_or_else(|| ApiError::NotFound("listing not found".into()))?;
-    }
-
     // Reuse works for portal applicants exactly like the public funnel.
     let email = me.email.to_lowercase();
-    let reused_from = match super::reuse::reuse_cutoff(&db, scope.tenant_id).await {
-        Some(cutoff) => {
-            Application::find()
-                .filter(entity::application::Column::TenantId.eq(scope.tenant_id))
-                .filter(entity::application::Column::Email.eq(email.clone()))
-                .filter(entity::application::Column::Status.eq("Approved"))
-                .filter(entity::application::Column::CreatedAt.gte(cutoff))
-                .order_by_desc(entity::application::Column::CreatedAt)
-                .one(&db)
-                .await?
-        }
-        None => None,
-    };
+    let reused_from = super::reuse::latest_reusable_approved(&db, scope.tenant_id, &email).await?;
 
     // White-glove auto-fill: explicit values win, the profile fills the rest.
     let profile_name = profile.as_ref().and_then(|p| {
@@ -153,10 +132,12 @@ pub async fn my_apply(
     // Snapshot the person's vehicles onto the application: convert re-links
     // application vehicles to the lease, so these copies flow all the way into
     // parking amenities and lease verbiage. The profile rows stay the master.
-    let own = crate::routes::iam::self_profile::own_vehicles(&db, user.user_id).await?;
+    let own =
+        crate::routes::iam::self_profile::own_vehicles(&db, scope.tenant_id, user.user_id).await?;
     let now = chrono::Utc::now();
-    for v in own {
-        let copy = entity::vehicle::ActiveModel {
+    let copies: Vec<entity::vehicle::ActiveModel> = own
+        .into_iter()
+        .map(|v| entity::vehicle::ActiveModel {
             id: sea_orm::Set(uuid::Uuid::new_v4()),
             tenant_id: sea_orm::Set(scope.tenant_id),
             lease_id: sea_orm::Set(None),
@@ -171,10 +152,14 @@ pub async fn my_apply(
             notes: sea_orm::Set(v.notes),
             created_at: sea_orm::Set(now.into()),
             updated_at: sea_orm::Set(now.into()),
-        };
-        if let Err(e) = sea_orm::ActiveModelTrait::insert(copy, &db).await {
-            tracing::warn!("failed to snapshot vehicle onto application: {e}");
-        }
+        })
+        .collect();
+    if let Err(e) = Vehicle::insert_many(copies)
+        .on_empty_do_nothing()
+        .exec(&db)
+        .await
+    {
+        tracing::warn!("failed to snapshot vehicles onto application: {e}");
     }
 
     Ok(Json(ApplicationResp::from(saved)))

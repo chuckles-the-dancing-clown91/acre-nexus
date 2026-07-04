@@ -117,21 +117,15 @@ pub async fn convert(
     }
 
     // Mark the application as leased so it can't be converted again / re-shown,
-    // recording the transition in the application's history like any other.
-    let mut am: entity::application::ActiveModel = app.clone().into();
-    am.status = Set("Leased".into());
-    am.update(&db).await?;
-    entity::application_event::ActiveModel {
-        id: Set(Uuid::new_v4()),
-        tenant_id: Set(scope.tenant_id),
-        application_id: Set(aid),
-        from_status: Set(Some(app.status.clone())),
-        to_status: Set("Leased".into()),
-        note: Set(Some("Converted to lease".into())),
-        actor_user_id: Set(Some(user.user_id)),
-        created_at: Set(now.into()),
-    }
-    .insert(&db)
+    // through the same validated transition machinery as every other change.
+    super::apply_transition(
+        &db,
+        scope.tenant_id,
+        Some(user.user_id),
+        app,
+        "Leased",
+        Some("Converted to lease".into()),
+    )
     .await?;
 
     // The advertised listing (if any) is now under contract.

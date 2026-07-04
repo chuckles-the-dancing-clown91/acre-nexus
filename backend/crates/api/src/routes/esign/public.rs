@@ -14,14 +14,21 @@ use chrono::Utc;
 use entity::prelude::{EsignEnvelope, EsignSigner, LeaseDocument, Theme};
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set};
 use serde_json::json;
 
 /// Resolve a raw signing token to its (signer, envelope) pair.
+///
+/// `lock_envelope` takes `SELECT … FOR UPDATE` on the envelope row — the
+/// mutation handlers (sign/decline) use it so two signers submitting at the
+/// same moment serialize on the envelope: the second waits for the first's
+/// commit and then sees its signature, which is what makes the "was that the
+/// last signature?" check race-free.
 async fn signer_for_token(
     db: &crate::db::RequestDb,
     tenant_id: uuid::Uuid,
     token: &str,
+    lock_envelope: bool,
 ) -> ApiResult<(entity::esign_signer::Model, entity::esign_envelope::Model)> {
     let hash = esign::hash_token(token);
     let signer = EsignSigner::find()
@@ -30,8 +37,12 @@ async fn signer_for_token(
         .one(db)
         .await?
         .ok_or_else(|| ApiError::NotFound("signing link is invalid or has expired".into()))?;
-    let envelope = EsignEnvelope::find_by_id(signer.envelope_id)
-        .filter(entity::esign_envelope::Column::TenantId.eq(tenant_id))
+    let mut q = EsignEnvelope::find_by_id(signer.envelope_id)
+        .filter(entity::esign_envelope::Column::TenantId.eq(tenant_id));
+    if lock_envelope {
+        q = q.lock_exclusive();
+    }
+    let envelope = q
         .one(db)
         .await?
         .ok_or_else(|| ApiError::NotFound("envelope not found".into()))?;
@@ -83,11 +94,31 @@ async fn build_view(
     })
 }
 
-/// `GET /public/sign/<token>` — the signer's view of the document. First open
-/// marks the signer `viewed` (an ESIGN audit event with IP + user agent).
+/// `GET /public/sign/<token>` — the signer's view of the document. Read-only:
+/// email link scanners and previewers fetch links before the human ever opens
+/// them, so "viewed" is recorded by [`mark_viewed`] on the signer's first real
+/// interaction with the page instead of on fetch — keeping the ESIGN audit
+/// trail's first-view entry a human act.
 #[rocket_okapi::openapi(tag = "E-Signature (Public)")]
 #[get("/public/sign/<token>")]
 pub async fn view(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    tenant: PublicTenant,
+    token: &str,
+) -> ApiResult<Json<PublicSignView>> {
+    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token, false).await?;
+    Ok(Json(
+        build_view(&db, tenant.tenant_id, signer, &envelope).await?,
+    ))
+}
+
+/// `POST /public/sign/<token>/viewed` — the signing page calls this on the
+/// signer's first interaction (not on load): sent → viewed, with IP + user
+/// agent in the audit trail. Idempotent past the first call.
+#[rocket_okapi::openapi(tag = "E-Signature (Public)")]
+#[post("/public/sign/<token>/viewed")]
+pub async fn mark_viewed(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
     tenant: PublicTenant,
@@ -95,9 +126,7 @@ pub async fn view(
     user_agent: UserAgent,
     token: &str,
 ) -> ApiResult<Json<PublicSignView>> {
-    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token).await?;
-
-    // First open: sent → viewed.
+    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token, false).await?;
     let signer = if signer.status == "sent" && super::is_open(&envelope.status) {
         let now = Utc::now();
         let mut am: entity::esign_signer::ActiveModel = signer.into();
@@ -130,7 +159,6 @@ pub async fn view(
     } else {
         signer
     };
-
     Ok(Json(
         build_view(&db, tenant.tenant_id, signer, &envelope).await?,
     ))
@@ -162,7 +190,7 @@ pub async fn sign(
         ));
     }
 
-    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token).await?;
+    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token, true).await?;
     if !super::is_open(&envelope.status) {
         return Err(ApiError::Conflict(format!(
             "this envelope is {} and can no longer be signed",
@@ -177,6 +205,19 @@ pub async fn sign(
             ))
         }
         _ => {}
+    }
+    // The document may have been signed outside this envelope (in person)
+    // while the link was out — never let a stale link overwrite that record.
+    if let Some(doc) = LeaseDocument::find_by_id(envelope.lease_document_id)
+        .filter(entity::lease_document::Column::TenantId.eq(tenant.tenant_id))
+        .one(&db)
+        .await?
+    {
+        if doc.status == "signed" {
+            return Err(ApiError::Conflict(
+                "this document has already been signed — no further signatures are needed".into(),
+            ));
+        }
     }
 
     let now = Utc::now();
@@ -216,11 +257,7 @@ pub async fn sign(
 
     let signers = esign::envelope_signers(&db, tenant.tenant_id, envelope.id).await?;
     let envelope = if esign::all_signed(&signers) {
-        esign::complete_envelope(&db, &envelope, &signers).await?;
-        EsignEnvelope::find_by_id(envelope.id)
-            .one(&db)
-            .await?
-            .ok_or_else(|| ApiError::NotFound("envelope not found".into()))?
+        esign::complete_envelope(&db, &envelope, &signers).await?
     } else {
         // Someone still pending: mark progress + tell the back office.
         let signed_count = signers.iter().filter(|s| s.status == "signed").count();
@@ -266,7 +303,7 @@ pub async fn decline(
     body: Json<DeclineReq>,
 ) -> ApiResult<Json<PublicSignView>> {
     let reason = body.into_inner().reason.filter(|r| !r.trim().is_empty());
-    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token).await?;
+    let (signer, envelope) = signer_for_token(&db, tenant.tenant_id, token, true).await?;
     if !super::is_open(&envelope.status) {
         return Err(ApiError::Conflict(format!(
             "this envelope is {} and can no longer be declined",
@@ -324,6 +361,10 @@ pub async fn decline(
         Some(json!({ "signer_id": signer.id, "reason": reason })),
     )
     .await;
+    // The deal died from the resident's side — the advertised listing (if the
+    // lease came from one) goes back on the market.
+    crate::listing_sync::reopen_on_deal_death(&db, tenant.tenant_id, envelope.lease_id).await;
+
     crate::notify::notify_staff(
         &db,
         tenant.tenant_id,

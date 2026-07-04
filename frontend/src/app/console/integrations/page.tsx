@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
+import { formatBytes } from "@/lib/utils";
 
 const OWNER_TYPES = [
   "property",
@@ -25,12 +26,6 @@ const OWNER_TYPES = [
   "maintenance_ticket",
   "tenant",
 ];
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function statusToneFor(status: string): "good" | "warn" | "bad" | "neutral" {
   if (status === "sent" || status === "stored") return "good";

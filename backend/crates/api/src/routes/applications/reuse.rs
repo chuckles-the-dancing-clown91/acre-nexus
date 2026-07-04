@@ -49,6 +49,27 @@ fn is_reusable_status(status: &str) -> bool {
     !matches!(status, "Declined" | "Withdrawn")
 }
 
+/// The applicant's most recent **approved** application inside the reuse
+/// window, if the workspace allows reuse. The public and portal doors carry
+/// its screening result forward so a returning applicant isn't re-screened.
+pub(crate) async fn latest_reusable_approved(
+    db: &impl sea_orm::ConnectionTrait,
+    tenant_id: Uuid,
+    email: &str,
+) -> Result<Option<entity::application::Model>, sea_orm::DbErr> {
+    let Some(cutoff) = reuse_cutoff(db, tenant_id).await else {
+        return Ok(None);
+    };
+    Application::find()
+        .filter(entity::application::Column::TenantId.eq(tenant_id))
+        .filter(entity::application::Column::Email.eq(email))
+        .filter(entity::application::Column::Status.eq("Approved"))
+        .filter(entity::application::Column::CreatedAt.gte(cutoff))
+        .order_by_desc(entity::application::Column::CreatedAt)
+        .one(db)
+        .await
+}
+
 /// `GET /applications/reusable?email=` — an applicant's recent reusable apps.
 #[rocket_okapi::openapi(tag = "Applications")]
 #[get("/applications/reusable?<email>")]

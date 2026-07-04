@@ -32,47 +32,25 @@ pub struct MyProfileView {
     pub vehicles: Vec<VehicleDto>,
 }
 
-/// An empty profile for users who haven't filled anything in yet.
-fn empty_profile() -> ProfileDto {
-    ProfileDto {
-        legal_first_name: None,
-        legal_middle_name: None,
-        legal_last_name: None,
-        preferred_name: None,
-        date_of_birth: None,
-        phone: None,
-        address_line1: None,
-        address_line2: None,
-        city: None,
-        region: None,
-        postal_code: None,
-        country: None,
-        ssn_last4: None,
-        gov_id_type: None,
-        gov_id_last4: None,
-        photo_url: None,
-        has_ssn: false,
-        has_gov_id: false,
-        has_pet: false,
-        pet_details: None,
-        is_military: false,
-        annual_income_cents: None,
-    }
-}
-
-/// The signed-in user's own vehicles, newest first.
+/// The signed-in user's own vehicles in this workspace, newest first.
 pub(crate) async fn own_vehicles(
     db: &impl ConnectionTrait,
+    tenant_id: Uuid,
     user_id: Uuid,
 ) -> Result<Vec<entity::vehicle::Model>, sea_orm::DbErr> {
     Vehicle::find()
+        .filter(entity::vehicle::Column::TenantId.eq(tenant_id))
         .filter(entity::vehicle::Column::UserId.eq(user_id))
         .order_by_desc(entity::vehicle::Column::CreatedAt)
         .all(db)
         .await
 }
 
-async fn build_view(db: &crate::db::RequestDb, user_id: Uuid) -> ApiResult<MyProfileView> {
+async fn build_view(
+    db: &crate::db::RequestDb,
+    tenant_id: Uuid,
+    user_id: Uuid,
+) -> ApiResult<MyProfileView> {
     let me = User::find_by_id(user_id)
         .one(db)
         .await?
@@ -81,8 +59,8 @@ async fn build_view(db: &crate::db::RequestDb, user_id: Uuid) -> ApiResult<MyPro
         .one(db)
         .await?
         .map(ProfileDto::from)
-        .unwrap_or_else(empty_profile);
-    let vehicles = own_vehicles(db, user_id)
+        .unwrap_or_default();
+    let vehicles = own_vehicles(db, tenant_id, user_id)
         .await?
         .into_iter()
         .map(VehicleDto::from)
@@ -102,9 +80,9 @@ pub async fn my_profile(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
-    _scope: TenantScope,
+    scope: TenantScope,
 ) -> ApiResult<Json<MyProfileView>> {
-    Ok(Json(build_view(&db, user.user_id).await?))
+    Ok(Json(build_view(&db, scope.tenant_id, user.user_id).await?))
 }
 
 /// `PUT /my/profile` — self-service update. SSN / government ID are write-only
@@ -115,7 +93,7 @@ pub async fn update_my_profile(
     state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
-    _scope: TenantScope,
+    scope: TenantScope,
     body: Json<ProfileInput>,
 ) -> ApiResult<Json<MyProfileView>> {
     let input = body.into_inner();
@@ -133,5 +111,5 @@ pub async fn update_my_profile(
     )
     .await;
 
-    Ok(Json(build_view(&db, user.user_id).await?))
+    Ok(Json(build_view(&db, scope.tenant_id, user.user_id).await?))
 }

@@ -1,6 +1,8 @@
-//! `POST /leases/<id>/document/sign` — capture a typed signature on the latest
-//! lease document. Signing **activates the tenancy** (lease → `active`) and syncs
-//! the property's occupancy + unit status.
+//! `POST /leases/<id>/document/sign` — capture a typed signature **in person**
+//! on the latest lease document. Signing activates the tenancy (lease →
+//! `active`, occupancy synced, listing closed) and voids any e-sign envelope
+//! still out on the document so stale emailed links can't later overwrite the
+//! in-person signature record.
 
 use super::dto::{LeaseDocDto, SignReq};
 use crate::auth::AuthUser;
@@ -68,18 +70,19 @@ pub async fn sign(
     dm.signed_ip = Set(client_ip.0.clone());
     let saved = dm.update(&db).await?;
 
-    // Signing activates the tenancy; the advertised listing (if any) closes out.
-    let property_id = lease.property_id;
-    let lease = if lease.status != "active" {
-        let mut lm: entity::lease::ActiveModel = lease.into();
-        lm.status = Set("active".into());
-        lm.updated_at = Set(now.into());
-        lm.update(&db).await?
-    } else {
-        lease
-    };
-    crate::rentals_occupancy::sync_property_occupancy(&db, property_id).await;
-    crate::listing_sync::close_on_lease_activation(&db, scope.tenant_id, &lease).await;
+    // Signing activates the tenancy (shared with e-signature completion), and
+    // any envelope still out on this document dies so its links stop working.
+    crate::rentals_occupancy::activate_lease_on_signing(&db, scope.tenant_id, lease).await?;
+    if let Err(e) = crate::esign::void_open_envelopes_for_document(
+        &db,
+        scope.tenant_id,
+        saved.id,
+        "Signed in person",
+    )
+    .await
+    {
+        tracing::warn!("failed to void open envelopes after in-person signing: {e}");
+    }
 
     crate::audit::record(
         &db,

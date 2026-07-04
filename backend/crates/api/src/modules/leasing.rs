@@ -78,7 +78,13 @@ impl PlatformModule for LeasingModule {
                 // (roadmap Phase 4) drops its verdict in here instead.
                 let result = "cleared";
                 if let Err(e) = record_screening_outcome(ctx, result).await {
-                    tracing::error!("failed to apply screening outcome: {e}");
+                    // Landing the outcome is the whole point of the job — a
+                    // transient failure must retry (idempotently), not mark
+                    // the job completed while the application sits stranded.
+                    return Some(JobOutcome::retry(
+                        crate::providers::backoff(ctx.job.attempts),
+                        format!("failed to apply screening outcome: {e}"),
+                    ));
                 }
                 Some(JobOutcome::completed(json!({
                     "cleared": true,
