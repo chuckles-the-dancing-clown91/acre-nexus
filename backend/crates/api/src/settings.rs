@@ -28,14 +28,29 @@ pub const APPLICATION_REUSE_ENABLED: &str = "application_reuse.enabled";
 pub const APPLICATION_REUSE_WINDOW_DAYS: &str = "application_reuse.window_days";
 /// Auto-approve an application the moment its background screening clears.
 pub const APPLICATION_AUTO_APPROVE: &str = "applications.auto_approve";
+/// Auto-generate the lease agreement when an application converts to a lease.
+pub const APPLICATION_GENERATE_DOC_ON_CONVERT: &str = "applications.generate_document_on_convert";
+/// Minimum credit score for screening to clear (0 = no floor).
+pub const SCREENING_MIN_CREDIT_SCORE: &str = "screening.min_credit_score";
+/// Minimum monthly-income-to-rent multiple for screening to clear (0 = off).
+pub const SCREENING_MIN_INCOME_RENT_RATIO: &str = "screening.min_income_rent_ratio";
+/// Seconds the simulated screening provider takes to call back.
+pub const SCREENING_CALLBACK_DELAY_SECS: &str = "screening.callback_delay_secs";
+/// Days a signing link stays valid after the envelope is sent (0 = no expiry).
+pub const ESIGN_LINK_EXPIRY_DAYS: &str = "esign.link_expiry_days";
+/// Maximum signers allowed on one envelope.
+pub const ESIGN_MAX_SIGNERS: &str = "esign.max_signers";
+/// Days to retain the stored signed-lease PDF (0 = keep forever).
+pub const ESIGN_SIGNED_DOC_RETENTION_DAYS: &str = "esign.signed_doc_retention_days";
+/// Title stamped on generated lease documents (and the envelopes sent for them).
+pub const LEASE_DOC_TITLE: &str = "lease_documents.title";
 
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingKind {
     Bool,
     Int,
-    /// A free-text setting. Reserved for future catalog entries.
-    #[allow(dead_code)]
+    /// A free-text setting.
     Text,
 }
 
@@ -98,6 +113,88 @@ pub const CATALOG: &[SettingDef] = &[
         kind: SettingKind::Bool,
         default: || json!(false),
     },
+    SettingDef {
+        key: APPLICATION_GENERATE_DOC_ON_CONVERT,
+        label: "Auto-generate lease document on conversion",
+        description: "Draft the lease agreement automatically when an \
+                      application converts to a lease. Turn off when the \
+                      workspace uses external paperwork. (A conversion request \
+                      can still override either way per call.)",
+        group: "Applications",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: SCREENING_MIN_CREDIT_SCORE,
+        label: "Minimum credit score",
+        description: "Screening fails when the applicant's reported credit \
+                      score is below this floor. 0 disables the check; an \
+                      application without a score is never failed by it.",
+        group: "Screening",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: SCREENING_MIN_INCOME_RENT_RATIO,
+        label: "Minimum income-to-rent multiple",
+        description: "Screening fails when the applicant's stated monthly \
+                      income is below this multiple of the listing's rent \
+                      (e.g. 3 = income must be at least 3× rent). 0 disables \
+                      the check; it only runs when the application targets a \
+                      listing with a rent.",
+        group: "Screening",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: SCREENING_CALLBACK_DELAY_SECS,
+        label: "Provider callback delay (seconds)",
+        description: "How long the simulated screening provider takes to call \
+                      back with a verdict. A live provider (roadmap Phase 4) \
+                      ignores this.",
+        group: "Screening",
+        kind: SettingKind::Int,
+        default: || json!(6),
+    },
+    SettingDef {
+        key: ESIGN_LINK_EXPIRY_DAYS,
+        label: "Signing-link validity (days)",
+        description: "Signing links stop working this many days after the \
+                      envelope is sent (void + re-send to issue fresh ones). \
+                      0 = links stay valid until the envelope completes or is \
+                      voided.",
+        group: "E-signature",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: ESIGN_MAX_SIGNERS,
+        label: "Maximum signers per envelope",
+        description: "Upper bound on the number of signers one envelope can \
+                      carry.",
+        group: "E-signature",
+        kind: SettingKind::Int,
+        default: || json!(10),
+    },
+    SettingDef {
+        key: ESIGN_SIGNED_DOC_RETENTION_DAYS,
+        label: "Signed-lease retention (days)",
+        description: "Retention window stamped on the stored signed-lease PDF \
+                      (drives the document service's expiry). 0 = keep \
+                      forever.",
+        group: "E-signature",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: LEASE_DOC_TITLE,
+        label: "Lease document title",
+        description: "Title given to generated lease agreements and the \
+                      e-signature envelopes sent for them.",
+        group: "Lease documents",
+        kind: SettingKind::Text,
+        default: || json!("Residential Lease Agreement"),
+    },
 ];
 
 /// Look up a catalog entry by key.
@@ -134,6 +231,17 @@ pub async fn get_bool(db: &impl ConnectionTrait, tenant_id: Uuid, key: &str) -> 
 /// Typed accessor: an integer setting (0 if missing/mistyped).
 pub async fn get_i64(db: &impl ConnectionTrait, tenant_id: Uuid, key: &str) -> i64 {
     get_value(db, tenant_id, key).await.as_i64().unwrap_or(0)
+}
+
+/// Typed accessor: a text setting (the catalog default if missing/mistyped).
+pub async fn get_string(db: &impl ConnectionTrait, tenant_id: Uuid, key: &str) -> String {
+    match get_value(db, tenant_id, key).await.as_str() {
+        Some(s) if !s.trim().is_empty() => s.to_string(),
+        _ => def(key)
+            .map(|d| (d.default)())
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default(),
+    }
 }
 
 /// Validate + upsert a setting override. Rejects unknown keys and type mismatches.

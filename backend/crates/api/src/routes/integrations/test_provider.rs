@@ -75,6 +75,18 @@ pub async fn test_provider(
     )
     .await?;
 
+    // The recipient is logged, never the credentials the provider carries.
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::NOTIFICATION_TEST,
+        Some("notification_provider"),
+        Some(provider.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "channel": provider.channel, "to": to, "job_id": job_id })),
+    )
+    .await;
+
     Ok(Json(
         serde_json::json!({ "queued": true, "job_id": job_id }),
     ))

@@ -154,12 +154,24 @@ pub async fn my_apply(
             updated_at: sea_orm::Set(now.into()),
         })
         .collect();
+    let snapshotted = copies.len();
     if let Err(e) = Vehicle::insert_many(copies)
         .on_empty_do_nothing()
         .exec(&db)
         .await
     {
         tracing::warn!("failed to snapshot vehicles onto application: {e}");
+    } else if snapshotted > 0 {
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::VEHICLE_CREATE,
+            Some("application"),
+            Some(saved.id.to_string()),
+            Some(scope.tenant_id),
+            Some(serde_json::json!({ "snapshotted": snapshotted, "source": "profile" })),
+        )
+        .await;
     }
 
     Ok(Json(ApplicationResp::from(saved)))

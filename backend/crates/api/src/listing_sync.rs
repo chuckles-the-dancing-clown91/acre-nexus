@@ -18,6 +18,28 @@ use entity::prelude::{Application, Listing};
 use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
+/// Record the pipeline-driven status change in the audit log (actor = `None`:
+/// the pipeline moved it, not a person).
+async fn audit_sync(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    listing_id: Uuid,
+    from: &str,
+    to: &str,
+    trigger: &str,
+) {
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::LISTING_SYNC,
+        Some("listing"),
+        Some(listing_id.to_string()),
+        Some(tenant_id),
+        Some(serde_json::json!({ "from": from, "to": to, "trigger": trigger })),
+    )
+    .await;
+}
+
 /// The listing an application points at, if any.
 async fn listing_for_application(
     db: &impl ConnectionTrait,
@@ -51,10 +73,12 @@ pub async fn mark_pending_on_convert(
         return;
     }
     let id = listing.id;
+    let from = listing.status.clone();
     let mut am: entity::listing::ActiveModel = listing.into();
     am.status = Set("Pending".into());
-    if let Err(e) = am.update(db).await {
-        tracing::warn!("failed to mark listing {id} pending: {e}");
+    match am.update(db).await {
+        Ok(_) => audit_sync(db, tenant_id, id, &from, "Pending", "application_converted").await,
+        Err(e) => tracing::warn!("failed to mark listing {id} pending: {e}"),
     }
 }
 
@@ -78,10 +102,12 @@ pub async fn reopen_on_deal_death(db: &impl ConnectionTrait, tenant_id: Uuid, le
         return;
     }
     let id = listing.id;
+    let from = listing.status.clone();
     let mut am: entity::listing::ActiveModel = listing.into();
     am.status = Set("Available".into());
-    if let Err(e) = am.update(db).await {
-        tracing::warn!("failed to reopen listing {id} after declined envelope: {e}");
+    match am.update(db).await {
+        Ok(_) => audit_sync(db, tenant_id, id, &from, "Available", "envelope_declined").await,
+        Err(e) => tracing::warn!("failed to reopen listing {id} after declined envelope: {e}"),
     }
 }
 
@@ -99,10 +125,12 @@ pub async fn close_on_lease_activation(
         return;
     };
     let id = listing.id;
+    let from = listing.status.clone();
     let mut am: entity::listing::ActiveModel = listing.into();
     am.status = Set("Leased".into());
     am.is_public = Set(false);
-    if let Err(e) = am.update(db).await {
-        tracing::warn!("failed to close listing {id} on lease activation: {e}");
+    match am.update(db).await {
+        Ok(_) => audit_sync(db, tenant_id, id, &from, "Leased", "lease_activated").await,
+        Err(e) => tracing::warn!("failed to close listing {id} on lease activation: {e}"),
     }
 }

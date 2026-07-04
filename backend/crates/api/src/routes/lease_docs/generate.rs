@@ -67,7 +67,9 @@ pub(crate) async fn generate_for_lease(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         lease_id: Set(lease.id),
-        title: Set("Residential Lease Agreement".into()),
+        title: Set(
+            crate::settings::get_string(db, tenant_id, crate::settings::LEASE_DOC_TITLE).await,
+        ),
         body: Set(body),
         format: Set("text".into()),
         status: Set("draft".into()),

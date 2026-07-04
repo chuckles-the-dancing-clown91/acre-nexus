@@ -90,13 +90,31 @@ pub async fn put_blob(
         .await
         .map_err(|_| Status::InternalServerError)?;
     if let Some(doc) = doc {
+        let (doc_id, tenant_id, filename) = (doc.id, doc.tenant_id, doc.filename.clone());
         let mut am: entity::document::ActiveModel = doc.into();
         am.size_bytes = Set(body.len() as i64);
         am.checksum = Set(Some(sha256_hex(&body)));
         am.status = Set("stored".into());
         am.updated_at = Set(Utc::now().into());
-        if let Err(e) = am.update(&state.db).await {
-            tracing::error!("failed to finalize document after upload: {e}");
+        match am.update(&state.db).await {
+            Ok(_) => {
+                // Completes the `document.upload` story: the bytes landed and
+                // the row was finalized (tokenized route → no acting user).
+                crate::audit::record(
+                    &state.db,
+                    None,
+                    crate::audit::actions::DOCUMENT_STORED,
+                    Some("document"),
+                    Some(doc_id.to_string()),
+                    Some(tenant_id),
+                    Some(serde_json::json!({
+                        "filename": filename,
+                        "size_bytes": body.len(),
+                    })),
+                )
+                .await;
+            }
+            Err(e) => tracing::error!("failed to finalize document after upload: {e}"),
         }
     }
 

@@ -80,8 +80,17 @@ pub const LIEN_DELETE: &str = "lien.delete";
 
 // ---- Leasing ----
 pub const APPLICATION_SUBMIT: &str = "application.submit";
+/// A background screening finished and its verdict landed on the application
+/// (actor is `None`: the pipeline wrote it, not a person).
+pub const APPLICATION_SCREENED: &str = "application.screened";
 pub const LISTING_CREATE: &str = "listing.create";
 pub const LISTING_UPDATE: &str = "listing.update";
+/// The pipeline moved a listing's status automatically (conversion → Pending,
+/// activation → Leased, declined envelope → Available) — distinct from a
+/// staff-driven [`LISTING_UPDATE`].
+pub const LISTING_SYNC: &str = "listing.sync";
+/// A lease flipped to `active` because its document was signed.
+pub const LEASE_ACTIVATE: &str = "lease.activate";
 
 // ---- Settings ----
 pub const THEME_UPDATE: &str = "theme.update";
@@ -97,11 +106,19 @@ pub const SECRET_SET: &str = "secret.set";
 pub const SECRET_ROTATE: &str = "secret.rotate";
 pub const SECRET_DELETE: &str = "secret.delete";
 pub const DOCUMENT_UPLOAD: &str = "document.upload";
+/// A tokenized blob PUT landed and finalized the document row (size,
+/// checksum, `stored`) — the completion of the upload that
+/// [`DOCUMENT_UPLOAD`] initiated.
+pub const DOCUMENT_STORED: &str = "document.stored";
 /// The fact a download URL was issued — not the content (same discipline as
 /// `pii.reveal`).
 pub const DOCUMENT_DOWNLOAD: &str = "document.download";
 pub const DOCUMENT_DELETE: &str = "document.delete";
 pub const NOTIFICATION_SEND: &str = "notification.send";
+/// Staff triggered a test delivery (provider test or own-device push test).
+pub const NOTIFICATION_TEST: &str = "notification.test";
+/// Inbox entries marked read (self-service; count in metadata).
+pub const NOTIFICATION_READ: &str = "notification.read";
 /// One event fanned out to staff (in-app + push + chat) — recipients counted
 /// in metadata; individual sends audit separately as `notification.send`.
 pub const NOTIFICATION_BROADCAST: &str = "notification.broadcast";

@@ -64,10 +64,16 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    rest) through the IAM profile routes (`PUT /admin/users/<id>/profile`).
    Applications capture the attributes that drive the rest of the flow
    (`has_pet`/`pet_details`, `is_military`, vehicles).
-3. **Screen** — the screening job's completion writes `screening_status` /
-   `screened_at` onto the application. With the **`applications.auto_approve`
-   setting** on, a cleared check advances the application to `Approved` on the
-   spot (automated transition, `actor = None`); otherwise staff get an
+3. **Screen** — the screening job's completion evaluates the workspace's
+   **screening policy** and writes `screening_status` / `screened_at` onto the
+   application (plus an `application.screened` audit event). The policy is
+   settings-driven: `screening.min_credit_score` (0 = no floor) and
+   `screening.min_income_rent_ratio` (monthly income vs. the listing's rent,
+   0 = off) fail an application that trips them, with the reasons recorded on
+   the job and in the audit metadata; `screening.callback_delay_secs` paces
+   the simulated provider. With the **`applications.auto_approve` setting**
+   on, a cleared check advances the application to `Approved` on the spot
+   (automated transition, `actor = None`); otherwise staff get an
    "application screened" notification and decide.
 4. **Decide** — `POST /applications/<id>/advance` (or `PATCH`) through the
    validated state machine; approval and decline each email the applicant.
@@ -110,6 +116,26 @@ New ──▶ Screening ──▶ Approved ──▶ Leased          (main path)
 
 Every transition is stored in `application_event` (mirrors `workflow_event` for
 properties) and audited.
+
+## Workspace settings
+
+Everything tunable in this flow lives in the settings catalog
+([TENANCY.md](./TENANCY.md#system-settings-setting) → System settings), editable
+from the console's Settings page (`tenant:manage`) and audited as
+`setting.update`:
+
+| Key | Default | Controls |
+|-----|---------|----------|
+| `applications.auto_approve` | `false` | Auto-approve a cleared screening |
+| `applications.generate_document_on_convert` | `true` | Draft the lease agreement automatically on conversion (per-call override still wins) |
+| `application_reuse.enabled` / `.window_days` | `false` / `30` | Reusable applications (below) |
+| `screening.min_credit_score` | `0` (off) | Credit floor for screening to clear |
+| `screening.min_income_rent_ratio` | `0` (off) | Monthly income-to-rent multiple for screening to clear |
+| `screening.callback_delay_secs` | `6` | Simulated provider callback pace |
+| `esign.link_expiry_days` | `0` (never) | Signing links die N days after the envelope is sent |
+| `esign.max_signers` | `10` | Signer cap per envelope |
+| `esign.signed_doc_retention_days` | `0` (forever) | Retention stamped on the stored signed PDF |
+| `lease_documents.title` | `Residential Lease Agreement` | Title on generated leases + their envelopes |
 
 ## Reusable applications (configurable)
 

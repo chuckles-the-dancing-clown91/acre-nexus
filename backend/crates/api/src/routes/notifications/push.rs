@@ -125,6 +125,16 @@ pub async fn test_push(
         0,
     )
     .await?;
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::NOTIFICATION_TEST,
+        Some("user"),
+        Some(user.user_id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "channel": "push", "job_id": job_id })),
+    )
+    .await;
     Ok(Json(
         serde_json::json!({ "queued": true, "job_id": job_id }),
     ))

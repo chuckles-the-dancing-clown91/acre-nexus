@@ -133,11 +133,40 @@ pub async fn convert(
 
     // Auto-apply the conditional fee schedule (pet fee, military discount, …).
     let applied = apply_to_lease(&db, scope.tenant_id, &lease).await?;
+    if !applied.is_empty() {
+        // Same domain event the manual apply-fees route writes — auto-applied
+        // charges are money and belong in the audit log.
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::LEASE_FEES_APPLY,
+            Some("lease"),
+            Some(lease_id.to_string()),
+            Some(scope.tenant_id),
+            Some(serde_json::json!({
+                "applied": applied.len(),
+                "trigger": "conversion",
+            })),
+        )
+        .await;
+    }
 
     // Generate the first draft of the lease agreement so the file is ready to
-    // review and send for signature the moment conversion finishes. Opt out
-    // with `generate_document: false` (e.g. when using external paperwork).
-    if b.generate_document.unwrap_or(true) {
+    // review and send for signature the moment conversion finishes. The
+    // workspace setting picks the default; the request can override per call
+    // (e.g. external paperwork for one deal).
+    let generate_doc = match b.generate_document {
+        Some(v) => v,
+        None => {
+            crate::settings::get_bool(
+                &db,
+                scope.tenant_id,
+                crate::settings::APPLICATION_GENERATE_DOC_ON_CONVERT,
+            )
+            .await
+        }
+    };
+    if generate_doc {
         crate::routes::lease_docs::generate::generate_for_lease(
             &db,
             scope.tenant_id,
@@ -157,7 +186,7 @@ pub async fn convert(
         Some(serde_json::json!({
             "application_id": aid,
             "charges_applied": applied.len(),
-            "document_generated": b.generate_document.unwrap_or(true),
+            "document_generated": generate_doc,
         })),
     )
     .await;

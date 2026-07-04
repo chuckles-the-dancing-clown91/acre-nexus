@@ -416,6 +416,19 @@ pub async fn retry_store_pdf(
     em.signed_document_id = Set(Some(id));
     em.updated_at = Set(Utc::now().into());
     em.update(db).await?;
+    // The trail shows the late store, so a completed-without-PDF envelope
+    // visibly resolves.
+    record_event(
+        db,
+        tenant_id,
+        envelope_id,
+        None,
+        "pdf_stored",
+        json!({ "signed_document_id": id, "deferred": true }),
+        None,
+        None,
+    )
+    .await;
     Ok(Some(id))
 }
 
@@ -455,6 +468,18 @@ pub async fn void_open_envelopes_for_document(
             json!({ "reason": reason }),
             None,
             None,
+        )
+        .await;
+        // Same domain event the staff void route writes — the platform audit
+        // log shows every envelope death, however it happened.
+        crate::audit::record(
+            db,
+            None,
+            crate::audit::actions::ESIGN_VOID,
+            Some("esign_envelope"),
+            Some(id.to_string()),
+            Some(tenant_id),
+            Some(json!({ "reason": reason, "trigger": "in_person_signing" })),
         )
         .await;
         for s in envelope_signers(db, tenant_id, id).await? {
@@ -500,7 +525,17 @@ async fn store_signed_pdf(
     let store = ObjectStore::from_env()?;
     store.put_bytes(&storage_key, bytes).await?;
 
+    // Records-retention policy: 0 (the default) keeps the signed lease
+    // forever; a configured window feeds the document service's expiry sweep.
+    let retention_days = crate::settings::get_i64(
+        db,
+        tenant_id,
+        crate::settings::ESIGN_SIGNED_DOC_RETENTION_DAYS,
+    )
+    .await;
     let now = Utc::now();
+    let retention_expires_at =
+        (retention_days > 0).then(|| (now + chrono::Duration::days(retention_days)).into());
     entity::document::ActiveModel {
         id: Set(id),
         tenant_id: Set(tenant_id),
@@ -514,13 +549,32 @@ async fn store_signed_pdf(
         previous_version_id: Set(previous_version_id),
         storage_key: Set(storage_key),
         status: Set("stored".into()),
-        retention_expires_at: Set(None),
+        retention_expires_at: Set(retention_expires_at),
         created_by: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
     .insert(db)
     .await?;
+
+    // The signed PDF entering the document service is a domain event like any
+    // staff upload (actor = None: the signing pipeline wrote it).
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::DOCUMENT_UPLOAD,
+        Some("document"),
+        Some(id.to_string()),
+        Some(tenant_id),
+        Some(json!({
+            "filename": SIGNED_PDF_FILENAME,
+            "lease_id": lease_id,
+            "version": version,
+            "source": "esign_completion",
+            "retention_days": retention_days,
+        })),
+    )
+    .await;
     Ok(id)
 }
 
@@ -567,7 +621,7 @@ async fn advance_workflow_on_lease_signed(
         tenant_id: Set(tenant_id),
         property_id: Set(property_id),
         strategy: Set(strategy_key),
-        from_stage: Set(from_stage),
+        from_stage: Set(from_stage.clone()),
         to_stage: Set("leased".into()),
         note: Set(Some(format!("Lease e-signed by {signed_by}"))),
         actor_user_id: Set(None),
@@ -576,6 +630,22 @@ async fn advance_workflow_on_lease_signed(
     if let Err(e) = event.insert(db).await {
         tracing::warn!("failed to record auto workflow event: {e}");
     }
+    // Mirror the manual advance route's domain event (actor = None: the
+    // signing pipeline moved it).
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::WORKFLOW_ADVANCE,
+        Some("property"),
+        Some(property_id.to_string()),
+        Some(tenant_id),
+        Some(json!({
+            "from": from_stage,
+            "to": "leased",
+            "trigger": "lease_signed",
+        })),
+    )
+    .await;
 }
 
 /// Load an envelope's signers, oldest first (stable display order).

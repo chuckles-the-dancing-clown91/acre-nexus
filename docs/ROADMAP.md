@@ -7,6 +7,22 @@ what it unblocks, and a **Definition of Done (DoD)**.
 
 Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
+## TODO — what's next
+
+The next slice of work, in dependency order:
+
+- [ ] **Phase 3 kickoff**: Stripe/Plaid sandbox behind the provider framework;
+      extend `lease_payment` into a charges + payments ledger.
+- [ ] **Phase 4**: real FCRA screening provider dropped into the
+      `application.screened` slot (policy settings + consent + adverse action).
+- [ ] **Portal round-out (Phase 5)**: lease + documents view and maintenance
+      requests in the renter portal (rent payment lands with Phase 3).
+- [ ] **Scale guards**: pagination caps on `GET /applications`,
+      `GET /public/listings`, and `GET /my/applications` (the document and
+      audit lists already cap).
+- [ ] **Automated e-sign reminder cadence** (settings-driven schedule + max
+      rounds) on top of today's manual remind.
+
 ---
 
 ## Phase 0 — Foundation ✅ (shipped on this branch / PR #3)
@@ -73,6 +89,18 @@ as-built design.
   status, reminders, void, and the audit trail; public `/sign/<token>` signing
   page. Notification templates are importable into the workspace and editable
   from the console.
+- **Post-ship hardening** ✅: concurrent final signatures serialize on a row
+  lock; in-person signing voids open envelopes (and vice-versa a signed
+  document refuses a stale link); profile updates merge instead of
+  full-replace; "viewed" is interaction-driven (scanners don't pollute the
+  trail); a storage outage degrades to a retryable `esign_store_pdf` job;
+  declined envelopes reopen the listing. Every pipeline mutation now writes a
+  domain audit event (`application.screened`, `listing.sync`,
+  `lease.activate`, occupancy sync, auto workflow advance, auto void, signed
+  PDF store), and the flow's tunables are per-tenant **settings** — screening
+  policy (credit floor, income multiple, callback pace), signing-link expiry,
+  signer cap, signed-PDF retention, document title, auto-generate-on-convert
+  (see [LEASING.md](LEASING.md#workspace-settings)).
 
 **DoD (met):** generate a lease from a template, send for signature, capture
 the completed signed PDF + audit trail, and see it on the property/lease.
@@ -103,21 +131,29 @@ from the webhook, an owner payout is computed, and the dashboard charts it.
 - **Applicant consent** capture, a `screening_report` entity, secure result
   storage, and **adverse-action** workflow + decision recording.
 - Wire into the existing apply funnel (replacing the simulated `background_check`
-  job) with status surfaced to the back office.
+  job) with status surfaced to the back office. The seams already exist: the
+  simulated provider honors per-tenant policy settings
+  (`screening.min_credit_score`, `screening.min_income_rent_ratio`) and lands
+  its verdict through `application.screened` — a live provider drops its
+  verdict into the same slot.
 
 **DoD:** submit an application → real (sandbox) screening runs → report stored →
 approve/deny with adverse-action notice, fully audited.
 
 ---
 
-## Phase 5 — Tenant lifecycle & resident portal ⬜  *(Pillar 3)*
+## Phase 5 — Tenant lifecycle & resident portal 🟡  *(Pillar 3)*
 
-- **Applicant → tenant conversion**: approved application becomes a lease +
-  resident with one action; deposit + first month via Phase 3.
-- **Resident portal**: a renter logs in to pay rent, view lease + documents,
-  submit maintenance requests, and message the manager (reuses RBAC `renter`).
-- **Move-in/move-out**: checklists, inspections (photos via documents), deposit
-  disposition.
+- **Applicant → tenant conversion** ✅ (shipped with Phase 2): approved
+  application becomes a lease with one action — identity/attributes/vehicles
+  copied, fees auto-applied, lease document auto-generated, listing closed;
+  deposit + first month still wait on Phase 3.
+- **Resident portal** 🟡: renters already apply white-glove from their
+  profile (`/account/profile`), track applications (`/account/applications`),
+  maintain vehicles, and sign remotely; still to come — pay rent, view lease +
+  documents, submit maintenance requests, and message the manager.
+- **Move-in/move-out** ⬜: checklists, inspections (photos via documents),
+  deposit disposition.
 
 **DoD:** an applicant self-serves from approval → signed lease → autopay →
 portal, end to end.
@@ -167,12 +203,12 @@ controls and monitored SLOs.
 
 ```
 Phase 0 ✅
-   └─ Phase 1 (substrate)
-        ├─ Phase 2 (documents + e-sign) ──┐
-        ├─ Phase 3 (payments + charts) ───┼─ Phase 5 (tenant lifecycle/portal)
-        ├─ Phase 4 (screening) ───────────┘        └─ Phase 6 (helpdesk)
-        └─ Phase 7 (real data)
-                         all ─→ Phase 8 (reporting/billing/GA)
+   └─ Phase 1 ✅ (substrate)
+        ├─ Phase 2 ✅ (documents + e-sign) ─┐
+        ├─ Phase 3 ⬜ (payments + charts) ──┼─ Phase 5 🟡 (tenant lifecycle/portal)
+        ├─ Phase 4 ⬜ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
+        └─ Phase 7 ⬜ (real data)
+                         all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```
 
 ## Sequencing notes

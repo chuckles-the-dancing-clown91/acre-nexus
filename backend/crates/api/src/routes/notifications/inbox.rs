@@ -80,7 +80,18 @@ pub async fn mark_read(
     let mut am: entity::notification::ActiveModel = row.into();
     am.read_at = Set(Some(Utc::now().into()));
     am.updated_at = Set(Utc::now().into());
-    Ok(Json(InboxEntryDto::from(am.update(&db).await?)))
+    let saved = am.update(&db).await?;
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::NOTIFICATION_READ,
+        Some("notification"),
+        Some(saved.id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "marked": 1 })),
+    )
+    .await;
+    Ok(Json(InboxEntryDto::from(saved)))
 }
 
 /// `POST /notifications/read_all` — mark every unread notification read.
@@ -108,5 +119,17 @@ pub async fn mark_all_read(
         .filter(entity::notification::Column::ReadAt.is_null())
         .exec(&db)
         .await?;
+    if res.rows_affected > 0 {
+        crate::audit::record(
+            &db,
+            Some(user.user_id),
+            crate::audit::actions::NOTIFICATION_READ,
+            Some("notification"),
+            None,
+            Some(scope.tenant_id),
+            Some(serde_json::json!({ "marked": res.rows_affected })),
+        )
+        .await;
+    }
     Ok(Json(serde_json::json!({ "marked": res.rows_affected })))
 }

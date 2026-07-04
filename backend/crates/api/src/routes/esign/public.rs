@@ -46,6 +46,19 @@ async fn signer_for_token(
         .one(db)
         .await?
         .ok_or_else(|| ApiError::NotFound("envelope not found".into()))?;
+    // Workspace-configurable link validity: 0 (the default) means links live
+    // as long as the envelope; a positive window kills them N days after the
+    // envelope was sent (staff void + re-send to issue fresh ones).
+    let expiry_days =
+        crate::settings::get_i64(db, tenant_id, crate::settings::ESIGN_LINK_EXPIRY_DAYS).await;
+    if expiry_days > 0
+        && super::is_open(&envelope.status)
+        && Utc::now() - chrono::Duration::days(expiry_days) > envelope.created_at
+    {
+        return Err(ApiError::NotFound(
+            "this signing link has expired — contact the sender for a fresh one".into(),
+        ));
+    }
     Ok((signer, envelope))
 }
 
