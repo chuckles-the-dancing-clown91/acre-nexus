@@ -5,7 +5,7 @@
 // credential. The signer reviews the exact document text, types their name,
 // consents to sign electronically (ESIGN/UETA), and signs — or declines.
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { api, DEFAULT_TENANT, type PublicSignView } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
@@ -51,6 +51,18 @@ function SignPageInner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Opening the email is not "viewed" — the signer's first interaction with
+  // the page is. Best-effort and once per visit; the backend is idempotent.
+  const viewedSent = useRef(false);
+  const markViewed = useCallback(() => {
+    if (viewedSent.current || view?.signer.status !== "sent") return;
+    viewedSent.current = true;
+    api
+      .publicMarkViewed(token, tenant)
+      .then(setView)
+      .catch(() => {});
+  }, [token, tenant, view?.signer.status]);
 
   async function submitSignature() {
     setBusy(true);
@@ -169,7 +181,10 @@ function SignPageInner() {
               sha256:{view.body_hash.slice(0, 16)}…
             </span>
           </div>
-          <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap p-5 font-mono text-xs leading-relaxed">
+          <pre
+            onScroll={markViewed}
+            className="max-h-[28rem] overflow-auto whitespace-pre-wrap p-5 font-mono text-xs leading-relaxed"
+          >
             {view.document_body}
           </pre>
         </Card>
@@ -199,6 +214,7 @@ function SignPageInner() {
             </span>
             <input
               value={name}
+              onFocus={markViewed}
               onChange={(e) => setName(e.target.value)}
               placeholder={me.name}
               className="w-full max-w-md rounded-lg border border-line bg-surface px-3 py-2 font-semibold"
@@ -208,7 +224,10 @@ function SignPageInner() {
             <input
               type="checkbox"
               checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
+              onChange={(e) => {
+                markViewed();
+                setConsent(e.target.checked);
+              }}
               className="mt-1"
             />
             <span className="text-ink-2">
@@ -227,7 +246,10 @@ function SignPageInner() {
               {busy ? "Signing…" : "Sign agreement"}
             </button>
             <button
-              onClick={() => setDeclining(true)}
+              onClick={() => {
+                markViewed();
+                setDeclining(true);
+              }}
               disabled={busy}
               className="rounded-xl border border-line px-5 py-2.5 text-sm font-bold text-ink-2"
             >

@@ -4,6 +4,7 @@
 use super::dto::{actor_names, build, WorkflowResp};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
+use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use entity::prelude::{Property, WorkflowEvent};
@@ -14,19 +15,21 @@ use uuid::Uuid;
 
 /// `GET /properties/<id>/workflow` — current workflow state + history.
 ///
-/// Deliberately requires **no specific permission** beyond authentication:
-/// every member of the workspace can see where a property stands in its
-/// process and the steps it has been through (advancing still requires
-/// `property:write`).
+/// Gated by `property:read`, which **every staff system role holds** — so any
+/// member of the operation can see where a property stands and the steps it
+/// went through (advancing still requires `property:write`) — while
+/// renter-portal accounts, which hold no staff permissions, cannot read
+/// internal stage history, staff names, or deal notes.
 #[rocket_okapi::openapi(tag = "Workflow")]
 #[get("/properties/<id>/workflow")]
 pub async fn get_workflow(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
-    _user: AuthUser,
+    user: AuthUser,
     scope: TenantScope,
     id: &str,
 ) -> ApiResult<Json<WorkflowResp>> {
+    user.require(Permission::PropertyRead)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let property = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))

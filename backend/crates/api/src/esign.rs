@@ -26,8 +26,9 @@
 use crate::pdf;
 use crate::storage::{sha256_hex, ObjectStore};
 use chrono::Utc;
-use entity::prelude::{Document, EsignSigner, Lease, LeaseDocument, Property, Tenant};
-use rand::RngCore;
+use entity::prelude::{
+    Document, EsignEnvelope, EsignSigner, Lease, LeaseDocument, Property, Tenant,
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
 };
@@ -45,19 +46,17 @@ pub const SIGNED_PDF_FILENAME: &str = "signed-lease-agreement.pdf";
 // Tokens + links
 // ---------------------------------------------------------------------------
 
-/// Mint a signing-link token: 32 random bytes, hex — returned raw (for the
-/// link) plus its SHA-256 (the lookup form we persist).
+/// Mint a signing-link token — returned raw (for the link) plus its SHA-256
+/// (the lookup form we persist). Same primitives as API tokens.
 pub fn generate_token() -> (String, String) {
-    let mut buf = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut buf);
-    let raw: String = buf.iter().map(|b| format!("{b:02x}")).collect();
+    let raw = crate::auth::random_secret(32);
     let hash = hash_token(&raw);
     (raw, hash)
 }
 
 /// SHA-256 (hex) of a raw signing token.
 pub fn hash_token(raw: &str) -> String {
-    sha256_hex(raw.as_bytes())
+    crate::auth::hash_secret(raw)
 }
 
 /// Seal a raw token with AES-256-GCM under the integration-secrets key
@@ -81,10 +80,22 @@ pub fn unseal_token(ciphertext_b64: &str, nonce_b64: &str) -> anyhow::Result<Str
 /// The tenant slug rides along so the unauthenticated page can resolve the
 /// workspace (same contract as the public apply funnel).
 pub fn sign_url(tenant_slug: &str, raw_token: &str) -> String {
-    let base = std::env::var("PUBLIC_APP_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".into())
-        .trim_end_matches('/')
-        .to_string();
+    let base = match std::env::var("PUBLIC_APP_URL") {
+        Ok(v) => v.trim_end_matches('/').to_string(),
+        Err(_) => {
+            if matches!(
+                std::env::var("APP_ENV").ok().as_deref(),
+                Some("production") | Some("prod")
+            ) {
+                tracing::error!(
+                    "PUBLIC_APP_URL is not set — signing links will point at \
+                     localhost and be dead on arrival; set it to the frontend's \
+                     public base URL"
+                );
+            }
+            "http://localhost:3000".into()
+        }
+    };
     format!("{base}/sign/{raw_token}?tenant={tenant_slug}")
 }
 
@@ -222,15 +233,16 @@ pub fn all_signed(signers: &[entity::esign_signer::Model]) -> bool {
 }
 
 /// Finish a fully-signed envelope: mark the lease document signed, activate
-/// the lease (+ occupancy sync), store the signed PDF in the document
-/// service, advance the property's workflow toward `leased`, append the
-/// audit-trail event, and notify signers + staff. Returns the stored signed
-/// document's id.
+/// the lease (+ occupancy sync, listing close-out), store the signed PDF in
+/// the document service, advance the property's workflow toward `leased`,
+/// append the audit-trail event, and notify signers + staff. A storage
+/// failure never blocks completion: the PDF store degrades to a retryable
+/// background job (`esign_store_pdf`). Returns the updated envelope.
 pub async fn complete_envelope(
     db: &impl ConnectionTrait,
     envelope: &entity::esign_envelope::Model,
     signers: &[entity::esign_signer::Model],
-) -> anyhow::Result<Uuid> {
+) -> anyhow::Result<entity::esign_envelope::Model> {
     let now = Utc::now();
     let tenant_id = envelope.tenant_id;
 
@@ -239,6 +251,11 @@ pub async fn complete_envelope(
         .one(db)
         .await?
         .ok_or_else(|| anyhow::anyhow!("lease document vanished"))?;
+    // Backstop for the route-level guard: never clobber a signature captured
+    // outside this envelope (e.g. in person while the envelope was out).
+    if doc.status == "signed" {
+        anyhow::bail!("lease document was already signed outside this envelope");
+    }
     let lease = Lease::find_by_id(envelope.lease_id)
         .filter(entity::lease::Column::TenantId.eq(tenant_id))
         .one(db)
@@ -262,33 +279,47 @@ pub async fn complete_envelope(
     dm.signed_ip = Set(last_ip);
     dm.update(db).await?;
 
-    // 2. Signing activates the tenancy (same rule as in-person signing); the
-    //    advertised listing (if the lease came from one) closes out.
+    // 2. Signing activates the tenancy (shared with in-person signing).
     let property_id = lease.property_id;
-    let lease = if lease.status != "active" {
-        let mut lm: entity::lease::ActiveModel = lease.into();
-        lm.status = Set("active".into());
-        lm.updated_at = Set(now.into());
-        lm.update(db).await?
-    } else {
-        lease
-    };
-    crate::rentals_occupancy::sync_property_occupancy(db, property_id).await;
-    crate::listing_sync::close_on_lease_activation(db, tenant_id, &lease).await;
+    crate::rentals_occupancy::activate_lease_on_signing(db, tenant_id, lease).await?;
 
-    // 3. Store the signed rendition (body + signature certificate) as a PDF in
-    //    the document service, versioned like any other upload.
+    // 3. Store the signed rendition (body + signature certificate) as a PDF.
+    //    Storage trouble must not block a fully-signed envelope: degrade to a
+    //    retryable background job and complete without the PDF for now.
     let full_text = format!("{body}{}", signature_certificate(envelope, signers));
-    let pdf_bytes = pdf::text_to_pdf(&full_text);
-    let signed_doc_id = store_signed_pdf(db, tenant_id, envelope.lease_id, &pdf_bytes).await?;
+    let signed_doc_id = match store_signed_pdf(
+        db,
+        tenant_id,
+        envelope.lease_id,
+        &pdf::text_to_pdf(&full_text),
+    )
+    .await
+    {
+        Ok(id) => Some(id),
+        Err(e) => {
+            tracing::error!(
+                "signed-PDF store failed for envelope {} — queueing retry: {e}",
+                envelope.id
+            );
+            let _ = crate::scheduler::enqueue(
+                db,
+                tenant_id,
+                "esign_store_pdf",
+                json!({ "envelope_id": envelope.id }),
+                30,
+            )
+            .await;
+            None
+        }
+    };
 
     // 4. The envelope itself is done.
     let mut em: entity::esign_envelope::ActiveModel = envelope.clone().into();
     em.status = Set("completed".into());
     em.completed_at = Set(Some(now.into()));
-    em.signed_document_id = Set(Some(signed_doc_id));
+    em.signed_document_id = Set(signed_doc_id);
     em.updated_at = Set(now.into());
-    em.update(db).await?;
+    let envelope = em.update(db).await?;
 
     // 5. The property's process advances toward "leased" automatically, so the
     //    tracker reflects what actually happened.
@@ -346,7 +377,126 @@ pub async fn complete_envelope(
     )
     .await;
 
-    Ok(signed_doc_id)
+    Ok(envelope)
+}
+
+/// Retry a deferred signed-PDF store (the `esign_store_pdf` background job):
+/// re-render the rendition and attach it to the completed envelope. Idempotent
+/// — an envelope that already carries a signed document is a no-op.
+pub async fn retry_store_pdf(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    envelope_id: Uuid,
+) -> anyhow::Result<Option<Uuid>> {
+    let Some(envelope) = EsignEnvelope::find_by_id(envelope_id)
+        .filter(entity::esign_envelope::Column::TenantId.eq(tenant_id))
+        .one(db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    if envelope.signed_document_id.is_some() || envelope.status != "completed" {
+        return Ok(envelope.signed_document_id);
+    }
+    let doc = LeaseDocument::find_by_id(envelope.lease_document_id)
+        .filter(entity::lease_document::Column::TenantId.eq(tenant_id))
+        .one(db)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("lease document vanished"))?;
+    let signers = envelope_signers(db, tenant_id, envelope.id).await?;
+    let full_text = format!("{}{}", doc.body, signature_certificate(&envelope, &signers));
+    let id = store_signed_pdf(
+        db,
+        tenant_id,
+        envelope.lease_id,
+        &pdf::text_to_pdf(&full_text),
+    )
+    .await?;
+    let mut em: entity::esign_envelope::ActiveModel = envelope.into();
+    em.signed_document_id = Set(Some(id));
+    em.updated_at = Set(Utc::now().into());
+    em.update(db).await?;
+    // The trail shows the late store, so a completed-without-PDF envelope
+    // visibly resolves.
+    record_event(
+        db,
+        tenant_id,
+        envelope_id,
+        None,
+        "pdf_stored",
+        json!({ "signed_document_id": id, "deferred": true }),
+        None,
+        None,
+    )
+    .await;
+    Ok(Some(id))
+}
+
+/// Void every still-open envelope on `lease_document_id` — used when the
+/// document gets signed **in person** while an envelope is out, so the emailed
+/// links die instead of later overwriting the in-person signature record.
+/// Pending signers are told the request was cancelled.
+pub async fn void_open_envelopes_for_document(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    lease_document_id: Uuid,
+    reason: &str,
+) -> anyhow::Result<()> {
+    let open = EsignEnvelope::find()
+        .filter(entity::esign_envelope::Column::TenantId.eq(tenant_id))
+        .filter(entity::esign_envelope::Column::LeaseDocumentId.eq(lease_document_id))
+        .filter(entity::esign_envelope::Column::Status.is_in(["sent", "partially_signed"]))
+        .all(db)
+        .await?;
+    let now = Utc::now();
+    for envelope in open {
+        let id = envelope.id;
+        let title = envelope.title.clone();
+        let mut em: entity::esign_envelope::ActiveModel = envelope.into();
+        em.status = Set("voided".into());
+        em.voided_at = Set(Some(now.into()));
+        em.void_reason = Set(Some(reason.to_string()));
+        em.updated_at = Set(now.into());
+        em.update(db).await?;
+
+        record_event(
+            db,
+            tenant_id,
+            id,
+            None,
+            "voided",
+            json!({ "reason": reason }),
+            None,
+            None,
+        )
+        .await;
+        // Same domain event the staff void route writes — the platform audit
+        // log shows every envelope death, however it happened.
+        crate::audit::record(
+            db,
+            None,
+            crate::audit::actions::ESIGN_VOID,
+            Some("esign_envelope"),
+            Some(id.to_string()),
+            Some(tenant_id),
+            Some(json!({ "reason": reason, "trigger": "in_person_signing" })),
+        )
+        .await;
+        for s in envelope_signers(db, tenant_id, id).await? {
+            if s.status != "signed" {
+                notify_signer(
+                    db,
+                    tenant_id,
+                    &s,
+                    "esign_voided",
+                    "voided",
+                    json!({ "document_title": title, "signer": s.name }),
+                )
+                .await;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Insert the signed PDF into the document service (new version if one
@@ -375,7 +525,17 @@ async fn store_signed_pdf(
     let store = ObjectStore::from_env()?;
     store.put_bytes(&storage_key, bytes).await?;
 
+    // Records-retention policy: 0 (the default) keeps the signed lease
+    // forever; a configured window feeds the document service's expiry sweep.
+    let retention_days = crate::settings::get_i64(
+        db,
+        tenant_id,
+        crate::settings::ESIGN_SIGNED_DOC_RETENTION_DAYS,
+    )
+    .await;
     let now = Utc::now();
+    let retention_expires_at =
+        (retention_days > 0).then(|| (now + chrono::Duration::days(retention_days)).into());
     entity::document::ActiveModel {
         id: Set(id),
         tenant_id: Set(tenant_id),
@@ -389,13 +549,32 @@ async fn store_signed_pdf(
         previous_version_id: Set(previous_version_id),
         storage_key: Set(storage_key),
         status: Set("stored".into()),
-        retention_expires_at: Set(None),
+        retention_expires_at: Set(retention_expires_at),
         created_by: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
     .insert(db)
     .await?;
+
+    // The signed PDF entering the document service is a domain event like any
+    // staff upload (actor = None: the signing pipeline wrote it).
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::DOCUMENT_UPLOAD,
+        Some("document"),
+        Some(id.to_string()),
+        Some(tenant_id),
+        Some(json!({
+            "filename": SIGNED_PDF_FILENAME,
+            "lease_id": lease_id,
+            "version": version,
+            "source": "esign_completion",
+            "retention_days": retention_days,
+        })),
+    )
+    .await;
     Ok(id)
 }
 
@@ -442,7 +621,7 @@ async fn advance_workflow_on_lease_signed(
         tenant_id: Set(tenant_id),
         property_id: Set(property_id),
         strategy: Set(strategy_key),
-        from_stage: Set(from_stage),
+        from_stage: Set(from_stage.clone()),
         to_stage: Set("leased".into()),
         note: Set(Some(format!("Lease e-signed by {signed_by}"))),
         actor_user_id: Set(None),
@@ -451,6 +630,22 @@ async fn advance_workflow_on_lease_signed(
     if let Err(e) = event.insert(db).await {
         tracing::warn!("failed to record auto workflow event: {e}");
     }
+    // Mirror the manual advance route's domain event (actor = None: the
+    // signing pipeline moved it).
+    crate::audit::record(
+        db,
+        None,
+        crate::audit::actions::WORKFLOW_ADVANCE,
+        Some("property"),
+        Some(property_id.to_string()),
+        Some(tenant_id),
+        Some(json!({
+            "from": from_stage,
+            "to": "leased",
+            "trigger": "lease_signed",
+        })),
+    )
+    .await;
 }
 
 /// Load an envelope's signers, oldest first (stable display order).

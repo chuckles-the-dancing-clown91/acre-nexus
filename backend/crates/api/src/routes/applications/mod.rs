@@ -13,9 +13,37 @@ pub mod workflow;
 
 use crate::error::{ApiError, ApiResult};
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use uuid::Uuid;
+
+/// Enqueue one applicant-facing email about an application. The
+/// `(template, application, trigger)` triple is the notification engine's
+/// idempotency key, so re-running a transition (or a retried job) can't
+/// double-send.
+async fn enqueue_applicant_email(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    app: &entity::application::Model,
+    template: &str,
+    trigger: &str,
+) -> Result<Uuid, sea_orm::DbErr> {
+    crate::scheduler::enqueue(
+        db,
+        tenant_id,
+        "auto_email",
+        json!({
+            "template": template,
+            "to": app.email,
+            "owner_type": "application",
+            "owner_id": app.id,
+            "trigger": trigger,
+            "vars": { "applicant": app.applicant_name },
+        }),
+        0,
+    )
+    .await
+}
 
 /// Apply a validated status transition to an application: checks the
 /// [`crate::app_workflow`] state machine, updates `status`, records an immutable
@@ -76,38 +104,14 @@ pub(crate) async fn apply_transition(
     // a retried job) can't double-send.
     match to_status {
         "Approved" => {
-            let _ = crate::scheduler::enqueue(
-                db,
-                tenant_id,
-                "auto_email",
-                json!({
-                    "template": "application_approved",
-                    "to": saved.email,
-                    "owner_type": "application",
-                    "owner_id": saved.id,
-                    "trigger": "approved",
-                    "vars": { "applicant": saved.applicant_name },
-                }),
-                0,
-            )
-            .await;
+            let _ =
+                enqueue_applicant_email(db, tenant_id, &saved, "application_approved", "approved")
+                    .await;
         }
         "Declined" => {
-            let _ = crate::scheduler::enqueue(
-                db,
-                tenant_id,
-                "auto_email",
-                json!({
-                    "template": "application_declined",
-                    "to": saved.email,
-                    "owner_type": "application",
-                    "owner_id": saved.id,
-                    "trigger": "declined",
-                    "vars": { "applicant": saved.applicant_name },
-                }),
-                0,
-            )
-            .await;
+            let _ =
+                enqueue_applicant_email(db, tenant_id, &saved, "application_declined", "declined")
+                    .await;
         }
         _ => {}
     }
@@ -163,6 +167,15 @@ pub(crate) async fn intake(
         return Err(ApiError::BadRequest(format!(
             "invalid applicant email '{email}'"
         )));
+    }
+    // A listing reference must be real (and this tenant's) — a typo'd or
+    // cross-tenant id would silently detach the application from its home.
+    if let Some(listing_id) = input.listing_id {
+        entity::prelude::Listing::find_by_id(listing_id)
+            .filter(entity::listing::Column::TenantId.eq(tenant_id))
+            .one(db)
+            .await?
+            .ok_or_else(|| ApiError::BadRequest("listing not found".into()))?;
     }
 
     let app_id = Uuid::new_v4();
@@ -233,37 +246,17 @@ pub(crate) async fn intake(
     // screen.
     let job_id = if reused_from.is_some() {
         // Pre-approved: skip "received", go straight to the good news.
-        crate::scheduler::enqueue(
+        enqueue_applicant_email(
             db,
             tenant_id,
-            "auto_email",
-            json!({
-                "template": "application_approved",
-                "to": email,
-                "owner_type": "application",
-                "owner_id": app_id,
-                "trigger": "pre_approved",
-                "vars": { "applicant": name },
-            }),
-            0,
+            &saved,
+            "application_approved",
+            "pre_approved",
         )
         .await?
     } else {
-        let _ = crate::scheduler::enqueue(
-            db,
-            tenant_id,
-            "auto_email",
-            json!({
-                "template": "application_received",
-                "to": email,
-                "owner_type": "application",
-                "owner_id": app_id,
-                "trigger": "submitted",
-                "vars": { "applicant": name },
-            }),
-            0,
-        )
-        .await;
+        let _ = enqueue_applicant_email(db, tenant_id, &saved, "application_received", "submitted")
+            .await;
         crate::scheduler::enqueue(
             db,
             tenant_id,

@@ -723,6 +723,11 @@ export const api = {
       body: { reason },
       tenant,
     }),
+  publicMarkViewed: (token: string, tenant = DEFAULT_TENANT) =>
+    request<PublicSignView>(`/public/sign/${token}/viewed`, {
+      method: "POST",
+      tenant,
+    }),
 
   convertApplication: (applicationId: string, body: ConvertInput) =>
     request<Lease>(`/applications/${applicationId}/convert-to-lease`, {

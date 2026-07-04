@@ -15,7 +15,7 @@ use chrono::Utc;
 use entity::prelude::EsignEnvelope;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -43,13 +43,23 @@ pub async fn remind(
         )));
     }
 
-    // Reminder count so far → distinct idempotency trigger per round.
-    let round = super::envelope_events(&db, scope.tenant_id, eid)
-        .await?
-        .iter()
-        .filter(|e| e.event == "reminded")
-        .count()
-        + 1;
+    // Reminder round → distinct idempotency trigger per round. Each round
+    // records one "reminded" event per nudged signer, so the round is the
+    // highest round on file + 1 (not the event count).
+    let round = {
+        let stmt = sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            "SELECT COALESCE(MAX((detail->>'round')::bigint), 0) + 1 AS round \
+             FROM esign_event \
+             WHERE tenant_id = $1 AND envelope_id = $2 AND event = 'reminded'",
+            [scope.tenant_id.into(), eid.into()],
+        );
+        db.query_one(stmt)
+            .await?
+            .map(|r| r.try_get::<i64>("", "round"))
+            .transpose()?
+            .unwrap_or(1)
+    };
 
     let slug = esign::tenant_slug(&db, scope.tenant_id).await;
     let signers = esign::envelope_signers(&db, scope.tenant_id, eid).await?;

@@ -250,10 +250,14 @@ async fn resolve_signers(
             ]
         }
     };
-    if signers.is_empty() || signers.len() > 10 {
-        return Err(ApiError::BadRequest(
-            "an envelope needs between 1 and 10 signers".into(),
-        ));
+    let max_signers =
+        crate::settings::get_i64(db, lease.tenant_id, crate::settings::ESIGN_MAX_SIGNERS)
+            .await
+            .max(1) as usize;
+    if signers.is_empty() || signers.len() > max_signers {
+        return Err(ApiError::BadRequest(format!(
+            "an envelope needs between 1 and {max_signers} signers"
+        )));
     }
     Ok(signers)
 }

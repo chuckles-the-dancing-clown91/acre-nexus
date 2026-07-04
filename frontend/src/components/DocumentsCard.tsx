@@ -12,6 +12,7 @@ import { api, ApiError, type DocumentEntry } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card } from "@/components/ui";
 import { logError } from "@/lib/log";
+import { formatBytes } from "@/lib/utils";
 
 export function DocumentsCard({
   ownerType,
@@ -246,10 +247,4 @@ function expiryInfo(
   if (days <= 0) return { label: "expired", tone: "bad" };
   if (days <= 30) return { label: `expires in ${days}d`, tone: "warn" };
   return { label: `expires ${iso.slice(0, 10)}`, tone: "neutral" };
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }

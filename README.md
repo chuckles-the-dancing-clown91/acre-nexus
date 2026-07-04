@@ -17,8 +17,11 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   *and* enforced Postgres row-level security; per-tenant white-label domains,
   branding, and legal templates.
 - **IAM & RBAC** — JWT auth, fine-grained permissions, seeded system roles and
-  personas, field-level PII encryption (AES-256-GCM), and a full audit trail of
-  every state change.
+  personas, and field-level PII encryption (AES-256-GCM).
+- **Audit everywhere** — every HTTP request is access-logged, and every state
+  change (including background-job and pipeline mutations: screening verdicts,
+  lease activation, listing sync, signed-PDF stores) writes a domain audit
+  event with a stable action taxonomy — see [`docs/AUDIT.md`](docs/AUDIT.md).
 - **Pluggable modules** — each feature area (properties, rentals, leasing,
   maintenance, title, flips, integrations …) is a self-contained module a
   tenant can toggle from settings; adding one is "a file plus a registry line".
@@ -28,8 +31,21 @@ portfolio tooling that incumbent PM software treats as an afterthought.
 - **Property intelligence** — automated enrichment (geocoding, parcel, tax,
   valuation, schools, utilities) behind a provider interface with deterministic
   simulated sources and a live geocoder.
-- **Leasing funnel** — public listings site, applications, screening pipeline,
-  and an auditable application workflow.
+- **Leasing funnel** — end to end: public listings site, three application
+  doors (anonymous website, white-glove renter portal that auto-fills from the
+  tenant's profile, back office), a settings-driven screening pipeline
+  (credit floor / income multiple, optional auto-approve), one-click
+  application→lease conversion with auto-applied fees and a generated lease
+  document, and automatic listing/occupancy/workflow sync at every step.
+- **E-signature** — native envelope flow with tokenized signing links (email +
+  SMS), reminders that keep the original links working, an ESIGN/UETA audit
+  trail (typed signature, consent, IP, user agent, pinned body hash), signed
+  PDF stored in the document service, and in-person signing as a first-class
+  alternative — race-proof against simultaneous final signatures.
+- **Per-tenant settings** — a code-defined catalog of workspace knobs
+  (screening policy, signing-link expiry, signer caps, document retention and
+  titles, application reuse, auto-approve …) editable from the console, each
+  change audited.
 - **Integration substrate** — encrypted credential vault, typed outbound
   provider framework, signature-verified inbound webhooks, and S3-compatible
   document storage with signed URLs and versioning — all riding a durable
@@ -135,10 +151,13 @@ CI runs the same suite on every push and pull request.
 ## Roadmap
 
 Development is tracked in [GitHub issues](https://github.com/chuckles-the-dancing-clown91/acre-nexus/issues)
-against the [roadmap](docs/ROADMAP.md): hardening (T0), integration substrate
-(Phase 1, shipped), documents & e-signature (Phase 2, shipped), payments +
-accounting core, screening, resident portal, helpdesk, real data providers,
-and reporting/GA.
+against the [roadmap](docs/ROADMAP.md) (which carries the living **TODO**
+list): foundation + integration substrate (Phases 0–1, shipped), documents &
+e-signature with the full listing→application→screening→lease pipeline
+(Phase 2, shipped and hardened), tenant lifecycle / resident portal (partial —
+conversion and the white-glove portal shipped with Phase 2), then payments +
+accounting core, real screening providers, helpdesk, real data providers, and
+reporting/GA.
 
 ## Topics
 

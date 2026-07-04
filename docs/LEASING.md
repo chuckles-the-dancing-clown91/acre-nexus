@@ -49,7 +49,8 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    (`Available`/`New`/`Pending`/`Leased`) and public visibility from the
    console's Listings page. The pipeline retires listings automatically
    (`crate::listing_sync`) — `Pending` on conversion, `Leased` + unpublished
-   when the lease activates.
+   when the lease activates, and back to `Available` when the resident
+   declines the envelope.
 2. **Apply** — all three doors run the same `applications::intake`: persist
    (with `source`), audit, staff fan-out, the applicant's confirmation email,
    and the screening job. Portal applications are **white-glove**: the
@@ -63,10 +64,16 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    rest) through the IAM profile routes (`PUT /admin/users/<id>/profile`).
    Applications capture the attributes that drive the rest of the flow
    (`has_pet`/`pet_details`, `is_military`, vehicles).
-3. **Screen** — the screening job's completion writes `screening_status` /
-   `screened_at` onto the application. With the **`applications.auto_approve`
-   setting** on, a cleared check advances the application to `Approved` on the
-   spot (automated transition, `actor = None`); otherwise staff get an
+3. **Screen** — the screening job's completion evaluates the workspace's
+   **screening policy** and writes `screening_status` / `screened_at` onto the
+   application (plus an `application.screened` audit event). The policy is
+   settings-driven: `screening.min_credit_score` (0 = no floor) and
+   `screening.min_income_rent_ratio` (monthly income vs. the listing's rent,
+   0 = off) fail an application that trips them, with the reasons recorded on
+   the job and in the audit metadata; `screening.callback_delay_secs` paces
+   the simulated provider. With the **`applications.auto_approve` setting**
+   on, a cleared check advances the application to `Approved` on the spot
+   (automated transition, `actor = None`); otherwise staff get an
    "application screened" notification and decide.
 4. **Decide** — `POST /applications/<id>/advance` (or `PATCH`) through the
    validated state machine; approval and decline each email the applicant.
@@ -109,6 +116,26 @@ New ──▶ Screening ──▶ Approved ──▶ Leased          (main path)
 
 Every transition is stored in `application_event` (mirrors `workflow_event` for
 properties) and audited.
+
+## Workspace settings
+
+Everything tunable in this flow lives in the settings catalog
+([TENANCY.md](./TENANCY.md#system-settings-setting) → System settings), editable
+from the console's Settings page (`tenant:manage`) and audited as
+`setting.update`:
+
+| Key | Default | Controls |
+|-----|---------|----------|
+| `applications.auto_approve` | `false` | Auto-approve a cleared screening |
+| `applications.generate_document_on_convert` | `true` | Draft the lease agreement automatically on conversion (per-call override still wins) |
+| `application_reuse.enabled` / `.window_days` | `false` / `30` | Reusable applications (below) |
+| `screening.min_credit_score` | `0` (off) | Credit floor for screening to clear |
+| `screening.min_income_rent_ratio` | `0` (off) | Monthly income-to-rent multiple for screening to clear |
+| `screening.callback_delay_secs` | `6` | Simulated provider callback pace |
+| `esign.link_expiry_days` | `0` (never) | Signing links die N days after the envelope is sent |
+| `esign.max_signers` | `10` | Signer cap per envelope |
+| `esign.signed_doc_retention_days` | `0` (forever) | Retention stamped on the stored signed PDF |
+| `lease_documents.title` | `Residential Lease Agreement` | Title on generated leases + their envelopes |
 
 ## Reusable applications (configurable)
 
@@ -213,10 +240,15 @@ Console endpoints (mounted by `lease_builder`):
   the document returns to `draft`.
 
 Public (tokenized) endpoints, resolved via `X-Tenant`/`?tenant=` like the apply
-funnel: `GET /public/sign/<token>` (first open marks `viewed`),
-`POST /public/sign/<token>` (typed name + explicit ESIGN/UETA consent), and
-`POST /public/sign/<token>/decline`. The frontend serves the signing page at
-`/sign/<token>?tenant=<slug>` (`PUBLIC_APP_URL` builds the link).
+funnel: `GET /public/sign/<token>` (read-only — link scanners and previews
+don't pollute the trail), `POST /public/sign/<token>/viewed` (the page calls
+it on the signer's **first interaction**, marking `viewed` with IP + user
+agent), `POST /public/sign/<token>` (typed name + explicit ESIGN/UETA
+consent), and `POST /public/sign/<token>/decline` — which also puts a listing
+parked at `Pending` back to `Available`, since the deal died from the
+resident's side (a staff **void** leaves the listing alone). The frontend
+serves the signing page at `/sign/<token>?tenant=<slug>` (`PUBLIC_APP_URL`
+builds the link).
 
 Every act lands in `esign_event` — the **ESIGN/UETA audit trail** — with signer,
 IP, and user agent. When the last signer signs, completion is automatic: the
@@ -226,7 +258,13 @@ certificate) is rendered by the in-tree text→PDF writer (`api/src/pdf.rs`) and
 stored in the document service as `signed-lease-agreement.pdf` on the lease,
 the property's workflow auto-advances to `leased` (when its strategy has that
 stage and it hasn't reached it), and signers + staff are notified
-(`esign_completed` / `esign_completed_staff`).
+(`esign_completed` / `esign_completed_staff`). Two racing final signatures
+can't wedge the envelope — signing locks the envelope row (`SELECT … FOR
+UPDATE`) so completions serialize — and if the PDF store hiccups, completion
+still goes through and the store is retried by a deferred `esign_store_pdf`
+job. Signing **in person** voids any envelope still out on the document (and
+a live envelope refuses to sign a document already signed outside it), so an
+emailed link can never overwrite an in-person signature record.
 
 Schema (migration `m20240101_000020`): `esign_envelope`, `esign_signer`,
 `esign_event` — tenant-scoped with enforced RLS.

@@ -154,7 +154,7 @@ pub struct UpdateUserReq {
 
 // ---- Profiles ----
 
-#[derive(Serialize, schemars::JsonSchema)]
+#[derive(Default, Serialize, schemars::JsonSchema)]
 pub struct ProfileDto {
     pub legal_first_name: Option<String>,
     pub legal_middle_name: Option<String>,

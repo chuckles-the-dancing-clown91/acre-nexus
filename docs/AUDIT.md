@@ -56,7 +56,10 @@ below):
 |------|---------|
 | Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.switch_workspace` |
 | Properties | `property.create`, `property.update`, `property.onboard`, `property.enrich`, `property.enrichment_run`, `llc.create` |
-| Leasing | `application.submit` (public), `application.advance`, `application.convert`, `application.reuse` |
+| Leasing | `application.submit` (public), `application.screened` (pipeline), `application.advance`, `application.convert`, `application.reuse`, `listing.create`, `listing.update`, `listing.sync` (pipeline), `lease.activate` (pipeline) |
+| E-signature | `esign.send`, `esign.view`, `esign.sign`, `esign.decline`, `esign.remind`, `esign.complete`, `esign.void` (staff **and** the in-person-signing auto-void) |
+| Documents | `document.upload` (incl. the pipeline-stored signed PDF), `document.stored` (tokenized blob PUT finalizing the row), `document.download`, `document.delete` |
+| Notifications | `notification.send`, `notification.broadcast`, `notification.test`, `notification.read`, provider CRUD, template edits, `push.subscribe`/`push.unsubscribe` |
 | Settings | `theme.update`, `module.toggle`, `setting.update` |
 | Vendor tokens | `apitoken.create`, `apitoken.revoke` |
 | IAM | `user.create`, `user.update`, `role.create`, `role.update`, `role.delete`, `role.assign`, `role.revoke`, `membership.add`, `membership.remove`, `profile.write`, `pii.reveal` |
@@ -77,9 +80,17 @@ actor, behind them. `property.enrich` (recorded when `POST
 /properties/<id>/enrich` **enqueues** the job) only proves someone asked; it's
 `property.enrichment_run` — recorded once per source in the job handler's
 `record_run()`, actor `None` — that proves property data actually changed (or
-didn't, and why: `metadata.status` is `succeeded` or `failed`). The screening/
-auto-email jobs make no database mutations, so they have nothing to audit
-beyond the request-level trail.
+didn't, and why: `metadata.status` is `succeeded` or `failed`). The same
+actor-`None` discipline covers the whole leasing pipeline's automatic
+mutations: `application.screened` when a background check lands its verdict,
+`lease.activate` when signing flips the tenancy on, `listing.sync` when the
+pipeline moves a listing (conversion → `Pending`, activation → `Leased`,
+declined envelope → `Available`), `property.update` with
+`trigger: "occupancy_sync"` when reconciliation changes occupancy or
+availability status, `workflow.advance` with `trigger: "lease_signed"`,
+`esign.void` with `trigger: "in_person_signing"`, and `document.upload` with
+`source: "esign_completion"` when the signed PDF is stored (immediately or by
+the deferred `esign_store_pdf` retry job).
 
 ---
 

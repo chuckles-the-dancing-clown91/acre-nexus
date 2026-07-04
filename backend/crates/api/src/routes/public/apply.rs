@@ -10,10 +10,8 @@ use crate::error::ApiResult;
 use crate::routes::applications::{intake, IntakeInput};
 use crate::state::AppState;
 use crate::tenancy::PublicTenant;
-use entity::prelude::Application;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
 /// `POST /public/applications` — submit a rental application.
 ///
@@ -35,19 +33,8 @@ pub async fn apply(
     // *approved* application, carry that screening result forward — the new
     // application is pre-approved for this listing and skips re-screening.
     let reused_from =
-        match crate::routes::applications::reuse::reuse_cutoff(&db, tenant.tenant_id).await {
-            Some(cutoff) => {
-                Application::find()
-                    .filter(entity::application::Column::TenantId.eq(tenant.tenant_id))
-                    .filter(entity::application::Column::Email.eq(email.clone()))
-                    .filter(entity::application::Column::Status.eq("Approved"))
-                    .filter(entity::application::Column::CreatedAt.gte(cutoff))
-                    .order_by_desc(entity::application::Column::CreatedAt)
-                    .one(&db)
-                    .await?
-            }
-            None => None,
-        };
+        crate::routes::applications::reuse::latest_reusable_approved(&db, tenant.tenant_id, &email)
+            .await?;
 
     let (saved, job_id) = intake(
         &db,

@@ -19,6 +19,43 @@ pub async fn sync_property_occupancy(db: &impl ConnectionTrait, property_id: Uui
     }
 }
 
+/// The one rule both signing paths (e-signature completion and in-person)
+/// share: signing **activates the tenancy** — the lease flips to `active`,
+/// occupancy re-syncs, and the advertised listing (if the lease came from one)
+/// closes out. Returns the up-to-date lease.
+pub async fn activate_lease_on_signing(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    lease: entity::lease::Model,
+) -> Result<entity::lease::Model, sea_orm::DbErr> {
+    let property_id = lease.property_id;
+    let lease = if lease.status != "active" {
+        let from = lease.status.clone();
+        let mut lm: entity::lease::ActiveModel = lease.into();
+        lm.status = Set("active".into());
+        lm.updated_at = Set(chrono::Utc::now().into());
+        let lease = lm.update(db).await?;
+        // The activation is its own domain event (actor = None: signing did
+        // it), on top of the esign.complete / lease_document.sign umbrella.
+        crate::audit::record(
+            db,
+            None,
+            crate::audit::actions::LEASE_ACTIVATE,
+            Some("lease"),
+            Some(lease.id.to_string()),
+            Some(tenant_id),
+            Some(serde_json::json!({ "from": from, "trigger": "document_signed" })),
+        )
+        .await;
+        lease
+    } else {
+        lease
+    };
+    sync_property_occupancy(db, property_id).await;
+    crate::listing_sync::close_on_lease_activation(db, tenant_id, &lease).await;
+    Ok(lease)
+}
+
 async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), sea_orm::DbErr> {
     let leases = Lease::find()
         .filter(entity::lease::Column::PropertyId.eq(property_id))
@@ -33,6 +70,7 @@ async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), se
         .filter(entity::unit::Column::PropertyId.eq(property_id))
         .all(db)
         .await?;
+    let mut units_flipped = 0usize;
     for u in units {
         let should_be_occupied = occupied_unit_ids.contains(&u.id);
         let next = if should_be_occupied {
@@ -47,6 +85,7 @@ async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), se
             let mut am: entity::unit::ActiveModel = u.into();
             am.status = Set(next.into());
             am.update(db).await?;
+            units_flipped += 1;
         }
     }
 
@@ -70,12 +109,32 @@ async fn try_sync(db: &impl ConnectionTrait, property_id: Uuid) -> Result<(), se
             None
         };
         if p.occupied_units != occupied || next_status.is_some() {
+            let tenant_id = p.tenant_id;
+            let from_status = p.status.clone();
+            let from_occupied = p.occupied_units;
             let mut am: entity::property::ActiveModel = p.into();
             am.occupied_units = Set(occupied);
             if let Some(status) = next_status {
                 am.status = Set(status.into());
             }
             am.update(db).await?;
+            // Occupancy changing hands is a domain event — one record per
+            // reconciliation that actually changed something, never per tick.
+            crate::audit::record(
+                db,
+                None,
+                crate::audit::actions::PROPERTY_UPDATE,
+                Some("property"),
+                Some(property_id.to_string()),
+                Some(tenant_id),
+                Some(serde_json::json!({
+                    "occupied_units": { "from": from_occupied, "to": occupied },
+                    "status": next_status.map(|s| serde_json::json!({ "from": from_status, "to": s })),
+                    "units_flipped": units_flipped,
+                    "trigger": "occupancy_sync",
+                })),
+            )
+            .await;
         }
     }
     Ok(())

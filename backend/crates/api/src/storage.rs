@@ -333,9 +333,11 @@ impl S3Store {
     /// Store an object by executing a presigned `PUT` server-side.
     pub async fn put_bytes(&self, key: &str, bytes: &[u8]) -> anyhow::Result<()> {
         let signed = self.presign("PUT", key, 60, Utc::now())?;
-        let client = crate::providers::client::build_http_client()
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let resp = client.put(&signed.url).body(bytes.to_vec()).send().await?;
+        let resp = http_client()?
+            .put(&signed.url)
+            .body(bytes.to_vec())
+            .send()
+            .await?;
         if !resp.status().is_success() {
             anyhow::bail!("s3 put failed: HTTP {}", resp.status());
         }
@@ -345,15 +347,25 @@ impl S3Store {
     /// Delete an object by executing a presigned `DELETE` server-side.
     pub async fn delete(&self, key: &str) -> anyhow::Result<()> {
         let signed = self.presign("DELETE", key, 60, Utc::now())?;
-        let client = crate::providers::client::build_http_client()
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let resp = client.delete(&signed.url).send().await?;
+        let resp = http_client()?.delete(&signed.url).send().await?;
         // 204 on delete, 404 treated as already-gone.
         if !resp.status().is_success() && resp.status().as_u16() != 404 {
             anyhow::bail!("s3 delete failed: HTTP {}", resp.status());
         }
         Ok(())
     }
+}
+
+/// One shared HTTP client for the server-side S3 calls — keeps a connection
+/// pool alive instead of building a fresh client per PUT/DELETE.
+fn http_client() -> anyhow::Result<&'static reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(c) = CLIENT.get() {
+        return Ok(c);
+    }
+    let built = crate::providers::client::build_http_client()
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    Ok(CLIENT.get_or_init(|| built))
 }
 
 fn hmac_raw(key: &[u8], data: &[u8]) -> Vec<u8> {

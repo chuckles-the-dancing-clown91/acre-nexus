@@ -24,8 +24,12 @@ export default function MyProfilePage() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // Form state mirrors ProfileInput (full-replace semantics, like the IAM form).
+  // Form state mirrors ProfileInput (the backend merges: only fields present
+  // in the payload change). Income is kept as the raw string the user typed
+  // and validated on save, so "52,000" or a stray letter can't silently
+  // corrupt the stored amount.
   const [form, setForm] = useState<ProfileInput>({});
+  const [income, setIncome] = useState("");
   const [ssn, setSsn] = useState("");
   const [govId, setGovId] = useState("");
 
@@ -37,10 +41,13 @@ export default function MyProfilePage() {
         const p = v.profile;
         setForm({
           legal_first_name: p.legal_first_name ?? undefined,
+          legal_middle_name: p.legal_middle_name ?? undefined,
           legal_last_name: p.legal_last_name ?? undefined,
           preferred_name: p.preferred_name ?? undefined,
+          date_of_birth: p.date_of_birth ?? undefined,
           phone: p.phone ?? undefined,
           address_line1: p.address_line1 ?? undefined,
+          address_line2: p.address_line2 ?? undefined,
           city: p.city ?? undefined,
           region: p.region ?? undefined,
           postal_code: p.postal_code ?? undefined,
@@ -49,8 +56,12 @@ export default function MyProfilePage() {
           has_pet: p.has_pet,
           pet_details: p.pet_details ?? undefined,
           is_military: p.is_military,
-          annual_income_cents: p.annual_income_cents ?? undefined,
         });
+        setIncome(
+          p.annual_income_cents != null
+            ? String(p.annual_income_cents / 100)
+            : ""
+        );
         setError(null);
       })
       .catch((e) => setError(e.message));
@@ -67,6 +78,15 @@ export default function MyProfilePage() {
     setSaved(false);
     try {
       const body: ProfileInput = { ...form };
+      const rawIncome = income.replace(/[$,\s]/g, "");
+      if (rawIncome) {
+        if (!/^\d+(\.\d{1,2})?$/.test(rawIncome)) {
+          setError("Annual income must be a number, e.g. 52000 or 52,000.50");
+          setBusy(false);
+          return;
+        }
+        body.annual_income_cents = Math.round(parseFloat(rawIncome) * 100);
+      }
       if (ssn.trim()) body.ssn = ssn.trim();
       if (govId.trim()) body.gov_id_number = govId.trim();
       const v = await api.updateMyProfile(body);
@@ -136,10 +156,31 @@ export default function MyProfilePage() {
                   />
                 </label>
                 <label className="text-sm">
+                  <span className="mb-1 block text-ink-3">
+                    Legal middle name
+                  </span>
+                  <input
+                    value={form.legal_middle_name ?? ""}
+                    onChange={(e) => set("legal_middle_name", e.target.value)}
+                    className={field}
+                  />
+                </label>
+                <label className="text-sm">
                   <span className="mb-1 block text-ink-3">Legal last name</span>
                   <input
                     value={form.legal_last_name ?? ""}
                     onChange={(e) => set("legal_last_name", e.target.value)}
+                    className={field}
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-ink-3">Date of birth</span>
+                  <input
+                    type="date"
+                    value={form.date_of_birth ?? ""}
+                    onChange={(e) =>
+                      set("date_of_birth", e.target.value || undefined)
+                    }
                     className={field}
                   />
                 </label>
@@ -168,6 +209,16 @@ export default function MyProfilePage() {
                     className={field}
                   />
                 </label>
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block text-ink-3">
+                    Apt / suite (optional)
+                  </span>
+                  <input
+                    value={form.address_line2 ?? ""}
+                    onChange={(e) => set("address_line2", e.target.value)}
+                    className={field}
+                  />
+                </label>
                 <label className="text-sm">
                   <span className="mb-1 block text-ink-3">City</span>
                   <input
@@ -184,6 +235,14 @@ export default function MyProfilePage() {
                     className={field}
                   />
                 </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-ink-3">ZIP / postal</span>
+                  <input
+                    value={form.postal_code ?? ""}
+                    onChange={(e) => set("postal_code", e.target.value)}
+                    className={field}
+                  />
+                </label>
               </div>
             </Card>
 
@@ -197,19 +256,9 @@ export default function MyProfilePage() {
                     Annual income (USD)
                   </span>
                   <input
-                    value={
-                      form.annual_income_cents != null
-                        ? String(form.annual_income_cents / 100)
-                        : ""
-                    }
-                    onChange={(e) =>
-                      set(
-                        "annual_income_cents",
-                        e.target.value
-                          ? Math.round(parseFloat(e.target.value) * 100)
-                          : undefined
-                      )
-                    }
+                    value={income}
+                    onChange={(e) => setIncome(e.target.value)}
+                    placeholder="52,000"
                     inputMode="decimal"
                     className={field}
                   />

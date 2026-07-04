@@ -67,67 +67,70 @@ export default function MyApplicationsPage() {
         )}
 
         <div className="space-y-4">
-          {apps?.map((a) => (
-            <Card key={a.id} className="p-5">
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <span className="font-semibold">
-                  Application from {a.created_at.slice(0, 10)}
-                </span>
-                {a.screening_status && (
-                  <Badge
-                    tone={a.screening_status === "cleared" ? "good" : "bad"}
-                  >
-                    screening {a.screening_status}
-                  </Badge>
-                )}
-                <Badge tone={statusTone(a.status)}>{a.status}</Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {PIPELINE.map((stage, i) => {
-                  const stageIdx = PIPELINE.indexOf(a.status);
-                  const reached =
-                    a.status === stage || (stageIdx >= 0 && i <= stageIdx);
-                  const offRamp =
-                    a.status === "Declined" || a.status === "Withdrawn";
-                  return (
-                    <div key={stage} className="flex items-center gap-2">
-                      <span
-                        className={
-                          "flex h-6 items-center rounded-full px-2.5 text-xs font-semibold " +
-                          (a.status === stage
-                            ? "bg-accent text-on-accent"
-                            : reached && !offRamp
-                              ? "bg-good-soft text-good"
-                              : "bg-surface-2 text-ink-3")
-                        }
-                      >
-                        {stage}
-                      </span>
-                      {i < PIPELINE.length - 1 && (
-                        <span className="h-px w-4 bg-line" />
-                      )}
-                    </div>
-                  );
-                })}
-                {(a.status === "Declined" || a.status === "Withdrawn") && (
-                  <Badge tone={a.status === "Declined" ? "bad" : "neutral"}>
-                    {a.status}
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-3 text-sm text-ink-3">
-                {a.status === "Screening" &&
-                  "Background screening is in progress — we'll email you as soon as there's a decision."}
-                {a.status === "Approved" &&
-                  "Approved! The leasing team will reach out with your lease to sign electronically."}
-                {a.status === "Leased" &&
-                  "Your lease has been created — check your email for the signing link."}
-                {a.status === "Declined" &&
-                  "We couldn't move forward with this application."}
-                {a.status === "Withdrawn" && "This application was withdrawn."}
-              </p>
-            </Card>
-          ))}
+          {apps?.map((a) => {
+            const stageIdx = PIPELINE.indexOf(a.status);
+            return (
+              <Card key={a.id} className="p-5">
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  <span className="font-semibold">
+                    Application from {a.created_at.slice(0, 10)}
+                  </span>
+                  {a.screening_status && (
+                    <Badge
+                      tone={a.screening_status === "cleared" ? "good" : "bad"}
+                    >
+                      screening {a.screening_status}
+                    </Badge>
+                  )}
+                  <Badge tone={statusTone(a.status)}>{a.status}</Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PIPELINE.map((stage, i) => {
+                    const reached =
+                      a.status === stage || (stageIdx >= 0 && i <= stageIdx);
+                    const offRamp =
+                      a.status === "Declined" || a.status === "Withdrawn";
+                    return (
+                      <div key={stage} className="flex items-center gap-2">
+                        <span
+                          className={
+                            "flex h-6 items-center rounded-full px-2.5 text-xs font-semibold " +
+                            (a.status === stage
+                              ? "bg-accent text-on-accent"
+                              : reached && !offRamp
+                                ? "bg-good-soft text-good"
+                                : "bg-surface-2 text-ink-3")
+                          }
+                        >
+                          {stage}
+                        </span>
+                        {i < PIPELINE.length - 1 && (
+                          <span className="h-px w-4 bg-line" />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(a.status === "Declined" || a.status === "Withdrawn") && (
+                    <Badge tone={a.status === "Declined" ? "bad" : "neutral"}>
+                      {a.status}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-3 text-sm text-ink-3">
+                  {a.status === "Screening" &&
+                    "Background screening is in progress — we'll email you as soon as there's a decision."}
+                  {a.status === "Approved" &&
+                    "Approved! The leasing team will reach out with your lease to sign electronically."}
+                  {a.status === "Leased" &&
+                    "Your lease has been created — check your email for the signing link."}
+                  {a.status === "Declined" &&
+                    "We couldn't move forward with this application."}
+                  {a.status === "Withdrawn" &&
+                    "This application was withdrawn."}
+                </p>
+              </Card>
+            );
+          })}
         </div>
       </main>
     </>

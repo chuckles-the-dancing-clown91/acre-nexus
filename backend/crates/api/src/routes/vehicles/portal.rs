@@ -23,9 +23,10 @@ pub async fn my_vehicles(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
-    _scope: TenantScope,
+    scope: TenantScope,
 ) -> ApiResult<Json<Vec<VehicleDto>>> {
-    let rows = crate::routes::iam::self_profile::own_vehicles(&db, user.user_id).await?;
+    let rows =
+        crate::routes::iam::self_profile::own_vehicles(&db, scope.tenant_id, user.user_id).await?;
     Ok(Json(rows.into_iter().map(VehicleDto::from).collect()))
 }
 
@@ -88,6 +89,7 @@ pub async fn delete_my_vehicle(
 ) -> ApiResult<Json<serde_json::Value>> {
     let vid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
     let v = Vehicle::find_by_id(vid)
+        .filter(entity::vehicle::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::vehicle::Column::UserId.eq(user.user_id))
         .one(&db)
         .await?
