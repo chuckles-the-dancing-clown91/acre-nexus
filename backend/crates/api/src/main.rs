@@ -25,6 +25,8 @@ mod accounting;
 mod app_workflow;
 mod audit;
 mod auth;
+mod bankfeed;
+mod billing;
 mod config;
 mod cors;
 mod db;
@@ -32,12 +34,15 @@ mod dto;
 mod enrichment;
 mod error;
 mod esign;
+mod finance;
 mod guards;
 mod leasedoc;
 mod listing_sync;
 mod modules;
 mod notify;
 mod openapi;
+mod payments;
+mod payouts;
 mod pdf;
 mod pii;
 mod providers;
@@ -101,8 +106,10 @@ async fn rocket() -> _ {
         seed::run(&db).await.expect("seed failed");
     }
 
-    // Spawn the Tokio background scheduler.
+    // Spawn the Tokio background scheduler, and make sure every tenant has
+    // its recurring billing cycle scheduled (idempotent).
     scheduler::spawn(db.clone());
+    billing::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
 

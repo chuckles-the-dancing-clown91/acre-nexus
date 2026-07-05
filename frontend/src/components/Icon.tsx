@@ -20,6 +20,9 @@ export const ICONS: Record<string, string> = {
   shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
   key: "M21 2l-2 2m-7.6 7.6a5 5 0 11-7 7 5 5 0 017-7zm0 0L15 8l3 3 3-3-3-3",
   bell: "M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",
+  card: "M2 6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM2 10h20M6 15h4",
+  ledger: "M4 3h13a3 3 0 013 3v15H7a3 3 0 01-3-3V3zM4 17h16M8 7h8M8 11h5",
+  bank: "M3 21h18M4 10h16M12 3l9 7H3l9-7zM6 10v11M10 10v11M14 10v11M18 10v11",
 };
 
 export function Icon({

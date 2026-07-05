@@ -87,6 +87,17 @@ pattern the remaining roles plug into:
   delivery providers (Resend, SendGrid, Postmark, Twilio, Slack, Discord) from
   the console, with simulated senders as the dev/CI default. See
   `docs/NOTIFICATIONS.md`.
+- **Payments + accounting core (Phase 3)** — a per-LLC double-entry general
+  ledger with a seeded chart of accounts, one validated posting path
+  (balanced by construction; trust no-commingling enforced), and reports
+  (trial balance / income statement / trust reconciliation). Rent collection
+  rides Stripe behind the provider framework (sandbox-first) with tokenized
+  saved methods, autopay, webhook-driven settlement, receipts, and a
+  settings-driven late-fee engine on a recurring per-tenant billing cycle;
+  Plaid bank feeds auto-match deposits for reconciliation; owner payouts
+  compute from the ledger and file generated statements; and
+  `GET /finance/series` powers 12-month dashboard trends. Renters pay from
+  `/account/payments`. See `docs/PAYMENTS.md`.
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

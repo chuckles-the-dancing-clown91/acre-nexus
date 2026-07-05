@@ -64,6 +64,9 @@ pub async fn create(
         masked_number: Set(masked),
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
+        provider: Set(None),
+        external_id: Set(None),
+        last_synced_at: Set(None),
     }
     .insert(&db)
     .await?;

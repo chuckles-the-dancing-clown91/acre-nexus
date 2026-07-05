@@ -23,6 +23,11 @@ pub struct Model {
     /// `active` | `closed` | `pending`.
     pub status: String,
     pub created_at: DateTimeWithTimeZone,
+    /// `plaid` | `simulated` once linked for bank feeds (Phase 3).
+    pub provider: Option<String>,
+    /// Provider account id the feed syncs by.
+    pub external_id: Option<String>,
+    pub last_synced_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

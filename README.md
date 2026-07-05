@@ -42,6 +42,24 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   trail (typed signature, consent, IP, user agent, pinned body hash), signed
   PDF stored in the document service, and in-person signing as a first-class
   alternative — race-proof against simultaneous final signatures.
+- **Accounting core** — a double-entry general ledger with a chart of
+  accounts per LLC, one validated posting path (every transaction balances,
+  so trial balances sum to zero), trust/escrow accounting with the
+  no-commingling invariant enforced at posting time, and trial balance /
+  income statement / trust reconciliation reports.
+- **Payments** — rent, deposits, and fees collected by card/ACH through
+  Stripe (sandbox-first; tokenized saved methods, never PANs) with autopay,
+  webhook-driven settlement, automatic receipts, and a settings-driven
+  late-fee engine; a recurring billing cycle raises receivables and keeps
+  the books current.
+- **Bank feeds & payouts** — Plaid-linked accounts sync transactions and
+  auto-match deposits against settled payments (manual match/ignore for the
+  rest); owner payouts compute from the ledger (rent − expenses − management
+  fee), execute as ACH, and file a generated owner statement.
+- **Financial dashboards** — 12-month trends (rent collected, occupancy,
+  delinquency, NOI, portfolio value) from live ledger rollups + monthly
+  snapshots, charted with a dependency-free SVG component; residents get a
+  full pay-rent portal (balance, one-click pay, methods, autopay, receipts).
 - **Per-tenant settings** — a code-defined catalog of workspace knobs
   (screening policy, signing-link expiry, signer caps, document retention and
   titles, application reuse, auto-approve …) editable from the console, each
@@ -142,6 +160,7 @@ CI runs the same suite on every push and pull request.
 | [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md) | Email/SMS/push/chat delivery, providers, in-app inbox |
 | [`docs/PROPERTY_DATA.md`](docs/PROPERTY_DATA.md) | Property intelligence & enrichment |
 | [`docs/RENTALS.md`](docs/RENTALS.md) | Units, leases, ledger, maintenance, title |
+| [`docs/PAYMENTS.md`](docs/PAYMENTS.md) | Ledger, payments, late fees, bank feeds, payouts, dashboards |
 | [`docs/LEASING.md`](docs/LEASING.md) | Listings, applications, screening |
 | [`docs/INVESTING.md`](docs/INVESTING.md) | Entities, financing, workflows |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Audit trail & logging |
@@ -154,9 +173,11 @@ Development is tracked in [GitHub issues](https://github.com/chuckles-the-dancin
 against the [roadmap](docs/ROADMAP.md) (which carries the living **TODO**
 list): foundation + integration substrate (Phases 0–1, shipped), documents &
 e-signature with the full listing→application→screening→lease pipeline
-(Phase 2, shipped and hardened), tenant lifecycle / resident portal (partial —
-conversion and the white-glove portal shipped with Phase 2), then payments +
-accounting core, real screening providers, helpdesk, real data providers, and
+(Phase 2, shipped and hardened), payments + accounting core + financial
+dashboards (Phase 3, shipped: double-entry ledger, Stripe/Plaid sandbox,
+autopay, late fees, payouts, trends), tenant lifecycle / resident portal
+(partial — conversion, the white-glove portal, and rent payment shipped),
+then real screening providers, helpdesk, real data providers, and
 reporting/GA.
 
 ## Topics

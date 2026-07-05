@@ -147,6 +147,21 @@ contractors (`/tickets`, `/properties/{id}/tickets`, `/tickets/{id}`,
 and liens (`/properties/{id}/ownership`, `/properties/{id}/liens`). Full design:
 **`docs/RENTALS.md`**.
 
+**Accounting & payments** (the `accounting` module) add the money layer:
+the double-entry ledger (`/accounting/accounts`, `/accounting/transactions`,
+`/accounting/trial-balance`, `/accounting/income-statement`,
+`/accounting/trust-reconciliation` — `ledger:read` / `ledger:manage`);
+back-office payment visibility (`/payments`, `/leases/{id}/payment-methods` —
+`payment:read`); the renter portal payment surface (`/my/lease`,
+`/my/payments`, `/my/payment-methods`, `/my/autopay` — self-scoped, no staff
+permission); bank feeds + reconciliation (`/bank-accounts`,
+`/bank-accounts/{id}/link|sync|transactions`,
+`/bank-transactions/{id}/match|ignore` — `payment:manage`); owner payouts
+(`/payouts`, `/payouts/compute`, `/payouts/{id}/execute` — `payout:manage`);
+and the dashboard series (`/finance/series?months=N`). Stripe/Plaid webhooks
+arrive on the shared `POST /webhooks/{provider}` ingestion endpoint. Full
+design: **`docs/PAYMENTS.md`**.
+
 **Property intelligence** (the `property_intel` module) enriches each property
 with parcel/county records, tax history, an automated valuation (AVM) + rent
 estimate, schools, and utilities — fetched and validated by background workers on

@@ -4,4 +4,5 @@
 
 pub mod create;
 pub mod dto;
+pub mod feed;
 pub mod list;

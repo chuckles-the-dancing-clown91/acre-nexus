@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, actingTenant } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useFinanceSeries } from "@/lib/queries";
+import { bpsLabel, compactUsd } from "@/lib/chart";
 import type { PortfolioSummary, Property } from "@/lib/types";
 import { Badge, Card, StatTile, statusTone } from "@/components/ui";
+import { TrendChart } from "@/components/TrendChart";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -63,6 +66,8 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {!needsTenant && <Trends />}
+
       <Card className="overflow-hidden">
         <div className="border-b border-line px-5 py-4 font-display text-lg font-bold">
           Properties
@@ -96,6 +101,54 @@ export default function DashboardPage() {
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+/** Twelve months of financial trends, from ledger + snapshot history. */
+function Trends() {
+  const { can } = useAuth();
+  const { data: series } = useFinanceSeries(12, {
+    enabled: can("ledger:read"),
+  });
+  if (!can("ledger:read") || !series || series.months.length === 0) return null;
+  return (
+    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+      <TrendChart
+        title="Rent collected"
+        months={series.months}
+        values={series.rent_collected_cents}
+        kind="bar"
+        format={compactUsd}
+      />
+      <TrendChart
+        title="Occupancy"
+        months={series.months}
+        values={series.occupancy_bps}
+        format={bpsLabel}
+        color="var(--good)"
+      />
+      <TrendChart
+        title="Portfolio value"
+        months={series.months}
+        values={series.portfolio_value_cents}
+        format={compactUsd}
+      />
+      <TrendChart
+        title="NOI"
+        months={series.months}
+        values={series.noi_cents}
+        kind="bar"
+        format={compactUsd}
+        color="var(--info)"
+      />
+      <TrendChart
+        title="Delinquency"
+        months={series.months}
+        values={series.delinquency_bps}
+        format={bpsLabel}
+        color="var(--bad)"
+      />
     </div>
   );
 }

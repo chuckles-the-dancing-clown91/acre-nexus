@@ -5,7 +5,7 @@
 
 use crate::auth::hash_password;
 use crate::rbac::{PERMISSION_CATALOG, PROFILE_TYPES, SYSTEM_ROLES};
-use chrono::Utc;
+use chrono::{Datelike, Utc};
 use entity::prelude::*;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
 use serde_json::json;
@@ -260,7 +260,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let investor = seed_owner(db, northwind, "individual", "Dana Kessler").await?;
     seed_entity_ownership(db, northwind, maple, firm_owner, 6000, "manager").await?;
     seed_entity_ownership(db, northwind, maple, investor, 4000, "investor").await?;
-    seed_bank_account(
+    let operating_acct = seed_bank_account(
         db,
         northwind,
         maple,
@@ -521,7 +521,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let unit_a = seed_unit(db, northwind, maple_court, "1A", 2, 1.0, 185_000).await?;
     let unit_b = seed_unit(db, northwind, maple_court, "2B", 1, 1.0, 162_000).await?;
     // A current tenant and a behind tenant.
-    seed_lease(
+    let current = seed_lease(
         db,
         northwind,
         maple_court,
@@ -535,6 +535,8 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         0,
     )
     .await?;
+    // Jordan's monthly amount is rent + the reserved-garage amenity below, and
+    // last month's rent is sitting unpaid (the balance).
     let behind = seed_lease(
         db,
         northwind,
@@ -546,10 +548,9 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         "2024-06-15",
         "active",
         "late",
-        162_000,
+        177_000,
     )
     .await?;
-    seed_lease_payment(db, northwind, behind, "2025-06-01", 162_000, "late").await?;
     // Demo vehicle + a garage amenity charge on the behind lease.
     seed_vehicle(
         db, northwind, behind, "Toyota", "Tacoma", 2021, "Silver", "ABC-1234",
@@ -608,8 +609,339 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
+    // ---- Phase 3 demo: books, payment history, methods, feeds, payouts ----
+    // Renter portal login for the current resident (password `password`):
+    // taylor@example.com pays rent from /account/payments.
+    let taylor_user = seed_user(
+        db,
+        Some(northwind),
+        "taylor@example.com",
+        "Taylor Brooks",
+        &pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        &role_ids,
+        taylor_user,
+        "tenant",
+        Some(northwind),
+        "renter",
+        Some("Resident — Maple Court 1A"),
+    )
+    .await?;
+    seed_profile(db, taylor_user, "Taylor", "Brooks").await?;
+
+    // Maple Holdings' books: seed the default chart of accounts.
+    crate::accounting::ensure_chart(db, northwind, maple).await?;
+
+    // Saved payment methods: Taylor autopays with a visa; Jordan's card is the
+    // canonical declining test number (…0002) so the failure path demos.
+    seed_payment_method(
+        db,
+        northwind,
+        current,
+        Some(taylor_user),
+        "card",
+        Some("Visa"),
+        "4242",
+        true,
+        Some(1),
+    )
+    .await?;
+    seed_payment_method(
+        db,
+        northwind,
+        behind,
+        None,
+        "card",
+        Some("Visa"),
+        "0002",
+        false,
+        None,
+    )
+    .await?;
+
+    // Security deposits collected at move-in and held in trust — escrow cash
+    // equals the deposit liability, so the trust ledger reconciles to zero.
+    let dep = seed_lease_payment(
+        db,
+        northwind,
+        current,
+        "deposit",
+        "2024-09-01",
+        185_000,
+        "paid",
+        Some("2024-09-01"),
+        Some("ach"),
+    )
+    .await?;
+    crate::accounting::post_payment_settled(
+        db,
+        northwind,
+        maple,
+        Some(maple_court),
+        current,
+        "2024-09-01",
+        185_000,
+        "deposit",
+        dep,
+    )
+    .await?;
+    let dep = seed_lease_payment(
+        db,
+        northwind,
+        behind,
+        "deposit",
+        "2024-06-15",
+        162_000,
+        "paid",
+        Some("2024-06-15"),
+        Some("ach"),
+    )
+    .await?;
+    crate::accounting::post_payment_settled(
+        db,
+        northwind,
+        maple,
+        Some(maple_court),
+        behind,
+        "2024-06-15",
+        162_000,
+        "deposit",
+        dep,
+    )
+    .await?;
+
+    // Trailing 11 months of rent history with balanced ledger postings:
+    // Taylor pays on time every month; Jordan pays until last month, which is
+    // the unpaid balance carried on the lease above.
+    let today = Utc::now().date_naive();
+    let expenses_acct = crate::accounting::account(
+        db,
+        northwind,
+        maple,
+        crate::accounting::subtypes::PROPERTY_EXPENSES,
+    )
+    .await?;
+    let operating_gl = crate::accounting::account(
+        db,
+        northwind,
+        maple,
+        crate::accounting::subtypes::OPERATING_BANK,
+    )
+    .await?;
+    for i in (1..=11u32).rev() {
+        let month = today
+            .checked_sub_months(chrono::Months::new(i))
+            .unwrap_or(today);
+        let day = |d: u32| {
+            chrono::NaiveDate::from_ymd_opt(month.year(), month.month(), d)
+                .unwrap_or(month)
+                .to_string()
+        };
+        let due = day(1);
+
+        // Taylor: $1,850, settled on the 2nd by ACH.
+        let paid = day(2);
+        let p = seed_lease_payment(
+            db,
+            northwind,
+            current,
+            "rent",
+            &due,
+            185_000,
+            "paid",
+            Some(&paid),
+            Some("ach"),
+        )
+        .await?;
+        crate::accounting::post_rent_due(
+            db,
+            northwind,
+            maple,
+            Some(maple_court),
+            current,
+            &due,
+            185_000,
+            p,
+        )
+        .await?;
+        crate::accounting::post_payment_settled(
+            db,
+            northwind,
+            maple,
+            Some(maple_court),
+            current,
+            &paid,
+            185_000,
+            "rent",
+            p,
+        )
+        .await?;
+
+        // Jordan: $1,770 (rent + garage); the most recent month goes unpaid.
+        if i == 1 {
+            let p = seed_lease_payment(
+                db, northwind, behind, "rent", &due, 177_000, "late", None, None,
+            )
+            .await?;
+            crate::accounting::post_rent_due(
+                db,
+                northwind,
+                maple,
+                Some(maple_court),
+                behind,
+                &due,
+                177_000,
+                p,
+            )
+            .await?;
+        } else {
+            let paid = day(5);
+            let p = seed_lease_payment(
+                db,
+                northwind,
+                behind,
+                "rent",
+                &due,
+                177_000,
+                "paid",
+                Some(&paid),
+                Some("card"),
+            )
+            .await?;
+            crate::accounting::post_rent_due(
+                db,
+                northwind,
+                maple,
+                Some(maple_court),
+                behind,
+                &due,
+                177_000,
+                p,
+            )
+            .await?;
+            crate::accounting::post_payment_settled(
+                db,
+                northwind,
+                maple,
+                Some(maple_court),
+                behind,
+                &paid,
+                177_000,
+                "rent",
+                p,
+            )
+            .await?;
+        }
+
+        // Monthly operating spend keeps NOI (and payout math) honest.
+        let spent = day(15);
+        crate::accounting::post(
+            db,
+            northwind,
+            crate::accounting::PostArgs {
+                entity_id: maple,
+                txn_date: &spent,
+                memo: "Maintenance & operations",
+                source_type: "manual",
+                source_id: None,
+                posted_by: None,
+            },
+            vec![
+                crate::accounting::Leg::debit(expenses_acct.id, 120_000)
+                    .on(Some(maple_court), None),
+                crate::accounting::Leg::credit(operating_gl.id, 120_000),
+            ],
+        )
+        .await?;
+    }
+
+    // Monthly snapshots so the dashboards chart occupancy / value history
+    // (flow metrics per month come from the ledger + payments just seeded).
+    let live = crate::billing::compute_point_in_time(db, northwind).await?;
+    for i in (0..=11u32).rev() {
+        let month = today
+            .checked_sub_months(chrono::Months::new(i))
+            .unwrap_or(today);
+        let key = month.format("%Y-%m").to_string();
+        let (rent_due, rent_collected) =
+            crate::billing::month_rent_figures(db, northwind, &key).await?;
+        let noi = crate::finance::month_noi(db, northwind, &key).await?;
+        // A gentle upward drift in value; occupancy wobbles further back.
+        let value = live.portfolio_value_cents - (i as i64) * (live.portfolio_value_cents / 200);
+        let occupancy = (live.occupancy_bps - (i as i32 % 3) * 250).max(0);
+        let delinquency = if i == 0 {
+            live.delinquency_bps
+        } else if i % 5 == 4 {
+            5_000
+        } else {
+            0
+        };
+        entity::financial_snapshot::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(northwind),
+            month: Set(key),
+            occupancy_bps: Set(occupancy),
+            delinquency_bps: Set(delinquency),
+            portfolio_value_cents: Set(value),
+            rent_due_cents: Set(rent_due),
+            rent_collected_cents: Set(rent_collected),
+            noi_cents: Set(noi),
+            active_leases: Set(live.active_leases),
+            created_at: Set(Utc::now().into()),
+            updated_at: Set(Utc::now().into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
+    // Link the operating account for bank feeds (simulated Plaid). The first
+    // billing cycle pulls the feed and auto-matches recent settled payments.
+    let mut am: entity::bank_account::ActiveModel = BankAccount::find_by_id(operating_acct)
+        .one(db)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("seeded bank account missing"))?
+        .into();
+    am.provider = Set(Some("plaid".into()));
+    am.external_id = Set(Some(format!("sim_acct_{}", operating_acct.simple())));
+    am.update(db).await?;
+
+    // Owner payouts for Maple Holdings: two months ago executed + settled
+    // (ledger entry + statement), last month left as a draft for the demo to
+    // execute from the console.
+    let two_ago = today
+        .checked_sub_months(chrono::Months::new(2))
+        .unwrap_or(today);
+    let (ps, pe) = month_bounds(two_ago);
+    let payout = crate::payouts::compute_payout(db, northwind, maple, &ps, &pe, None).await?;
+    let mut am: entity::owner_payout::ActiveModel = payout.clone().into();
+    am.status = Set("processing".into());
+    am.provider = Set(Some("stripe".into()));
+    am.external_id = Set(Some(format!("sim_po_{}", payout.id.simple())));
+    am.update(db).await?;
+    crate::payouts::settle_payout(db, northwind, payout.id, true, None).await;
+
+    let last_month = today
+        .checked_sub_months(chrono::Months::new(1))
+        .unwrap_or(today);
+    let (ps, pe) = month_bounds(last_month);
+    crate::payouts::compute_payout(db, northwind, maple, &ps, &pe, None).await?;
+
     tracing::info!("seed: complete");
     Ok(())
+}
+
+/// First + last day of `d`'s month, as `YYYY-MM-DD`.
+fn month_bounds(d: chrono::NaiveDate) -> (String, String) {
+    let first = chrono::NaiveDate::from_ymd_opt(d.year(), d.month(), 1).unwrap_or(d);
+    let last = first
+        .checked_add_months(chrono::Months::new(1))
+        .and_then(|n| n.pred_opt())
+        .unwrap_or(first);
+    (first.to_string(), last.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -781,28 +1113,82 @@ async fn seed_lease_charge(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn seed_lease_payment(
     db: &DatabaseConnection,
     tenant_id: Uuid,
     lease_id: Uuid,
+    kind: &str,
     due_date: &str,
     amount_cents: i64,
     status: &str,
-) -> anyhow::Result<()> {
+    paid_date: Option<&str>,
+    method: Option<&str>,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let receipt = paid_date.map(|d| {
+        format!(
+            "RCT-{}-{}",
+            &d[..4],
+            &id.simple().to_string()[..8].to_uppercase()
+        )
+    });
     entity::lease_payment::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(id),
         tenant_id: Set(tenant_id),
         lease_id: Set(lease_id),
         due_date: Set(due_date.into()),
         amount_cents: Set(amount_cents),
-        paid_date: Set(None),
+        paid_date: Set(paid_date.map(str::to_string)),
         status: Set(status.into()),
-        method: Set(None),
+        method: Set(method.map(str::to_string)),
+        created_at: Set(Utc::now().into()),
+        kind: Set(kind.into()),
+        method_id: Set(None),
+        provider: Set(None),
+        external_id: Set(None),
+        failure_reason: Set(None),
+        receipt_number: Set(receipt),
+        ledger_txn_id: Set(None),
+    }
+    .insert(db)
+    .await?;
+    Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_payment_method(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    lease_id: Uuid,
+    user_id: Option<Uuid>,
+    kind: &str,
+    brand: Option<&str>,
+    last4: &str,
+    autopay: bool,
+    autopay_day: Option<i32>,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    entity::payment_method::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(Some(lease_id)),
+        user_id: Set(user_id),
+        provider: Set("simulated".into()),
+        kind: Set(kind.into()),
+        external_id: Set(format!("sim_pm_{}{last4}", id.simple())),
+        brand: Set(brand.map(str::to_string)),
+        last4: Set(last4.into()),
+        exp_month: Set(Some(12)),
+        exp_year: Set(Some(2028)),
+        status: Set("active".into()),
+        autopay: Set(autopay),
+        autopay_day: Set(autopay_day),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
     .await?;
-    Ok(())
+    Ok(id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1335,9 +1721,10 @@ async fn seed_bank_account(
     kind: &str,
     institution: &str,
     last4: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
     entity::bank_account::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(id),
         tenant_id: Set(tenant_id),
         entity_id: Set(entity_id),
         kind: Set(kind.into()),
@@ -1345,10 +1732,13 @@ async fn seed_bank_account(
         masked_number: Set(Some(format!("••••{last4}"))),
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
+        provider: Set(None),
+        external_id: Set(None),
+        last_synced_at: Set(None),
     }
     .insert(db)
     .await?;
-    Ok(())
+    Ok(id)
 }
 
 async fn seed_portfolio(

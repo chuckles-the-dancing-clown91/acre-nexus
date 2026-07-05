@@ -41,6 +41,16 @@ pub enum Permission {
     /// Documents: upload, version, delete.
     DocumentManage,
     BillingRead,
+    /// General ledger: chart of accounts, journal, financial reports.
+    LedgerRead,
+    /// Post manual journal entries and manage the chart of accounts.
+    LedgerManage,
+    /// Payments: rent collection status, methods, receipts, reconciliation.
+    PaymentRead,
+    /// Collect payments, manage methods/autopay, match bank transactions.
+    PaymentManage,
+    /// Compute and execute owner payouts / draws.
+    PayoutManage,
     // Tenant administration.
     TenantManage,
     // Identity & access management (the user/RBAC system).
@@ -94,6 +104,11 @@ impl Permission {
             Permission::DocumentRead => "document:read",
             Permission::DocumentManage => "document:manage",
             Permission::BillingRead => "billing:read",
+            Permission::LedgerRead => "ledger:read",
+            Permission::LedgerManage => "ledger:manage",
+            Permission::PaymentRead => "payment:read",
+            Permission::PaymentManage => "payment:manage",
+            Permission::PayoutManage => "payout:manage",
             Permission::TenantManage => "tenant:manage",
             Permission::UserRead => "user:read",
             Permission::UserManage => "user:manage",
@@ -143,6 +158,11 @@ pub const ALL_PERMS: &[Permission] = &[
     DocumentRead,
     DocumentManage,
     BillingRead,
+    LedgerRead,
+    LedgerManage,
+    PaymentRead,
+    PaymentManage,
+    PayoutManage,
     TenantManage,
     UserRead,
     UserManage,

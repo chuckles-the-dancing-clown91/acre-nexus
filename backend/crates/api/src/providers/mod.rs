@@ -18,7 +18,9 @@
 //!   ([`webhook`]), which enqueues a `background_job` instead of handling
 //!   events synchronously.
 
+pub mod bank;
 pub mod client;
+pub mod payments;
 pub mod webhook;
 
 use crate::modules::JobOutcome;
@@ -124,6 +126,13 @@ pub trait Provider: Send + Sync {
             self.simulate(ctx, req).await
         }
     }
+}
+
+/// Whether `key` is configured live — for callers whose *control flow* differs
+/// between live and simulated (e.g. the payment pipeline waits on a webhook in
+/// live mode but self-settles after a delay in simulation).
+pub fn is_live(key: &str) -> bool {
+    live_providers().iter().any(|k| k == key || k == "all")
 }
 
 /// Provider keys enabled for live (non-simulated) calls, from the

@@ -44,6 +44,24 @@ pub const ESIGN_MAX_SIGNERS: &str = "esign.max_signers";
 pub const ESIGN_SIGNED_DOC_RETENTION_DAYS: &str = "esign.signed_doc_retention_days";
 /// Title stamped on generated lease documents (and the envelopes sent for them).
 pub const LEASE_DOC_TITLE: &str = "lease_documents.title";
+/// Let residents enroll a saved method in autopay.
+pub const PAYMENTS_AUTOPAY_ENABLED: &str = "payments.autopay_enabled";
+/// Day of month rent falls due (clamped 1–28).
+pub const PAYMENTS_RENT_DUE_DAY: &str = "payments.rent_due_day";
+/// Seconds the simulated processor takes to confirm a charge.
+pub const PAYMENTS_CALLBACK_DELAY_SECS: &str = "payments.callback_delay_secs";
+/// Days past the due date before a late fee applies (0 = never).
+pub const LATE_FEE_GRACE_DAYS: &str = "payments.late_fee_grace_days";
+/// Flat late-fee amount, in cents.
+pub const LATE_FEE_FLAT_CENTS: &str = "payments.late_fee_flat_cents";
+/// Percentage late fee, in basis points of the overdue amount.
+pub const LATE_FEE_PERCENT_BPS: &str = "payments.late_fee_percent_bps";
+/// Late-fee recurrence: `one_time` or `daily`.
+pub const LATE_FEE_RECURRENCE: &str = "payments.late_fee_recurrence";
+/// Cap on total late fees per billing period, in cents (0 = no cap).
+pub const LATE_FEE_MAX_CENTS: &str = "payments.late_fee_max_cents";
+/// Management fee withheld from owner payouts, in basis points of rent collected.
+pub const PAYOUT_MGMT_FEE_BPS: &str = "payments.mgmt_fee_bps";
 
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,6 +212,91 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Lease documents",
         kind: SettingKind::Text,
         default: || json!("Residential Lease Agreement"),
+    },
+    SettingDef {
+        key: PAYMENTS_AUTOPAY_ENABLED,
+        label: "Autopay",
+        description: "Let residents enroll a saved payment method in autopay: \
+                      rent is charged automatically on its due date.",
+        group: "Payments",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: PAYMENTS_RENT_DUE_DAY,
+        label: "Rent due day of month",
+        description: "The day of the month rent falls due (1–28). The billing \
+                      cycle raises each active lease's rent receivable on this \
+                      day.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(1),
+    },
+    SettingDef {
+        key: PAYMENTS_CALLBACK_DELAY_SECS,
+        label: "Processor callback delay (seconds)",
+        description: "How long the simulated payment processor takes to \
+                      confirm a charge. A live processor (Stripe) ignores \
+                      this — its webhook drives settlement.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(5),
+    },
+    SettingDef {
+        key: LATE_FEE_GRACE_DAYS,
+        label: "Late-fee grace period (days)",
+        description: "Days past the due date before a late fee is assessed. \
+                      0 disables automatic late fees.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(5),
+    },
+    SettingDef {
+        key: LATE_FEE_FLAT_CENTS,
+        label: "Late fee — flat amount (cents)",
+        description: "Flat late-fee amount in cents (e.g. 7500 = $75). \
+                      Combined with the percentage component when both are set.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(7500),
+    },
+    SettingDef {
+        key: LATE_FEE_PERCENT_BPS,
+        label: "Late fee — percentage (basis points)",
+        description: "Percentage late fee in basis points of the overdue \
+                      amount (e.g. 500 = 5%). 0 = flat fee only.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: LATE_FEE_RECURRENCE,
+        label: "Late-fee recurrence",
+        description: "one_time = a single fee per overdue period; daily = the \
+                      fee re-applies each day the balance stays overdue \
+                      (subject to the cap).",
+        group: "Payments",
+        kind: SettingKind::Text,
+        default: || json!("one_time"),
+    },
+    SettingDef {
+        key: LATE_FEE_MAX_CENTS,
+        label: "Late-fee cap per period (cents)",
+        description: "Ceiling on the total late fees assessed against one \
+                      billing period. 0 = no cap.",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: PAYOUT_MGMT_FEE_BPS,
+        label: "Management fee (basis points)",
+        description: "The management fee withheld from owner payouts, in \
+                      basis points of rent collected for the period (e.g. \
+                      800 = 8%).",
+        group: "Payments",
+        kind: SettingKind::Int,
+        default: || json!(800),
     },
 ];
 

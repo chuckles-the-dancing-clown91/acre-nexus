@@ -101,6 +101,33 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    key: "accounting",
+    label: "Accounting & Payments",
+    description:
+      "Double-entry ledger per LLC, rent collection (cards/ACH with autopay), late fees, bank reconciliation, and owner payouts.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/payments",
+        label: "Payments",
+        icon: "card",
+        permission: "payment:read",
+      },
+      {
+        href: "/console/accounting",
+        label: "Accounting",
+        icon: "ledger",
+        permission: "ledger:read",
+      },
+      {
+        href: "/console/payouts",
+        label: "Payouts",
+        icon: "dollar",
+        permission: "ledger:read",
+      },
+    ],
+  },
+  {
     key: "lease_builder",
     label: "Lease Builder & Tenancy",
     description:

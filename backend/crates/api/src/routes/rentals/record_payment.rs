@@ -46,6 +46,15 @@ pub async fn record_payment(
         status: Set(status.clone()),
         method: Set(b.method),
         created_at: Set(now.into()),
+        // Manually recorded payments (check/cash at the office) are rent by
+        // default and settle outside the processor pipeline.
+        kind: Set(crate::payments::KIND_RENT.into()),
+        method_id: Set(None),
+        provider: Set(None),
+        external_id: Set(None),
+        failure_reason: Set(None),
+        receipt_number: Set(None),
+        ledger_txn_id: Set(None),
     };
     let saved = model.insert(&db).await?;
 
