@@ -846,6 +846,136 @@ export const api = {
       body,
     }),
 
+  // ---- accounting: ledger, reports, finance series (Phase 3) ----
+  ledgerAccounts: (entityId: string) =>
+    request<LedgerAccount[]>(`/accounting/accounts?entity=${entityId}`, {
+      auth: true,
+    }),
+  createLedgerAccount: (body: CreateLedgerAccountInput) =>
+    request<LedgerAccount>("/accounting/accounts", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  ledgerTransactions: (entityId: string, limit = 50) =>
+    request<LedgerTxn[]>(
+      `/accounting/transactions?entity=${entityId}&limit=${limit}`,
+      { auth: true }
+    ),
+  postLedgerTransaction: (body: ManualTxnInput) =>
+    request<{ id: string }>("/accounting/transactions", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  trialBalance: (entityId: string) =>
+    request<TrialBalance>(`/accounting/trial-balance?entity=${entityId}`, {
+      auth: true,
+    }),
+  incomeStatement: (entityId: string, from?: string, to?: string) => {
+    const qs = new URLSearchParams({ entity: entityId });
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    return request<IncomeStatement>(`/accounting/income-statement?${qs}`, {
+      auth: true,
+    });
+  },
+  trustReconciliation: (entityId: string) =>
+    request<TrustReconciliation>(
+      `/accounting/trust-reconciliation?entity=${entityId}`,
+      { auth: true }
+    ),
+  financeSeries: (months = 12) =>
+    request<FinanceSeries>(`/finance/series?months=${months}`, { auth: true }),
+
+  // ---- payments: back-office visibility ----
+  payments: (params: { status?: string; lease?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.lease) qs.set("lease", params.lease);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<Payment[]>(`/payments${suffix}`, { auth: true });
+  },
+  leasePaymentMethods: (leaseId: string) =>
+    request<PaymentMethod[]>(`/leases/${leaseId}/payment-methods`, {
+      auth: true,
+    }),
+
+  // ---- renter portal: my lease + pay rent + autopay ----
+  myLease: () => request<MyLease>("/my/lease", { auth: true }),
+  addMyPaymentMethod: (body: AddPaymentMethodInput) =>
+    request<PaymentMethod>("/my/payment-methods", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  removeMyPaymentMethod: (id: string) =>
+    request<{ removed: boolean }>(`/my/payment-methods/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  payMyLease: (body: PayInput) =>
+    request<Payment>("/my/payments", { method: "POST", auth: true, body }),
+  setMyAutopay: (methodId: string, day?: number) =>
+    request<PaymentMethod>("/my/autopay", {
+      method: "PUT",
+      auth: true,
+      body: { method_id: methodId, day },
+    }),
+  cancelMyAutopay: () =>
+    request<{ cancelled: boolean }>("/my/autopay", {
+      method: "DELETE",
+      auth: true,
+    }),
+
+  // ---- bank feeds + reconciliation ----
+  allBankAccounts: (entityId?: string) => {
+    const suffix = entityId ? `?entity=${entityId}` : "";
+    return request<BankAccount[]>(`/bank-accounts${suffix}`, { auth: true });
+  },
+  linkBankAccount: (id: string, publicToken?: string) =>
+    request<BankAccount>(`/bank-accounts/${id}/link`, {
+      method: "POST",
+      auth: true,
+      body: { public_token: publicToken },
+    }),
+  syncBankAccount: (id: string) =>
+    request<{ queued: boolean; job_id: string }>(`/bank-accounts/${id}/sync`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  bankTransactions: (accountId: string, status?: string) => {
+    const suffix = status ? `?status=${status}` : "";
+    return request<BankTxn[]>(
+      `/bank-accounts/${accountId}/transactions${suffix}`,
+      { auth: true }
+    );
+  },
+  matchBankTransaction: (txnId: string, paymentId: string) =>
+    request<BankTxn>(`/bank-transactions/${txnId}/match`, {
+      method: "POST",
+      auth: true,
+      body: { payment_id: paymentId },
+    }),
+  ignoreBankTransaction: (txnId: string) =>
+    request<BankTxn>(`/bank-transactions/${txnId}/ignore`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+
+  // ---- owner payouts ----
+  payouts: () => request<Payout[]>("/payouts", { auth: true }),
+  computePayout: (body: ComputePayoutInput) =>
+    request<Payout>("/payouts/compute", { method: "POST", auth: true, body }),
+  executePayout: (id: string) =>
+    request<Payout>(`/payouts/${id}/execute`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+
   // ---- platform plane: staff + audited impersonation + provisioning ----
   platformStaff: () =>
     request<PlatformStaff[]>("/platform/staff", { auth: true }),
@@ -1737,6 +1867,10 @@ export interface BankAccount {
   institution: string;
   masked_number: string | null;
   status: string;
+  /** `plaid` once linked for feeds. */
+  provider: string | null;
+  linked: boolean;
+  last_synced_at: string | null;
 }
 
 export interface CreateBankAccountInput {
@@ -1791,4 +1925,220 @@ export interface ProvisionResult {
   owner_user_id: string;
   owner_email: string;
   temp_password: string | null;
+}
+
+// ---- accounting & payments (Phase 3) ----
+
+export interface LedgerAccount {
+  id: string;
+  entity_id: string;
+  code: string;
+  name: string;
+  kind: string;
+  subtype: string | null;
+  is_trust: boolean;
+  system: boolean;
+  active: boolean;
+  debit_cents: number;
+  credit_cents: number;
+  balance_cents: number;
+  balance_label: string;
+}
+
+export interface CreateLedgerAccountInput {
+  entity_id: string;
+  code: string;
+  name: string;
+  kind: string;
+  is_trust?: boolean;
+}
+
+export interface LedgerEntry {
+  id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  side: string;
+  amount_cents: number;
+  amount_label: string;
+  property_id: string | null;
+  lease_id: string | null;
+}
+
+export interface LedgerTxn {
+  id: string;
+  entity_id: string;
+  txn_date: string;
+  memo: string;
+  source_type: string;
+  source_id: string | null;
+  posted_by: string | null;
+  created_at: string;
+  entries: LedgerEntry[];
+}
+
+export interface ManualTxnInput {
+  entity_id: string;
+  txn_date?: string;
+  memo: string;
+  legs: { account_id: string; side: string; amount_cents: number }[];
+}
+
+export interface TrialBalanceRow {
+  code: string;
+  name: string;
+  kind: string;
+  debit_cents: number;
+  credit_cents: number;
+  debit_label: string;
+  credit_label: string;
+}
+
+export interface TrialBalance {
+  entity_id: string;
+  rows: TrialBalanceRow[];
+  total_debits_cents: number;
+  total_credits_cents: number;
+  balanced: boolean;
+}
+
+export interface StatementLine {
+  name: string;
+  amount_cents: number;
+  amount_label: string;
+}
+
+export interface IncomeStatement {
+  entity_id: string;
+  from: string | null;
+  to: string | null;
+  income: StatementLine[];
+  expenses: StatementLine[];
+  total_income_cents: number;
+  total_expenses_cents: number;
+  net_cents: number;
+  net_label: string;
+}
+
+export interface TrustReconciliation {
+  entity_id: string;
+  trust_bank_cents: number;
+  trust_liability_cents: number;
+  difference_cents: number;
+  trust_bank_label: string;
+  trust_liability_label: string;
+  reconciled: boolean;
+}
+
+export interface FinanceSeries {
+  months: string[];
+  rent_due_cents: number[];
+  rent_collected_cents: number[];
+  noi_cents: number[];
+  occupancy_bps: number[];
+  delinquency_bps: number[];
+  portfolio_value_cents: number[];
+  active_leases: number[];
+}
+
+export interface Payment {
+  id: string;
+  lease_id: string;
+  kind: string;
+  due_date: string;
+  paid_date: string | null;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  method: string | null;
+  receipt_number: string | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  lease_id: string | null;
+  provider: string;
+  kind: string;
+  brand: string | null;
+  last4: string;
+  exp_month: number | null;
+  exp_year: number | null;
+  status: string;
+  autopay: boolean;
+  autopay_day: number | null;
+}
+
+export interface AddPaymentMethodInput {
+  kind: string;
+  external_id?: string;
+  last4?: string;
+  brand?: string;
+  exp_month?: number;
+  exp_year?: number;
+}
+
+export interface PayInput {
+  payment_id?: string;
+  kind?: string;
+  method_id: string;
+}
+
+export interface MyLease {
+  lease_id: string;
+  property_name: string;
+  property_address: string;
+  unit_label: string | null;
+  status: string;
+  payment_status: string;
+  rent_cents: number;
+  rent_label: string;
+  balance_cents: number;
+  balance_label: string;
+  deposit_cents: number | null;
+  deposit_label: string | null;
+  deposit_paid: boolean;
+  autopay_enabled: boolean;
+  due_items: Payment[];
+  history: Payment[];
+  methods: PaymentMethod[];
+}
+
+export interface BankTxn {
+  id: string;
+  bank_account_id: string;
+  posted_date: string;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  matched_payment_id: string | null;
+}
+
+export interface Payout {
+  id: string;
+  entity_id: string;
+  entity_name: string | null;
+  period_start: string;
+  period_end: string;
+  rent_collected_cents: number;
+  rent_collected_label: string;
+  expenses_cents: number;
+  expenses_label: string;
+  mgmt_fee_cents: number;
+  mgmt_fee_label: string;
+  net_cents: number;
+  net_label: string;
+  status: string;
+  statement_document_id: string | null;
+  ledger_txn_id: string | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export interface ComputePayoutInput {
+  entity_id: string;
+  period_start: string;
+  period_end: string;
 }

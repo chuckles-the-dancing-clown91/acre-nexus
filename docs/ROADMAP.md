@@ -11,17 +11,20 @@ Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
 The next slice of work, in dependency order:
 
-- [ ] **Phase 3 kickoff**: Stripe/Plaid sandbox behind the provider framework;
-      extend `lease_payment` into a charges + payments ledger.
 - [ ] **Phase 4**: real FCRA screening provider dropped into the
       `application.screened` slot (policy settings + consent + adverse action).
 - [ ] **Portal round-out (Phase 5)**: lease + documents view and maintenance
-      requests in the renter portal (rent payment lands with Phase 3).
+      requests in the renter portal (rent payment shipped with Phase 3).
+- [ ] **Accounts payable (#58)**: vendor bills → approval → pay, riding the
+      Phase 3 ledger + payment execution.
+- [ ] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
+      top of the new general ledger.
 - [ ] **Scale guards**: pagination caps on `GET /applications`,
-      `GET /public/listings`, and `GET /my/applications` (the document and
-      audit lists already cap).
+      `GET /public/listings`, and `GET /my/applications` (the document,
+      audit, payment, and ledger lists already cap).
 - [ ] **Automated e-sign reminder cadence** (settings-driven schedule + max
-      rounds) on top of today's manual remind.
+      rounds) on top of today's manual remind — the `billing_cycle` job is
+      the recurring-scan pattern to follow.
 
 ---
 
@@ -107,20 +110,44 @@ the completed signed PDF + audit trail, and see it on the property/lease.
 
 ---
 
-## Phase 3 — Payments + financial dashboards ⬜  *(Pillar 5)*
+## Phase 3 — Payments + accounting core + financial dashboards ✅  *(Pillar 5)*
 
-- **Processor integration**: Stripe (cards/ACH) + Plaid (bank linking) for rent,
-  deposits, and application fees; **autopay** + saved methods (tokenized — no PANs
-  stored, PCI-safe).
-- **Ledger & reconciliation**: extend `lease_payment` into a proper charges +
-  payments ledger; auto-match deposits; late-fee rules; owner **payouts** and
-  basic **trust accounting**.
-- **Invoices/receipts** + webhook-driven status updates.
-- **Charts/dashboards**: time-series rent collected, occupancy, delinquency,
-  NOI/cash-flow, portfolio value over time (the KPIs exist; add history + viz).
+**Shipped** — see [`PAYMENTS.md`](PAYMENTS.md) for the as-built design.
 
-**DoD:** a tenant pays rent via ACH in sandbox, the ledger + lease status update
-from the webhook, an owner payout is computed, and the dashboard charts it.
+- **Accounting core** ✅: double-entry general ledger + chart of accounts per
+  legal entity (`ledger_account`/`ledger_txn`/`ledger_entry`), a single
+  validated posting path (balance enforced, so a trial balance always sums
+  to zero), **trust accounting** with the no-commingling invariant enforced
+  in the posting engine, and trial balance / income statement / trust
+  reconciliation reports.
+- **Processor integration** ✅: Stripe (cards/ACH) behind the Phase 1
+  provider framework — sandbox-first, live via `LIVE_PROVIDERS` — with
+  tokenized saved methods (no PANs stored), **autopay**, and webhook-driven
+  settlement; Plaid bank linking + transaction feeds with auto-matching
+  reconciliation and a manual match/ignore review queue.
+- **Ledger & reconciliation** ✅: `lease_payment` grew into a receivable +
+  payment lifecycle (`due → processing → paid/failed`, plus `late`); a
+  recurring per-tenant **billing cycle** raises rent receivables, assesses
+  settings-driven **late fees** (grace, flat + percent, one-time/daily,
+  capped), runs autopay, and refreshes bank feeds.
+- **Payouts, receipts & statements** ✅: owner draws computed from the
+  entity's actual books (rent collected − expenses − management fee),
+  executed as ACH via the provider, posted to the ledger, with a generated
+  owner-statement PDF; every settled payment issues a receipt PDF into the
+  document service.
+- **Charts/dashboards** ✅: `GET /finance/series` merges live ledger rollups
+  (rent due/collected, NOI) with monthly snapshot history (occupancy,
+  delinquency, portfolio value); the console dashboard renders 12-month
+  trends with a dependency-free SVG chart, and the renter portal gained a
+  full **pay-rent** page (balance, one-click pay, methods, autopay,
+  receipts).
+
+**DoD (met):** a resident pays rent from the portal (or autopay collects it),
+the payment settles through the provider pipeline and updates the lease +
+posts a balanced ledger entry + issues a receipt; a trial balance sums to
+zero and the trust ledger reconciles; an owner payout computed from the
+ledger executes in sandbox and files its statement; the dashboard charts a
+year of trends from real ledger data.
 
 ---
 
@@ -147,11 +174,13 @@ approve/deny with adverse-action notice, fully audited.
 - **Applicant → tenant conversion** ✅ (shipped with Phase 2): approved
   application becomes a lease with one action — identity/attributes/vehicles
   copied, fees auto-applied, lease document auto-generated, listing closed;
-  deposit + first month still wait on Phase 3.
+  deposit + first month now collect through the Phase 3 payment pipeline.
 - **Resident portal** 🟡: renters already apply white-glove from their
   profile (`/account/profile`), track applications (`/account/applications`),
-  maintain vehicles, and sign remotely; still to come — pay rent, view lease +
-  documents, submit maintenance requests, and message the manager.
+  maintain vehicles, sign remotely, and **pay rent** — balance, one-click
+  pay, saved methods, autopay, receipts (`/account/payments`, shipped with
+  Phase 3); still to come — view lease + documents, submit maintenance
+  requests, and message the manager.
 - **Move-in/move-out** ⬜: checklists, inspections (photos via documents),
   deposit disposition.
 
@@ -205,7 +234,7 @@ controls and monitored SLOs.
 Phase 0 ✅
    └─ Phase 1 ✅ (substrate)
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
-        ├─ Phase 3 ⬜ (payments + charts) ──┼─ Phase 5 🟡 (tenant lifecycle/portal)
+        ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 🟡 (tenant lifecycle/portal)
         ├─ Phase 4 ⬜ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
         └─ Phase 7 ⬜ (real data)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)

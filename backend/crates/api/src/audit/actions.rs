@@ -136,6 +136,33 @@ pub const PROVIDER_CALL: &str = "provider.call";
 /// A signature-verified inbound webhook was accepted and enqueued.
 pub const WEBHOOK_RECEIVED: &str = "webhook.received";
 
+// ---- Accounting & payments (Phase 3) ----
+/// A balanced double-entry transaction landed on an entity's books (actor is
+/// `None` when the pipeline posted it, the user for manual journal entries).
+pub const LEDGER_POST: &str = "ledger.post";
+pub const LEDGER_ACCOUNT_CREATE: &str = "ledger_account.create";
+/// A payment was initiated (portal "pay now", autopay, or staff collect).
+pub const PAYMENT_CREATE: &str = "payment.create";
+/// A payment reached a terminal state (paid/failed) — written by the pipeline
+/// (simulated settlement or a processor webhook), not a person.
+pub const PAYMENT_SETTLE: &str = "payment.settle";
+pub const PAYMENT_METHOD_ADD: &str = "payment_method.add";
+pub const PAYMENT_METHOD_REMOVE: &str = "payment_method.remove";
+pub const AUTOPAY_ENROLL: &str = "autopay.enroll";
+pub const AUTOPAY_CANCEL: &str = "autopay.cancel";
+/// The billing cycle assessed a late fee against an overdue receivable.
+pub const LATE_FEE_APPLY: &str = "late_fee.apply";
+pub const PAYOUT_CREATE: &str = "payout.create";
+pub const PAYOUT_EXECUTE: &str = "payout.execute";
+/// A payout reached a terminal state (paid/failed).
+pub const PAYOUT_SETTLE: &str = "payout.settle";
+/// A bank account was linked for feeds (Plaid or simulated).
+pub const BANK_ACCOUNT_LINK: &str = "bank_account.link";
+/// One bank-feed sync pulled transactions for a linked account.
+pub const BANK_FEED_SYNC: &str = "bank_feed.sync";
+/// A bank transaction was matched to (or unmatched from) a payment.
+pub const BANK_TXN_MATCH: &str = "bank_txn.match";
+
 // ---- IAM (also referenced from the iam routes) ----
 pub const USER_CREATE: &str = "user.create";
 pub const USER_UPDATE: &str = "user.update";

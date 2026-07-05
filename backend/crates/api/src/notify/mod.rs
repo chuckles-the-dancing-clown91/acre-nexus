@@ -181,6 +181,45 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                works.\n\n— {company}",
         sms: "{company}: the signature request for {document_title} was cancelled.",
     },
+    DefaultTemplate {
+        key: "payment_receipt",
+        subject: "Payment received — {amount}",
+        body: "Hi {recipient},\n\nWe received your payment of {amount}. Your receipt number \
+               is {receipt_number}; a PDF copy is kept with your lease records.\n\nThank you!\n\n\
+               — {company}",
+        sms: "{company}: payment of {amount} received. Receipt {receipt_number}.",
+    },
+    DefaultTemplate {
+        key: "payment_failed",
+        subject: "Your payment could not be processed",
+        body: "Hi {recipient},\n\nYour payment of {amount} could not be processed: {reason}. \
+               No money was taken. Please try again with another payment method, or contact \
+               us if the problem persists.\n\n— {company}",
+        sms: "{company}: your payment of {amount} failed ({reason}). Please try another method.",
+    },
+    DefaultTemplate {
+        key: "payment_received",
+        subject: "Payment received: {amount} from {resident}",
+        body: "Hi {recipient},\n\n{resident} paid {amount}. The payment has settled, posted \
+               to the ledger, and a receipt was issued.\n\n— {company}",
+        sms: "Payment settled: {amount} from {resident}.",
+    },
+    DefaultTemplate {
+        key: "late_fee_applied",
+        subject: "A late fee was applied to your account",
+        body: "Hi {recipient},\n\nRent for {month} is past its grace period, and a late fee \
+               of {amount} has been applied to your account per your lease terms. Paying \
+               your outstanding balance stops further fees.\n\n— {company}",
+        sms: "{company}: a {amount} late fee was applied for {month}. Please pay your balance.",
+    },
+    DefaultTemplate {
+        key: "payout_paid",
+        subject: "Owner payout sent: {amount}",
+        body: "Hi {recipient},\n\nAn owner payout of {amount} was executed and the statement \
+               is filed on the entity. The ledger entry is linked from the payout record.\n\n\
+               — {company}",
+        sms: "Owner payout of {amount} sent.",
+    },
 ];
 
 /// A rendered, ready-to-send message. `subject` doubles as the title for

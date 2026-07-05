@@ -183,6 +183,12 @@ pub async fn provision(
     )
     .await;
 
+    // The new workspace gets its recurring billing cycle immediately (boot
+    // only covers tenants that existed at startup).
+    if let Err(e) = crate::billing::ensure_cycle_for_tenant(&db, tenant_id).await {
+        tracing::error!("provision: billing cycle scheduling failed: {e}");
+    }
+
     Ok(Json(ProvisionResp {
         tenant_id,
         slug,

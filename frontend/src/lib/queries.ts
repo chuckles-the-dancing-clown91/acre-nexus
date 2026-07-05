@@ -15,20 +15,33 @@ import {
   api,
   iam,
   type AuditEntry,
+  type BankAccount,
+  type BankTxn,
+  type ComputePayoutInput,
   type CreateRoleInput,
   type CreateTokenResponse,
   type CreateUserInput,
+  type FinanceSeries,
   type InviteMemberInput,
+  type LedgerAccount,
+  type LedgerTxn,
+  type LegalEntity,
+  type ManualTxnInput,
   type Member,
+  type MyLease,
   type Membership,
   type MembershipInput,
   type ModuleInfo,
+  type Payment,
+  type Payout,
   type PermissionDef,
   type ProfileDto,
   type ProfileInput,
   type ProfileType,
   type Role,
   type TokenSummary,
+  type TrialBalance,
+  type TrustReconciliation,
   type UpdateRoleInput,
   type UpdateUserInput,
   type UserDetail,
@@ -67,6 +80,26 @@ export const queryKeys = {
   assignments: (subjectType: AssignmentSubject, id: string) =>
     ["assignments", subjectType, id] as const,
   settings: ["settings"] as const,
+  // Accounting & payments (Phase 3)
+  llcs: ["llcs"] as const,
+  llcGroups: ["portfolio", "llcs"] as const,
+  ledgerAccounts: (entityId: string) =>
+    ["accounting", "accounts", entityId] as const,
+  ledgerTransactions: (entityId: string) =>
+    ["accounting", "transactions", entityId] as const,
+  trialBalance: (entityId: string) =>
+    ["accounting", "trial-balance", entityId] as const,
+  trustReconciliation: (entityId: string) =>
+    ["accounting", "trust", entityId] as const,
+  financeSeries: (months: number) => ["finance", "series", months] as const,
+  payments: (params?: { status?: string; lease?: string }) =>
+    ["payments", params ?? {}] as const,
+  myLease: ["my", "lease"] as const,
+  bankAccounts: (entityId?: string) =>
+    ["bank-accounts", entityId ?? "all"] as const,
+  bankTransactions: (accountId: string) =>
+    ["bank-transactions", accountId] as const,
+  payouts: ["payouts"] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -470,5 +503,190 @@ export function useInviteMember() {
       toast.success("Member invited");
     },
     onError: notifyError("Couldn't invite member"),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Accounting & payments (Phase 3)
+// ---------------------------------------------------------------------------
+
+export function useLegalEntities(opts?: QueryOpts<LegalEntity[]>) {
+  return useQuery({
+    queryKey: queryKeys.llcs,
+    queryFn: () => api.legalEntities(),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+/**
+ * Entity picker state shared by the accounting/payouts pages: all legal
+ * entities, defaulting to the one holding the most properties (its books are
+ * the interesting ones).
+ */
+export function useEntityPicker() {
+  const { data: entities } = useLegalEntities();
+  const { data: groups } = useQuery({
+    queryKey: queryKeys.llcGroups,
+    queryFn: () => api.llcGroups(),
+    enabled: isAuthed(),
+  });
+  const biggest =
+    groups && groups.length > 0
+      ? groups.reduce((a, b) => (b.property_count > a.property_count ? b : a))
+      : undefined;
+  const defaultId = biggest?.id ?? entities?.[0]?.id;
+  return { entities, defaultId };
+}
+
+export function useLedgerAccounts(
+  entityId: string | undefined,
+  opts?: QueryOpts<LedgerAccount[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.ledgerAccounts(entityId ?? ""),
+    queryFn: () => api.ledgerAccounts(entityId!),
+    enabled: isAuthed() && !!entityId,
+    ...opts,
+  });
+}
+
+export function useLedgerTransactions(
+  entityId: string | undefined,
+  opts?: QueryOpts<LedgerTxn[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.ledgerTransactions(entityId ?? ""),
+    queryFn: () => api.ledgerTransactions(entityId!),
+    enabled: isAuthed() && !!entityId,
+    ...opts,
+  });
+}
+
+export function useTrialBalance(
+  entityId: string | undefined,
+  opts?: QueryOpts<TrialBalance>
+) {
+  return useQuery({
+    queryKey: queryKeys.trialBalance(entityId ?? ""),
+    queryFn: () => api.trialBalance(entityId!),
+    enabled: isAuthed() && !!entityId,
+    ...opts,
+  });
+}
+
+export function useTrustReconciliation(
+  entityId: string | undefined,
+  opts?: QueryOpts<TrustReconciliation>
+) {
+  return useQuery({
+    queryKey: queryKeys.trustReconciliation(entityId ?? ""),
+    queryFn: () => api.trustReconciliation(entityId!),
+    enabled: isAuthed() && !!entityId,
+    ...opts,
+  });
+}
+
+export function useFinanceSeries(months = 12, opts?: QueryOpts<FinanceSeries>) {
+  return useQuery({
+    queryKey: queryKeys.financeSeries(months),
+    queryFn: () => api.financeSeries(months),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function usePayments(
+  params: { status?: string; lease?: string } = {},
+  opts?: QueryOpts<Payment[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.payments(params),
+    queryFn: () => api.payments(params),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+/** Post a manual journal entry; refreshes the entity's books. */
+export function usePostLedgerTransaction(entityId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ id: string }, Error, ManualTxnInput>({
+    mutationFn: (body) => api.postLedgerTransaction(body),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.ledgerTransactions(entityId),
+      });
+      qc.invalidateQueries({ queryKey: queryKeys.ledgerAccounts(entityId) });
+      qc.invalidateQueries({ queryKey: queryKeys.trialBalance(entityId) });
+      toast.success("Journal entry posted");
+    },
+    onError: notifyError("Couldn't post the entry"),
+  });
+}
+
+export function useBankAccounts(
+  entityId?: string,
+  opts?: QueryOpts<BankAccount[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.bankAccounts(entityId),
+    queryFn: () => api.allBankAccounts(entityId),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function useBankTransactions(
+  accountId: string | undefined,
+  opts?: QueryOpts<BankTxn[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.bankTransactions(accountId ?? ""),
+    queryFn: () => api.bankTransactions(accountId!),
+    enabled: isAuthed() && !!accountId,
+    ...opts,
+  });
+}
+
+export function useMyLease(opts?: QueryOpts<MyLease>) {
+  return useQuery({
+    queryKey: queryKeys.myLease,
+    queryFn: () => api.myLease(),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function usePayouts(opts?: QueryOpts<Payout[]>) {
+  return useQuery({
+    queryKey: queryKeys.payouts,
+    queryFn: () => api.payouts(),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function useComputePayout() {
+  const qc = useQueryClient();
+  return useMutation<Payout, Error, ComputePayoutInput>({
+    mutationFn: (body) => api.computePayout(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.payouts });
+      toast.success("Payout computed from the ledger");
+    },
+    onError: notifyError("Couldn't compute the payout"),
+  });
+}
+
+export function useExecutePayout() {
+  const qc = useQueryClient();
+  return useMutation<Payout, Error, string>({
+    mutationFn: (id) => api.executePayout(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.payouts });
+      toast.success("Payout executing — settlement posts the statement");
+    },
+    onError: notifyError("Couldn't execute the payout"),
   });
 }

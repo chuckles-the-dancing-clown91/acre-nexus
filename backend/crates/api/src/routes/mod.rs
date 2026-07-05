@@ -10,6 +10,7 @@
 //! The audience-specific handlers below remain organised by area; modules
 //! reference them (e.g. [`properties`] is wrapped by `modules::properties`).
 
+pub mod accounting;
 pub mod api_tokens;
 pub mod applications;
 pub mod assignments;
@@ -32,6 +33,8 @@ pub mod modules;
 pub mod mortgages;
 pub mod notifications;
 pub mod onboarding;
+pub mod payments;
+pub mod payouts;
 pub mod platform;
 pub mod portfolio;
 pub mod portfolios;

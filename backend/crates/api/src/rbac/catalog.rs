@@ -199,6 +199,45 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "both",
     },
     PermissionMeta {
+        key: "ledger:read",
+        category: "Accounting",
+        label: "View accounting",
+        description: "View the chart of accounts, journal, trial balance, and \
+                      financial reports.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "ledger:manage",
+        category: "Accounting",
+        label: "Manage accounting",
+        description: "Post manual journal entries and manage the chart of \
+                      accounts.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payment:read",
+        category: "Accounting",
+        label: "View payments",
+        description: "View rent collection status, saved methods, receipts, \
+                      and bank reconciliation.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payment:manage",
+        category: "Accounting",
+        label: "Manage payments",
+        description: "Collect payments, manage payment methods and autopay, \
+                      and match bank transactions.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payout:manage",
+        category: "Accounting",
+        label: "Manage payouts",
+        description: "Compute and execute owner payouts / draws.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "tenant:manage",
         category: "Settings",
         label: "Manage workspace",

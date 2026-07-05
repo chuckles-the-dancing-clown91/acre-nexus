@@ -25,6 +25,7 @@
 //! That is the entire contract — no central wiring to touch. See
 //! [`flips`] for a minimal, self-gating example.
 
+pub mod accounting;
 pub mod domains;
 pub mod enrichment;
 pub mod entities;
@@ -167,6 +168,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(enrichment::EnrichmentModule),
         Box::new(entities::EntitiesModule),
         Box::new(rentals::RentalsModule),
+        Box::new(accounting::AccountingModule),
         Box::new(lease_builder::LeaseBuilderModule),
         Box::new(maintenance::MaintenanceModule),
         Box::new(title::TitleModule),
