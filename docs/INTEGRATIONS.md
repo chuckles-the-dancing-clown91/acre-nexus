@@ -101,6 +101,13 @@ data rooms, rehab photos, notices, media).
   `retention_expires_at`, `created_by`. Blobs are opaque objects keyed by
   `storage_key` (`{tenant_id}/{document_id}`); the row is the only source of
   truth for metadata.
+- **Filing metadata** (property documents tab) — `category` (`insurance` |
+  `loan` | `title` | `tax` | `lease` | `inspection` | `permit` | `receipt` |
+  `statement` | `notice` | `other`), `requires_wet_ink` (the original needs a
+  physical signature, so a paper copy is the record of truth), and
+  `physical_location` (where that wet-ink original is filed, e.g. "Fireproof
+  safe — HQ, Drawer 3"). Set on upload and editable via `PATCH` as the paper
+  moves.
 - **Two backends** (`STORAGE_BACKEND`):
   - `local` (default) — blobs under `STORAGE_DIR`, served by the
     `/storage/local/…` routes with expiring HMAC-signed URLs. What dev/CI
@@ -113,13 +120,21 @@ data rooms, rehab photos, notices, media).
 - **Retention** — a `document_retention` job per retained document rides the
   queue and hard-deletes blob + row once `retention_expires_at` passes.
 - **Audit** — `document.upload`, `document.download` (the fact a URL was
-  issued, not the content — the `pii.reveal` discipline), `document.delete`.
+  issued, not the content — the `pii.reveal` discipline), `document.update`
+  (filing metadata changed), `document.delete`.
 - **RBAC** — `document:read` (list/download) and `document:manage`
-  (upload/delete).
+  (upload/update/delete).
 
-**Routes** — `POST /documents` (returns the row + a signed `PUT` URL),
-`GET /documents?owner_type&owner_id`, `GET /documents/<id>/download` (returns
-`{ url, expires_at }`), `DELETE /documents/<id>`.
+**Routes** — `POST /documents` (returns the row + a signed `PUT` URL; accepts
+`category` / `requires_wet_ink` / `physical_location`),
+`GET /documents?owner_type&owner_id`, `PATCH /documents/<id>` (update the filing
+category, wet-ink flag, and storage location), `GET /documents/<id>/download`
+(returns `{ url, expires_at }`), `DELETE /documents/<id>`.
+
+**Property documents tab** — `GET /properties/{id}/documents` (`document:read`)
+returns the latest version of each document filed against the property, a
+per-category tally, and the subset of **wet-ink originals** with their
+`physical_location` — the "where is the paper" area.
 
 ## 4. Notifications (#18)
 

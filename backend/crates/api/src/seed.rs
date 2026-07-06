@@ -479,6 +479,20 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     seed_intel(db, maple_court).await?;
     seed_intel(db, riverside_flats).await?;
 
+    // Hero photos for the two showcased profiles (upper-left of the profile).
+    seed_property_image(
+        db,
+        maple_court,
+        "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=1200&q=80",
+    )
+    .await?;
+    seed_property_image(
+        db,
+        riverside_flats,
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+    )
+    .await?;
+
     // ---- demo entities (counterparties) + financing on Maple Court ----
     let bank = seed_counterparty(
         db,
@@ -579,6 +593,79 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         "plumbing",
         "high",
         "in_progress",
+    )
+    .await?;
+    // A couple of resolved work orders so the maintenance history isn't empty.
+    seed_ticket(
+        db,
+        northwind,
+        maple_court,
+        Some(unit_a),
+        contractor,
+        "Annual HVAC service",
+        "hvac",
+        "normal",
+        "resolved",
+    )
+    .await?;
+    seed_ticket(
+        db,
+        northwind,
+        maple_court,
+        None,
+        contractor,
+        "Repaint common stairwell",
+        "general",
+        "low",
+        "closed",
+    )
+    .await?;
+
+    // ---- demo documents on Maple Court (insurance / loan / title / lease) ----
+    // The recorded deed and the original signed lease need wet-ink originals, so
+    // they carry a physical storage location.
+    seed_document(
+        db,
+        northwind,
+        "property",
+        maple_court,
+        "hazard-insurance-policy-2024.pdf",
+        "insurance",
+        false,
+        None,
+    )
+    .await?;
+    seed_document(
+        db,
+        northwind,
+        "property",
+        maple_court,
+        "first-cascade-loan-agreement.pdf",
+        "loan",
+        false,
+        None,
+    )
+    .await?;
+    seed_document(
+        db,
+        northwind,
+        "property",
+        maple_court,
+        "warranty-deed-recorded-2021.pdf",
+        "title",
+        true,
+        Some("Fireproof safe — Northwind HQ, Drawer 3"),
+    )
+    .await?;
+    seed_document(
+        db,
+        northwind,
+        "property",
+        maple_court,
+        "original-signed-lease-1A.pdf",
+        "lease",
+        true,
+        Some("Lease binder — Northwind HQ, Cabinet A"),
     )
     .await?;
 
@@ -1795,11 +1882,70 @@ async fn seed_property(
         workflow_stage: Set("managing".into()),
         purchase_price_cents: Set(None),
         acquired_on: Set(None),
+        image_url: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
     .await?;
     Ok(id)
+}
+
+/// Set a property's hero photo (partial update — only `image_url` changes).
+async fn seed_property_image(
+    db: &DatabaseConnection,
+    property_id: Uuid,
+    url: &str,
+) -> anyhow::Result<()> {
+    entity::property::ActiveModel {
+        id: Set(property_id),
+        image_url: Set(Some(url.into())),
+        ..Default::default()
+    }
+    .update(db)
+    .await?;
+    Ok(())
+}
+
+/// File a document against an owner record. Demo rows carry metadata only (no
+/// blob) so the documents tab lists them; wet-ink originals record where the
+/// paper lives.
+#[allow(clippy::too_many_arguments)]
+async fn seed_document(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    owner_type: &str,
+    owner_id: Uuid,
+    filename: &str,
+    category: &str,
+    requires_wet_ink: bool,
+    physical_location: Option<&str>,
+) -> anyhow::Result<()> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+    entity::document::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        owner_type: Set(owner_type.into()),
+        owner_id: Set(owner_id),
+        filename: Set(filename.into()),
+        category: Set(Some(category.into())),
+        requires_wet_ink: Set(requires_wet_ink),
+        physical_location: Set(physical_location.map(|s| s.to_string())),
+        mime_type: Set("application/pdf".into()),
+        size_bytes: Set(0),
+        checksum: Set(None),
+        version: Set(1),
+        previous_version_id: Set(None),
+        storage_key: Set(format!("{tenant_id}/{id}")),
+        status: Set("stored".into()),
+        retention_expires_at: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
 }
 
 /// Populate a property's intelligence (parcel, tax, valuation, schools,

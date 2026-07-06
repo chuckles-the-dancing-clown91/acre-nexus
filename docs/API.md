@@ -111,8 +111,11 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 | GET | `/properties` | `property:read` | Portfolio list |
 | POST | `/properties` | `property:write` | Add a property |
 | POST | `/properties/onboard` | `property:write` | **Onboard** a house (property + financing + workflow + enrichment) |
-| GET | `/properties/{id}` | `property:read` | **Full profile w/ computed economics** |
-| PATCH | `/properties/{id}` | `property:write` | Update property |
+| GET | `/properties/{id}` | `property:read` | **Full profile**: header dossier (hero image, home breakdown, address status, rental status) + computed economics |
+| PATCH | `/properties/{id}` | `property:write` | Update property (incl. `image_url`) |
+| GET | `/properties/{id}/financials` | `finance:read` | **Financials tab**: loans (each with owning bank + contact), LLC bank accounts, levered economics |
+| GET | `/properties/{id}/maintenance` | `maintenance:read` | **Maintenance tab**: open work orders vs resolved history, with counts |
+| GET | `/properties/{id}/documents` | `document:read` | **Documents tab**: filed docs by category + wet-ink originals with storage location |
 | GET | `/properties/{id}/intel` | `property:read` | **Property intelligence**: parcel/county, taxes, valuation, schools, utilities |
 | POST | `/properties/{id}/enrich` | `property:write` | Enqueue automated enrichment (county records, parcel, AVM, …) |
 | GET | `/properties/{id}/enrichment` | `property:read` | Recent enrichment runs |

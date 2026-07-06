@@ -465,6 +465,9 @@ async fn store_statement(
             "owner-statement-{}-{}.pdf",
             payout.period_start, payout.period_end
         )),
+        category: Set(Some("statement".into())),
+        requires_wet_ink: Set(false),
+        physical_location: Set(None),
         mime_type: Set("application/pdf".into()),
         size_bytes: Set(bytes.len() as i64),
         checksum: Set(Some(crate::storage::sha256_hex(&bytes))),

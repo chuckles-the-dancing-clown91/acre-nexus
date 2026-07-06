@@ -29,6 +29,7 @@ impl PlatformModule for MaintenanceModule {
         openapi_get_routes_spec![
             maintenance::list_tickets::list_tickets,
             maintenance::list_property_tickets::list_property_tickets,
+            maintenance::property_maintenance::property_maintenance,
             maintenance::create_ticket::create_ticket,
             maintenance::get_ticket::get_ticket,
             maintenance::update_ticket::update_ticket,

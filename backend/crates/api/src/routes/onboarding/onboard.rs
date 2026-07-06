@@ -58,6 +58,7 @@ pub async fn onboard(
         workflow_stage: Set(stage.clone()),
         purchase_price_cents: Set(b.purchase_price_cents),
         acquired_on: Set(b.acquired_on.clone()),
+        image_url: Set(b.image_url.clone()),
         created_at: Set(now.into()),
     }
     .insert(&db)

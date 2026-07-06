@@ -23,6 +23,16 @@ pub struct Model {
     pub owner_type: String,
     pub owner_id: Uuid,
     pub filename: String,
+    /// Coarse filing bucket for the documents tab: `insurance` | `loan` |
+    /// `title` | `tax` | `lease` | `inspection` | `permit` | `other` (`NULL` =
+    /// unfiled).
+    pub category: Option<String>,
+    /// The original needs a physical ("wet ink") signature, so a paper copy is
+    /// the record of truth even though a scan may live in the store.
+    pub requires_wet_ink: bool,
+    /// Where the wet-ink original is physically filed (e.g. "Fireproof safe —
+    /// HQ, Drawer 3"). Only meaningful when `requires_wet_ink`.
+    pub physical_location: Option<String>,
     pub mime_type: String,
     pub size_bytes: i64,
     /// SHA-256 of the stored bytes (hex). Client-declared until the store

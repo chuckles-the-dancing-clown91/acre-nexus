@@ -50,6 +50,10 @@ pub async fn update(
     if let Some(v) = b.manager {
         am.manager = Set(v);
     }
+    if let Some(v) = b.image_url {
+        // Empty string clears the hero image.
+        am.image_url = Set(if v.trim().is_empty() { None } else { Some(v) });
+    }
     let saved = am.update(&db).await?;
     crate::audit::record(
         &db,

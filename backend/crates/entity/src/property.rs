@@ -36,6 +36,8 @@ pub struct Model {
     pub purchase_price_cents: Option<i64>,
     /// Acquisition date (`YYYY-MM-DD`).
     pub acquired_on: Option<String>,
+    /// Hero photo shown top-left on the property profile (object-store / CDN URL).
+    pub image_url: Option<String>,
     pub created_at: DateTimeWithTimeZone,
 }
 
