@@ -396,6 +396,21 @@ pub async fn settle_payment(
     )
     .await;
 
+    // Outbound webhooks (#68): subscribed vendors hear the payment landed.
+    crate::webhooks_out::emit(
+        db,
+        tenant_id,
+        "payment.recorded",
+        json!({
+            "payment_id": payment.id,
+            "lease_id": payment.lease_id,
+            "amount_cents": amount,
+            "kind": kind,
+            "status": "paid",
+        }),
+    )
+    .await;
+
     notify_resident(
         db,
         tenant_id,
@@ -603,7 +618,9 @@ async fn handle_stripe_event(
         }
         "payout.paid" | "payout.failed" => {
             let success = event_type == "payout.paid";
-            crate::payouts::settle_by_external_id(
+            // The `payout` rail carries both owner draws and vendor-bill
+            // payments — try the bill ledger first, then owner payouts.
+            let matched_bill = crate::payables::settle_by_external_id(
                 db,
                 tenant_id,
                 external_id,
@@ -612,6 +629,17 @@ async fn handle_stripe_event(
                 (!success).then(|| "payout failed".to_string()),
             )
             .await;
+            if !matched_bill {
+                crate::payouts::settle_by_external_id(
+                    db,
+                    tenant_id,
+                    external_id,
+                    reference,
+                    success,
+                    (!success).then(|| "payout failed".to_string()),
+                )
+                .await;
+            }
             JobOutcome::completed(json!({ "provider": "stripe", "event": event_type }))
         }
         _ => JobOutcome::completed(json!({

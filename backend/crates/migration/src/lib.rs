@@ -31,6 +31,10 @@ mod m20240101_000023_pipeline_indexes;
 mod m20240101_000024_accounting;
 mod m20240101_000025_screening;
 mod m20240101_000026_property_profile;
+mod m20240101_000027_payables;
+mod m20240101_000028_calendar;
+mod m20240101_000029_email;
+mod m20240101_000030_webhooks;
 
 pub struct Migrator;
 
@@ -64,6 +68,10 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000024_accounting::Migration),
             Box::new(m20240101_000025_screening::Migration),
             Box::new(m20240101_000026_property_profile::Migration),
+            Box::new(m20240101_000027_payables::Migration),
+            Box::new(m20240101_000028_calendar::Migration),
+            Box::new(m20240101_000029_email::Migration),
+            Box::new(m20240101_000030_webhooks::Migration),
         ]
     }
 }

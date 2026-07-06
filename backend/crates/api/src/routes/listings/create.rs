@@ -95,5 +95,19 @@ pub async fn create(
     )
     .await;
 
+    crate::webhooks_out::emit(
+        &db,
+        scope.tenant_id,
+        "listing.created",
+        serde_json::json!({
+            "listing_id": saved.id,
+            "property_id": pid,
+            "title": saved.title,
+            "status": saved.status,
+            "rent_cents": saved.rent_cents,
+        }),
+    )
+    .await;
+
     Ok(Json(ConsoleListingResp::from(saved)))
 }

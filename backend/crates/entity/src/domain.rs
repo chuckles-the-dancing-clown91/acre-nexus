@@ -27,6 +27,11 @@ pub struct Model {
     pub verified_at: Option<DateTimeWithTimeZone>,
     /// `pending` | `active` | `failed` — TLS certificate provisioning status.
     pub tls_status: String,
+    /// Per-record email DNS check results, e.g. `{"spf": true, "dkim": false,
+    /// "dmarc": false}` — written by `POST /domains/<id>/verify-email`.
+    pub email_dns_status: Json,
+    /// Set once SPF + DKIM + DMARC all verify; `None` while unverified.
+    pub email_verified_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
 }
 

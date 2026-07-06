@@ -22,6 +22,10 @@ This repository contains:
 | `docs/RENTALS.md` | Rentals (units/leases/payments), maintenance work orders, and title (ownership/liens). |
 | `docs/TENANCY.md` | Onboarding, multi-entity (LLC cap tables, trust accounts), the platform plane + audited impersonation, scoped RBAC, and white-label multi-domain routing. |
 | `docs/LEASING.md` | Application→onboarding→lease-signing: templated lease documents, conditional fees/discounts/amenities, vehicle profiles, occupancy sync, and tenant history. |
+| `docs/PAYMENTS.md` | Payments + accounting core: the double-entry ledger, rent collection, bank feeds, payouts, and accounts payable (vendor bills → approval → pay). |
+| `docs/CALENDAR.md` | The calendar / scheduling / reminders engine (lease renewals, expirations, tours, inspections). |
+| `docs/EMAIL.md` | Email integration: inbound email→ticket/lead routing, comms logging, and SPF/DKIM/DMARC deliverability. |
+| `docs/WEBHOOKS.md` | Vendor API outbound webhooks: scoped subscriptions, signed deliveries, retries, dead-letter + replay. |
 
 ## What's implemented (this pass)
 
@@ -98,6 +102,20 @@ pattern the remaining roles plug into:
   compute from the ledger and file generated statements; and
   `GET /finance/series` powers 12-month dashboard trends. Renters pay from
   `/account/payments`. See `docs/PAYMENTS.md`.
+- **Platform services (#58 / #54 / #62 / #68)** — **accounts payable**:
+  vendor bills raised from completed work orders, role-gated approval
+  (accrues `Dr Expenses / Cr Accounts Payable`), payment through the
+  provider rail clearing the liability + remitting to the vendor (see
+  `docs/PAYMENTS.md`); a **calendar/reminders engine** — one schedule for
+  lease renewals (auto-synced), license/insurance expirations, tours, and
+  inspections, fired at configurable lead times through the notification
+  substrate onto a console calendar (`docs/CALENDAR.md`); **email
+  integration** — inbound email routed to ticket comments and CRM leads via
+  per-tenant addresses, a logged comms history, and SPF/DKIM/DMARC
+  verification for branded sending from custom domains (`docs/EMAIL.md`);
+  and **vendor outbound webhooks** — scoped subscribe-don't-poll callbacks
+  with HMAC signatures, retries, dead-lettering, history, and replay
+  (`docs/WEBHOOKS.md`).
 - **Vertical slice UI + API**:
   - **Public website** — branded hero, listings grid, listing detail, working
     application form (which enqueues a screening job).

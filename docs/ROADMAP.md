@@ -13,16 +13,21 @@ The next slice of work, in dependency order:
 
 - [ ] **Portal round-out (Phase 5)**: lease + documents view and maintenance
       requests in the renter portal (rent payment shipped with Phase 3).
-- [ ] **Accounts payable (#58)**: vendor bills → approval → pay, riding the
-      Phase 3 ledger + payment execution.
+- [x] **Accounts payable (#58)**: vendor bills → approval → pay, riding the
+      Phase 3 ledger + payment execution — shipped, see
+      [`PAYMENTS.md`](PAYMENTS.md#accounts-payable-vendor-bills).
+- [x] **Platform services phase (#54/#62/#68)**: the calendar/reminders
+      engine ([`CALENDAR.md`](CALENDAR.md)), inbound email→ticket/lead +
+      SPF/DKIM/DMARC deliverability ([`EMAIL.md`](EMAIL.md)), and vendor
+      outbound webhooks ([`WEBHOOKS.md`](WEBHOOKS.md)).
 - [ ] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
       top of the new general ledger.
 - [ ] **Scale guards**: pagination caps on `GET /applications`,
       `GET /public/listings`, and `GET /my/applications` (the document,
       audit, payment, and ledger lists already cap).
 - [ ] **Automated e-sign reminder cadence** (settings-driven schedule + max
-      rounds) on top of today's manual remind — the `billing_cycle` job is
-      the recurring-scan pattern to follow.
+      rounds) on top of today's manual remind — the reminders engine (#54)
+      is now the natural home.
 
 ---
 

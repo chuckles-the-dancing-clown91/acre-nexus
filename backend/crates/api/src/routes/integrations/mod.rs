@@ -6,6 +6,7 @@ pub mod create_provider;
 pub mod delete_provider;
 pub mod delete_secret;
 pub mod dto;
+pub mod inbound_emails;
 pub mod list_notifications;
 pub mod list_providers;
 pub mod list_secrets;

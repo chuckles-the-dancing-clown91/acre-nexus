@@ -59,6 +59,8 @@ impl PlatformModule for IntegrationsModule {
             integrations::delete_secret::delete_secret,
             // notification send history
             integrations::list_notifications::list_notifications,
+            // inbound comms log (#62)
+            integrations::inbound_emails::list_inbound_emails,
             // notification delivery providers (Resend/SendGrid/Postmark,
             // Twilio, Slack/Discord) — end-user configurable
             integrations::list_providers::list_providers,
@@ -102,9 +104,9 @@ impl PlatformModule for IntegrationsModule {
             }
             "document_retention" => Some(retention(ctx.db, ctx.job).await),
             // Verified inbound events dispatch on `payload.provider`: the
-            // payments providers (stripe/plaid, Phase 3) and the screening
-            // provider (checkr, Phase 4) consume theirs; any other provider's
-            // event is recorded as processed.
+            // payments providers (stripe/plaid, Phase 3), the screening
+            // provider (checkr, Phase 4), and inbound email (#62) consume
+            // theirs; any other provider's event is recorded as processed.
             "webhook_event" => {
                 if let Some(outcome) = crate::payments::handle_webhook_event(ctx.db, ctx.job).await
                 {
@@ -112,6 +114,9 @@ impl PlatformModule for IntegrationsModule {
                 }
                 if let Some(outcome) = crate::screening::handle_webhook_event(ctx.db, ctx.job).await
                 {
+                    return Some(outcome);
+                }
+                if let Some(outcome) = crate::mail::handle_webhook_event(ctx.db, ctx.job).await {
                     return Some(outcome);
                 }
                 let provider = ctx

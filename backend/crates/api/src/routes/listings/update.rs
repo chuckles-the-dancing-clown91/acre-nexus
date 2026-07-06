@@ -90,5 +90,19 @@ pub async fn update(
     )
     .await;
 
+    crate::webhooks_out::emit(
+        &db,
+        scope.tenant_id,
+        "listing.updated",
+        serde_json::json!({
+            "listing_id": saved.id,
+            "title": saved.title,
+            "status": saved.status,
+            "rent_cents": saved.rent_cents,
+            "is_public": saved.is_public,
+        }),
+    )
+    .await;
+
     Ok(Json(ConsoleListingResp::from(saved)))
 }

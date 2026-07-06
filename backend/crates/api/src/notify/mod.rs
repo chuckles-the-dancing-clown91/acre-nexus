@@ -234,6 +234,44 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                — {company}",
         sms: "Owner payout of {amount} sent.",
     },
+    DefaultTemplate {
+        key: "vendor_bill_submitted",
+        subject: "Vendor bill {bill_number} awaits approval: {amount}",
+        body: "Hi {recipient},\n\nVendor bill {bill_number} from {vendor} for {amount} was \
+               submitted and needs an approval decision. Review it in the payables \
+               console.\n\n— {company}",
+        sms: "Vendor bill {bill_number} from {vendor} ({amount}) awaits approval.",
+    },
+    DefaultTemplate {
+        key: "vendor_bill_paid",
+        subject: "Vendor bill {bill_number} paid: {amount}",
+        body: "Hi {recipient},\n\nVendor bill {bill_number} from {vendor} was paid ({amount}). \
+               The expense is posted to the entity's ledger and the linked work order was \
+               updated.\n\n— {company}",
+        sms: "Vendor bill {bill_number} ({amount}) to {vendor} paid.",
+    },
+    DefaultTemplate {
+        key: "vendor_bill_remittance",
+        subject: "Payment sent: {bill_number} — {amount}",
+        body: "Hi {recipient},\n\nWe've sent payment of {amount} for bill {bill_number} \
+               ({memo}). Depending on your bank, the transfer may take a few business days \
+               to arrive.\n\n— {company}",
+        sms: "{company} sent {amount} for bill {bill_number}.",
+    },
+    DefaultTemplate {
+        key: "lead_received",
+        subject: "New leasing lead: {lead_name}",
+        body: "Hi {recipient},\n\n{lead_name} ({lead_email}) wrote to the leasing inbox: \
+               {subject}. Follow up from the leads console.\n\n— {company}",
+        sms: "New leasing lead: {lead_name} ({lead_email}) — {subject}.",
+    },
+    DefaultTemplate {
+        key: "reminder_due",
+        subject: "Reminder: {title} — due {due_date}",
+        body: "Hi {recipient},\n\n{title} is due on {due_date} ({days_left} day(s) from now).\
+               \n\nDetails: {description}\n\n— {company}",
+        sms: "{company} reminder: {title} due {due_date} ({days_left} day(s)).",
+    },
 ];
 
 /// A rendered, ready-to-send message. `subject` doubles as the title for

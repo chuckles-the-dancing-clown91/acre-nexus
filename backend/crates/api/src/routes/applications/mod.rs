@@ -256,6 +256,21 @@ pub(crate) async fn intake(
     )
     .await;
 
+    // Outbound webhooks (#68): subscribed vendors hear about the new
+    // application (every intake door funnels through here).
+    crate::webhooks_out::emit(
+        db,
+        tenant_id,
+        "application.created",
+        json!({
+            "application_id": app_id,
+            "listing_id": input.listing_id,
+            "status": saved.status,
+            "source": source,
+        }),
+    )
+    .await;
+
     // Integrated notifications: every staff member who can read applications
     // gets an in-app inbox entry + a web push, and the tenant's chat channel
     // (if configured) gets one message.

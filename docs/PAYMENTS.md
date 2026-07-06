@@ -161,6 +161,49 @@ to the ledger, stores a generated **owner statement PDF** against the entity,
 audits, and notifies staff. Failed payouts keep their reason and can be
 re-executed.
 
+## Accounts payable (vendor bills)
+
+Issue #58 closes the loop from "contractor did the work" to "contractor got
+paid". A `vendor_bill` ties a vendor (`counterparty`) — and optionally the
+completed `maintenance_ticket` — to an amount with line items, on one
+entity's books:
+
+```
+draft → submitted → approved → processing → paid
+          ↓ reject      (failed retries; void only before approval)
+        draft
+```
+
+- **Create** (`POST /payables`, `payable:manage`) — passing
+  `maintenance_ticket_id` prefills the vendor (the ticket's contractor
+  assignee), property, amount (`cost_cents`), and memo, so a completed work
+  order becomes a bill in one call. The entity is the property's owning LLC
+  unless passed explicitly.
+- **Submit** (`payable:manage`) hands the bill to the approvers — everyone
+  holding `payable:approve` is notified (`vendor_bill_submitted`).
+- **Approve** (`payable:approve`) accrues the expense immediately:
+  `Dr Property Expenses / Cr Accounts Payable` (the chart gained system
+  account `2000 Accounts Payable`). The books recognize the cost when the
+  obligation is committed, not when cash moves — and because it posts to
+  `property_expenses`, approved bills flow into NOI and payout expense
+  computations automatically. Reject returns the bill to draft with a
+  reason.
+- **Pay** (`payable:approve`) rides the payments provider's payout rail on
+  the durable queue (`vendor_bill_pay` job; sandbox by default, ACH live).
+  Settlement — webhook-driven live (`payout.paid`/`payout.failed` match the
+  bill before owner payouts), immediate in simulation — posts
+  `Dr Accounts Payable / Cr Operating Bank`, stamps `payment_txn_id`,
+  records the cost + a timeline note on the originating ticket, notifies
+  staff, and emails the vendor a remittance advice
+  (`vendor_bill_remittance`) when the counterparty has an email.
+
+Console: **`/console/payables`** — list with status filter, create dialog,
+and role-gated Submit / Approve / Reject / Pay / Void actions
+(`property_manager` submits; `back_office` and the workspace owner approve
+and pay; `landlord` reads).
+
+Every transition audits (`vendor_bill.create/submit/approve/reject/pay/settle/void`).
+
 ## Renter portal
 
 `/account/payments` in the app, backed by:

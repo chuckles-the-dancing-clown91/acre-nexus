@@ -23,6 +23,10 @@ export const ICONS: Record<string, string> = {
   card: "M2 6a2 2 0 012-2h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM2 10h20M6 15h4",
   ledger: "M4 3h13a3 3 0 013 3v15H7a3 3 0 01-3-3V3zM4 17h16M8 7h8M8 11h5",
   bank: "M3 21h18M4 10h16M12 3l9 7H3l9-7zM6 10v11M10 10v11M14 10v11M18 10v11",
+  calendar:
+    "M3 6a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6zM3 10h18M8 2v4M16 2v4",
+  bill: "M6 2h12a1 1 0 011 1v19l-3-2-3 2-3-2-3 2V3a1 1 0 011-1zM9 7h6M9 11h6M9 15h4",
+  mail: "M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zM22 7l-10 6L2 7",
 };
 
 export function Icon({

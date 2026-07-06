@@ -109,3 +109,47 @@ export const inviteMemberSchema = z.object({
 });
 
 export type InviteMemberInputForm = z.infer<typeof inviteMemberSchema>;
+
+// ---- Accounts payable (#58) ----------------------------------------------------
+
+/** "New vendor bill" form (console/payables). Amount is entered in dollars. */
+export const createPayableSchema = z.object({
+  counterparty_id: z.string().trim().min(1, "Pick the vendor being paid."),
+  property_id: optionalText,
+  entity_id: optionalText,
+  maintenance_ticket_id: optionalText,
+  memo: z.string().trim().min(2, "Describe what the bill is for."),
+  amount: z.coerce
+    .number()
+    .positive("Enter the bill amount (must be positive)."),
+  due_date: optionalText,
+});
+
+export type CreatePayableInputForm = z.infer<typeof createPayableSchema>;
+
+// ---- Calendar / reminders (#54) -------------------------------------------------
+
+/** Subject types a reminder can carry. Keep in sync with the backend. */
+export const REMINDER_SUBJECTS = [
+  "lease",
+  "license",
+  "insurance",
+  "tour",
+  "inspection",
+  "custom",
+] as const;
+
+/** "New reminder" form (console/calendar). Lead days are comma-separated. */
+export const createReminderSchema = z.object({
+  subject_type: z.enum(REMINDER_SUBJECTS),
+  title: z.string().trim().min(2, "Give the reminder a title."),
+  description: optionalText,
+  due_date: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a due date."),
+  lead_days: optionalText,
+  recipients: optionalText,
+});
+
+export type CreateReminderInputForm = z.infer<typeof createReminderSchema>;

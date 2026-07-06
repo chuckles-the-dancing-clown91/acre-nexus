@@ -38,15 +38,18 @@ mod finance;
 mod guards;
 mod leasedoc;
 mod listing_sync;
+mod mail;
 mod modules;
 mod notify;
 mod openapi;
+mod payables;
 mod payments;
 mod payouts;
 mod pdf;
 mod pii;
 mod providers;
 mod rbac;
+mod reminders;
 mod rentals_occupancy;
 mod routes;
 mod scheduler;
@@ -58,6 +61,7 @@ mod state;
 mod storage;
 mod tenancy;
 mod tokens;
+mod webhooks_out;
 mod workflow;
 
 use config::Config;
@@ -108,9 +112,10 @@ async fn rocket() -> _ {
     }
 
     // Spawn the Tokio background scheduler, and make sure every tenant has
-    // its recurring billing cycle scheduled (idempotent).
+    // its recurring billing cycle + reminder scan scheduled (idempotent).
     scheduler::spawn(db.clone());
     billing::ensure_recurring_jobs(&db).await;
+    reminders::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
 

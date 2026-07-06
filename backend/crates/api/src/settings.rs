@@ -68,6 +68,12 @@ pub const LATE_FEE_RECURRENCE: &str = "payments.late_fee_recurrence";
 pub const LATE_FEE_MAX_CENTS: &str = "payments.late_fee_max_cents";
 /// Management fee withheld from owner payouts, in basis points of rent collected.
 pub const PAYOUT_MGMT_FEE_BPS: &str = "payments.mgmt_fee_bps";
+/// Default lead times (days before due, comma-separated) for new reminders.
+pub const CALENDAR_DEFAULT_LEAD_DAYS: &str = "calendar.default_lead_days";
+/// Seconds the per-tenant reminder scan sleeps between runs.
+pub const CALENDAR_SCAN_INTERVAL_SECS: &str = "calendar.scan_interval_secs";
+/// Auto-create a renewal reminder for every active lease with an end date.
+pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
 
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -333,6 +339,34 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Payments",
         kind: SettingKind::Int,
         default: || json!(800),
+    },
+    SettingDef {
+        key: CALENDAR_DEFAULT_LEAD_DAYS,
+        label: "Default reminder lead times (days)",
+        description: "Comma-separated days before a due date at which new \
+                      reminders notify (e.g. \"30,7,1\"; 0 = the day itself). \
+                      Existing reminders keep their own lead times.",
+        group: "Calendar",
+        kind: SettingKind::Text,
+        default: || json!("30,7,1"),
+    },
+    SettingDef {
+        key: CALENDAR_SCAN_INTERVAL_SECS,
+        label: "Reminder scan interval (seconds)",
+        description: "How often the reminder engine scans for due dates and \
+                      fires notifications.",
+        group: "Calendar",
+        kind: SettingKind::Int,
+        default: || json!(3600),
+    },
+    SettingDef {
+        key: CALENDAR_LEASE_RENEWAL_SYNC,
+        label: "Lease renewal reminders",
+        description: "Automatically keep a renewal reminder on every active \
+                      lease's end date.",
+        group: "Calendar",
+        kind: SettingKind::Bool,
+        default: || json!(true),
     },
 ];
 

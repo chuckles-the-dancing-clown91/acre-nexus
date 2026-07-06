@@ -87,6 +87,9 @@ pub struct TicketDetailDto {
     #[serde(flatten)]
     pub ticket: TicketDto,
     pub comments: Vec<TicketCommentDto>,
+    /// The reply-to address that threads email back into this ticket's
+    /// timeline (issue #62).
+    pub inbound_email_address: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

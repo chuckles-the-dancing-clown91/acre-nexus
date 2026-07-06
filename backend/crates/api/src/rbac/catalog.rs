@@ -246,6 +246,42 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "payable:read",
+        category: "Accounting",
+        label: "View payables",
+        description: "View vendor bills and their approval / payment history.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payable:manage",
+        category: "Accounting",
+        label: "Manage payables",
+        description: "Create, edit, and submit vendor bills for approval.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payable:approve",
+        category: "Accounting",
+        label: "Approve payables",
+        description: "Approve submitted vendor bills and execute their payment.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "calendar:read",
+        category: "Calendar",
+        label: "View calendar",
+        description: "View the reminders calendar; receive reminder \
+                      notifications.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "calendar:manage",
+        category: "Calendar",
+        label: "Manage reminders",
+        description: "Create, edit, complete, and cancel reminders.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "tenant:manage",
         category: "Settings",
         label: "Manage workspace",

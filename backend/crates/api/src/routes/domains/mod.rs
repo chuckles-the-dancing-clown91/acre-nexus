@@ -8,3 +8,4 @@ pub mod dto;
 pub mod list;
 pub mod resolve;
 pub mod verify;
+pub mod verify_email;
