@@ -12,6 +12,7 @@ export default function DomainsPage() {
   const [hostname, setHostname] = useState("");
   const [audience, setAudience] = useState("admin");
   const [busy, setBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState<string | null>(null);
 
   const load = () =>
     api
@@ -54,6 +55,19 @@ export default function DomainsPage() {
       await load();
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function verifyEmail(id: string) {
+    setEmailBusy(id);
+    setError(null);
+    try {
+      await api.verifyDomainEmail(id);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEmailBusy(null);
     }
   }
 
@@ -150,6 +164,66 @@ export default function DomainsPage() {
                   {`CNAME  ${d.hostname}  →  ${d.dns_instructions.cname_target}\n`}
                   {`TXT    ${d.dns_instructions.txt_name}  →  ${d.dns_instructions.txt_value}`}
                 </pre>
+              </div>
+            )}
+
+            {d.email_dns_records && (
+              <div className="mt-4 rounded-lg border border-line bg-surface-2 p-4 text-sm">
+                <div className="mb-2 flex flex-wrap items-center gap-3">
+                  <h3 className="font-semibold">Branded email</h3>
+                  <Badge tone={d.email_verified ? "good" : "warn"}>
+                    {d.email_verified ? "email verified" : "email unverified"}
+                  </Badge>
+                  <button
+                    onClick={() => verifyEmail(d.id)}
+                    disabled={emailBusy === d.id}
+                    className="ml-auto rounded-lg border border-line px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+                  >
+                    {emailBusy === d.id ? "Verifying…" : "Verify email DNS"}
+                  </button>
+                </div>
+                <p className="mb-3 text-ink-3">
+                  Publish these records so mail from this domain passes
+                  SPF/DKIM/DMARC. Simulated verification passes in sandbox.
+                </p>
+                <div className="space-y-2">
+                  {d.email_dns_records.map((rec) => {
+                    const found = d.email_dns_status[rec.key];
+                    return (
+                      <div
+                        key={rec.key}
+                        className="flex flex-wrap items-start gap-x-3 gap-y-1"
+                      >
+                        <span className="w-16 shrink-0 pt-0.5 text-xs font-bold uppercase tracking-wide">
+                          {rec.key}
+                        </span>
+                        <Badge
+                          tone={
+                            found === true
+                              ? "good"
+                              : found === false
+                                ? "bad"
+                                : "neutral"
+                          }
+                        >
+                          {found === true
+                            ? "found"
+                            : found === false
+                              ? "missing"
+                              : "unchecked"}
+                        </Badge>
+                        <div className="min-w-0 flex-1">
+                          <div className="break-all font-mono text-xs">
+                            {rec.name}
+                          </div>
+                          <div className="break-all font-mono text-xs text-ink-3">
+                            {rec.value}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </Card>
