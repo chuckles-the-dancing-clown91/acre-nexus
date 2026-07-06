@@ -173,6 +173,47 @@ pub const BANK_FEED_SYNC: &str = "bank_feed.sync";
 /// A bank transaction was matched to (or unmatched from) a payment.
 pub const BANK_TXN_MATCH: &str = "bank_txn.match";
 
+// ---- Accounts payable (#58) ----
+pub const VENDOR_BILL_CREATE: &str = "vendor_bill.create";
+pub const VENDOR_BILL_UPDATE: &str = "vendor_bill.update";
+pub const VENDOR_BILL_SUBMIT: &str = "vendor_bill.submit";
+pub const VENDOR_BILL_APPROVE: &str = "vendor_bill.approve";
+/// A reviewer sent a submitted bill back to draft (reason in metadata).
+pub const VENDOR_BILL_REJECT: &str = "vendor_bill.reject";
+pub const VENDOR_BILL_VOID: &str = "vendor_bill.void";
+/// Payment execution was kicked off (the user action).
+pub const VENDOR_BILL_PAY: &str = "vendor_bill.pay";
+/// The payment reached a terminal state (paid/failed) — written by the
+/// pipeline (simulated settlement or a processor webhook), not a person.
+pub const VENDOR_BILL_SETTLE: &str = "vendor_bill.settle";
+
+// ---- Calendar / reminders (#54) ----
+pub const REMINDER_CREATE: &str = "reminder.create";
+pub const REMINDER_UPDATE: &str = "reminder.update";
+pub const REMINDER_DELETE: &str = "reminder.delete";
+/// A lead-time window opened and the reminder notified (actor is `None`: the
+/// scan fired it, not a person).
+pub const REMINDER_FIRE: &str = "reminder.fire";
+
+// ---- Email integration (#62): inbound routing, CRM leads, deliverability ----
+/// An inbound email was received and routed (metadata says where; the body is
+/// in the `inbound_email` row, never the audit trail).
+pub const EMAIL_INBOUND: &str = "email.inbound";
+pub const LEAD_CREATE: &str = "lead.create";
+pub const LEAD_UPDATE: &str = "lead.update";
+/// SPF/DKIM/DMARC records were checked for a custom domain (per-record
+/// results in metadata).
+pub const DOMAIN_EMAIL_VERIFY: &str = "domain.verify_email";
+
+// ---- Vendor API outbound webhooks (#68) ----
+// Subscription mutations are made by a vendor token (actor is `None`; the
+// token id is in metadata).
+pub const WEBHOOK_SUB_CREATE: &str = "webhook_subscription.create";
+pub const WEBHOOK_SUB_UPDATE: &str = "webhook_subscription.update";
+pub const WEBHOOK_SUB_DELETE: &str = "webhook_subscription.delete";
+/// A vendor re-sent one delivery (a fresh delivery row, linked in metadata).
+pub const WEBHOOK_REPLAY: &str = "webhook_delivery.replay";
+
 // ---- IAM (also referenced from the iam routes) ----
 pub const USER_CREATE: &str = "user.create";
 pub const USER_UPDATE: &str = "user.update";

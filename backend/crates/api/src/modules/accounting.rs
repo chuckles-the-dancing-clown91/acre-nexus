@@ -13,7 +13,7 @@
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{accounting, banking, payments, payouts};
+use crate::routes::{accounting, banking, payables, payments, payouts};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -35,12 +35,16 @@ impl PlatformModule for AccountingModule {
                 Permission::PaymentRead,
                 Permission::PaymentManage,
                 Permission::PayoutManage,
+                Permission::PayableRead,
+                Permission::PayableManage,
+                Permission::PayableApprove,
             ],
             job_kinds: &[
                 crate::billing::CYCLE_KIND,
                 "payment_process",
                 "bank_feed_sync",
                 "payout_execute",
+                crate::payables::PAY_JOB_KIND,
             ],
             default_enabled: true,
             preview: false,
@@ -79,6 +83,16 @@ impl PlatformModule for AccountingModule {
             payouts::list::list_payouts,
             payouts::compute::compute_payout,
             payouts::execute::execute_payout,
+            // accounts payable: vendor bills → approval → pay
+            payables::list::list_payables,
+            payables::get::get_payable,
+            payables::create::create_payable,
+            payables::update::update_payable,
+            payables::submit::submit_payable,
+            payables::approve::approve_payable,
+            payables::reject::reject_payable,
+            payables::void::void_payable,
+            payables::pay::pay_payable,
         ]
     }
 
@@ -90,6 +104,9 @@ impl PlatformModule for AccountingModule {
             "payment_process" => Some(crate::payments::handle_process_job(ctx.db, ctx.job).await),
             "bank_feed_sync" => Some(crate::bankfeed::handle_sync_job(ctx.db, ctx.job).await),
             "payout_execute" => Some(crate::payouts::handle_payout_job(ctx.db, ctx.job).await),
+            k if k == crate::payables::PAY_JOB_KIND => {
+                Some(crate::payables::handle_pay_job(ctx.db, ctx.job).await)
+            }
             _ => None,
         }
     }

@@ -60,6 +60,8 @@ pub async fn create(
         verification_token: Set(Some(token)),
         verified_at: Set(None),
         tls_status: Set("pending".into()),
+        email_dns_status: Set(serde_json::json!({})),
+        email_verified_at: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(&db)

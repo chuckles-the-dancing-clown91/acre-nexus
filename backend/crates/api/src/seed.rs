@@ -1731,6 +1731,8 @@ async fn seed_domain(
         }),
         verified_at: Set(if verified { Some(now.into()) } else { None }),
         tls_status: Set(if verified { "active" } else { "pending" }.into()),
+        email_dns_status: Set(json!({})),
+        email_verified_at: Set(None),
         created_at: Set(now.into()),
     }
     .insert(db)

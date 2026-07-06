@@ -7,7 +7,7 @@
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{applications, listings, public};
+use crate::routes::{applications, leads, listings, public};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -45,6 +45,9 @@ impl PlatformModule for LeasingModule {
             listings::list::list,
             listings::create::create,
             listings::update::update,
+            // CRM leads (the #46 seed; inbound leasing email lands here)
+            leads::list::list_leads,
+            leads::update::update_lead,
             // applications: back-office inbox + intake
             applications::list::list,
             applications::create::create,

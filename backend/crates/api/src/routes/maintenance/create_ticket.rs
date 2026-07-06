@@ -70,6 +70,21 @@ pub async fn create_ticket(
     )
     .await;
 
+    // Outbound webhooks (#68): subscribed vendors hear about new work orders.
+    crate::webhooks_out::emit(
+        &db,
+        scope.tenant_id,
+        "maintenance_ticket.created",
+        serde_json::json!({
+            "ticket_id": saved.id,
+            "property_id": saved.property_id,
+            "category": saved.category,
+            "priority": saved.priority,
+            "status": saved.status,
+        }),
+    )
+    .await;
+
     // Integrated notifications: maintenance staff get an in-app entry + web
     // push (+ the workspace chat channel), except the actor who opened it.
     crate::notify::notify_staff(

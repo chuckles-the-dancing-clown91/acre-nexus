@@ -54,6 +54,17 @@ pub enum Permission {
     PaymentManage,
     /// Compute and execute owner payouts / draws.
     PayoutManage,
+    /// Accounts payable: view vendor bills and their history.
+    PayableRead,
+    /// Create, edit, and submit vendor bills.
+    PayableManage,
+    /// Approve submitted vendor bills and execute their payment.
+    PayableApprove,
+    /// Calendar & reminders: view the aggregated schedule (also the audience
+    /// for reminder notifications).
+    CalendarRead,
+    /// Create, edit, complete, and cancel reminders.
+    CalendarManage,
     // Tenant administration.
     TenantManage,
     // Identity & access management (the user/RBAC system).
@@ -113,6 +124,11 @@ impl Permission {
             Permission::PaymentRead => "payment:read",
             Permission::PaymentManage => "payment:manage",
             Permission::PayoutManage => "payout:manage",
+            Permission::PayableRead => "payable:read",
+            Permission::PayableManage => "payable:manage",
+            Permission::PayableApprove => "payable:approve",
+            Permission::CalendarRead => "calendar:read",
+            Permission::CalendarManage => "calendar:manage",
             Permission::TenantManage => "tenant:manage",
             Permission::UserRead => "user:read",
             Permission::UserManage => "user:manage",
@@ -168,6 +184,11 @@ pub const ALL_PERMS: &[Permission] = &[
     PaymentRead,
     PaymentManage,
     PayoutManage,
+    PayableRead,
+    PayableManage,
+    PayableApprove,
+    CalendarRead,
+    CalendarManage,
     TenantManage,
     UserRead,
     UserManage,

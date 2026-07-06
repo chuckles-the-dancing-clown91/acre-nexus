@@ -20,9 +20,11 @@
 
 pub mod bank;
 pub mod client;
+pub mod dns;
 pub mod payments;
 pub mod screening;
 pub mod webhook;
+pub mod webhook_out;
 
 use crate::modules::JobOutcome;
 use crate::secrets;

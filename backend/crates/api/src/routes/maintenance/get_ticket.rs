@@ -4,7 +4,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
-use entity::prelude::{MaintenanceTicket, TicketComment};
+use entity::prelude::{MaintenanceTicket, Tenant, TicketComment};
 use rocket::serde::json::Json;
 use rocket::{get, State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
@@ -35,8 +35,13 @@ pub async fn get_ticket(
         .into_iter()
         .map(TicketCommentDto::from)
         .collect();
+    let inbound_email_address = Tenant::find_by_id(scope.tenant_id)
+        .one(&db)
+        .await?
+        .map(|t| crate::mail::ticket_address(&t.slug, ticket.id));
     Ok(Json(TicketDetailDto {
         ticket: TicketDto::from(ticket),
         comments,
+        inbound_email_address,
     }))
 }

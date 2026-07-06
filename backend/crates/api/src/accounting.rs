@@ -32,6 +32,7 @@ pub mod subtypes {
     pub const OPERATING_BANK: &str = "operating_bank";
     pub const TRUST_BANK: &str = "trust_bank";
     pub const ACCOUNTS_RECEIVABLE: &str = "accounts_receivable";
+    pub const ACCOUNTS_PAYABLE: &str = "accounts_payable";
     pub const SECURITY_DEPOSITS: &str = "security_deposits";
     pub const OWNER_EQUITY: &str = "owner_equity";
     pub const OWNER_DRAWS: &str = "owner_draws";
@@ -75,6 +76,13 @@ pub const DEFAULT_CHART: &[CoaDef] = &[
         name: "Accounts Receivable",
         kind: "asset",
         subtype: subtypes::ACCOUNTS_RECEIVABLE,
+        is_trust: false,
+    },
+    CoaDef {
+        code: "2000",
+        name: "Accounts Payable",
+        kind: "liability",
+        subtype: subtypes::ACCOUNTS_PAYABLE,
         is_trust: false,
     },
     CoaDef {
@@ -614,6 +622,73 @@ pub async fn post_payout(
             posted_by: None,
         },
         legs,
+    )
+    .await
+}
+
+/// A vendor bill is approved: the expense is recognized and the amount owed
+/// to the vendor becomes a liability.
+/// `Dr Property Expenses / Cr Accounts Payable`.
+#[allow(clippy::too_many_arguments)]
+pub async fn post_vendor_bill_approved(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    property_id: Option<Uuid>,
+    date: &str,
+    amount_cents: i64,
+    source_id: Uuid,
+    approved_by: Option<Uuid>,
+) -> ApiResult<entity::ledger_txn::Model> {
+    let expenses = account(db, tenant_id, entity_id, subtypes::PROPERTY_EXPENSES).await?;
+    let payable = account(db, tenant_id, entity_id, subtypes::ACCOUNTS_PAYABLE).await?;
+    post(
+        db,
+        tenant_id,
+        PostArgs {
+            entity_id,
+            txn_date: date,
+            memo: "Vendor bill approved",
+            source_type: "vendor_bill",
+            source_id: Some(source_id),
+            posted_by: approved_by,
+        },
+        vec![
+            Leg::debit(expenses.id, amount_cents).on(property_id, None),
+            Leg::credit(payable.id, amount_cents).on(property_id, None),
+        ],
+    )
+    .await
+}
+
+/// A vendor bill is paid: cash leaves operating and the liability clears.
+/// `Dr Accounts Payable / Cr Operating Bank`.
+pub async fn post_vendor_bill_paid(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    property_id: Option<Uuid>,
+    date: &str,
+    amount_cents: i64,
+    source_id: Uuid,
+) -> ApiResult<entity::ledger_txn::Model> {
+    let payable = account(db, tenant_id, entity_id, subtypes::ACCOUNTS_PAYABLE).await?;
+    let bank = account(db, tenant_id, entity_id, subtypes::OPERATING_BANK).await?;
+    post(
+        db,
+        tenant_id,
+        PostArgs {
+            entity_id,
+            txn_date: date,
+            memo: "Vendor bill paid",
+            source_type: "vendor_bill",
+            source_id: Some(source_id),
+            posted_by: None,
+        },
+        vec![
+            Leg::debit(payable.id, amount_cents).on(property_id, None),
+            Leg::credit(bank.id, amount_cents).on(property_id, None),
+        ],
     )
     .await
 }

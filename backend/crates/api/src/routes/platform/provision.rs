@@ -114,6 +114,8 @@ pub async fn provision(
         verification_token: Set(None),
         verified_at: Set(Some(now.into())),
         tls_status: Set("active".into()),
+        email_dns_status: Set(json!({})),
+        email_verified_at: Set(None),
         created_at: Set(now.into()),
     }
     .insert(&db)
@@ -183,10 +185,13 @@ pub async fn provision(
     )
     .await;
 
-    // The new workspace gets its recurring billing cycle immediately (boot
-    // only covers tenants that existed at startup).
+    // The new workspace gets its recurring billing cycle + reminder scan
+    // immediately (boot only covers tenants that existed at startup).
     if let Err(e) = crate::billing::ensure_cycle_for_tenant(&db, tenant_id).await {
         tracing::error!("provision: billing cycle scheduling failed: {e}");
+    }
+    if let Err(e) = crate::reminders::ensure_scan_for_tenant(&db, tenant_id).await {
+        tracing::error!("provision: reminder scan scheduling failed: {e}");
     }
 
     Ok(Json(ProvisionResp {

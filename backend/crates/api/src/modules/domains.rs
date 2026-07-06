@@ -31,6 +31,7 @@ impl PlatformModule for DomainsModule {
             domains::list::list,
             domains::create::create,
             domains::verify::verify,
+            domains::verify_email::verify_email,
             domains::delete::delete,
         ]
     }
