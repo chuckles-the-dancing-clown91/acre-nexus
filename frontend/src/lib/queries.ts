@@ -18,11 +18,15 @@ import {
   type BankAccount,
   type BankTxn,
   type ComputePayoutInput,
+  type CreateReminderInput,
   type CreateRoleInput,
   type CreateTokenResponse,
   type CreateUserInput,
+  type CreateVendorBillInput,
   type FinanceSeries,
   type InviteMemberInput,
+  type Lead,
+  type LeadsResponse,
   type LedgerAccount,
   type LedgerTxn,
   type LegalEntity,
@@ -38,14 +42,18 @@ import {
   type ProfileDto,
   type ProfileInput,
   type ProfileType,
+  type Reminder,
   type Role,
   type TokenSummary,
   type TrialBalance,
   type TrustReconciliation,
+  type UpdateLeadInput,
+  type UpdateReminderInput,
   type UpdateRoleInput,
   type UpdateUserInput,
   type UserDetail,
   type UserSummary,
+  type VendorBill,
 } from "./api";
 import { tokenStore } from "./api";
 import { toast } from "sonner";
@@ -100,6 +108,18 @@ export const queryKeys = {
   bankTransactions: (accountId: string) =>
     ["bank-transactions", accountId] as const,
   payouts: ["payouts"] as const,
+  // Accounts payable (#58)
+  payables: (params?: { status?: string }) =>
+    ["payables", params ?? {}] as const,
+  // Calendar / reminders (#54)
+  reminders: (params?: {
+    from?: string;
+    to?: string;
+    subject_type?: string;
+    status?: string;
+  }) => ["reminders", params ?? {}] as const,
+  // CRM leads (#62)
+  leads: (status?: string) => ["leads", status ?? ""] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -688,5 +708,154 @@ export function useExecutePayout() {
       toast.success("Payout executing — settlement posts the statement");
     },
     onError: notifyError("Couldn't execute the payout"),
+  });
+}
+
+// ---- Accounts payable (#58) -------------------------------------------------
+
+export function usePayables(
+  params: { status?: string } = {},
+  opts?: QueryOpts<VendorBill[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.payables(params),
+    queryFn: () => api.payables(params),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function useCreatePayable() {
+  const qc = useQueryClient();
+  return useMutation<VendorBill, Error, CreateVendorBillInput>({
+    mutationFn: (body) => api.createPayable(body),
+    onSuccess: (bill) => {
+      qc.invalidateQueries({ queryKey: ["payables"] });
+      toast.success(`Bill ${bill.bill_number} drafted`);
+    },
+    onError: notifyError("Couldn't create the bill"),
+  });
+}
+
+/** One hook for the lifecycle actions — submit / approve / reject / void / pay. */
+export function usePayableAction() {
+  const qc = useQueryClient();
+  return useMutation<
+    VendorBill,
+    Error,
+    {
+      id: string;
+      action: "submit" | "approve" | "reject" | "void" | "pay";
+      reason?: string;
+    }
+  >({
+    mutationFn: ({ id, action, reason }) => {
+      switch (action) {
+        case "submit":
+          return api.submitPayable(id);
+        case "approve":
+          return api.approvePayable(id);
+        case "reject":
+          return api.rejectPayable(id, reason);
+        case "void":
+          return api.voidPayable(id);
+        case "pay":
+          return api.payPayable(id);
+      }
+    },
+    onSuccess: (bill, { action }) => {
+      qc.invalidateQueries({ queryKey: ["payables"] });
+      const message: Record<string, string> = {
+        submit: `Bill ${bill.bill_number} submitted for approval`,
+        approve: `Bill ${bill.bill_number} approved — expense accrued to the ledger`,
+        reject: `Bill ${bill.bill_number} returned to draft`,
+        void: `Bill ${bill.bill_number} voided`,
+        pay: `Bill ${bill.bill_number} paying — settlement posts to the ledger`,
+      };
+      toast.success(message[action]);
+    },
+    onError: notifyError("Couldn't update the bill"),
+  });
+}
+
+// ---- Calendar / reminders (#54) ----------------------------------------------
+
+export function useReminders(
+  params: {
+    from?: string;
+    to?: string;
+    subject_type?: string;
+    status?: string;
+  } = {},
+  opts?: QueryOpts<Reminder[]>
+) {
+  return useQuery({
+    queryKey: queryKeys.reminders(params),
+    queryFn: () => api.reminders(params),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function useCreateReminder() {
+  const qc = useQueryClient();
+  return useMutation<Reminder, Error, CreateReminderInput>({
+    mutationFn: (body) => api.createReminder(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      toast.success("Reminder scheduled");
+    },
+    onError: notifyError("Couldn't create the reminder"),
+  });
+}
+
+export function useUpdateReminder() {
+  const qc = useQueryClient();
+  return useMutation<
+    Reminder,
+    Error,
+    { id: string; body: UpdateReminderInput }
+  >({
+    mutationFn: ({ id, body }) => api.updateReminder(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      toast.success("Reminder updated");
+    },
+    onError: notifyError("Couldn't update the reminder"),
+  });
+}
+
+export function useDeleteReminder() {
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean }, Error, string>({
+    mutationFn: (id) => api.deleteReminder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      toast.success("Reminder removed");
+    },
+    onError: notifyError("Couldn't remove the reminder"),
+  });
+}
+
+// ---- CRM leads (#62) ----------------------------------------------------------
+
+export function useLeads(status?: string, opts?: QueryOpts<LeadsResponse>) {
+  return useQuery({
+    queryKey: queryKeys.leads(status),
+    queryFn: () => api.leads(status),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+export function useUpdateLead() {
+  const qc = useQueryClient();
+  return useMutation<Lead, Error, { id: string; body: UpdateLeadInput }>({
+    mutationFn: ({ id, body }) => api.updateLead(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Lead updated");
+    },
+    onError: notifyError("Couldn't update the lead"),
   });
 }

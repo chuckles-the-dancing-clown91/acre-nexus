@@ -125,6 +125,27 @@ export const MODULES: ModuleDef[] = [
         icon: "dollar",
         permission: "ledger:read",
       },
+      {
+        href: "/console/payables",
+        label: "Payables",
+        icon: "bill",
+        permission: "payable:read",
+      },
+    ],
+  },
+  {
+    key: "calendar",
+    label: "Calendar & Reminders",
+    description:
+      "One schedule for everything with a due date: lease renewals (auto-synced), license / insurance expirations, tours, and inspections.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/calendar",
+        label: "Calendar",
+        icon: "calendar",
+        permission: "calendar:read",
+      },
     ],
   },
   {
@@ -189,13 +210,19 @@ export const MODULES: ModuleDef[] = [
         icon: "user",
         permission: "application:read",
       },
+      {
+        href: "/console/leads",
+        label: "Leads",
+        icon: "mail",
+        permission: "application:read",
+      },
     ],
   },
   {
     key: "vendor_api",
     label: "Vendor API",
     description:
-      "Scoped, revocable API tokens and the public /api/v1 endpoints.",
+      "Scoped, revocable API tokens, the public /api/v1 endpoints, and outbound webhook subscriptions.",
     defaultEnabled: true,
     nav: [
       {

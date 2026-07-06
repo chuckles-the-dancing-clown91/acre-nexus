@@ -23,7 +23,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Chart of accounts (customizable) | ⬜ | P1 | GAAP-ish defaults + per-tenant overrides |
 | **Trust / escrow accounting** | ⬜ | P1 | legally required for PMs holding client funds in many states |
 | Bank accounts + **bank feeds & reconciliation** | ⬜ | P1 | Plaid; auto-match deposits |
-| Accounts payable (vendor bills → approval → pay) | ⬜ | P2 | ties to vendors + work orders |
+| Accounts payable (vendor bills → approval → pay) | ✅ | — | `vendor_bill`: ticket → bill → approve (accrues) → pay (clears AP) |
 | Owner **draws/distributions** + contributions | ⬜ | P2 | owner payouts, statements |
 | **Owner statements** + owner portal | ⬜ | P2 | monthly packets, ledgers |
 | Budgets, forecasts, pro formas | ⬜ | P2 | per property/portfolio |
@@ -41,7 +41,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Public white-label listings site | ✅ | — | per-tenant branded |
 | Online applications + application fees | 🟡 | P1 | apply funnel exists; add fee payment |
 | **Tenant screening** (credit/criminal/eviction/income) | 🟡 | P1 | simulated job today → real FCRA provider |
-| Leasing **CRM** (leads, tours, follow-ups) | ⬜ | P2 | prospect pipeline + comms |
+| Leasing **CRM** (leads, tours, follow-ups) | 🟡 | P2 | `lead` pipeline shipped (inbound-email fed); tours ride the calendar |
 | Listing **syndication** (Zillow, Apartments.com, MLS) | ⬜ | P2 | feed out to portals |
 | Tour scheduling / self-showing / lockboxes | ⬜ | P3 | calendar + access |
 | Rent **pricing / comps** optimization | 🟡 | P3 | AVM rent estimate exists |
@@ -59,7 +59,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Renewals, amendments, addenda | ⬜ | P2 | versioned docs + e-sign |
 | **Security deposit** mgmt + disposition + statements | ⬜ | P1 | escrow accounting tie-in |
 | Renters **insurance** tracking / requirement | ⬜ | P2 | policy expiry reminders |
-| Communications: email / SMS / in-app + broadcast | ⬜ | P1 | `auto_email` job is the seed |
+| Communications: email / SMS / in-app + broadcast | 🟡 | P1 | outbound + inbound email→ticket/lead + comms log shipped (`docs/EMAIL.md`) |
 | Move-in / move-out **inspections** w/ photos | ⬜ | P2 | condition reports |
 | Package mgmt, amenity booking, community board | ⬜ | P3 | multifamily nice-to-haves |
 
@@ -70,7 +70,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Work orders + assignment + timeline | ✅ | — | staff or contractor |
 | **Helpdesk / resident support** (SLAs, queues) | 🟡 | P1 | tickets exist; add SLA + resident-facing |
 | Vendor management + **dispatch** + scheduling | 🟡 | P2 | entities registry exists |
-| Vendor **bids → approval → invoice → pay** | ⬜ | P2 | ties to AP |
+| Vendor **bids → approval → invoice → pay** | 🟡 | P2 | invoice → approval → pay shipped (AP); bids still open |
 | **Preventive maintenance** schedules | ⬜ | P2 | recurring jobs (queue exists) |
 | Inspections (routine, drive-by, turnover) | ⬜ | P2 | templated checklists |
 | **Make-ready / turnover** workflow | 🟡 | P2 | unit `make_ready` status exists |
@@ -141,14 +141,14 @@ The biggest gap for "total" management — most operators live in their books.
 | **Document storage + e-sign** | ✅ | — | Phase 1 storage + Phase 2 envelopes |
 | **Payments** processor + webhooks | ⬜ | P1 | |
 | Outbound integration / webhook framework + **secrets/KMS** | ⬜ | P1 | enables every real provider |
-| Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API exists |
+| Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API + signed outbound webhooks (subscribe/replay) shipped |
 | **Mobile apps** (manager / resident / inspector, offline) | ⬜ | P3 | |
 | **MFA/2FA**, SSO/SAML/SCIM (enterprise) | ⬜ | P2 | |
 | Global **search** | ⬜ | P2 | |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
 | **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |
 | SaaS **billing/metering** for client workspaces | ⬜ | P2 | plans modeled |
-| Calendar / scheduling / reminders engine | ⬜ | P2 | leases, inspections, renewals |
+| Calendar / scheduling / reminders engine | ✅ | — | `reminder` + per-tenant scan + console calendar (`docs/CALENDAR.md`) |
 
 ## 10. Optional verticals (expand TAM)
 

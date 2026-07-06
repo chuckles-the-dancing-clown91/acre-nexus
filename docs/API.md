@@ -167,6 +167,29 @@ and the dashboard series (`/finance/series?months=N`). Stripe/Plaid webhooks
 arrive on the shared `POST /webhooks/{provider}` ingestion endpoint. Full
 design: **`docs/PAYMENTS.md`**.
 
+**Accounts payable** (the `accounting` module, issue #58): vendor bills from
+draft to paid — `GET`/`POST /payables`, `GET`/`PATCH /payables/{id}`
+(`payable:read` / `payable:manage`), the lifecycle actions
+`POST /payables/{id}/submit|void` (`payable:manage`) and
+`POST /payables/{id}/approve|reject|pay` (`payable:approve` — approval
+accrues the expense, payment clears the liability through the payments
+provider). See **`docs/PAYMENTS.md`**.
+
+**Calendar & reminders** (the `calendar` module, issue #54):
+`GET /reminders?from=&to=&subject_type=&status=` (`calendar:read`),
+`POST /reminders`, `PATCH /reminders/{id}` (edit / `done` / `cancelled`),
+`DELETE /reminders/{id}` (`calendar:manage`). Lease-renewal reminders are
+auto-synced by the per-tenant scan. See **`docs/CALENDAR.md`**.
+
+**Email integration** (issue #62): CRM leads (`GET /leads` —
+`application:read`, `PATCH /leads/{id}` — `application:write`); the inbound
+comms log (`GET /integrations/inbound-emails` — `integrations:manage`);
+inbound mail arrives at `POST /webhooks/inbound_email?tenant={slug}`
+(signature-verified) and routes to ticket comments / leads; email
+deliverability for custom domains (`POST /domains/{id}/verify-email` —
+`domain:manage`; the records to publish ride `GET /domains`). See
+**`docs/EMAIL.md`**.
+
 **Property intelligence** (the `property_intel` module) enriches each property
 with parcel/county records, tax history, an automated valuation (AVM) + rent
 estimate, schools, and utilities — fetched and validated by background workers on
@@ -214,6 +237,11 @@ Client users receive `403` here.
 |--------|------|----------------|
 | GET | `/api/v1/listings` | `listing:read` |
 | GET | `/api/v1/properties` | `property:read` |
+| GET | `/api/v1/webhooks/events` | any valid token |
+| GET/POST | `/api/v1/webhooks` | per-event scopes (see below) |
+| PATCH/DELETE | `/api/v1/webhooks/{id}` | owning token |
+| GET | `/api/v1/webhooks/{id}/deliveries` | owning token |
+| POST | `/api/v1/webhooks/{id}/deliveries/{did}/replay` | owning token |
 
 Example:
 ```bash
@@ -221,6 +249,13 @@ curl http://localhost:8000/api/v1/listings \
   -H "Authorization: Bearer acre_live_xxxxxxxx"
 ```
 A token missing the required scope receives `403`; revoked/expired tokens `401`.
+
+**Outbound webhooks** (issue #68): subscribe to `listing.created`,
+`listing.updated`, `application.created`, `payment.recorded`, or
+`maintenance_ticket.created` — each gated by the same scope as the matching
+read, so a token can't subscribe to data it can't read. Deliveries are
+HMAC-signed (`X-Acre-Signature`), retried with backoff, dead-lettered after
+`max_attempts`, and replayable. Full design: **`docs/WEBHOOKS.md`**.
 
 ---
 
@@ -238,6 +273,9 @@ Domain: `property:read` · `property:write` · `entity:read` · `entity:manage` 
 `maintenance:read` · `maintenance:manage` · `title:read` · `title:manage` ·
 `listing:read` · `listing:write` · `application:read` · `application:write` ·
 `tenant:manage` · `billing:read` · `theme:write` · `apitoken:manage`.
+Accounting: `ledger:read` · `ledger:manage` · `payment:read` ·
+`payment:manage` · `payout:manage` · `payable:read` · `payable:manage` ·
+`payable:approve`. Calendar: `calendar:read` · `calendar:manage`.
 IAM: `user:read` · `user:manage` · `profile:read` · `profile:write` ·
 `profile:read_pii` · `member:read` · `member:manage` · `role:read` ·
 `role:manage`. Plus `platform:admin` (super-permission, implies all).

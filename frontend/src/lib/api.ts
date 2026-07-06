@@ -1007,6 +1007,103 @@ export const api = {
       body: {},
     }),
 
+  // ---- accounts payable (vendor bills) ----
+  payables: (params: { status?: string; counterparty?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.counterparty) qs.set("counterparty", params.counterparty);
+    const suffix = qs.size ? `?${qs.toString()}` : "";
+    return request<VendorBill[]>(`/payables${suffix}`, { auth: true });
+  },
+  payable: (id: string) =>
+    request<VendorBill>(`/payables/${id}`, { auth: true }),
+  createPayable: (body: CreateVendorBillInput) =>
+    request<VendorBill>("/payables", { method: "POST", auth: true, body }),
+  updatePayable: (id: string, body: UpdateVendorBillInput) =>
+    request<VendorBill>(`/payables/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  submitPayable: (id: string) =>
+    request<VendorBill>(`/payables/${id}/submit`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  approvePayable: (id: string) =>
+    request<VendorBill>(`/payables/${id}/approve`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  rejectPayable: (id: string, reason?: string) =>
+    request<VendorBill>(`/payables/${id}/reject`, {
+      method: "POST",
+      auth: true,
+      body: { reason },
+    }),
+  voidPayable: (id: string) =>
+    request<VendorBill>(`/payables/${id}/void`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  payPayable: (id: string) =>
+    request<VendorBill>(`/payables/${id}/pay`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+
+  // ---- calendar / reminders ----
+  reminders: (
+    params: {
+      from?: string;
+      to?: string;
+      subject_type?: string;
+      status?: string;
+    } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    if (params.subject_type) qs.set("subject_type", params.subject_type);
+    if (params.status) qs.set("status", params.status);
+    const suffix = qs.size ? `?${qs.toString()}` : "";
+    return request<Reminder[]>(`/reminders${suffix}`, { auth: true });
+  },
+  createReminder: (body: CreateReminderInput) =>
+    request<Reminder>("/reminders", { method: "POST", auth: true, body }),
+  updateReminder: (id: string, body: UpdateReminderInput) =>
+    request<Reminder>(`/reminders/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  deleteReminder: (id: string) =>
+    request<{ deleted: boolean }>(`/reminders/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+
+  // ---- CRM leads (inbound leasing email lands here) ----
+  leads: (status?: string) => {
+    const suffix = status ? `?status=${status}` : "";
+    return request<LeadsResponse>(`/leads${suffix}`, { auth: true });
+  },
+  updateLead: (id: string, body: UpdateLeadInput) =>
+    request<Lead>(`/leads/${id}`, { method: "PATCH", auth: true, body }),
+
+  // ---- email integration: inbound comms log + domain deliverability ----
+  inboundEmails: () =>
+    request<InboundEmailLog[]>("/integrations/inbound-emails", { auth: true }),
+  verifyDomainEmail: (id: string) =>
+    request<DomainInfo>(`/domains/${id}/verify-email`, {
+      method: "POST",
+      auth: true,
+    }),
+
   // ---- platform plane: staff + audited impersonation + provisioning ----
   platformStaff: () =>
     request<PlatformStaff[]>("/platform/staff", { auth: true }),
@@ -1852,6 +1949,15 @@ export interface DnsInstructions {
   txt_value: string;
 }
 
+export interface EmailDnsRecord {
+  /** `spf` | `dkim` | `dmarc`. */
+  key: string;
+  /** The DNS name to create the TXT record at. */
+  name: string;
+  /** The TXT value to publish. */
+  value: string;
+}
+
 export interface DomainInfo {
   id: string;
   hostname: string;
@@ -1862,6 +1968,147 @@ export interface DomainInfo {
   verified_at: string | null;
   tls_status: string;
   dns_instructions: DnsInstructions | null;
+  /** True once SPF + DKIM + DMARC all verified for branded sending. */
+  email_verified: boolean;
+  email_verified_at: string | null;
+  /** Per-record email DNS check results, e.g. `{ spf: true, dkim: false }`. */
+  email_dns_status: Record<string, boolean>;
+  /** Records to publish for branded mail (custom domains only). */
+  email_dns_records: EmailDnsRecord[] | null;
+}
+
+// ---- accounts payable (vendor bills, #58) ----
+
+export interface VendorBillLineItem {
+  description: string;
+  amount_cents: number;
+}
+
+export interface VendorBill {
+  id: string;
+  bill_number: string;
+  entity_id: string;
+  entity_name: string | null;
+  counterparty_id: string;
+  vendor_name: string | null;
+  property_id: string | null;
+  maintenance_ticket_id: string | null;
+  memo: string;
+  line_items: VendorBillLineItem[];
+  amount_cents: number;
+  amount_label: string;
+  due_date: string | null;
+  /** draft | submitted | approved | processing | paid | failed | void */
+  status: string;
+  submitted_at: string | null;
+  approved_at: string | null;
+  rejected_reason: string | null;
+  accrual_txn_id: string | null;
+  payment_txn_id: string | null;
+  failure_reason: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export interface CreateVendorBillInput {
+  counterparty_id?: string;
+  entity_id?: string;
+  property_id?: string;
+  maintenance_ticket_id?: string;
+  memo?: string;
+  line_items?: VendorBillLineItem[];
+  amount_cents?: number;
+  due_date?: string;
+}
+
+export interface UpdateVendorBillInput {
+  memo?: string;
+  line_items?: VendorBillLineItem[];
+  amount_cents?: number;
+  due_date?: string;
+}
+
+// ---- calendar / reminders (#54) ----
+
+export interface Reminder {
+  id: string;
+  /** lease | license | insurance | tour | inspection | custom */
+  subject_type: string;
+  subject_id: string | null;
+  title: string;
+  description: string | null;
+  due_date: string;
+  lead_days: number[];
+  recipients: string[];
+  fired: number[];
+  /** active | done | cancelled */
+  status: string;
+  /** Days until due (negative = overdue). */
+  days_left: number | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface CreateReminderInput {
+  subject_type: string;
+  subject_id?: string;
+  title: string;
+  description?: string;
+  due_date: string;
+  lead_days?: number[];
+  recipients?: string[];
+}
+
+export interface UpdateReminderInput {
+  title?: string;
+  description?: string;
+  due_date?: string;
+  lead_days?: number[];
+  recipients?: string[];
+  status?: string;
+}
+
+// ---- CRM leads (#46 seed, landed with #62) ----
+
+export interface Lead {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  source: string;
+  /** new | contacted | toured | applied | closed */
+  status: string;
+  notes: string | null;
+  last_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadsResponse {
+  /** The monitored leasing inbox — mail sent here creates/updates leads. */
+  inbox_address: string | null;
+  leads: Lead[];
+}
+
+export interface UpdateLeadInput {
+  name?: string;
+  phone?: string;
+  status?: string;
+  notes?: string;
+}
+
+// ---- inbound email comms log (#62) ----
+
+export interface InboundEmailLog {
+  id: string;
+  from_email: string;
+  to_email: string;
+  subject: string;
+  body_text: string;
+  /** ticket_comment | lead | unmatched */
+  routed: string;
+  routed_id: string | null;
+  created_at: string;
 }
 
 export interface ResolveResult {
