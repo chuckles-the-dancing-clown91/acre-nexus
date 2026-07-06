@@ -66,7 +66,7 @@ pub async fn enqueue_with_retries(
 ) -> Result<Uuid, sea_orm::DbErr> {
     let now = Utc::now();
     let job = entity::background_job::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(Uuid::now_v7()),
         tenant_id: Set(tenant_id),
         kind: Set(kind.to_string()),
         status: Set("pending".into()),

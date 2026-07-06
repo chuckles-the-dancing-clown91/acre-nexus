@@ -50,7 +50,7 @@ impl Fairing for AuditFairing {
         let trace = Trace {
             started: Instant::now(),
             actor,
-            request_id: Uuid::new_v4(),
+            request_id: Uuid::now_v7(),
         };
         // Stash for `on_response`; keyed by type, retrieved as `Option<Trace>`.
         req.local_cache(|| Some(trace));

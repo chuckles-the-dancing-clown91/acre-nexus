@@ -20,7 +20,7 @@ pub async fn record(
     metadata: Option<serde_json::Value>,
 ) {
     let entry = entity::audit_log::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(Uuid::now_v7()),
         actor_user_id: Set(actor),
         action: Set(action.to_string()),
         target_type: Set(target_type.map(|s| s.to_string())),

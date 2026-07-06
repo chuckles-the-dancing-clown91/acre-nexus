@@ -107,13 +107,15 @@ async fn rocket() -> _ {
     // its routes and a matching spec fragment.
     let mut spec = OpenApi::new();
     // Raise body limits so document/logo uploads (multipart) are accepted.
-    let figment = rocket::Config::figment().merge((
-        "limits",
-        rocket::data::Limits::default()
-            .limit("file", 25.mebibytes())
-            .limit("data-form", 30.mebibytes())
-            .limit("bytes", 30.mebibytes()),
-    ));
+    let figment = rocket::Config::figment()
+        .merge(("cli_colors", false))
+        .merge((
+            "limits",
+            rocket::data::Limits::default()
+                .limit("file", 25.mebibytes())
+                .limit("data-form", 30.mebibytes())
+                .limit("bytes", 30.mebibytes()),
+        ));
     let mut app = rocket::custom(figment)
         .manage(state)
         .attach(cors::Cors)

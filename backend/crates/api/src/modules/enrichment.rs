@@ -183,7 +183,7 @@ async fn record_run<C: ConnectionTrait>(
     detail: serde_json::Value,
 ) {
     let row = entity::enrichment_run::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(Uuid::now_v7()),
         tenant_id: Set(property.tenant_id),
         property_id: Set(property.id),
         source: Set(source.as_str().to_string()),

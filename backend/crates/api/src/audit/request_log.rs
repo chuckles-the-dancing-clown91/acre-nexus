@@ -24,7 +24,7 @@ pub struct RequestRecord {
 /// Write a request entry. Best-effort: errors are logged, not propagated.
 pub async fn write(db: &DatabaseConnection, rec: RequestRecord) {
     let entry = entity::audit_log::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(Uuid::now_v7()),
         actor_user_id: Set(rec.actor.user_id),
         action: Set(actions::HTTP_REQUEST.to_string()),
         target_type: NotSet,
