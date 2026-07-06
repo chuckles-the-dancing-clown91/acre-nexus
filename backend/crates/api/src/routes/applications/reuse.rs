@@ -165,6 +165,11 @@ pub async fn reuse(
         screening_status: Set(src.screening_status.clone()),
         screened_at: Set(src.screened_at),
         created_at: Set(now.into()),
+        // The prior application's consent rides along with its screening
+        // result; adverse-action state never carries over.
+        screening_consent_at: Set(src.screening_consent_at),
+        adverse_action_at: Set(None),
+        adverse_action_document_id: Set(None),
     }
     .insert(&db)
     .await?;

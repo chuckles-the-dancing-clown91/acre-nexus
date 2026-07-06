@@ -100,10 +100,15 @@ impl PlatformModule for IntegrationsModule {
             }
             "document_retention" => Some(retention(ctx.db, ctx.job).await),
             // Verified inbound events dispatch on `payload.provider`: the
-            // payments providers (stripe/plaid, Phase 3) consume theirs; any
-            // other provider's event is recorded as processed.
+            // payments providers (stripe/plaid, Phase 3) and the screening
+            // provider (checkr, Phase 4) consume theirs; any other provider's
+            // event is recorded as processed.
             "webhook_event" => {
                 if let Some(outcome) = crate::payments::handle_webhook_event(ctx.db, ctx.job).await
+                {
+                    return Some(outcome);
+                }
+                if let Some(outcome) = crate::screening::handle_webhook_event(ctx.db, ctx.job).await
                 {
                     return Some(outcome);
                 }

@@ -71,6 +71,7 @@ pub mod push_subscription;
 pub mod refresh_token;
 pub mod role;
 pub mod role_permission;
+pub mod screening_report;
 pub mod secret;
 pub mod setting;
 pub mod tenant;

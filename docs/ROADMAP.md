@@ -11,8 +11,6 @@ Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
 The next slice of work, in dependency order:
 
-- [ ] **Phase 4**: real FCRA screening provider dropped into the
-      `application.screened` slot (policy settings + consent + adverse action).
 - [ ] **Portal round-out (Phase 5)**: lease + documents view and maintenance
       requests in the renter portal (rent payment shipped with Phase 3).
 - [ ] **Accounts payable (#58)**: vendor bills → approval → pay, riding the
@@ -151,20 +149,26 @@ year of trends from real ledger data.
 
 ---
 
-## Phase 4 — Automated background checks (real) ⬜  *(Pillar 1)*
+## Phase 4 — Automated background checks (real) ✅  *(Pillar 1)*
 
-- **FCRA-compliant screening provider** (Checkr / TransUnion SmartMove / similar)
-  behind the provider framework: credit + criminal + eviction.
-- **Applicant consent** capture, a `screening_report` entity, secure result
-  storage, and **adverse-action** workflow + decision recording.
-- Wire into the existing apply funnel (replacing the simulated `background_check`
-  job) with status surfaced to the back office. The seams already exist: the
-  simulated provider honors per-tenant policy settings
-  (`screening.min_credit_score`, `screening.min_income_rent_ratio`) and lands
-  its verdict through `application.screened` — a live provider drops its
-  verdict into the same slot.
+**Shipped** — see [`SCREENING.md`](SCREENING.md) for the as-built design.
 
-**DoD:** submit an application → real (sandbox) screening runs → report stored →
+- **FCRA screening provider** ✅: Checkr behind the Phase 1 provider framework
+  (credit + criminal + eviction) — deterministic sandbox by default,
+  `LIVE_PROVIDERS=checkr` + the `checkr.api_key` credential for real reports,
+  completion by signature-verified webhook (`POST /webhooks/checkr`).
+- **Consent + report + adverse action** ✅: FCRA §604(b) consent captured at
+  every intake door (no consent → no application), a `screening_report` entity
+  per application, and the §615(a) **adverse-action** workflow — notice
+  generated + filed as a PDF document, emailed to the applicant, stamped on the
+  application, auto-sent on decline (setting) or sent from the console.
+- **Wired into the apply funnel** ✅: the `background_check` job now orders a
+  real report and lands its policy verdict (credit floor, income multiple,
+  criminal/eviction records) through the same `application.screened` slot;
+  the report surfaces in the back office behind the new `screening:read`
+  permission.
+
+**DoD:** ✅ submit an application → (sandbox) screening runs → report stored →
 approve/deny with adverse-action notice, fully audited.
 
 ---
@@ -235,7 +239,7 @@ Phase 0 ✅
    └─ Phase 1 ✅ (substrate)
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 🟡 (tenant lifecycle/portal)
-        ├─ Phase 4 ⬜ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
+        ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
         └─ Phase 7 ⬜ (real data)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```

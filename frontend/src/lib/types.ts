@@ -706,9 +706,39 @@ export interface Application {
   is_military: boolean;
   /** Intake door: public | portal | back_office. */
   source: string;
-  /** Background-check outcome once screening finishes: cleared | flagged. */
+  /** Background-check outcome once screening finishes: cleared | failed. */
   screening_status: string | null;
   screened_at: string | null;
+  /** When the applicant authorized the consumer report (FCRA §604(b)). */
+  screening_consent_at: string | null;
+  /** When the FCRA §615(a) adverse-action notice was sent, if it was. */
+  adverse_action_at: string | null;
+  adverse_action_document_id: string | null;
+  created_at: string;
+}
+
+/** The stored screening (consumer) report for an application. */
+export interface ScreeningReport {
+  id: string;
+  application_id: string;
+  /** Provider key (checkr). */
+  provider: string;
+  /** pending | in_progress | complete | failed. */
+  status: string;
+  include_credit: boolean;
+  include_criminal: boolean;
+  include_eviction: boolean;
+  consent_at: string | null;
+  credit_score: number | null;
+  criminal_records: number | null;
+  eviction_records: number | null;
+  /** Provider assessment: clear | consider. */
+  recommendation: string | null;
+  /** Policy verdict once landed: cleared | failed. */
+  result: string | null;
+  /** The policy checks that tripped (empty when cleared). */
+  reasons: string[];
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -767,6 +797,8 @@ export interface CreateApplicationInput {
   has_pet?: boolean;
   pet_details?: string;
   is_military?: boolean;
+  /** Staff attest the applicant signed the consumer-report authorization. */
+  screening_consent?: boolean;
 }
 
 /** Renter-portal application (identity comes from the account). */
@@ -780,6 +812,8 @@ export interface PortalApplyInput {
   has_pet?: boolean;
   pet_details?: string;
   is_military?: boolean;
+  /** The applicant authorizes the consumer report (FCRA) — required. */
+  screening_consent?: boolean;
 }
 
 export interface ApplyResponse {

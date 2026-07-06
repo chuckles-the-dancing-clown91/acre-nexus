@@ -121,6 +121,7 @@ pub async fn my_apply(
             has_pet,
             pet_details,
             is_military,
+            screening_consent: b.screening_consent.unwrap_or(false),
         },
         "portal",
         Some(user.user_id),

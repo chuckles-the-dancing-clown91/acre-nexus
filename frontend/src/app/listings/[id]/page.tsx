@@ -109,6 +109,8 @@ function ApplyForm({ listingId }: { listingId: string }) {
     income: "",
     move_in: "",
   });
+  // FCRA §604(b): screening may only run with the applicant's authorization.
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -133,6 +135,7 @@ function ApplyForm({ listingId }: { listingId: string }) {
         const app = await api.myApply({
           listing_id: listingId,
           move_in: form.move_in || undefined,
+          screening_consent: consent,
         });
         setResult({
           application_id: app.id,
@@ -151,6 +154,7 @@ function ApplyForm({ listingId }: { listingId: string }) {
           phone: form.phone,
           annual_income_cents: form.income ? Number(form.income) * 100 : 0,
           move_in: form.move_in,
+          screening_consent: consent,
         });
         setResult(res);
       }
@@ -223,6 +227,19 @@ function ApplyForm({ listingId }: { listingId: string }) {
           value={form.move_in}
           onChange={update("move_in")}
         />
+        <label className="flex items-start gap-2 text-xs text-ink-3">
+          <input
+            required
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            I authorize a consumer report — credit, criminal, and eviction
+            history — for this application (Fair Credit Reporting Act).
+          </span>
+        </label>
         {error && <p className="text-sm text-bad">{error}</p>}
         <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? "Submitting…" : "Apply with my profile"}
@@ -267,6 +284,19 @@ function ApplyForm({ listingId }: { listingId: string }) {
         value={form.move_in}
         onChange={update("move_in")}
       />
+      <label className="flex items-start gap-2 text-xs text-ink-3">
+        <input
+          required
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          I authorize a consumer report — credit, criminal, and eviction history
+          — for this application (Fair Credit Reporting Act).
+        </span>
+      </label>
       {error && <p className="text-sm text-bad">{error}</p>}
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? "Submitting…" : "Apply now"}

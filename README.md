@@ -37,6 +37,12 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   (credit floor / income multiple, optional auto-approve), one-click
   application→lease conversion with auto-applied fees and a generated lease
   document, and automatic listing/occupancy/workflow sync at every step.
+- **Tenant screening (FCRA)** — real consumer reports (credit + criminal +
+  eviction) through a sandbox-first Checkr provider: §604(b) consent captured
+  at every intake door, a stored `screening_report` per application behind its
+  own `screening:read` permission, policy verdicts landing on the application,
+  and a §615(a) adverse-action workflow — notice generated, filed as a PDF,
+  emailed, and audited (auto-send on decline or one click from the console).
 - **E-signature** — native envelope flow with tokenized signing links (email +
   SMS), reminders that keep the original links working, an ESIGN/UETA audit
   trail (typed signature, consent, IP, user agent, pinned body hash), signed
@@ -162,6 +168,7 @@ CI runs the same suite on every push and pull request.
 | [`docs/RENTALS.md`](docs/RENTALS.md) | Units, leases, ledger, maintenance, title |
 | [`docs/PAYMENTS.md`](docs/PAYMENTS.md) | Ledger, payments, late fees, bank feeds, payouts, dashboards |
 | [`docs/LEASING.md`](docs/LEASING.md) | Listings, applications, screening |
+| [`docs/SCREENING.md`](docs/SCREENING.md) | FCRA screening, consent, adverse action |
 | [`docs/INVESTING.md`](docs/INVESTING.md) | Entities, financing, workflows |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Audit trail & logging |
 | [`docs/API.md`](docs/API.md) | API conventions & vendor tokens |
@@ -175,9 +182,10 @@ list): foundation + integration substrate (Phases 0–1, shipped), documents &
 e-signature with the full listing→application→screening→lease pipeline
 (Phase 2, shipped and hardened), payments + accounting core + financial
 dashboards (Phase 3, shipped: double-entry ledger, Stripe/Plaid sandbox,
-autopay, late fees, payouts, trends), tenant lifecycle / resident portal
-(partial — conversion, the white-glove portal, and rent payment shipped),
-then real screening providers, helpdesk, real data providers, and
+autopay, late fees, payouts, trends), FCRA tenant screening (Phase 4,
+shipped: Checkr sandbox, consent, screening reports, adverse action),
+tenant lifecycle / resident portal (partial — conversion, the white-glove
+portal, and rent payment shipped), then helpdesk, real data providers, and
 reporting/GA.
 
 ## Topics

@@ -1,8 +1,9 @@
 //! **Leasing** module — the public white-label website (listings + the apply
 //! funnel), the renter-portal and back-office application intake doors, the
 //! back-office applications inbox, and console listing management. It owns the
-//! tenant-screening background jobs; the `auto_email` jobs it enqueues are
-//! owned by the `integrations` module (which renders and delivers them).
+//! tenant-screening background jobs (delegated to [`crate::screening`], the
+//! Phase 4 FCRA pipeline); the `auto_email` jobs it enqueues are owned by the
+//! `integrations` module (which renders and delivers them).
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
@@ -10,9 +11,6 @@ use crate::routes::{applications, listings, public};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use serde_json::json;
-use uuid::Uuid;
 
 pub struct LeasingModule;
 
@@ -29,6 +27,7 @@ impl PlatformModule for LeasingModule {
                 Permission::ListingWrite,
                 Permission::ApplicationRead,
                 Permission::ApplicationWrite,
+                Permission::ScreeningRead,
             ],
             job_kinds: &["background_check", "screening"],
             default_enabled: true,
@@ -50,6 +49,9 @@ impl PlatformModule for LeasingModule {
             applications::list::list,
             applications::create::create,
             applications::update_status::update_status,
+            // screening report + adverse action (FCRA)
+            applications::screening::get_screening,
+            applications::screening::adverse_action,
             // renter portal: apply + track as the signed-in user
             applications::portal::my_applications,
             applications::portal::my_apply,
@@ -63,200 +65,17 @@ impl PlatformModule for LeasingModule {
         ]
     }
 
-    /// Durable screening state machine: pending → awaiting the (simulated)
-    /// provider callback → completed. Completion evaluates the workspace's
-    /// screening policy (credit floor, income multiple), writes the outcome
-    /// onto the application, and either auto-approves it (workspace setting)
-    /// or asks staff to review.
+    /// Durable screening state machine — the Phase 4 pipeline in
+    /// [`crate::screening`]: order a real report through the provider
+    /// framework, wait for the (simulated or webhook-delivered) result,
+    /// evaluate the workspace's screening policy, and land the verdict on the
+    /// application (auto-approve or staff review).
     async fn handle_job(&self, ctx: &JobContext<'_>) -> Option<JobOutcome> {
-        let now = chrono::Utc::now();
-        match (ctx.job.kind.as_str(), ctx.job.status.as_str()) {
-            ("background_check" | "screening", "pending") => {
-                let delay = crate::settings::get_i64(
-                    ctx.db,
-                    ctx.job.tenant_id,
-                    crate::settings::SCREENING_CALLBACK_DELAY_SECS,
-                )
-                .await
-                .max(0);
-                Some(JobOutcome::reschedule("awaiting_callback", delay))
-            }
-            ("background_check" | "screening", "awaiting_callback") => {
-                match record_screening_outcome(ctx).await {
-                    Ok(verdict) => Some(JobOutcome::completed(json!({
-                        "cleared": verdict.result == "cleared",
-                        "result": verdict.result,
-                        "reasons": verdict.reasons,
-                        "completed_at": now.to_rfc3339(),
-                    }))),
-                    // Landing the outcome is the whole point of the job — a
-                    // transient failure must retry (idempotently), not mark
-                    // the job completed while the application sits stranded.
-                    Err(e) => Some(JobOutcome::retry(
-                        crate::providers::backoff(ctx.job.attempts),
-                        format!("failed to apply screening outcome: {e}"),
-                    )),
-                }
+        match ctx.job.kind.as_str() {
+            "background_check" | "screening" => {
+                Some(crate::screening::handle_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }
     }
-}
-
-/// A screening verdict: `cleared` or `failed`, with the policy checks that
-/// tripped (empty when cleared, or when the job had no application to score).
-struct ScreeningVerdict {
-    result: &'static str,
-    reasons: Vec<String>,
-}
-
-/// Evaluate the workspace's screening policy against an application. The
-/// simulated provider clears everyone unless the tenant configured a credit
-/// floor or income multiple (a live FCRA provider — roadmap Phase 4 — replaces
-/// this verdict). Checks only run when the application carries the data.
-async fn evaluate_screening(
-    ctx: &JobContext<'_>,
-    app: &entity::application::Model,
-) -> ScreeningVerdict {
-    let tenant_id = ctx.job.tenant_id;
-    let mut reasons = Vec::new();
-
-    let min_score = crate::settings::get_i64(
-        ctx.db,
-        tenant_id,
-        crate::settings::SCREENING_MIN_CREDIT_SCORE,
-    )
-    .await;
-    if min_score > 0 {
-        if let Some(score) = app.credit_score {
-            if i64::from(score) < min_score {
-                reasons.push(format!("credit score {score} below minimum {min_score}"));
-            }
-        }
-    }
-
-    let min_ratio = crate::settings::get_i64(
-        ctx.db,
-        tenant_id,
-        crate::settings::SCREENING_MIN_INCOME_RENT_RATIO,
-    )
-    .await;
-    if min_ratio > 0 {
-        if let Some(listing_id) = app.listing_id {
-            let rent_cents = entity::prelude::Listing::find_by_id(listing_id)
-                .filter(entity::listing::Column::TenantId.eq(tenant_id))
-                .one(ctx.db)
-                .await
-                .ok()
-                .flatten()
-                .map(|l| l.rent_cents)
-                .unwrap_or(0);
-            if rent_cents > 0 && app.annual_income_cents < min_ratio * rent_cents * 12 {
-                reasons.push(format!(
-                    "monthly income ${:.0} below {min_ratio}x rent ${:.0}",
-                    app.annual_income_cents as f64 / 12.0 / 100.0,
-                    rent_cents as f64 / 100.0,
-                ));
-            }
-        }
-    }
-
-    ScreeningVerdict {
-        result: if reasons.is_empty() {
-            "cleared"
-        } else {
-            "failed"
-        },
-        reasons,
-    }
-}
-
-/// Land a finished screening on its application: evaluate the workspace's
-/// screening policy, record the outcome, then auto-approve (when the setting
-/// is on and the check cleared) or notify staff that a decision is waiting.
-async fn record_screening_outcome(ctx: &JobContext<'_>) -> anyhow::Result<ScreeningVerdict> {
-    use sea_orm::{ActiveModelTrait, Set};
-
-    let Some(app_id) = ctx
-        .job
-        .payload
-        .get("application_id")
-        .and_then(|v| v.as_str())
-        .and_then(|s| Uuid::parse_str(s).ok())
-    else {
-        // Legacy/manual jobs without an application reference: nothing to land.
-        return Ok(ScreeningVerdict {
-            result: "cleared",
-            reasons: vec![],
-        });
-    };
-    let tenant_id = ctx.job.tenant_id;
-    let Some(app) = entity::prelude::Application::find_by_id(app_id)
-        .filter(entity::application::Column::TenantId.eq(tenant_id))
-        .one(ctx.db)
-        .await?
-    else {
-        return Ok(ScreeningVerdict {
-            result: "cleared",
-            reasons: vec![],
-        });
-    };
-
-    let verdict = evaluate_screening(ctx, &app).await;
-    let result = verdict.result;
-
-    // Record the outcome (idempotent: a retried job re-writes the same state).
-    let mut am: entity::application::ActiveModel = app.clone().into();
-    am.screening_status = Set(Some(result.to_string()));
-    am.screened_at = Set(Some(chrono::Utc::now().into()));
-    let app = am.update(ctx.db).await?;
-
-    // The screening verdict is a domain event in its own right — the check
-    // ran and wrote data, whatever staff decide next (actor = None: the
-    // pipeline did it, not a person).
-    crate::audit::record(
-        ctx.db,
-        None,
-        crate::audit::actions::APPLICATION_SCREENED,
-        Some("application"),
-        Some(app.id.to_string()),
-        Some(tenant_id),
-        Some(json!({ "result": result, "reasons": verdict.reasons })),
-    )
-    .await;
-
-    // The application may have been decided while screening ran.
-    if app.status != "Screening" {
-        return Ok(verdict);
-    }
-
-    let auto_approve =
-        crate::settings::get_bool(ctx.db, tenant_id, crate::settings::APPLICATION_AUTO_APPROVE)
-            .await;
-
-    if auto_approve && result == "cleared" {
-        crate::routes::applications::apply_transition(
-            ctx.db,
-            tenant_id,
-            None,
-            app,
-            "Approved",
-            Some("Auto-approved: screening cleared".into()),
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("auto-approve transition failed: {e}"))?;
-    } else {
-        crate::notify::notify_staff(
-            ctx.db,
-            tenant_id,
-            "application:read",
-            "application_screened",
-            json!({ "applicant": app.applicant_name, "result": result }),
-            Some(("application", app.id)),
-            "screened",
-            None,
-        )
-        .await;
-    }
-    Ok(verdict)
 }

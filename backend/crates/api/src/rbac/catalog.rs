@@ -156,6 +156,14 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "screening:read",
+        category: "Leasing",
+        label: "View screening reports",
+        description: "View applicant screening (consumer) reports — credit, \
+                      criminal, and eviction results.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "theme:write",
         category: "Settings",
         label: "Edit branding",

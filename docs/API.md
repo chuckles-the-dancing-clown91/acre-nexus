@@ -91,10 +91,10 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 
 `POST /public/applications`:
 ```json
-// request
+// request (screening_consent is the FCRA §604(b) authorization — required)
 { "listing_id": "...", "applicant_name": "Taylor Brooks", "email": "t@e.com",
   "phone": "(503) 555-0188", "annual_income_cents": 7800000, "credit_score": 724,
-  "move_in": "Aug 1" }
+  "move_in": "Aug 1", "screening_consent": true }
 // response
 { "application_id": "...", "status": "Screening",
   "screening_job_id": "...", "message": "Application received — screening in progress" }
@@ -120,6 +120,8 @@ Auth required. `{ "refresh_token": "..." }` revokes the refresh token.
 | POST | `/llcs` | `tenant:manage` | Create LLC |
 | GET | `/applications` | `application:read` | Applications |
 | PATCH | `/applications/{id}` | `application:write` | Advance status (Approve → auto-email job) |
+| GET | `/applications/{id}/screening` | `screening:read` | The stored screening (consumer) report |
+| POST | `/applications/{id}/adverse-action` | `application:write` | Send + file the FCRA adverse-action notice |
 | GET | `/theme` | — | Tenant theme |
 | PUT | `/theme` | `theme:write` | Update branding + legal templates |
 | GET | `/api-tokens` | `apitoken:manage` | List vendor tokens |

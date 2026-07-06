@@ -50,6 +50,7 @@ mod rbac;
 mod rentals_occupancy;
 mod routes;
 mod scheduler;
+mod screening;
 mod secrets;
 mod seed;
 mod settings;
