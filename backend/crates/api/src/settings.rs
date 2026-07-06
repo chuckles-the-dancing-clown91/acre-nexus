@@ -36,6 +36,12 @@ pub const SCREENING_MIN_CREDIT_SCORE: &str = "screening.min_credit_score";
 pub const SCREENING_MIN_INCOME_RENT_RATIO: &str = "screening.min_income_rent_ratio";
 /// Seconds the simulated screening provider takes to call back.
 pub const SCREENING_CALLBACK_DELAY_SECS: &str = "screening.callback_delay_secs";
+/// Name of the consumer-reporting agency cited on adverse-action notices.
+pub const SCREENING_CRA_NAME: &str = "screening.cra_name";
+/// Contact details (address/phone/email) for the CRA on adverse-action notices.
+pub const SCREENING_CRA_CONTACT: &str = "screening.cra_contact";
+/// Auto-send the adverse-action notice when declining a flagged applicant.
+pub const SCREENING_AUTO_ADVERSE_ACTION: &str = "screening.auto_adverse_action";
 /// Days a signing link stays valid after the envelope is sent (0 = no expiry).
 pub const ESIGN_LINK_EXPIRY_DAYS: &str = "esign.link_expiry_days";
 /// Maximum signers allowed on one envelope.
@@ -173,6 +179,36 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Screening",
         kind: SettingKind::Int,
         default: || json!(6),
+    },
+    SettingDef {
+        key: SCREENING_CRA_NAME,
+        label: "Consumer-reporting agency name",
+        description: "The screening bureau named on FCRA adverse-action \
+                      notices — the applicant's point of contact for report \
+                      copies and disputes.",
+        group: "Screening",
+        kind: SettingKind::Text,
+        default: || json!("Checkr, Inc. (consumer reporting agency)"),
+    },
+    SettingDef {
+        key: SCREENING_CRA_CONTACT,
+        label: "Consumer-reporting agency contact",
+        description: "Address/phone/email printed under the agency name on \
+                      adverse-action notices.",
+        group: "Screening",
+        kind: SettingKind::Text,
+        default: || json!("1 Montgomery St, San Francisco, CA 94104 · (844) 824-3257 · checkr.com"),
+    },
+    SettingDef {
+        key: SCREENING_AUTO_ADVERSE_ACTION,
+        label: "Auto-send adverse-action notices",
+        description: "When a declined application's screening report carried \
+                      adverse information, send (and file) the FCRA §615(a) \
+                      notice automatically. Off = staff send it from the \
+                      application console.",
+        group: "Screening",
+        kind: SettingKind::Bool,
+        default: || json!(true),
     },
     SettingDef {
         key: ESIGN_LINK_EXPIRY_DAYS,

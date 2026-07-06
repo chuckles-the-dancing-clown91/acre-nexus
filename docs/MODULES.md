@@ -20,7 +20,7 @@ what a module is and how it is gated.
 | `accounting` | Accounting & Payments | on | `/accounting/*` (ledger + reports), `/payments`, `/my/lease` + `/my/payments` + `/my/payment-methods` + `/my/autopay`, `/bank-accounts/*` + `/bank-transactions/*`, `/payouts`, `/finance/series` + the `billing_cycle`/`payment_process`/`bank_feed_sync`/`payout_execute` jobs (see `docs/PAYMENTS.md`) |
 | `maintenance` | Maintenance & Work Orders | on | `/tickets`, `/properties/{id}/tickets`, `/tickets/{id}/comments` (see `docs/RENTALS.md`) |
 | `title` | Title & Ownership | on | `/properties/{id}/ownership`, `/properties/{id}/liens` (see `docs/RENTALS.md`) |
-| `leasing` | Leasing & Listings | on | `/public/*`, `/applications` + the screening jobs |
+| `leasing` | Leasing & Listings | on | `/public/*`, `/applications`, `/applications/{id}/screening` + `/adverse-action` + the FCRA screening jobs (see `docs/SCREENING.md`) |
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` |
 | `theming` | Branding & Theming | on | `/theme` |
 | `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/providers`, `/integrations/notifications`, `/notifications/*` (inbox + web push), `/documents`, `/webhooks/{provider}` + the `auto_email`/`auto_sms`/`auto_push`/`auto_chat`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`, `docs/NOTIFICATIONS.md`) |

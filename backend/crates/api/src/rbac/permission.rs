@@ -31,6 +31,9 @@ pub enum Permission {
     ListingWrite,
     ApplicationRead,
     ApplicationWrite,
+    /// View screening reports (FCRA consumer reports) — more sensitive than
+    /// the application itself, so it's its own grant.
+    ScreeningRead,
     ThemeWrite,
     ApiTokenManage,
     /// Integration credentials + integrations settings (write-only: set /
@@ -98,6 +101,7 @@ impl Permission {
             Permission::ListingWrite => "listing:write",
             Permission::ApplicationRead => "application:read",
             Permission::ApplicationWrite => "application:write",
+            Permission::ScreeningRead => "screening:read",
             Permission::ThemeWrite => "theme:write",
             Permission::ApiTokenManage => "apitoken:manage",
             Permission::IntegrationsManage => "integrations:manage",
@@ -152,6 +156,7 @@ pub const ALL_PERMS: &[Permission] = &[
     ListingWrite,
     ApplicationRead,
     ApplicationWrite,
+    ScreeningRead,
     ThemeWrite,
     ApiTokenManage,
     IntegrationsManage,

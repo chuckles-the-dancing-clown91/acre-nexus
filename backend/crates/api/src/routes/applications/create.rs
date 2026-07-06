@@ -50,6 +50,9 @@ pub async fn create(
             has_pet: b.has_pet.unwrap_or(false),
             pet_details: b.pet_details,
             is_military: b.is_military.unwrap_or(false),
+            // Staff intake implies the signed authorization was collected
+            // outside the system, unless explicitly negated.
+            screening_consent: b.screening_consent.unwrap_or(true),
         },
         "back_office",
         None,

@@ -46,6 +46,7 @@ import type {
   PropertyProfile,
   PublicTheme,
   RecordPaymentInput,
+  ScreeningReport,
   TicketDetail,
   TokenResponse,
   Unit,
@@ -401,6 +402,17 @@ export const api = {
       method: "PATCH",
       auth: true,
       body: { status },
+    }),
+  /** The application's screening (consumer) report — requires screening:read. */
+  screeningReport: (applicationId: string) =>
+    request<ScreeningReport>(`/applications/${applicationId}/screening`, {
+      auth: true,
+    }),
+  /** Send + file the FCRA adverse-action notice for a declined application. */
+  sendAdverseAction: (applicationId: string) =>
+    request<Application>(`/applications/${applicationId}/adverse-action`, {
+      method: "POST",
+      auth: true,
     }),
 
   // ---- renter portal: apply + track as the signed-in user ----

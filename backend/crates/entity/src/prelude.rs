@@ -54,6 +54,7 @@ pub use super::push_subscription::Entity as PushSubscription;
 pub use super::refresh_token::Entity as RefreshToken;
 pub use super::role::Entity as Role;
 pub use super::role_permission::Entity as RolePermission;
+pub use super::screening_report::Entity as ScreeningReport;
 pub use super::secret::Entity as Secret;
 pub use super::setting::Entity as Setting;
 pub use super::tenant::Entity as Tenant;

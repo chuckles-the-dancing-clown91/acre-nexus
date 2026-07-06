@@ -110,6 +110,20 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
               this time.",
     },
     DefaultTemplate {
+        key: "adverse_action",
+        subject: "Adverse action notice regarding your application",
+        body: "Hi {recipient},\n\nThis notice is provided under the Fair Credit Reporting \
+               Act (FCRA). Your rental application with {company} was declined based in \
+               whole or in part on information in a consumer report furnished by:\n\n\
+               {cra_name}\n{cra_contact}\n\nThe agency did not make this decision and \
+               cannot explain why it was made. You may obtain a free copy of your report \
+               from the agency within 60 days of this notice, and you may dispute any \
+               inaccurate or incomplete information with them directly. The full notice \
+               is on file with your application.\n\n— {company}",
+        sms: "{company}: an adverse-action notice about your application was issued — \
+              see your email for your FCRA rights.",
+    },
+    DefaultTemplate {
         key: "ticket_created",
         subject: "New maintenance ticket: {title}",
         body: "Hi {recipient},\n\nA new {priority}-priority maintenance ticket was opened: \

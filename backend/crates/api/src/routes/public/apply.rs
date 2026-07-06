@@ -50,6 +50,7 @@ pub async fn apply(
             has_pet: b.has_pet.unwrap_or(false),
             pet_details: b.pet_details,
             is_military: b.is_military.unwrap_or(false),
+            screening_consent: b.screening_consent.unwrap_or(false),
         },
         "public",
         None,

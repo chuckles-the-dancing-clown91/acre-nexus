@@ -33,6 +33,13 @@ pub struct Model {
     pub screening_status: Option<String>,
     pub screened_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
+    /// When the applicant consented to screening (FCRA §604(b)) — stamped at
+    /// intake by every door.
+    pub screening_consent_at: Option<DateTimeWithTimeZone>,
+    /// When an adverse-action notice was sent (FCRA §615(a)).
+    pub adverse_action_at: Option<DateTimeWithTimeZone>,
+    /// The stored adverse-action notice in the document service.
+    pub adverse_action_document_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -21,6 +21,7 @@
 pub mod bank;
 pub mod client;
 pub mod payments;
+pub mod screening;
 pub mod webhook;
 
 use crate::modules::JobOutcome;

@@ -8,6 +8,7 @@ import type {
   ApplicationWorkflow,
   AppWorkflowCatalog,
   Property,
+  ScreeningReport,
 } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +18,7 @@ export default function ApplicationsPage() {
   const { can } = useAuth();
   const canWrite = can("application:write");
   const canLease = can("lease:manage");
+  const canScreen = can("screening:read");
   const [apps, setApps] = useState<Application[] | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [catalog, setCatalog] = useState<AppWorkflowCatalog | null>(null);
@@ -24,6 +26,7 @@ export default function ApplicationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [converting, setConverting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [screeningFor, setScreeningFor] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [intaking, setIntaking] = useState(false);
 
@@ -171,6 +174,17 @@ export default function ApplicationsPage() {
                     {expanded === a.id ? "Hide" : "Pipeline"}
                   </button>
 
+                  {canScreen && a.screening_consent_at && (
+                    <button
+                      onClick={() =>
+                        setScreeningFor(screeningFor === a.id ? null : a.id)
+                      }
+                      className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink-3"
+                    >
+                      {screeningFor === a.id ? "Hide report" : "Report"}
+                    </button>
+                  )}
+
                   {canWrite &&
                     nexts.map((t) => (
                       <button
@@ -207,6 +221,14 @@ export default function ApplicationsPage() {
                 </div>
 
                 {expanded === a.id && <WorkflowPanel applicationId={a.id} />}
+
+                {screeningFor === a.id && (
+                  <ScreeningPanel
+                    app={a}
+                    canWrite={canWrite}
+                    onChanged={load}
+                  />
+                )}
 
                 {converting === a.id && (
                   <ConvertForm
@@ -348,6 +370,130 @@ function IntakeForm({
         </button>
       </form>
     </Card>
+  );
+}
+
+/** The application's screening (consumer) report + FCRA adverse action. */
+function ScreeningPanel({
+  app,
+  canWrite,
+  onChanged,
+}: {
+  app: Application;
+  canWrite: boolean;
+  onChanged: () => void;
+}) {
+  const [report, setReport] = useState<ScreeningReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .screeningReport(app.id)
+      .then((r) => live && setReport(r))
+      .catch((e) => live && setErr(e.message));
+    return () => {
+      live = false;
+    };
+  }, [app.id]);
+
+  async function sendNotice() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.sendAdverseAction(app.id);
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (err && !report) return <p className="mt-3 text-sm text-ink-3">{err}</p>;
+  if (!report) return <p className="mt-3 text-sm text-ink-3">Loading…</p>;
+
+  const adverse =
+    report.result === "failed" ||
+    (report.criminal_records ?? 0) > 0 ||
+    (report.eviction_records ?? 0) > 0;
+
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border border-line bg-surface-2 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold">
+          Screening report · {report.provider}
+        </span>
+        <Badge tone={report.status === "complete" ? "good" : "neutral"}>
+          {report.status}
+        </Badge>
+        {report.result && (
+          <Badge tone={report.result === "cleared" ? "good" : "bad"}>
+            {report.result}
+          </Badge>
+        )}
+        {report.consent_at && (
+          <span className="text-xs text-ink-3">
+            consent {new Date(report.consent_at).toLocaleDateString()}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-6 text-sm">
+        <div>
+          <div className="text-ink-3">Credit score</div>
+          <div className="font-semibold">{report.credit_score ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-ink-3">Criminal records</div>
+          <div className="font-semibold">{report.criminal_records ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-ink-3">Eviction records</div>
+          <div className="font-semibold">{report.eviction_records ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-ink-3">Provider assessment</div>
+          <div className="font-semibold">{report.recommendation ?? "—"}</div>
+        </div>
+      </div>
+
+      {report.reasons.length > 0 && (
+        <ul className="space-y-1 text-sm text-ink-2">
+          {report.reasons.map((r) => (
+            <li key={r}>• {r}</li>
+          ))}
+        </ul>
+      )}
+
+      {app.adverse_action_at ? (
+        <p className="text-sm text-ink-3">
+          Adverse-action notice sent{" "}
+          {new Date(app.adverse_action_at).toLocaleDateString()} — filed with
+          the application&apos;s documents.
+        </p>
+      ) : (
+        canWrite &&
+        app.status === "Declined" &&
+        adverse && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={sendNotice}
+              disabled={busy}
+              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-on-accent disabled:opacity-50"
+            >
+              {busy ? "Sending…" : "Send adverse-action notice"}
+            </button>
+            <span className="text-xs text-ink-3">
+              FCRA §615(a): names the reporting agency and the applicant&apos;s
+              dispute rights; a PDF copy is filed with the application.
+            </span>
+          </div>
+        )
+      )}
+      {err && report && <p className="text-sm text-bad">{err}</p>}
+    </div>
   );
 }
 

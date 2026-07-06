@@ -83,6 +83,14 @@ pub const APPLICATION_SUBMIT: &str = "application.submit";
 /// A background screening finished and its verdict landed on the application
 /// (actor is `None`: the pipeline wrote it, not a person).
 pub const APPLICATION_SCREENED: &str = "application.screened";
+/// A screening report was ordered from the consumer-reporting provider
+/// (consent timestamp recorded in metadata — FCRA §604(b)).
+pub const SCREENING_ORDERED: &str = "screening.ordered";
+/// The provider's report completed and the policy verdict was recorded.
+pub const SCREENING_COMPLETED: &str = "screening.completed";
+/// An FCRA §615(a) adverse-action notice was sent (and filed) for a declined
+/// application.
+pub const ADVERSE_ACTION: &str = "application.adverse_action";
 pub const LISTING_CREATE: &str = "listing.create";
 pub const LISTING_UPDATE: &str = "listing.update";
 /// The pipeline moved a listing's status automatically (conversion → Pending,

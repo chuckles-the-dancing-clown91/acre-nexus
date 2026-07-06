@@ -8,6 +8,7 @@ pub mod dto;
 pub mod list;
 pub mod portal;
 pub mod reuse;
+pub mod screening;
 pub mod update_status;
 pub mod workflow;
 
@@ -73,7 +74,7 @@ pub(crate) async fn apply_transition(
 
     let mut am: entity::application::ActiveModel = app.into();
     am.status = Set(to_status.to_string());
-    let saved = am.update(db).await?;
+    let mut saved = am.update(db).await?;
 
     entity::application_event::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -112,6 +113,18 @@ pub(crate) async fn apply_transition(
             let _ =
                 enqueue_applicant_email(db, tenant_id, &saved, "application_declined", "declined")
                     .await;
+            // FCRA §615(a): when the decline follows a report with adverse
+            // information (and the workspace setting is on), send + file the
+            // adverse-action notice automatically — it stamps the application,
+            // so return the fresh row.
+            crate::screening::maybe_auto_adverse_action(db, tenant_id, actor, &saved).await;
+            if let Some(fresh) = entity::prelude::Application::find_by_id(saved.id)
+                .filter(entity::application::Column::TenantId.eq(tenant_id))
+                .one(db)
+                .await?
+            {
+                saved = fresh;
+            }
         }
         _ => {}
     }
@@ -135,6 +148,9 @@ pub(crate) struct IntakeInput {
     pub has_pet: bool,
     pub pet_details: Option<String>,
     pub is_military: bool,
+    /// The applicant authorized a consumer report (FCRA §604(b)). Required by
+    /// every door that screens; a reused approval carries the prior consent.
+    pub screening_consent: bool,
 }
 
 /// Create an application and run the standard submission side-effects,
@@ -167,6 +183,15 @@ pub(crate) async fn intake(
         return Err(ApiError::BadRequest(format!(
             "invalid applicant email '{email}'"
         )));
+    }
+    // Screening runs on every fresh application, and a consumer report may
+    // only be ordered with the applicant's written authorization (FCRA
+    // §604(b)) — no consent, no application. A reused approval doesn't
+    // re-screen, so it rides the prior application's consent instead.
+    if reused_from.is_none() && !input.screening_consent {
+        return Err(ApiError::BadRequest(
+            "screening consent is required to submit an application".into(),
+        ));
     }
     // A listing reference must be real (and this tenant's) — a typo'd or
     // cross-tenant id would silently detach the application from its home.
@@ -209,6 +234,13 @@ pub(crate) async fn intake(
         screening_status: Set(reused_from.and_then(|r| r.screening_status.clone())),
         screened_at: Set(reused_from.and_then(|r| r.screened_at)),
         created_at: Set(Utc::now().into()),
+        screening_consent_at: Set(if input.screening_consent {
+            Some(Utc::now().into())
+        } else {
+            reused_from.and_then(|r| r.screening_consent_at)
+        }),
+        adverse_action_at: Set(None),
+        adverse_action_document_id: Set(None),
     }
     .insert(db)
     .await?;

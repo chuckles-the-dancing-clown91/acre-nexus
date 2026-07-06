@@ -60,6 +60,10 @@ pub struct ApplyReq {
     pub has_pet: Option<bool>,
     pub pet_details: Option<String>,
     pub is_military: Option<bool>,
+    /// The applicant authorizes a consumer report — credit, criminal, and
+    /// eviction history (FCRA §604(b)). Required unless a recent approval is
+    /// being reused.
+    pub screening_consent: Option<bool>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

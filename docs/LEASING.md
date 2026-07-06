@@ -18,11 +18,13 @@ notification substrate.
                 • back office        POST /applications             (staff intake)
                 │   applicant emailed "application received" · staff fan-out (in-app/push/chat)
                 ▼
-3. SCREEN    background_check job → screening_status + screened_at land on the application
+3. SCREEN    background_check job → consumer report ordered (Checkr, FCRA consent from intake)
+                │   report stored as screening_report · policy verdict → screening_status + screened_at
                 │   auto-approve setting ON + cleared  → Approved automatically (applicant emailed)
                 │   otherwise                          → staff notified: "screening finished, review"
                 ▼
-4. DECIDE    Approved (applicant emailed) │ Declined (applicant emailed) │ Withdrawn
+4. DECIDE    Approved (applicant emailed) │ Declined (applicant emailed; adverse-action
+                notice auto-sent + filed when the report was adverse) │ Withdrawn
                 ▼
 5. CONVERT   POST /applications/<id>/convert-to-lease
                 • draft lease (upcoming) + identity/attributes/vehicles copied
@@ -64,19 +66,27 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    rest) through the IAM profile routes (`PUT /admin/users/<id>/profile`).
    Applications capture the attributes that drive the rest of the flow
    (`has_pet`/`pet_details`, `is_military`, vehicles).
-3. **Screen** — the screening job's completion evaluates the workspace's
-   **screening policy** and writes `screening_status` / `screened_at` onto the
-   application (plus an `application.screened` audit event). The policy is
-   settings-driven: `screening.min_credit_score` (0 = no floor) and
+3. **Screen** — Phase 4 made this real (see [`SCREENING.md`](SCREENING.md)):
+   the job orders a **consumer report** (credit + criminal + eviction)
+   through the Checkr provider — with the applicant's FCRA consent captured
+   at intake — stores it as a `screening_report`, evaluates the workspace's
+   **screening policy**, and writes `screening_status` / `screened_at` onto
+   the application (plus `screening.ordered` / `screening.completed` /
+   `application.screened` audit events). The policy is settings-driven:
+   `screening.min_credit_score` (0 = no floor) and
    `screening.min_income_rent_ratio` (monthly income vs. the listing's rent,
-   0 = off) fail an application that trips them, with the reasons recorded on
-   the job and in the audit metadata; `screening.callback_delay_secs` paces
-   the simulated provider. With the **`applications.auto_approve` setting**
-   on, a cleared check advances the application to `Approved` on the spot
-   (automated transition, `actor = None`); otherwise staff get an
-   "application screened" notification and decide.
+   0 = off), plus any criminal or eviction records, fail an application —
+   the reasons land on the report and in the audit metadata;
+   `screening.callback_delay_secs` paces the simulated provider. With the
+   **`applications.auto_approve` setting** on, a cleared check advances the
+   application to `Approved` on the spot (automated transition,
+   `actor = None`); otherwise staff get an "application screened"
+   notification and decide.
 4. **Decide** — `POST /applications/<id>/advance` (or `PATCH`) through the
    validated state machine; approval and decline each email the applicant.
+   Declining an applicant whose report carried adverse information triggers
+   the **FCRA adverse-action notice** (auto by default, or one click from the
+   console) — generated, filed as a PDF against the application, and emailed.
 5. **Convert** — `POST /applications/<id>/convert-to-lease` creates a **draft**
    lease (`status = upcoming`), copies identity + attributes, re-links
    vehicles, **auto-applies the fee schedule**, marks the listing `Pending`,
@@ -132,6 +142,8 @@ from the console's Settings page (`tenant:manage`) and audited as
 | `screening.min_credit_score` | `0` (off) | Credit floor for screening to clear |
 | `screening.min_income_rent_ratio` | `0` (off) | Monthly income-to-rent multiple for screening to clear |
 | `screening.callback_delay_secs` | `6` | Simulated provider callback pace |
+| `screening.cra_name` / `.cra_contact` | Checkr, Inc. | The consumer-reporting agency cited on adverse-action notices |
+| `screening.auto_adverse_action` | `true` | Auto-send the FCRA notice when declining a flagged applicant |
 | `esign.link_expiry_days` | `0` (never) | Signing links die N days after the envelope is sent |
 | `esign.max_signers` | `10` | Signer cap per envelope |
 | `esign.signed_doc_retention_days` | `0` (forever) | Retention stamped on the stored signed PDF |

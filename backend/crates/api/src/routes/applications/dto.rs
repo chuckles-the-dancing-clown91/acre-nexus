@@ -18,9 +18,14 @@ pub struct ApplicationResp {
     pub is_military: bool,
     /// Intake door: `public` | `portal` | `back_office`.
     pub source: String,
-    /// Background-check outcome once screening finishes: `cleared` | `flagged`.
+    /// Background-check outcome once screening finishes: `cleared` | `failed`.
     pub screening_status: Option<String>,
     pub screened_at: Option<String>,
+    /// When the applicant authorized the consumer report (FCRA §604(b)).
+    pub screening_consent_at: Option<String>,
+    /// When the FCRA §615(a) adverse-action notice was sent, if it was.
+    pub adverse_action_at: Option<String>,
+    pub adverse_action_document_id: Option<Uuid>,
     pub created_at: String,
 }
 
@@ -42,6 +47,9 @@ impl From<entity::application::Model> for ApplicationResp {
             source: a.source,
             screening_status: a.screening_status,
             screened_at: a.screened_at.map(|x| x.to_rfc3339()),
+            screening_consent_at: a.screening_consent_at.map(|x| x.to_rfc3339()),
+            adverse_action_at: a.adverse_action_at.map(|x| x.to_rfc3339()),
+            adverse_action_document_id: a.adverse_action_document_id,
             created_at: a.created_at.to_rfc3339(),
         }
     }
@@ -60,6 +68,10 @@ pub struct CreateApplicationReq {
     pub has_pet: Option<bool>,
     pub pet_details: Option<String>,
     pub is_military: Option<bool>,
+    /// Staff attest the applicant authorized a consumer report (e.g. a signed
+    /// paper form). Defaults to true — back-office intake implies the
+    /// paperwork happened outside the system.
+    pub screening_consent: Option<bool>,
 }
 
 /// Renter-portal application: identity comes from the signed-in account, so
@@ -77,6 +89,10 @@ pub struct PortalApplyReq {
     pub has_pet: Option<bool>,
     pub pet_details: Option<String>,
     pub is_military: Option<bool>,
+    /// The applicant authorizes a consumer report — credit, criminal, and
+    /// eviction history (FCRA §604(b)). Required unless a recent approval is
+    /// being reused.
+    pub screening_consent: Option<bool>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
