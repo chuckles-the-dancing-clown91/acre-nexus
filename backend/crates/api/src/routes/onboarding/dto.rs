@@ -45,6 +45,8 @@ pub struct OnboardReq {
     pub strategy: String,
     pub purchase_price_cents: Option<i64>,
     pub acquired_on: Option<String>,
+    /// Hero photo URL for the property profile.
+    pub image_url: Option<String>,
     // ---- Financing ----
     #[serde(default)]
     pub mortgages: Vec<OnboardMortgage>,

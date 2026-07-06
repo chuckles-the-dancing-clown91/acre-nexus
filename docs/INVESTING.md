@@ -61,9 +61,31 @@ lender (as an entity), kind (`purchase`/`refinance`/`heloc`/`private`/
 | PATCH | `/mortgages/{id}` | `finance:manage` |
 | DELETE | `/mortgages/{id}` | `finance:manage` |
 
-### Financing feeds the economics
+**Selecting the bank that owns a loan.** A mortgage's `lender_id` points at a
+counterparty in the [entities registry](#entities-registry-counterparties) — the
+bank/lender that owns the loan, carrying the contact there (name, email, phone).
+Set it on create/update to attach the loan to a bank; leave it `null` for an
+unlinked loan.
 
-`GET /properties/{id}` now returns levered figures alongside the NOI economics:
+### The Financials tab (`GET /properties/{id}/financials`, `finance:read`)
+
+One call powers the profile's Financials tab:
+
+- **Loans** — every mortgage on the property, each resolved to its owning
+  **bank + contact** (name, email, phone, website) from the registry.
+- **Banking** — the operating/trust bank accounts of the LLC that holds the
+  property (`bank_account` rows for the property's `llc_id`).
+- **Economics** — the levered figures below (net revenue, debt service, cash
+  flow, loan balance, equity) plus the cost breakdown.
+
+### The profile header + financing economics
+
+`GET /properties/{id}` returns the profile **header dossier** — the hero
+`image_url` (shown top-left), a **home** breakdown (beds/baths/sqft/lot/stories/
+parking/HVAC/year, merged from `property_detail`), an **address status** block
+(matched address + geocode accuracy + `verified` + county/APN), and a **rental
+status** block (occupancy, vacant units, and the current tenancies with their
+payment standing) — alongside the levered figures below:
 
 - **Debt service** — sum of active mortgage payments (+ escrow), added as a line
   in the cost breakdown.

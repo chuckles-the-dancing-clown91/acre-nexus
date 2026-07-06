@@ -121,6 +121,8 @@ pub const DOCUMENT_STORED: &str = "document.stored";
 /// The fact a download URL was issued — not the content (same discipline as
 /// `pii.reveal`).
 pub const DOCUMENT_DOWNLOAD: &str = "document.download";
+/// Filing metadata changed (category, wet-ink flag, physical storage location).
+pub const DOCUMENT_UPDATE: &str = "document.update";
 pub const DOCUMENT_DELETE: &str = "document.delete";
 pub const NOTIFICATION_SEND: &str = "notification.send";
 /// Staff triggered a test delivery (provider test or own-device push test).

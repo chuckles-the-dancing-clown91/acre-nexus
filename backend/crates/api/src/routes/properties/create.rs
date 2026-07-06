@@ -41,6 +41,7 @@ pub async fn create(
         workflow_stage: Set(String::new()),
         purchase_price_cents: Set(None),
         acquired_on: Set(None),
+        image_url: Set(b.image_url),
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&db).await?;

@@ -2,7 +2,7 @@
 //! signed upload URL.
 
 use super::dto::{DocumentDto, UploadDocumentReq, UploadDocumentResp};
-use super::{MAX_SIZE_BYTES, OWNER_TYPES};
+use super::{normalize_category, MAX_SIZE_BYTES, OWNER_TYPES};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
@@ -61,6 +61,13 @@ pub async fn upload(
             ));
         }
     }
+    let category = normalize_category(b.category.clone()).map_err(ApiError::BadRequest)?;
+    let requires_wet_ink = b.requires_wet_ink.unwrap_or(false);
+    let physical_location = b
+        .physical_location
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
     // Versioning: the newest existing (owner, filename) row is the predecessor.
     let previous = Document::find()
@@ -89,6 +96,9 @@ pub async fn upload(
         owner_type: Set(owner_type.clone()),
         owner_id: Set(b.owner_id),
         filename: Set(filename.clone()),
+        category: Set(category),
+        requires_wet_ink: Set(requires_wet_ink),
+        physical_location: Set(physical_location),
         mime_type: Set(mime_type),
         size_bytes: Set(size),
         checksum: Set(b.checksum.clone()),

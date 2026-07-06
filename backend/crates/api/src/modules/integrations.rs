@@ -85,6 +85,8 @@ impl PlatformModule for IntegrationsModule {
             // document service
             documents::upload::upload,
             documents::list::list,
+            documents::property::property_documents,
+            documents::update::update,
             documents::download::download,
             documents::delete::delete,
             // local object-store blob endpoints (dev/CI backend)

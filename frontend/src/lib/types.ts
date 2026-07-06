@@ -88,6 +88,7 @@ export interface Property {
   workflow_stage: string;
   purchase_price_cents: number | null;
   acquired_on: string | null;
+  image_url: string | null;
 }
 
 export interface CostLine {
@@ -96,7 +97,62 @@ export interface CostLine {
   amount_label: string;
 }
 
+// ---- Property profile header dossier ---------------------------------------
+
+export interface HomeBreakdown {
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+  lot_size_sqft: number | null;
+  stories: number | null;
+  parking_spaces: number | null;
+  heating: string | null;
+  cooling: string | null;
+  year_built: number | null;
+  property_type: string | null;
+}
+
+export interface AddressStatus {
+  address: string;
+  city: string;
+  matched_address: string | null;
+  geocode_accuracy: string | null;
+  verified: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  county: string | null;
+  apn: string | null;
+}
+
+export interface ActiveLeaseSummary {
+  lease_id: string;
+  unit_id: string | null;
+  tenant_name: string;
+  rent_cents: number;
+  rent_label: string;
+  status: string;
+  payment_status: string;
+  balance_cents: number;
+  balance_label: string;
+}
+
+export interface RentalStatus {
+  status: string;
+  occupancy: string;
+  units: number;
+  occupied_units: number;
+  vacant_units: number;
+  monthly_rent_cents: number;
+  monthly_rent_label: string;
+  delinquent_leases: number;
+  active_leases: ActiveLeaseSummary[];
+}
+
 export interface PropertyProfile extends Property {
+  image_url: string | null;
+  home: HomeBreakdown;
+  address_status: AddressStatus;
+  rental_status: RentalStatus;
   kpis: CostLine[];
   cost_breakdown: CostLine[];
   net_revenue_cents: number;
@@ -110,6 +166,67 @@ export interface PropertyProfile extends Property {
   total_loan_balance_label: string;
   equity_cents: number;
   equity_label: string;
+}
+
+// ---- Financials tab --------------------------------------------------------
+
+export interface BankAccount {
+  id: string;
+  entity_id: string;
+  kind: string;
+  institution: string;
+  masked_number: string | null;
+  status: string;
+  provider: string | null;
+  linked: boolean;
+  last_synced_at: string | null;
+}
+
+/** The bank that owns a loan + the contact there (resolved via `lender_id`). */
+export interface LenderContact {
+  id: string;
+  name: string;
+  kind: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+}
+
+/** A mortgage with its owning bank + contact flattened in. */
+export interface Loan extends Mortgage {
+  lender: LenderContact | null;
+}
+
+export interface PropertyFinancials {
+  property_id: string;
+  financed: boolean;
+  net_revenue_cents: number;
+  net_revenue_label: string;
+  debt_service_cents: number;
+  debt_service_label: string;
+  cash_flow_cents: number;
+  cash_flow_label: string;
+  total_loan_balance_cents: number;
+  total_loan_balance_label: string;
+  equity_cents: number;
+  equity_label: string;
+  cost_breakdown: CostLine[];
+  loans: Loan[];
+  bank_accounts: BankAccount[];
+}
+
+// ---- Maintenance tab -------------------------------------------------------
+
+export interface PropertyMaintenance {
+  property_id: string;
+  total_count: number;
+  open_count: number;
+  open_cost_cents: number;
+  open_cost_label: string;
+  open: MaintenanceTicket[];
+  history: MaintenanceTicket[];
 }
 
 export interface Kpi {

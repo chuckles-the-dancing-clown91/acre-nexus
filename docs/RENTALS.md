@@ -50,6 +50,7 @@ contractor (from the entities registry).
 |--------|------|-----------|-------------|
 | GET | `/tickets?status=&property_id=&priority=` | `maintenance:read` | Work-order board |
 | GET | `/properties/{id}/tickets` | `maintenance:read` | Tickets for a property |
+| GET | `/properties/{id}/maintenance` | `maintenance:read` | Maintenance tab: **open** work orders split from resolved **history**, with counts and open-work cost |
 | POST | `/properties/{id}/tickets` | `maintenance:manage` | Open a ticket |
 | GET | `/tickets/{id}` | `maintenance:read` | Ticket + timeline |
 | PATCH | `/tickets/{id}` | `maintenance:manage` | Update status / assignee / fields (logs a status comment) |
@@ -98,7 +99,10 @@ visibility.
 - **Maintenance** (`/console/maintenance`) — the work-order board, filterable by
   status, with assignment and status changes.
 - The **property profile** gains Units, Leases (tenant + status), open Tickets,
-  and an Ownership & Liens section — the full property dossier.
+  and an Ownership & Liens section — the full property dossier. Its header shows
+  the hero image beside the home/address/rental-status breakdown, and the
+  Financials, Maintenance, and Documents tabs are each backed by a single
+  aggregating endpoint (`/properties/{id}/financials|maintenance|documents`).
 
 ## Schema
 

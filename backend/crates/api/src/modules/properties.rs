@@ -40,6 +40,7 @@ impl PlatformModule for PropertiesModule {
             properties::list::list,
             properties::create::create,
             properties::profile::profile,
+            properties::financials::financials,
             properties::update::update,
             onboarding::onboard::onboard,
             portfolio::summary::summary,

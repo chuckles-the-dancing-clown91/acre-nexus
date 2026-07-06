@@ -2,6 +2,8 @@
 
 pub mod create;
 pub mod dto;
+pub mod financials;
+pub mod helpers;
 pub mod list;
 pub mod profile;
 pub mod update;

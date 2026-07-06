@@ -205,7 +205,13 @@ function DocumentRow({
   return (
     <div className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
       <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold">{doc.filename}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-semibold">{doc.filename}</span>
+          {doc.category && (
+            <Badge tone="info">{humanizeCategory(doc.category)}</Badge>
+          )}
+          {doc.requires_wet_ink && <Badge tone="warn">wet ink</Badge>}
+        </div>
         <div className="text-xs text-ink-3">
           {formatBytes(doc.size_bytes)} · {doc.mime_type} ·{" "}
           {doc.created_at.slice(0, 10)}
@@ -235,6 +241,11 @@ function DocumentRow({
       )}
     </div>
   );
+}
+
+/** e.g. `insurance` → `Insurance`. */
+function humanizeCategory(category: string): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 function expiryInfo(

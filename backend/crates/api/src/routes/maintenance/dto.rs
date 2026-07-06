@@ -122,3 +122,19 @@ pub struct UpdateTicketReq {
 pub struct AddCommentReq {
     pub body: String,
 }
+
+/// The Maintenance tab for a property: open work orders split from resolved
+/// history, plus roll-up counts and the cost of open work.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct PropertyMaintenanceResp {
+    pub property_id: Uuid,
+    pub total_count: i64,
+    pub open_count: i64,
+    /// Sum of recorded cost on open tickets, in cents.
+    pub open_cost_cents: i64,
+    pub open_cost_label: String,
+    /// Open/active work orders, newest first.
+    pub open: Vec<TicketDto>,
+    /// Resolved/closed tickets — the maintenance history, newest first.
+    pub history: Vec<TicketDto>,
+}

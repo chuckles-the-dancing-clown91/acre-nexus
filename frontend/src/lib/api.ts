@@ -44,6 +44,8 @@ import type {
   Property,
   PropertyIntel,
   PropertyProfile,
+  PropertyFinancials,
+  PropertyMaintenance,
   PublicTheme,
   RecordPaymentInput,
   ScreeningReport,
@@ -223,6 +225,15 @@ export const api = {
   properties: () => request<Property[]>("/properties", { auth: true }),
   property: (id: string) =>
     request<PropertyProfile>(`/properties/${id}`, { auth: true }),
+  // ---- property profile tabs (aggregations) ----
+  propertyFinancials: (id: string) =>
+    request<PropertyFinancials>(`/properties/${id}/financials`, { auth: true }),
+  propertyMaintenance: (id: string) =>
+    request<PropertyMaintenance>(`/properties/${id}/maintenance`, {
+      auth: true,
+    }),
+  propertyDocuments: (id: string) =>
+    request<PropertyDocuments>(`/properties/${id}/documents`, { auth: true }),
   // ---- property intelligence (enrichment) ----
   propertyIntel: (id: string) =>
     request<PropertyIntel>(`/properties/${id}/intel`, { auth: true }),
@@ -621,6 +632,14 @@ export const api = {
     request<{ deleted: boolean }>(`/documents/${id}`, {
       method: "DELETE",
       auth: true,
+    }),
+  /** Update a document's filing metadata (category, wet-ink flag, and where the
+   *  wet-ink original is stored). */
+  updateDocument: (id: string, body: UpdateDocumentInput) =>
+    request<DocumentEntry>(`/documents/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
     }),
   /**
    * Full upload flow: register the metadata, then PUT the bytes straight to
@@ -1495,6 +1514,9 @@ export interface DocumentEntry {
   owner_type: string;
   owner_id: string;
   filename: string;
+  category: string | null;
+  requires_wet_ink: boolean;
+  physical_location: string | null;
   mime_type: string;
   size_bytes: number;
   checksum: string | null;
@@ -1512,6 +1534,30 @@ export interface RegisterDocumentInput {
   mime_type: string;
   size_bytes?: number;
   retention_days?: number;
+  category?: string;
+  requires_wet_ink?: boolean;
+  physical_location?: string;
+}
+
+export interface UpdateDocumentInput {
+  category?: string;
+  requires_wet_ink?: boolean;
+  physical_location?: string;
+}
+
+export interface CategoryCount {
+  category: string | null;
+  count: number;
+}
+
+/** The property Documents tab: latest version of each doc + category tally +
+ *  the wet-ink originals with their storage locations. */
+export interface PropertyDocuments {
+  property_id: string;
+  total: number;
+  documents: DocumentEntry[];
+  categories: CategoryCount[];
+  wet_ink_originals: DocumentEntry[];
 }
 
 export interface UploadDocumentResponse {
