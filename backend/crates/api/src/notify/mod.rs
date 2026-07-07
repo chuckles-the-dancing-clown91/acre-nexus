@@ -322,6 +322,14 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{company} dispatched a work order: {title} at {property}.",
     },
     DefaultTemplate {
+        key: "maintenance_reply",
+        subject: "Reply on your maintenance request: {title}",
+        body: "Hi {recipient},\n\n{author} replied to your maintenance request \
+               \"{title}\":\n\n\"{preview}\"\n\nRead and respond from your resident \
+               portal under Maintenance.\n\n— {company}",
+        sms: "{company}: {author} replied to your request \"{title}\" — see your portal.",
+    },
+    DefaultTemplate {
         key: "ticket_sla_breached",
         subject: "SLA breached ({kind}): {title}",
         body: "Hi {recipient},\n\nThe {priority}-priority work order \"{title}\" has \

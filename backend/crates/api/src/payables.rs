@@ -524,6 +524,9 @@ pub async fn settle_bill(
                 ticket_id: Set(ticket_id),
                 author_user_id: Set(None),
                 kind: Set("status".into()),
+                // Money detail stays off the resident-visible timeline.
+                visibility: Set("internal".into()),
+                author_name: Set(None),
                 body: Set(format!(
                     "Vendor bill {} paid — {}",
                     bill.bill_number,

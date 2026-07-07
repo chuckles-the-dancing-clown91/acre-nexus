@@ -720,11 +720,67 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
     seed_profile(db, taylor_user, "Taylor", "Brooks").await?;
 
+    // ---- Full maintenance demo: the equipment registry ----
+    // Registered serviceable equipment on Maple Court; manuals/photos ride
+    // the document service (owner_type "asset").
+    let now = Utc::now();
+    let ac_unit = Uuid::new_v4();
+    for (id, unit, kind, name, make, model, warranty) in [
+        (
+            ac_unit,
+            Some(unit_a),
+            "hvac",
+            "AC — Unit 1A living room",
+            "Carrier",
+            "Comfort 24ABC6",
+            Some("2027-05-01"),
+        ),
+        (
+            Uuid::new_v4(),
+            None,
+            "plumbing",
+            "Water heater — basement",
+            "Rheem",
+            "XG40T06EC36U1",
+            None,
+        ),
+        (
+            Uuid::new_v4(),
+            Some(unit_b),
+            "appliance",
+            "Refrigerator — Unit 2B",
+            "Whirlpool",
+            "WRF535SWHZ",
+            Some("2026-11-15"),
+        ),
+    ] {
+        entity::asset::ActiveModel {
+            id: Set(id),
+            tenant_id: Set(northwind),
+            property_id: Set(maple_court),
+            unit_id: Set(unit),
+            kind: Set(kind.into()),
+            name: Set(name.into()),
+            make: Set(Some(make.into())),
+            model: Set(Some(model.into())),
+            serial_number: Set(None),
+            install_date: Set(Some("2024-05-01".into())),
+            warranty_expires: Set(warranty.map(str::to_string)),
+            notes: Set(None),
+            status: Set("active".into()),
+            created_by: Set(Some(jordan)),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
     // ---- Phase 5 demo: resident request, messaging, move-in inspection ----
     // A resident-reported maintenance request from the portal, in triage.
-    let now = Utc::now();
+    let demo_ticket = Uuid::new_v4();
     entity::maintenance_ticket::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(demo_ticket),
         tenant_id: Set(northwind),
         property_id: Set(maple_court),
         unit_id: Set(Some(unit_a)),
@@ -740,6 +796,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         assignee_user_id: Set(None),
         assignee_entity_id: Set(None),
         reporter: Set(Some("Taylor Brooks".into())),
+        location: Set(Some("Bedroom".into())),
+        access_notes: Set(Some("Weekdays after 5pm, or use the lockbox.".into())),
+        permission_to_enter: Set(true),
+        asset_id: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(Some(now.into())),
@@ -748,6 +808,42 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(168)).into())),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    // The visibility split on its timeline: a public staff reply the
+    // resident sees, and an internal note they don't.
+    entity::ticket_comment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        ticket_id: Set(demo_ticket),
+        author_user_id: Set(Some(jordan)),
+        kind: Set("comment".into()),
+        visibility: Set("public".into()),
+        author_name: Set(Some("Jordan Mills".into())),
+        body: Set(
+            "Thanks Taylor — we'll have someone look at the latch this week. \
+                   The lockbox works if you're out."
+                .into(),
+        ),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::ticket_comment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        ticket_id: Set(demo_ticket),
+        author_user_id: Set(Some(jordan)),
+        kind: Set("comment".into()),
+        visibility: Set("internal".into()),
+        author_name: Set(Some("Jordan Mills".into())),
+        body: Set(
+            "Note: same latch failed in 2B last year — if Birch confirms it's \
+                   the same hardware batch, quote replacing all of them."
+                .into(),
+        ),
+        created_at: Set(now.into()),
     }
     .insert(db)
     .await?;
@@ -1450,6 +1546,10 @@ async fn seed_ticket(
         assignee_user_id: Set(None),
         assignee_entity_id: Set(Some(assignee_entity_id)),
         reporter: Set(Some("Resident".into())),
+        location: Set(None),
+        access_notes: Set(None),
+        permission_to_enter: Set(false),
+        asset_id: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(Some(now.into())),

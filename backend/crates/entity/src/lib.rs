@@ -20,6 +20,7 @@ pub mod prelude;
 pub mod api_token;
 pub mod application;
 pub mod application_event;
+pub mod asset;
 pub mod assignment;
 pub mod audit_log;
 pub mod background_job;

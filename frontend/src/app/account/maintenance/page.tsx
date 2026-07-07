@@ -22,6 +22,17 @@ const CATEGORIES = [
   "structural",
 ];
 const PRIORITIES = ["low", "normal", "high", "urgent"];
+const LOCATIONS = [
+  "Kitchen",
+  "Living room",
+  "Bedroom",
+  "Bathroom",
+  "Laundry",
+  "Garage",
+  "Exterior",
+  "Whole home",
+  "Other",
+];
 
 const field =
   "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent";
@@ -94,6 +105,9 @@ function NewRequestCard({ onCreated }: { onCreated: () => void }) {
   const [category, setCategory] = useState("general");
   const [priority, setPriority] = useState("normal");
   const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [accessNotes, setAccessNotes] = useState("");
+  const [permissionToEnter, setPermissionToEnter] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,12 +122,18 @@ function NewRequestCard({ onCreated }: { onCreated: () => void }) {
         description: description.trim() || undefined,
         category,
         priority,
+        location: location || undefined,
+        access_notes: accessNotes.trim() || undefined,
+        permission_to_enter: permissionToEnter,
       });
       toast.success("Request submitted — we're on it.");
       setTitle("");
       setDescription("");
       setCategory("general");
       setPriority("normal");
+      setLocation("");
+      setAccessNotes("");
+      setPermissionToEnter(false);
       setOpen(false);
       onCreated();
     } catch (e) {
@@ -181,12 +201,44 @@ function NewRequestCard({ onCreated }: { onCreated: () => void }) {
               </select>
             </label>
           </div>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs uppercase tracking-wide text-ink-3">
+              Where in your home?
+            </span>
+            <select
+              className={field}
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            >
+              <option value="">Pick a location…</option>
+              {LOCATIONS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
           <textarea
             className={field}
             rows={3}
             placeholder="What's happening? Anything that helps us fix it faster."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input
+              type="checkbox"
+              checked={permissionToEnter}
+              onChange={(e) => setPermissionToEnter(e.target.checked)}
+            />
+            You may enter to make the repair when I&apos;m not home
+          </label>
+          <textarea
+            className={field}
+            rows={2}
+            placeholder="Access notes — pets, alarm, best times, lockbox… (optional)"
+            value={accessNotes}
+            onChange={(e) => setAccessNotes(e.target.value)}
           />
           <div className="flex gap-2">
             <Button type="submit" disabled={busy}>
@@ -340,8 +392,10 @@ function RequestDetail({
           {detail.comments.map((c) => (
             <li key={c.id} className="rounded-xl bg-surface-2 px-3 py-2">
               <span className="text-xs text-ink-3">
-                {c.kind === "status" ? "status change" : "comment"} ·{" "}
-                {c.created_at.slice(0, 10)}
+                {c.kind === "status"
+                  ? "status change"
+                  : (c.author_name ?? "comment")}{" "}
+                · {c.created_at.slice(0, 10)}
               </span>
               <div>{c.body}</div>
             </li>

@@ -22,6 +22,7 @@ pub const OWNER_TYPES: &[&str] = &[
     "unit",
     "maintenance_ticket",
     "inspection",
+    "asset",
     "tenant",
 ];
 

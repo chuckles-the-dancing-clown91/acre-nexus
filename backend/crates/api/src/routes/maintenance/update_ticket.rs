@@ -53,6 +53,7 @@ pub async fn update_ticket(
     let had_first_response = existing.first_response_at.is_some();
     let created_at = existing.created_at;
     let was_resolved = existing.resolved_at.is_some();
+    let property_id = existing.property_id;
 
     let now = Utc::now();
     let mut am: entity::maintenance_ticket::ActiveModel = existing.into();
@@ -79,6 +80,25 @@ pub async fn update_ticket(
     }
     if let Some(v) = b.reporter {
         am.reporter = Set(Some(v));
+    }
+    if let Some(v) = b.location {
+        am.location = Set(Some(v).filter(|s| !s.trim().is_empty()));
+    }
+    if let Some(v) = b.access_notes {
+        am.access_notes = Set(Some(v).filter(|s| !s.trim().is_empty()));
+    }
+    if let Some(v) = b.permission_to_enter {
+        am.permission_to_enter = Set(v);
+    }
+    if let Some(v) = b.asset_id {
+        // Attach only equipment registered on this ticket's property.
+        entity::prelude::Asset::find_by_id(v)
+            .filter(entity::asset::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::asset::Column::PropertyId.eq(property_id))
+            .one(&db)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("asset not found on this property".into()))?;
+        am.asset_id = Set(Some(v));
     }
     if let Some(v) = b.due_date {
         am.due_date = Set(Some(v));
@@ -135,6 +155,8 @@ pub async fn update_ticket(
             ticket_id: Set(saved.id),
             author_user_id: Set(Some(user.user_id)),
             kind: Set("status".to_string()),
+            visibility: Set("public".into()),
+            author_name: Set(None),
             body: Set(format!("Status -> {}", new_status)),
             created_at: Set(Utc::now().into()),
         };

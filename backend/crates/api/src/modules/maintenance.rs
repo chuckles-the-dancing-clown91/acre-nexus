@@ -47,6 +47,10 @@ impl PlatformModule for MaintenanceModule {
             maintenance::portal::my_ticket_detail,
             maintenance::portal::add_my_comment,
             maintenance::portal::add_my_ticket_photo,
+            // equipment registry (assets)
+            maintenance::assets::list_assets,
+            maintenance::assets::create_asset,
+            maintenance::assets::update_asset,
             // helpdesk (Phase 6): quotes + preventive plans
             maintenance::quotes::add_quote,
             maintenance::quotes::approve_quote,

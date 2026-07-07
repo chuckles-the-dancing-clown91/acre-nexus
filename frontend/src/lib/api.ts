@@ -6,6 +6,9 @@
 
 import type {
   Application,
+  Asset,
+  CreateAssetInput,
+  UpdateAssetInput,
   ApplicationWorkflow,
   ConsoleListing,
   CreateApplicationInput,
@@ -384,12 +387,31 @@ export const api = {
       auth: true,
       body,
     }),
-  addTicketComment: (id: string, body: string) =>
+  addTicketComment: (
+    id: string,
+    body: string,
+    visibility: "public" | "internal" = "public"
+  ) =>
     request<unknown>(`/tickets/${id}/comments`, {
       method: "POST",
       auth: true,
-      body: { body },
+      body: { body, visibility },
     }),
+  // ---- equipment registry (assets) ----
+  assets: (
+    params: { property_id?: string; unit_id?: string; status?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.unit_id) qs.set("unit_id", params.unit_id);
+    if (params.status) qs.set("status", params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<Asset[]>(`/assets${suffix}`, { auth: true });
+  },
+  createAsset: (body: CreateAssetInput) =>
+    request<Asset>("/assets", { method: "POST", auth: true, body }),
+  updateAsset: (id: string, body: UpdateAssetInput) =>
+    request<Asset>(`/assets/${id}`, { method: "PATCH", auth: true, body }),
   // ---- helpdesk (Phase 6): quotes + preventive plans ----
   addTicketQuote: (
     ticketId: string,
@@ -2668,6 +2690,9 @@ export interface CreateMyTicketInput {
   description?: string;
   category?: string;
   priority?: string;
+  location?: string;
+  access_notes?: string;
+  permission_to_enter?: boolean;
 }
 
 export interface MyTicketDetail extends MaintenanceTicket {

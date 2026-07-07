@@ -37,11 +37,14 @@ download their statement.
 Mounted by the `maintenance` module:
 
 - `GET /my/tickets` / `POST /my/tickets` — the resident's requests on their
-  lease; creating one validates category/priority, stamps the reporter, emits
-  the vendor webhook, and notifies maintenance staff
-  (`maintenance_request` template).
+  lease; creating one validates category/priority, stamps the reporter,
+  captures the **location** (where in the home), **access notes**, and
+  **permission-to-enter**, emits the vendor webhook, and notifies
+  maintenance staff (`maintenance_request` template).
 - `GET /my/tickets/<id>` — the request plus its resident-visible timeline
-  (comments + status changes) and attachments.
+  (public replies with author names + status changes; staff-only internal
+  notes are filtered out) and attachments. A staff **public reply** emails
+  the resident (`maintenance_reply` template).
 - `POST /my/tickets/<id>/comments` — resident comment (staff notified).
 - `POST /my/tickets/<id>/photos` — two-step signed-URL upload of a photo
   against the request (`owner_type = maintenance_ticket`).

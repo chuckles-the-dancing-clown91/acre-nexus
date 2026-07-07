@@ -24,6 +24,14 @@ pub struct TicketDto {
     pub assignee_user_id: Option<Uuid>,
     pub assignee_entity_id: Option<Uuid>,
     pub reporter: Option<String>,
+    /// Where in the home (e.g. "Kitchen").
+    pub location: Option<String>,
+    /// Entry instructions.
+    pub access_notes: Option<String>,
+    /// Entry authorized when the resident is out.
+    pub permission_to_enter: bool,
+    /// Registered equipment being serviced.
+    pub asset_id: Option<Uuid>,
     pub due_date: Option<String>,
     pub cost_cents: Option<i64>,
     pub cost_label: Option<String>,
@@ -70,6 +78,10 @@ impl From<entity::maintenance_ticket::Model> for TicketDto {
             assignee_user_id: t.assignee_user_id,
             assignee_entity_id: t.assignee_entity_id,
             reporter: t.reporter,
+            location: t.location,
+            access_notes: t.access_notes,
+            permission_to_enter: t.permission_to_enter,
+            asset_id: t.asset_id,
             due_date: t.due_date,
             cost_cents: t.cost_cents,
             first_response_at: t.first_response_at.map(|v| v.to_rfc3339()),
@@ -89,6 +101,10 @@ pub struct TicketCommentDto {
     pub ticket_id: Uuid,
     pub author_user_id: Option<Uuid>,
     pub kind: String,
+    /// `public` | `internal` (staff-only note).
+    pub visibility: String,
+    /// Display name of the author.
+    pub author_name: Option<String>,
     pub body: String,
     pub created_at: String,
 }
@@ -101,6 +117,8 @@ impl From<entity::ticket_comment::Model> for TicketCommentDto {
             ticket_id: c.ticket_id,
             author_user_id: c.author_user_id,
             kind: c.kind,
+            visibility: c.visibility,
+            author_name: c.author_name,
             body: c.body,
             created_at: c.created_at.to_rfc3339(),
         }
@@ -113,6 +131,8 @@ pub struct TicketDetailDto {
     #[serde(flatten)]
     pub ticket: TicketDto,
     pub comments: Vec<TicketCommentDto>,
+    /// Display name of the referenced asset, resolved for the detail view.
+    pub asset_name: Option<String>,
     /// Contractor quotes on this work order (Phase 6).
     pub quotes: Vec<TicketQuoteDto>,
     /// The reply-to address that threads email back into this ticket's
@@ -233,6 +253,14 @@ pub struct CreateTicketReq {
     pub assignee_user_id: Option<Uuid>,
     pub assignee_entity_id: Option<Uuid>,
     pub reporter: Option<String>,
+    /// Where in the home (e.g. "Kitchen").
+    pub location: Option<String>,
+    /// Entry instructions ("lockbox on rail", "dog in yard").
+    pub access_notes: Option<String>,
+    /// Entry authorized when the resident is out (default false).
+    pub permission_to_enter: Option<bool>,
+    /// Registered equipment being serviced.
+    pub asset_id: Option<Uuid>,
     pub due_date: Option<String>,
     pub cost_cents: Option<i64>,
 }
@@ -247,6 +275,10 @@ pub struct UpdateTicketReq {
     pub assignee_user_id: Option<Uuid>,
     pub assignee_entity_id: Option<Uuid>,
     pub reporter: Option<String>,
+    pub location: Option<String>,
+    pub access_notes: Option<String>,
+    pub permission_to_enter: Option<bool>,
+    pub asset_id: Option<Uuid>,
     pub due_date: Option<String>,
     pub cost_cents: Option<i64>,
 }
@@ -254,6 +286,8 @@ pub struct UpdateTicketReq {
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct AddCommentReq {
     pub body: String,
+    /// `public` (default — residents see it) | `internal` (staff-only note).
+    pub visibility: Option<String>,
 }
 
 /// The Maintenance tab for a property: open work orders split from resolved
@@ -270,4 +304,105 @@ pub struct PropertyMaintenanceResp {
     pub open: Vec<TicketDto>,
     /// Resolved/closed tickets — the maintenance history, newest first.
     pub history: Vec<TicketDto>,
+}
+
+// ---------------------------------------------------------------------------
+// Equipment registry (assets)
+// ---------------------------------------------------------------------------
+
+/// A registered piece of serviceable equipment (AC, water heater, appliance).
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct AssetDto {
+    pub id: Uuid,
+    pub property_id: Uuid,
+    pub unit_id: Option<Uuid>,
+    /// `hvac` | `appliance` | `plumbing` | `electrical` | `safety` |
+    /// `structural` | `other`.
+    pub kind: String,
+    pub name: String,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub install_date: Option<String>,
+    pub warranty_expires: Option<String>,
+    /// `none` | `active` | `expired`, derived at read time.
+    pub warranty_state: String,
+    pub notes: Option<String>,
+    /// `active` | `retired`.
+    pub status: String,
+    pub created_at: String,
+}
+
+/// Whether a warranty date is still live (pure).
+pub fn warranty_state(expires: Option<&str>, today: chrono::NaiveDate) -> &'static str {
+    match expires.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()) {
+        None => "none",
+        Some(d) if d >= today => "active",
+        Some(_) => "expired",
+    }
+}
+
+impl From<entity::asset::Model> for AssetDto {
+    fn from(a: entity::asset::Model) -> Self {
+        let today = chrono::Utc::now().date_naive();
+        AssetDto {
+            warranty_state: warranty_state(a.warranty_expires.as_deref(), today).to_string(),
+            id: a.id,
+            property_id: a.property_id,
+            unit_id: a.unit_id,
+            kind: a.kind,
+            name: a.name,
+            make: a.make,
+            model: a.model,
+            serial_number: a.serial_number,
+            install_date: a.install_date,
+            warranty_expires: a.warranty_expires,
+            notes: a.notes,
+            status: a.status,
+            created_at: a.created_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct CreateAssetReq {
+    pub property_id: Uuid,
+    pub unit_id: Option<Uuid>,
+    pub kind: Option<String>,
+    pub name: String,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub install_date: Option<String>,
+    pub warranty_expires: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct UpdateAssetReq {
+    pub kind: Option<String>,
+    pub name: Option<String>,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub serial_number: Option<String>,
+    pub install_date: Option<String>,
+    pub warranty_expires: Option<String>,
+    pub notes: Option<String>,
+    /// `active` | `retired`.
+    pub status: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn warranty_states() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 7).unwrap();
+        assert_eq!(warranty_state(None, today), "none");
+        assert_eq!(warranty_state(Some("2027-01-01"), today), "active");
+        assert_eq!(warranty_state(Some("2026-07-07"), today), "active"); // lapses end of day
+        assert_eq!(warranty_state(Some("2026-07-06"), today), "expired");
+        assert_eq!(warranty_state(Some("garbage"), today), "none");
+    }
 }

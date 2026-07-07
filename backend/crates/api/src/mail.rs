@@ -243,6 +243,10 @@ async fn thread_into_ticket(
         ticket_id: Set(ticket.id),
         author_user_id: Set(None),
         kind: Set("comment".into()),
+        // Inbound email lands as an internal note; staff decide what to
+        // relay to the resident.
+        visibility: Set("internal".into()),
+        author_name: Set(Some(sender_name(from))),
         body: Set(format!(
             "Email reply from {}:\n\n{}",
             sender_name(from),

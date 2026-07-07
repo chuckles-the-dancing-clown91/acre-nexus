@@ -52,6 +52,43 @@ default hourly, ensured at boot and at tenant provisioning). Each pass:
    whole cadences — a scan that was down for weeks generates one ticket,
    not a backlog.
 
+## Intake context, replies & internal notes
+
+The full-maintenance round-out finished the ticket itself:
+
+- **Location & access**: every ticket carries `location` (where in the home),
+  `access_notes` (lockbox, pets, alarm, best times) and
+  `permission_to_enter` — collected in the resident portal's request form
+  and surfaced as an entry banner on the console detail page, so a
+  dispatcher never sends a contractor in blind.
+- **Public replies vs. internal notes**: `ticket_comment.visibility` splits
+  the timeline. A **public reply** (`POST /tickets/{id}/comments`, default)
+  shows in the resident's portal with the author's name and emails them
+  (`maintenance_reply` template). An **internal note**
+  (`visibility: "internal"`) is staff-only — the portal filters it out, and
+  it renders highlighted in the console. System entries follow the same
+  rule: vendor-bill payments log internally (money detail stays staff-side);
+  inbound email replies land internally for staff to relay; status changes
+  stay public.
+
+## Equipment registry (assets)
+
+`asset` registers the serviceable equipment — AC units, water heaters,
+appliances and other utilities — per property (optionally per unit): kind
+(`hvac` / `appliance` / `plumbing` / `electrical` / `safety` / `structural`
+/ `other`), make/model/serial, install date, and **warranty tracking**
+(`none` / `active` / `expired` derived at read time). Manuals, warranty
+docs, and photos file against the asset through the document service
+(`owner_type = "asset"`).
+
+- `GET /assets?property_id&unit_id&status` (`maintenance:read`) ·
+  `POST /assets` · `PATCH /assets/{id}` (edit / retire,
+  `maintenance:manage`).
+- Tickets attach the asset being serviced (`asset_id`, validated against
+  the ticket's property); the console detail page picks from the property's
+  registry and shows the asset chip, and the property profile gains an
+  **Equipment & assets** card.
+
 ## Contractor dispatch
 
 - **Assignment notifications** (`PATCH /tickets/{id}`): assigning a member
@@ -108,6 +145,9 @@ runs an external desk, and nothing here precludes it.
 
 | Method | Path | Permission |
 |--------|------|-----------|
+| GET | `/assets` | `maintenance:read` |
+| POST | `/assets` | `maintenance:manage` |
+| PATCH | `/assets/{id}` | `maintenance:manage` |
 | POST | `/tickets/{id}/quotes` | `maintenance:manage` |
 | POST | `/ticket-quotes/{id}/approve` | `payable:approve` |
 | POST | `/ticket-quotes/{id}/reject` | `payable:approve` |
@@ -120,11 +160,15 @@ Quotes ride along on `GET /tickets/{id}`.
 ## Audit, templates, schema
 
 - Audit actions: `ticket_quote.add/approve/reject`,
-  `maintenance_plan.create/update/run` (plus the existing `ticket.*`).
-- Templates: `ticket_assigned`, `ticket_dispatch`, `ticket_sla_breached`.
-- Migration `m20240101_000032_helpdesk`: four SLA/lifecycle columns on
-  `maintenance_ticket`, plus `ticket_quote` and `maintenance_plan`
-  (tenant-scoped, RLS-enforced).
+  `maintenance_plan.create/update/run`, `asset.create/update` (plus the
+  existing `ticket.*`).
+- Templates: `ticket_assigned`, `ticket_dispatch`, `ticket_sla_breached`,
+  `maintenance_reply`.
+- Migrations: `m20240101_000032_helpdesk` (four SLA/lifecycle columns on
+  `maintenance_ticket`, plus `ticket_quote` and `maintenance_plan`) and
+  `m20240101_000033_maintenance_full` (the `asset` registry; ticket
+  `location`/`access_notes`/`permission_to_enter`/`asset_id`; comment
+  `visibility`/`author_name`) — tenant-scoped, RLS-enforced.
 
 ## Definition of Done (met)
 

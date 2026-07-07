@@ -704,6 +704,14 @@ export interface MaintenanceTicket {
   assignee_user_id: string | null;
   assignee_entity_id: string | null;
   reporter: string | null;
+  /** Where in the home (e.g. "Kitchen"). */
+  location: string | null;
+  /** Entry instructions. */
+  access_notes: string | null;
+  /** Entry authorized when the resident is out. */
+  permission_to_enter: boolean;
+  /** Registered equipment being serviced. */
+  asset_id: string | null;
   due_date: string | null;
   cost_cents: number | null;
   cost_label: string | null;
@@ -752,14 +760,62 @@ export interface TicketComment {
   ticket_id: string;
   author_user_id: string | null;
   kind: string;
+  /** `public` | `internal` (staff-only note). */
+  visibility: "public" | "internal";
+  author_name: string | null;
   body: string;
   created_at: string;
 }
 
 export interface TicketDetail extends MaintenanceTicket {
   comments: TicketComment[];
+  asset_name: string | null;
   quotes: TicketQuote[];
   inbound_email_address: string | null;
+}
+
+/** A registered piece of serviceable equipment (AC, water heater, appliance). */
+export interface Asset {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  kind: string;
+  name: string;
+  make: string | null;
+  model: string | null;
+  serial_number: string | null;
+  install_date: string | null;
+  warranty_expires: string | null;
+  /** `none` | `active` | `expired`, derived server-side. */
+  warranty_state: string;
+  notes: string | null;
+  status: "active" | "retired";
+  created_at: string;
+}
+
+export interface CreateAssetInput {
+  property_id: string;
+  unit_id?: string;
+  kind?: string;
+  name: string;
+  make?: string;
+  model?: string;
+  serial_number?: string;
+  install_date?: string;
+  warranty_expires?: string;
+  notes?: string;
+}
+
+export interface UpdateAssetInput {
+  kind?: string;
+  name?: string;
+  make?: string;
+  model?: string;
+  serial_number?: string;
+  install_date?: string;
+  warranty_expires?: string;
+  notes?: string;
+  status?: "active" | "retired";
 }
 
 export interface CreateTicketInput {
@@ -785,6 +841,10 @@ export interface UpdateTicketInput {
   assignee_user_id?: string;
   assignee_entity_id?: string;
   reporter?: string;
+  location?: string;
+  access_notes?: string;
+  permission_to_enter?: boolean;
+  asset_id?: string;
   due_date?: string;
   cost_cents?: number;
 }

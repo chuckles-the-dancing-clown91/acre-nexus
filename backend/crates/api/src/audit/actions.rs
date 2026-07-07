@@ -264,3 +264,7 @@ pub const TICKET_QUOTE_REJECT: &str = "ticket_quote.reject";
 pub const MAINTENANCE_PLAN_CREATE: &str = "maintenance_plan.create";
 pub const MAINTENANCE_PLAN_UPDATE: &str = "maintenance_plan.update";
 pub const MAINTENANCE_PLAN_RUN: &str = "maintenance_plan.run";
+
+// ---- Full maintenance system: equipment registry ----
+pub const ASSET_CREATE: &str = "asset.create";
+pub const ASSET_UPDATE: &str = "asset.update";

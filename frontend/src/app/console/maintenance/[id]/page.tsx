@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, iam, type Member } from "@/lib/api";
-import type { Counterparty, TicketDetail } from "@/lib/types";
+import type { Asset, Counterparty, TicketDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 import { toast } from "sonner";
@@ -60,14 +60,22 @@ export default function TicketDetailPage() {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [contractors, setContractors] = useState<Counterparty[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
+  const [noteMode, setNoteMode] = useState<"public" | "internal">("public");
 
   const load = useCallback(() => {
     api
       .ticket(id)
-      .then(setTicket)
+      .then((t) => {
+        setTicket(t);
+        api
+          .assets({ property_id: t.property_id, status: "active" })
+          .then(setAssets)
+          .catch((e) => logError("failed to load assets", e));
+      })
       .catch((e) => setError(e.message));
   }, [id]);
 
@@ -124,7 +132,7 @@ export default function TicketDetailPage() {
     e.preventDefault();
     if (!comment.trim() || !ticket) return;
     await run(async () => {
-      await api.addTicketComment(ticket.id, comment.trim());
+      await api.addTicketComment(ticket.id, comment.trim(), noteMode);
       setComment("");
     });
   }
@@ -156,8 +164,9 @@ export default function TicketDetailPage() {
           </Badge>
         </div>
         <p className="text-ink-3">
-          {ticket.category} · reported by {ticket.reporter ?? "—"} ·{" "}
-          {ticket.created_at.slice(0, 10)} ·{" "}
+          {ticket.category}
+          {ticket.location ? ` · ${ticket.location}` : ""} · reported by{" "}
+          {ticket.reporter ?? "—"} · {ticket.created_at.slice(0, 10)} ·{" "}
           <Link
             href={`/console/properties/${ticket.property_id}`}
             className="underline"
@@ -207,6 +216,18 @@ export default function TicketDetailPage() {
         {ticket.description && (
           <p className="text-sm text-ink-2">{ticket.description}</p>
         )}
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge tone={ticket.permission_to_enter ? "good" : "warn"}>
+            {ticket.permission_to_enter
+              ? "entry authorized"
+              : "coordinate entry"}
+          </Badge>
+          {ticket.location && <Badge tone="neutral">{ticket.location}</Badge>}
+          {ticket.asset_name && <Badge tone="info">{ticket.asset_name}</Badge>}
+          {ticket.access_notes && (
+            <span className="text-ink-3">Access: {ticket.access_notes}</span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-4">
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
             Status
@@ -300,6 +321,29 @@ export default function TicketDetailPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
+            Equipment
+            <select
+              className={select}
+              value={ticket.asset_id ?? ""}
+              disabled={!manage || busy}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                void run(
+                  () =>
+                    api.updateTicket(ticket.id, { asset_id: e.target.value }),
+                  "Equipment attached."
+                );
+              }}
+            >
+              <option value="">None</option>
+              {assets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
             Scheduled date
             <input
               type="date"
@@ -355,24 +399,45 @@ export default function TicketDetailPage() {
           {ticket.comments.map((c) => (
             <div
               key={c.id}
-              className="rounded-xl bg-surface-2 px-3 py-2 text-sm"
+              className={
+                c.visibility === "internal"
+                  ? "rounded-xl border border-line-2 bg-warn-soft px-3 py-2 text-sm"
+                  : "rounded-xl bg-surface-2 px-3 py-2 text-sm"
+              }
             >
               <span className="text-xs text-ink-3">
-                {c.kind} · {fmtWhen(c.created_at)}
+                {c.author_name ?? c.kind} · {fmtWhen(c.created_at)}
+                {c.visibility === "internal" && (
+                  <span className="ml-2 font-semibold uppercase">internal</span>
+                )}
               </span>
-              <div>{c.body}</div>
+              <div className="whitespace-pre-wrap">{c.body}</div>
             </div>
           ))}
           {manage && (
             <form onSubmit={sendComment} className="flex gap-2 pt-2">
+              <select
+                className={select}
+                value={noteMode}
+                onChange={(e) =>
+                  setNoteMode(e.target.value as "public" | "internal")
+                }
+              >
+                <option value="public">Reply</option>
+                <option value="internal">Internal note</option>
+              </select>
               <input
                 className={field}
-                placeholder="Add a comment…"
+                placeholder={
+                  noteMode === "internal"
+                    ? "Add an internal note (staff-only)…"
+                    : "Reply to the resident…"
+                }
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
               />
               <Button type="submit" disabled={busy || !comment.trim()}>
-                Send
+                {noteMode === "internal" ? "Add note" : "Send"}
               </Button>
             </form>
           )}

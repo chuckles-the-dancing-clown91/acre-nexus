@@ -3,6 +3,7 @@
 //! changes, and USD cost labels for display.
 
 pub mod add_comment;
+pub mod assets;
 pub mod create_ticket;
 pub mod dto;
 pub mod get_ticket;

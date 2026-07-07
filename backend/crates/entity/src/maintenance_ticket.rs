@@ -29,6 +29,14 @@ pub struct Model {
     pub assignee_entity_id: Option<Uuid>,
     /// Who reported the issue (free-form, e.g. the resident's name).
     pub reporter: Option<String>,
+    /// Where in the home (e.g. "Kitchen", "Master bathroom").
+    pub location: Option<String>,
+    /// Entry instructions ("lockbox on rail", "dog in yard").
+    pub access_notes: Option<String>,
+    /// The resident authorized entry when they're not home.
+    pub permission_to_enter: bool,
+    /// The registered equipment being serviced ([`super::asset`]).
+    pub asset_id: Option<Uuid>,
     pub due_date: Option<String>,
     /// Actual/estimated cost in cents.
     pub cost_cents: Option<i64>,

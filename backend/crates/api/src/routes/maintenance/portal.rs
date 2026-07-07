@@ -41,6 +41,12 @@ pub struct CreateMyTicketReq {
     pub category: Option<String>,
     /// `low` | `normal` (default) | `high` | `urgent`.
     pub priority: Option<String>,
+    /// Where in the home (e.g. "Kitchen", "Master bathroom").
+    pub location: Option<String>,
+    /// Entry instructions ("lockbox on rail", "dog in yard").
+    pub access_notes: Option<String>,
+    /// The resident authorizes entry when they're not home.
+    pub permission_to_enter: Option<bool>,
 }
 
 /// Register a photo (or other attachment) against a request.
@@ -163,6 +169,10 @@ pub async fn create_my_ticket(
         assignee_user_id: Set(None),
         assignee_entity_id: Set(None),
         reporter: Set(Some(lease.tenant_name.clone())),
+        location: Set(b.location.filter(|s| !s.trim().is_empty())),
+        access_notes: Set(b.access_notes.filter(|s| !s.trim().is_empty())),
+        permission_to_enter: Set(b.permission_to_enter.unwrap_or(false)),
+        asset_id: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(None),
@@ -247,10 +257,12 @@ pub async fn my_ticket_detail(
     let lease = my_lease(&db, scope.tenant_id, user.user_id).await?;
     let ticket = my_ticket(&db, scope.tenant_id, lease.id, id).await?;
 
+    // Residents see the public timeline only — internal notes stay staff-side.
     let comments = TicketComment::find()
         .filter(entity::ticket_comment::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::ticket_comment::Column::TicketId.eq(ticket.id))
         .filter(entity::ticket_comment::Column::Kind.is_in(["comment", "status"]))
+        .filter(entity::ticket_comment::Column::Visibility.eq("public"))
         .order_by_desc(entity::ticket_comment::Column::CreatedAt)
         .all(&db)
         .await?;
@@ -294,6 +306,8 @@ pub async fn add_my_comment(
         ticket_id: Set(ticket.id),
         author_user_id: Set(Some(user.user_id)),
         kind: Set("comment".to_string()),
+        visibility: Set("public".into()),
+        author_name: Set(Some(lease.tenant_name.clone())),
         body: Set(text),
         created_at: Set(Utc::now().into()),
     }
