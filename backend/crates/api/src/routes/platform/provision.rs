@@ -193,6 +193,9 @@ pub async fn provision(
     if let Err(e) = crate::reminders::ensure_scan_for_tenant(&db, tenant_id).await {
         tracing::error!("provision: reminder scan scheduling failed: {e}");
     }
+    if let Err(e) = crate::helpdesk::ensure_scan_for_tenant(&db, tenant_id).await {
+        tracing::error!("provision: helpdesk scan scheduling failed: {e}");
+    }
 
     Ok(Json(ProvisionResp {
         tenant_id,

@@ -32,6 +32,14 @@ pub struct Model {
     pub due_date: Option<String>,
     /// Actual/estimated cost in cents.
     pub cost_cents: Option<i64>,
+    /// When the first staff response landed (comment / triage / assignment).
+    pub first_response_at: Option<DateTimeWithTimeZone>,
+    /// When the ticket reached `resolved`/`closed` (cleared on reopen).
+    pub resolved_at: Option<DateTimeWithTimeZone>,
+    /// SLA targets stamped from the tenant's helpdesk policy at create (and
+    /// re-stamped on priority change while the target is still open).
+    pub sla_response_due_at: Option<DateTimeWithTimeZone>,
+    pub sla_resolve_due_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

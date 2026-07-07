@@ -39,6 +39,8 @@ pub async fn create_ticket(
         Some(p) if !p.trim().is_empty() => p,
         _ => "normal".to_string(),
     };
+    let (response_due, resolve_due) =
+        crate::helpdesk::sla_targets(&db, scope.tenant_id, &priority, now).await;
     let model = entity::maintenance_ticket::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -55,6 +57,10 @@ pub async fn create_ticket(
         reporter: Set(b.reporter),
         due_date: Set(b.due_date),
         cost_cents: Set(b.cost_cents),
+        first_response_at: Set(None),
+        resolved_at: Set(None),
+        sla_response_due_at: Set(response_due.map(Into::into)),
+        sla_resolve_due_at: Set(resolve_due.map(Into::into)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };

@@ -39,9 +39,11 @@ pub async fn get_ticket(
         .one(&db)
         .await?
         .map(|t| crate::mail::ticket_address(&t.slug, ticket.id));
+    let quotes = super::quotes::quotes_for_ticket(&db, scope.tenant_id, ticket.id).await?;
     Ok(Json(TicketDetailDto {
         ticket: TicketDto::from(ticket),
         comments,
+        quotes,
         inbound_email_address,
     }))
 }

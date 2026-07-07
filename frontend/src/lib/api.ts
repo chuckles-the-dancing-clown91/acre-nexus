@@ -35,6 +35,7 @@ import type {
   Lien,
   Listing,
   LlcGroup,
+  MaintenancePlan,
   MaintenanceTicket,
   Mortgage,
   OnboardInput,
@@ -51,6 +52,7 @@ import type {
   ScreeningReport,
   TicketComment,
   TicketDetail,
+  TicketQuote,
   TokenResponse,
   Unit,
   UpdateTicketInput,
@@ -387,6 +389,62 @@ export const api = {
       method: "POST",
       auth: true,
       body: { body },
+    }),
+  // ---- helpdesk (Phase 6): quotes + preventive plans ----
+  addTicketQuote: (
+    ticketId: string,
+    body: { entity_id?: string; description: string; amount_cents: number }
+  ) =>
+    request<TicketQuote>(`/tickets/${ticketId}/quotes`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  approveTicketQuote: (id: string) =>
+    request<TicketQuote>(`/ticket-quotes/${id}/approve`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  rejectTicketQuote: (id: string) =>
+    request<TicketQuote>(`/ticket-quotes/${id}/reject`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  maintenancePlans: () =>
+    request<MaintenancePlan[]>("/maintenance-plans", { auth: true }),
+  createMaintenancePlan: (body: {
+    property_id: string;
+    unit_id?: string;
+    title: string;
+    description?: string;
+    category?: string;
+    priority?: string;
+    cadence_days: number;
+    next_due_date: string;
+  }) =>
+    request<MaintenancePlan>("/maintenance-plans", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateMaintenancePlan: (
+    id: string,
+    body: {
+      title?: string;
+      description?: string;
+      category?: string;
+      priority?: string;
+      cadence_days?: number;
+      next_due_date?: string;
+      active?: boolean;
+    }
+  ) =>
+    request<MaintenancePlan>(`/maintenance-plans/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
     }),
   // ---- title: ownership + liens ----
   ownership: (propertyId: string) =>

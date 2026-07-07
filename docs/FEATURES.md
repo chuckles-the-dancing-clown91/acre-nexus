@@ -68,12 +68,12 @@ The biggest gap for "total" management — most operators live in their books.
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
 | Work orders + assignment + timeline | ✅ | — | staff or contractor |
-| **Helpdesk / resident support** (SLAs, queues) | 🟡 | P1 | tickets exist; add SLA + resident-facing |
-| Vendor management + **dispatch** + scheduling | 🟡 | P2 | entities registry exists |
+| **Helpdesk / resident support** (SLAs, queues) | ✅ | P1 | Phase 6 — SLA policy + breach scan, resident ticketing (Phase 5); see `HELPDESK.md` |
+| Vendor management + **dispatch** + scheduling | ✅ | P2 | Phase 6 — dispatch notifications, quotes → approval → bill |
 | Vendor **bids → approval → invoice → pay** | 🟡 | P2 | invoice → approval → pay shipped (AP); bids still open |
-| **Preventive maintenance** schedules | ⬜ | P2 | recurring jobs (queue exists) |
-| Inspections (routine, drive-by, turnover) | ⬜ | P2 | templated checklists |
-| **Make-ready / turnover** workflow | 🟡 | P2 | unit `make_ready` status exists |
+| **Preventive maintenance** schedules | ✅ | P2 | Phase 6 — `maintenance_plan` + helpdesk scan |
+| Inspections (routine, drive-by, turnover) | 🟡 | P2 | move-in/move-out shipped (Phase 5); routine/drive-by open |
+| **Make-ready / turnover** workflow | ✅ | P2 | Phase 6 — auto turnover ticket + unit flag on move-out |
 | Asset / appliance / warranty tracking | ⬜ | P3 | serials, warranty expiry |
 | Recurring service contracts (landscaping, pest) | ⬜ | P3 | |
 | Emergency / on-call routing | ⬜ | P3 | |

@@ -742,6 +742,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         reporter: Set(Some("Taylor Brooks".into())),
         due_date: Set(None),
         cost_cents: Set(None),
+        first_response_at: Set(Some(now.into())),
+        resolved_at: Set(None),
+        sla_response_due_at: Set(Some((now + chrono::Duration::hours(24)).into())),
+        sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(168)).into())),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -1448,6 +1452,14 @@ async fn seed_ticket(
         reporter: Set(Some("Resident".into())),
         due_date: Set(None),
         cost_cents: Set(None),
+        first_response_at: Set(Some(now.into())),
+        resolved_at: Set(if status == "resolved" || status == "closed" {
+            Some(now.into())
+        } else {
+            None
+        }),
+        sla_response_due_at: Set(Some((now + chrono::Duration::hours(8)).into())),
+        sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(72)).into())),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

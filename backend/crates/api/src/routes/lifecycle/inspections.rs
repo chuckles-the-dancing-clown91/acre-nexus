@@ -274,6 +274,16 @@ pub async fn complete_inspection(
     )
     .await;
 
+    // Phase 6: a completed move-out inspection starts the turn — open a
+    // make-ready ticket and flag the unit (setting-gated, best-effort).
+    if saved.kind == "move_out" {
+        if let Err(e) =
+            crate::helpdesk::open_turnover_ticket(&db, scope.tenant_id, &saved, user.user_id).await
+        {
+            tracing::error!("turnover ticket failed: {e}");
+        }
+    }
+
     let items = items_for(&db, scope.tenant_id, saved.id).await?;
     Ok(Json(detail(saved, items)))
 }

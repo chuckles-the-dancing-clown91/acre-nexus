@@ -256,3 +256,11 @@ pub const DEPOSIT_DISPOSITION_CREATE: &str = "deposit_disposition.create";
 pub const DEPOSIT_DISPOSITION_UPDATE: &str = "deposit_disposition.update";
 pub const DEPOSIT_DISPOSITION_FINALIZE: &str = "deposit_disposition.finalize";
 pub const DEPOSIT_DISPOSITION_SETTLE: &str = "deposit_disposition.settle";
+
+// ---- Phase 6: helpdesk & maintenance operations ----
+pub const TICKET_QUOTE_ADD: &str = "ticket_quote.add";
+pub const TICKET_QUOTE_APPROVE: &str = "ticket_quote.approve";
+pub const TICKET_QUOTE_REJECT: &str = "ticket_quote.reject";
+pub const MAINTENANCE_PLAN_CREATE: &str = "maintenance_plan.create";
+pub const MAINTENANCE_PLAN_UPDATE: &str = "maintenance_plan.update";
+pub const MAINTENANCE_PLAN_RUN: &str = "maintenance_plan.run";

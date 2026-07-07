@@ -304,6 +304,31 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                Maintenance.\n\n— {company}",
         sms: "{company}: your maintenance request \"{title}\" is now {status}.",
     },
+    // ---- Phase 6: helpdesk & maintenance operations ----
+    DefaultTemplate {
+        key: "ticket_assigned",
+        subject: "Assigned to you: {title}",
+        body: "Hi {recipient},\n\nThe work order \"{title}\" ({priority} priority) at \
+               {property} has been assigned to you{due_line}.\n\n— {company}",
+        sms: "{company}: work order assigned to you — {title} ({priority}).",
+    },
+    DefaultTemplate {
+        key: "ticket_dispatch",
+        subject: "Work order from {company}: {title}",
+        body: "Hi {recipient},\n\n{company} has dispatched a work order to you:\n\n\
+               {title} ({priority} priority)\nProperty: {property}{due_line}\n\n\
+               {description}\n\nPlease confirm scheduling with the property manager.\n\n\
+               — {company}",
+        sms: "{company} dispatched a work order: {title} at {property}.",
+    },
+    DefaultTemplate {
+        key: "ticket_sla_breached",
+        subject: "SLA breached ({kind}): {title}",
+        body: "Hi {recipient},\n\nThe {priority}-priority work order \"{title}\" has \
+               passed its {kind} SLA target. Triage it on the maintenance board.\n\n\
+               — {company}",
+        sms: "SLA breached ({kind}): {title} ({priority}).",
+    },
     DefaultTemplate {
         key: "deposit_disposition_closed",
         subject: "Your security deposit statement — {refund} refunded",

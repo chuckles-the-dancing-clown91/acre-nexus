@@ -4,11 +4,13 @@
 // assignment. Gated by `maintenance:read`; status changes need `maintenance:manage`.
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
-import type { MaintenanceTicket, Property } from "@/lib/types";
+import type { MaintenancePlan, MaintenanceTicket, Property } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
-import { Badge, Card } from "@/components/ui";
+import { toast } from "sonner";
+import { Badge, Button, Card } from "@/components/ui";
 
 const STATUSES = [
   "open",
@@ -142,10 +144,21 @@ export default function MaintenancePage() {
                 className="grid grid-cols-[1.6fr_1fr_.6fr_.8fr_.9fr] items-center gap-4 px-5 py-3.5"
               >
                 <div className="min-w-0">
-                  <div className="truncate font-semibold">{t.title}</div>
+                  <Link
+                    href={`/console/maintenance/${t.id}`}
+                    className="block truncate font-semibold hover:underline"
+                  >
+                    {t.title}
+                  </Link>
                   <div className="truncate text-sm text-ink-3">
                     {humanize(t.category)}
                     {t.reporter ? ` · ${t.reporter}` : ""}
+                    {(t.sla_response_state === "breached" ||
+                      t.sla_resolve_state === "breached") && (
+                      <span className="ml-2 font-semibold text-bad">
+                        SLA breached
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="truncate text-sm text-ink-2">
@@ -181,6 +194,194 @@ export default function MaintenancePage() {
           )}
         </div>
       </Card>
+
+      <PlansCard properties={properties} manage={manage} />
     </div>
+  );
+}
+
+/** Preventive-maintenance plans (Phase 6): recurring tasks the helpdesk scan
+ *  turns into tickets on schedule. */
+function PlansCard({
+  properties,
+  manage,
+}: {
+  properties: Property[];
+  manage: boolean;
+}) {
+  const [plans, setPlans] = useState<MaintenancePlan[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [propertyId, setPropertyId] = useState("");
+  const [title, setTitle] = useState("");
+  const [cadence, setCadence] = useState("180");
+  const [nextDue, setNextDue] = useState("");
+
+  const load = () => {
+    api
+      .maintenancePlans()
+      .then(setPlans)
+      .catch((e) => logError("failed to load maintenance plans", e));
+  };
+  useEffect(load, []);
+
+  const propName = useMemo(() => {
+    const m = new Map(properties.map((p) => [p.id, p.name]));
+    return (id: string) => m.get(id) ?? "—";
+  }, [properties]);
+
+  async function run(fn: () => Promise<unknown>, ok?: string) {
+    setBusy(true);
+    try {
+      await fn();
+      if (ok) toast.success(ok);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const days = parseInt(cadence, 10);
+    if (
+      !propertyId ||
+      !title.trim() ||
+      !nextDue ||
+      !Number.isFinite(days) ||
+      days < 1
+    ) {
+      toast.error(
+        "A plan needs a property, title, cadence, and first due date."
+      );
+      return;
+    }
+    await run(
+      () =>
+        api.createMaintenancePlan({
+          property_id: propertyId,
+          title: title.trim(),
+          cadence_days: days,
+          next_due_date: nextDue,
+        }),
+      "Plan created — the helpdesk scan opens its tickets on schedule."
+    );
+    setAdding(false);
+    setTitle("");
+    setNextDue("");
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between border-b border-line px-5 py-4">
+        <h2 className="font-display text-lg font-bold">
+          Preventive maintenance
+        </h2>
+        {manage && !adding && (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setAdding(true)}
+          >
+            New plan
+          </Button>
+        )}
+      </div>
+      <div className="space-y-3 p-5 text-sm">
+        {adding && (
+          <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+            <select
+              className="rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+              value={propertyId}
+              onChange={(e) => setPropertyId(e.target.value)}
+            >
+              <option value="">Property…</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="w-64 rounded-xl border border-line bg-surface px-3 py-2 text-sm"
+              placeholder="Task, e.g. “HVAC service”"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <label className="flex items-center gap-1 text-xs text-ink-3">
+              every
+              <input
+                className="w-20 rounded-xl border border-line bg-surface px-3 py-2 text-sm"
+                inputMode="numeric"
+                value={cadence}
+                onChange={(e) => setCadence(e.target.value)}
+              />
+              days
+            </label>
+            <label className="flex items-center gap-1 text-xs text-ink-3">
+              first due
+              <input
+                type="date"
+                className="rounded-xl border border-line bg-surface px-3 py-2 text-sm"
+                value={nextDue}
+                onChange={(e) => setNextDue(e.target.value)}
+              />
+            </label>
+            <Button type="submit" disabled={busy}>
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setAdding(false)}
+            >
+              Cancel
+            </Button>
+          </form>
+        )}
+        {plans.length === 0 && !adding && (
+          <p className="text-ink-3">
+            No plans yet — schedule recurring work (HVAC service, gutters,
+            detector checks) and tickets open themselves.
+          </p>
+        )}
+        {plans.map((p) => (
+          <div
+            key={p.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line px-4 py-3"
+          >
+            <div className="min-w-0">
+              <div className="font-semibold">{p.title}</div>
+              <div className="truncate text-xs text-ink-3">
+                {propName(p.property_id)} · every {p.cadence_days} days · next{" "}
+                {p.next_due_date}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge tone={p.active ? "good" : "neutral"}>
+                {p.active ? "active" : "paused"}
+              </Badge>
+              {manage && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        api.updateMaintenancePlan(p.id, { active: !p.active }),
+                      p.active ? "Plan paused." : "Plan resumed."
+                    )
+                  }
+                >
+                  {p.active ? "Pause" : "Resume"}
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

@@ -707,8 +707,44 @@ export interface MaintenanceTicket {
   due_date: string | null;
   cost_cents: number | null;
   cost_label: string | null;
+  /** SLA / lifecycle timestamps (Phase 6). */
+  first_response_at: string | null;
+  resolved_at: string | null;
+  sla_response_due_at: string | null;
+  sla_resolve_due_at: string | null;
+  /** `none` | `on_track` | `met` | `breached`, derived server-side. */
+  sla_response_state: string;
+  sla_resolve_state: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TicketQuote {
+  id: string;
+  ticket_id: string;
+  entity_id: string;
+  entity_name: string | null;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+  status: "pending" | "approved" | "rejected";
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface MaintenancePlan {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  priority: string;
+  cadence_days: number;
+  next_due_date: string;
+  active: boolean;
+  last_ticket_id: string | null;
+  created_at: string;
 }
 
 export interface TicketComment {
@@ -722,6 +758,8 @@ export interface TicketComment {
 
 export interface TicketDetail extends MaintenanceTicket {
   comments: TicketComment[];
+  quotes: TicketQuote[];
+  inbound_email_address: string | null;
 }
 
 export interface CreateTicketInput {

@@ -147,6 +147,8 @@ pub async fn create_my_ticket(
     };
 
     let now = Utc::now();
+    let (response_due, resolve_due) =
+        crate::helpdesk::sla_targets(&db, scope.tenant_id, &priority, now).await;
     let saved = entity::maintenance_ticket::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -163,6 +165,10 @@ pub async fn create_my_ticket(
         reporter: Set(Some(lease.tenant_name.clone())),
         due_date: Set(None),
         cost_cents: Set(None),
+        first_response_at: Set(None),
+        resolved_at: Set(None),
+        sla_response_due_at: Set(response_due.map(Into::into)),
+        sla_resolve_due_at: Set(resolve_due.map(Into::into)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

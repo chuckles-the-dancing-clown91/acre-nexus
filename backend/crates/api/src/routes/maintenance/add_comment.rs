@@ -24,11 +24,17 @@ pub async fn add_comment(
 ) -> ApiResult<Json<TicketCommentDto>> {
     user.require(Permission::MaintenanceManage)?;
     let tid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
-    MaintenanceTicket::find_by_id(tid)
+    let ticket = MaintenanceTicket::find_by_id(tid)
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
+    // A staff comment is the first response when none is recorded yet.
+    if ticket.first_response_at.is_none() {
+        let mut am: entity::maintenance_ticket::ActiveModel = ticket.into();
+        am.first_response_at = Set(Some(Utc::now().into()));
+        am.update(&db).await?;
+    }
     let b = body.into_inner();
     let model = entity::ticket_comment::ActiveModel {
         id: Set(Uuid::new_v4()),

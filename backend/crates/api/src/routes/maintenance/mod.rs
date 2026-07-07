@@ -8,8 +8,10 @@ pub mod dto;
 pub mod get_ticket;
 pub mod list_property_tickets;
 pub mod list_tickets;
+pub mod plans;
 pub mod portal;
 pub mod property_maintenance;
+pub mod quotes;
 pub mod update_ticket;
 
 /// Ticket statuses that count as still-open work (everything before the ticket

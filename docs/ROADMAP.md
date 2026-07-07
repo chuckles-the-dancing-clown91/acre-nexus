@@ -208,17 +208,29 @@ settled, statemented deposit.
 
 ---
 
-## Phase 6 — Helpdesk & maintenance ops ⬜  *(Pillar 6)*
+## Phase 6 — Helpdesk & maintenance ops ✅  *(Pillar 6)*
 
-- **Support desk**: SLAs, priorities, queues, and resident-facing ticketing on
-  top of the maintenance module; threaded comms.
-- **External connector** (optional): Zendesk/Intercom sync for tenants who run
-  their own helpdesk.
-- **Contractor dispatch**: assignment notifications, scheduling, quotes →
-  approval → invoice → payment (ties to Phases 1–3).
+**Shipped** — see [`HELPDESK.md`](HELPDESK.md) for the as-built design.
 
-**DoD:** a resident opens a ticket from the portal, it routes to a contractor
-with an SLA, and resolution + cost flow back to the property ledger.
+- **Support desk** ✅: per-priority **SLA policy** (first-response +
+  resolution targets stamped on every ticket, re-stamped on priority change,
+  breach states on the board and detail view), a per-tenant `helpdesk_scan`
+  job surfacing breaches to staff, and resident-facing ticketing + threaded
+  comms (shipped with Phase 5).
+- **Contractor dispatch** ✅: assignment notifications (member in-app+email,
+  contractor dispatch email with schedule + scope), scheduling on the
+  ticket, **quotes → approval** (approval gated like vendor bills, feeding
+  the ticket's cost) → **invoice → payment** through the Phase 3
+  accounts-payable loop, landing on the property ledger.
+- **Preventive maintenance + turnover** ✅: recurring `maintenance_plan`s
+  auto-open tickets on cadence; completing a move-out inspection auto-opens
+  a make-ready ticket and flags the unit (setting-gated).
+- **External connector** (optional): deferred — the Phase 1 provider
+  framework is the natural home when a client runs an external desk.
+
+**DoD (met):** a resident opens a ticket from the portal, it routes to a
+contractor with an SLA, and resolution + cost flow back to the property
+ledger.
 
 ---
 
@@ -254,7 +266,7 @@ Phase 0 ✅
    └─ Phase 1 ✅ (substrate)
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
-        ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
+        ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
         └─ Phase 7 ⬜ (real data)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```
