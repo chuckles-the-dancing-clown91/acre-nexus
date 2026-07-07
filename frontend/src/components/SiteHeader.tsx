@@ -32,14 +32,32 @@ export function SiteHeader() {
         {user && (
           <>
             <Link
+              href="/account/lease"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 sm:block"
+            >
+              My lease
+            </Link>
+            <Link
               href="/account/payments"
               className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 sm:block"
             >
               My rent
             </Link>
             <Link
+              href="/account/maintenance"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 lg:block"
+            >
+              Maintenance
+            </Link>
+            <Link
+              href="/account/messages"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 lg:block"
+            >
+              Messages
+            </Link>
+            <Link
               href="/account/applications"
-              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 sm:block"
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-surface-2 lg:block"
             >
               My applications
             </Link>

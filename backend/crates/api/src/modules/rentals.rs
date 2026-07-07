@@ -4,7 +4,7 @@
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::rentals;
+use crate::routes::{lifecycle, rentals};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -36,6 +36,21 @@ impl PlatformModule for RentalsModule {
             rentals::update_lease::update_lease,
             rentals::list_payments::list_payments,
             rentals::record_payment::record_payment,
+            // move-in / move-out inspections (Phase 5)
+            lifecycle::inspections::create_inspection,
+            lifecycle::inspections::list_lease_inspections,
+            lifecycle::inspections::get_inspection,
+            lifecycle::inspections::update_inspection,
+            lifecycle::inspections::complete_inspection,
+            lifecycle::inspections::add_item,
+            lifecycle::inspections::update_item,
+            lifecycle::inspections::delete_item,
+            lifecycle::inspections::my_inspections,
+            // security-deposit disposition (Phase 5)
+            lifecycle::deposits::get_lease_deposit,
+            lifecycle::deposits::upsert_disposition,
+            lifecycle::deposits::finalize_disposition,
+            lifecycle::deposits::my_deposit,
         ]
     }
 }

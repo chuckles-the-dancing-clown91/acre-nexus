@@ -7,6 +7,7 @@ pub mod delete;
 pub mod download;
 pub mod dto;
 pub mod list;
+pub mod portal;
 pub mod property;
 pub mod update;
 pub mod upload;
@@ -20,6 +21,8 @@ pub const OWNER_TYPES: &[&str] = &[
     "deal",
     "unit",
     "maintenance_ticket",
+    "inspection",
+    "asset",
     "tenant",
 ];
 

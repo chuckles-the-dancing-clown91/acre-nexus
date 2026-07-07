@@ -19,6 +19,7 @@ import type {
 } from "@/lib/types";
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { AssetsCard } from "@/components/AssetsCard";
 import { AssignmentsCard } from "@/components/AssignmentsCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { useAuth } from "@/lib/auth";
@@ -1128,6 +1129,9 @@ function DocumentsTab({
 
       {/* Full document drawer: list, upload, versions, download */}
       <DocumentsCard ownerType="property" ownerId={id} title="All documents" />
+
+      {/* Equipment registry: AC units, water heaters, appliances… */}
+      <AssetsCard propertyId={id} />
     </div>
   );
 }

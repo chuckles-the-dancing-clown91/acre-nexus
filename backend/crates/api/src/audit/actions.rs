@@ -244,3 +244,34 @@ pub const ASSIGNMENT_REMOVE: &str = "assignment.remove";
 pub const SETTING_UPDATE: &str = "setting.update";
 pub const APPLICATION_ADVANCE: &str = "application.advance";
 pub const APPLICATION_REUSE: &str = "application.reuse";
+
+// ---- Phase 5: resident portal, messaging, inspections, deposits ----
+pub const MESSAGE_THREAD_CREATE: &str = "message_thread.create";
+pub const MESSAGE_SEND: &str = "message.send";
+pub const MESSAGE_THREAD_UPDATE: &str = "message_thread.update";
+pub const INSPECTION_CREATE: &str = "inspection.create";
+pub const INSPECTION_UPDATE: &str = "inspection.update";
+pub const INSPECTION_COMPLETE: &str = "inspection.complete";
+pub const DEPOSIT_DISPOSITION_CREATE: &str = "deposit_disposition.create";
+pub const DEPOSIT_DISPOSITION_UPDATE: &str = "deposit_disposition.update";
+pub const DEPOSIT_DISPOSITION_FINALIZE: &str = "deposit_disposition.finalize";
+pub const DEPOSIT_DISPOSITION_SETTLE: &str = "deposit_disposition.settle";
+
+// ---- Phase 6: helpdesk & maintenance operations ----
+pub const TICKET_QUOTE_ADD: &str = "ticket_quote.add";
+pub const TICKET_QUOTE_APPROVE: &str = "ticket_quote.approve";
+pub const TICKET_QUOTE_REJECT: &str = "ticket_quote.reject";
+pub const MAINTENANCE_PLAN_CREATE: &str = "maintenance_plan.create";
+pub const MAINTENANCE_PLAN_UPDATE: &str = "maintenance_plan.update";
+pub const MAINTENANCE_PLAN_RUN: &str = "maintenance_plan.run";
+
+// ---- Full maintenance system: equipment registry ----
+pub const ASSET_CREATE: &str = "asset.create";
+pub const ASSET_UPDATE: &str = "asset.update";
+
+// ---- Maintenance operations: lines, inventory, reviews ----
+pub const TICKET_LINE_ADD: &str = "ticket_line.add";
+pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
+pub const INVENTORY_CREATE: &str = "inventory_item.create";
+pub const INVENTORY_UPDATE: &str = "inventory_item.update";
+pub const TICKET_REVIEW: &str = "ticket.review";

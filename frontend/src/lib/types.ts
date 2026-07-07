@@ -704,11 +704,62 @@ export interface MaintenanceTicket {
   assignee_user_id: string | null;
   assignee_entity_id: string | null;
   reporter: string | null;
+  /** Where in the home (e.g. "Kitchen"). */
+  location: string | null;
+  /** Entry instructions. */
+  access_notes: string | null;
+  /** Entry authorized when the resident is out. */
+  permission_to_enter: boolean;
+  /** Registered equipment being serviced. */
+  asset_id: string | null;
+  /** What an on-hold ticket is blocked by. */
+  waiting_on: string | null;
+  /** ISO date the waiting-on follow-up is due. */
+  follow_up_date: string | null;
+  /** Resident feedback after resolution (1–5). */
+  rating: number | null;
+  review_comment: string | null;
   due_date: string | null;
   cost_cents: number | null;
   cost_label: string | null;
+  /** SLA / lifecycle timestamps (Phase 6). */
+  first_response_at: string | null;
+  resolved_at: string | null;
+  sla_response_due_at: string | null;
+  sla_resolve_due_at: string | null;
+  /** `none` | `on_track` | `met` | `breached`, derived server-side. */
+  sla_response_state: string;
+  sla_resolve_state: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TicketQuote {
+  id: string;
+  ticket_id: string;
+  entity_id: string;
+  entity_name: string | null;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+  status: "pending" | "approved" | "rejected";
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface MaintenancePlan {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  priority: string;
+  cadence_days: number;
+  next_due_date: string;
+  active: boolean;
+  last_ticket_id: string | null;
+  created_at: string;
 }
 
 export interface TicketComment {
@@ -716,12 +767,98 @@ export interface TicketComment {
   ticket_id: string;
   author_user_id: string | null;
   kind: string;
+  /** `public` | `internal` (staff-only note). */
+  visibility: "public" | "internal";
+  author_name: string | null;
   body: string;
   created_at: string;
 }
 
 export interface TicketDetail extends MaintenanceTicket {
   comments: TicketComment[];
+  lines: TicketLine[];
+  asset_name: string | null;
+  quotes: TicketQuote[];
+  inbound_email_address: string | null;
+}
+
+/** One itemized part / labor / fee entry on a work order. */
+export interface TicketLine {
+  id: string;
+  ticket_id: string;
+  kind: "part" | "labor" | "fee" | "other";
+  description: string;
+  inventory_item_id: string | null;
+  serial_number: string | null;
+  quantity: number;
+  unit_cost_cents: number;
+  unit_cost_label: string;
+  total_cents: number;
+  total_label: string;
+  created_at: string;
+}
+
+/** A stockroom item the maintenance team draws from. */
+export interface InventoryItem {
+  id: string;
+  property_id: string | null;
+  name: string;
+  sku: string | null;
+  category: string;
+  quantity: number;
+  unit_cost_cents: number | null;
+  unit_cost_label: string | null;
+  reorder_level: number;
+  low_stock: boolean;
+  storage_location: string | null;
+  serial_numbers: string[];
+  notes: string | null;
+  status: "active" | "archived";
+  created_at: string;
+}
+
+/** A registered piece of serviceable equipment (AC, water heater, appliance). */
+export interface Asset {
+  id: string;
+  property_id: string;
+  unit_id: string | null;
+  kind: string;
+  name: string;
+  make: string | null;
+  model: string | null;
+  serial_number: string | null;
+  install_date: string | null;
+  warranty_expires: string | null;
+  /** `none` | `active` | `expired`, derived server-side. */
+  warranty_state: string;
+  notes: string | null;
+  status: "active" | "retired";
+  created_at: string;
+}
+
+export interface CreateAssetInput {
+  property_id: string;
+  unit_id?: string;
+  kind?: string;
+  name: string;
+  make?: string;
+  model?: string;
+  serial_number?: string;
+  install_date?: string;
+  warranty_expires?: string;
+  notes?: string;
+}
+
+export interface UpdateAssetInput {
+  kind?: string;
+  name?: string;
+  make?: string;
+  model?: string;
+  serial_number?: string;
+  install_date?: string;
+  warranty_expires?: string;
+  notes?: string;
+  status?: "active" | "retired";
 }
 
 export interface CreateTicketInput {
@@ -747,6 +884,14 @@ export interface UpdateTicketInput {
   assignee_user_id?: string;
   assignee_entity_id?: string;
   reporter?: string;
+  location?: string;
+  access_notes?: string;
+  permission_to_enter?: boolean;
+  asset_id?: string;
+  /** Set with status on_hold: parts|vendor|resident|owner|other ("none" clears). */
+  waiting_on?: string;
+  follow_up_date?: string;
+  follow_up_note?: string;
   due_date?: string;
   cost_cents?: number;
 }

@@ -720,6 +720,306 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
     seed_profile(db, taylor_user, "Taylor", "Brooks").await?;
 
+    // ---- Full maintenance demo: the equipment registry ----
+    // Registered serviceable equipment on Maple Court; manuals/photos ride
+    // the document service (owner_type "asset").
+    let now = Utc::now();
+    let ac_unit = Uuid::new_v4();
+    for (id, unit, kind, name, make, model, warranty) in [
+        (
+            ac_unit,
+            Some(unit_a),
+            "hvac",
+            "AC — Unit 1A living room",
+            "Carrier",
+            "Comfort 24ABC6",
+            Some("2027-05-01"),
+        ),
+        (
+            Uuid::new_v4(),
+            None,
+            "plumbing",
+            "Water heater — basement",
+            "Rheem",
+            "XG40T06EC36U1",
+            None,
+        ),
+        (
+            Uuid::new_v4(),
+            Some(unit_b),
+            "appliance",
+            "Refrigerator — Unit 2B",
+            "Whirlpool",
+            "WRF535SWHZ",
+            Some("2026-11-15"),
+        ),
+    ] {
+        entity::asset::ActiveModel {
+            id: Set(id),
+            tenant_id: Set(northwind),
+            property_id: Set(maple_court),
+            unit_id: Set(unit),
+            kind: Set(kind.into()),
+            name: Set(name.into()),
+            make: Set(Some(make.into())),
+            model: Set(Some(model.into())),
+            serial_number: Set(None),
+            install_date: Set(Some("2024-05-01".into())),
+            warranty_expires: Set(warranty.map(str::to_string)),
+            notes: Set(None),
+            status: Set("active".into()),
+            created_by: Set(Some(jordan)),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
+    // The stockroom: common parts, one serialized item, one already at its
+    // reorder level so the low-stock alert demos.
+    for (name, sku, category, qty, unit_cost, reorder, serials) in [
+        (
+            "HVAC filter 20x25x1 (MERV 11)",
+            Some("FLT-2025-11"),
+            "part",
+            24,
+            Some(1_200i64),
+            6,
+            Vec::<&str>::new(),
+        ),
+        (
+            "Kitchen faucet cartridge",
+            Some("MOEN-1225"),
+            "part",
+            2,
+            Some(2_400),
+            3,
+            vec![],
+        ),
+        (
+            "Water heater element 4500W",
+            Some("WH-4500"),
+            "part",
+            2,
+            Some(3_500),
+            0,
+            vec!["WH45-00117", "WH45-00118"],
+        ),
+    ] {
+        entity::inventory_item::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(northwind),
+            property_id: Set(None),
+            name: Set(name.into()),
+            sku: Set(sku.map(str::to_string)),
+            category: Set(category.into()),
+            quantity: Set(qty),
+            unit_cost_cents: Set(unit_cost),
+            reorder_level: Set(reorder),
+            storage_location: Set(Some("Shop — shelf B".into())),
+            serial_numbers: Set(json!(serials)),
+            notes: Set(None),
+            low_stock_alerted_at: Set(None),
+            status: Set("active".into()),
+            created_by: Set(Some(jordan)),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
+    // ---- Phase 5 demo: resident request, messaging, move-in inspection ----
+    // A resident-reported maintenance request from the portal, in triage.
+    let demo_ticket = Uuid::new_v4();
+    entity::maintenance_ticket::ActiveModel {
+        id: Set(demo_ticket),
+        tenant_id: Set(northwind),
+        property_id: Set(maple_court),
+        unit_id: Set(Some(unit_a)),
+        lease_id: Set(Some(current)),
+        title: Set("Bedroom window won't latch".into()),
+        description: Set(Some(
+            "The latch on the bedroom window doesn't catch — it stays closed but won't lock."
+                .into(),
+        )),
+        category: Set("general".into()),
+        priority: Set("normal".into()),
+        status: Set("triage".into()),
+        assignee_user_id: Set(None),
+        assignee_entity_id: Set(None),
+        reporter: Set(Some("Taylor Brooks".into())),
+        location: Set(Some("Bedroom".into())),
+        access_notes: Set(Some("Weekdays after 5pm, or use the lockbox.".into())),
+        permission_to_enter: Set(true),
+        asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
+        due_date: Set(None),
+        cost_cents: Set(None),
+        first_response_at: Set(Some(now.into())),
+        resolved_at: Set(None),
+        sla_response_due_at: Set(Some((now + chrono::Duration::hours(24)).into())),
+        sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(168)).into())),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    // The visibility split on its timeline: a public staff reply the
+    // resident sees, and an internal note they don't.
+    entity::ticket_comment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        ticket_id: Set(demo_ticket),
+        author_user_id: Set(Some(jordan)),
+        kind: Set("comment".into()),
+        visibility: Set("public".into()),
+        author_name: Set(Some("Jordan Mills".into())),
+        body: Set(
+            "Thanks Taylor — we'll have someone look at the latch this week. \
+                   The lockbox works if you're out."
+                .into(),
+        ),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::ticket_comment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        ticket_id: Set(demo_ticket),
+        author_user_id: Set(Some(jordan)),
+        kind: Set("comment".into()),
+        visibility: Set("internal".into()),
+        author_name: Set(Some("Jordan Mills".into())),
+        body: Set(
+            "Note: same latch failed in 2B last year — if Birch confirms it's \
+                   the same hardware batch, quote replacing all of them."
+                .into(),
+        ),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // A resident ↔ manager conversation with a staff reply.
+    let thread_id = Uuid::new_v4();
+    entity::message_thread::ActiveModel {
+        id: Set(thread_id),
+        tenant_id: Set(northwind),
+        lease_id: Set(current),
+        property_id: Set(maple_court),
+        subject: Set("Package room access".into()),
+        status: Set("open".into()),
+        created_by: Set(taylor_user),
+        last_message_at: Set(now.into()),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::message::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        thread_id: Set(thread_id),
+        sender_user_id: Set(taylor_user),
+        sender_kind: Set("resident".into()),
+        sender_name: Set("Taylor Brooks".into()),
+        body: Set("Hi — my fob stopped opening the package room this week. \
+                   Could you take a look?"
+            .into()),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::message::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        thread_id: Set(thread_id),
+        sender_user_id: Set(jordan),
+        sender_kind: Set("staff".into()),
+        sender_name: Set("Jordan Mills".into()),
+        body: Set(
+            "Thanks for flagging it, Taylor — we've reset your fob's access. \
+                   Give it a try and reply here if it still won't scan."
+                .into(),
+        ),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // A completed move-in inspection on Taylor's lease with a few rated rows.
+    let inspection_id = Uuid::new_v4();
+    entity::inspection::ActiveModel {
+        id: Set(inspection_id),
+        tenant_id: Set(northwind),
+        lease_id: Set(current),
+        property_id: Set(maple_court),
+        unit_id: Set(Some(unit_a)),
+        kind: Set("move_in".into()),
+        status: Set("completed".into()),
+        scheduled_date: Set(Some("2024-08-30".into())),
+        completed_at: Set(Some(now.into())),
+        completed_by: Set(Some(jordan)),
+        notes: Set(Some(
+            "Unit in good shape at move-in; minor carpet wear noted in the bedroom.".into(),
+        )),
+        created_by: Set(Some(jordan)),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    for (idx, (area, item, condition, notes)) in [
+        (
+            "Entry & living areas",
+            "Doors, locks & hardware",
+            "good",
+            None,
+        ),
+        (
+            "Entry & living areas",
+            "Walls, ceiling & trim",
+            "good",
+            None,
+        ),
+        (
+            "Kitchen",
+            "Appliances (range, fridge, dishwasher)",
+            "good",
+            None,
+        ),
+        (
+            "Bedrooms",
+            "Flooring / carpet",
+            "fair",
+            Some("Light wear near the closet."),
+        ),
+        ("Systems & safety", "Smoke / CO detectors", "good", None),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        entity::inspection_item::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(northwind),
+            inspection_id: Set(inspection_id),
+            area: Set(area.into()),
+            item: Set(item.into()),
+            condition: Set(condition.into()),
+            notes: Set(notes.map(str::to_string)),
+            sort_order: Set(idx as i32),
+            created_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
     // Maple Holdings' books: seed the default chart of accounts.
     crate::accounting::ensure_chart(db, northwind, maple).await?;
 
@@ -1305,8 +1605,25 @@ async fn seed_ticket(
         assignee_user_id: Set(None),
         assignee_entity_id: Set(Some(assignee_entity_id)),
         reporter: Set(Some("Resident".into())),
+        location: Set(None),
+        access_notes: Set(None),
+        permission_to_enter: Set(false),
+        asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
+        first_response_at: Set(Some(now.into())),
+        resolved_at: Set(if status == "resolved" || status == "closed" {
+            Some(now.into())
+        } else {
+            None
+        }),
+        sla_response_due_at: Set(Some((now + chrono::Duration::hours(8)).into())),
+        sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(72)).into())),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

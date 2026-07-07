@@ -56,6 +56,15 @@ contractor (from the entities registry).
 | PATCH | `/tickets/{id}` | `maintenance:manage` | Update status / assignee / fields (logs a status comment) |
 | POST | `/tickets/{id}/comments` | `maintenance:manage` | Add a comment |
 
+Residents open and follow their own requests (with photos) through the
+`/my/tickets` portal routes — see [`PORTAL.md`](PORTAL.md). Phase 5 also
+added **move-in/move-out inspections** (`/leases/{id}/inspections`, checklist
++ photos) and the **security-deposit disposition** (`/leases/{id}/deposit`)
+to the rentals module, documented there. Phase 6 grew the module into the
+**helpdesk** — SLA targets + breach scanning, contractor dispatch with
+quotes → approval → vendor bill, preventive-maintenance plans, and the
+auto make-ready turnover — see [`HELPDESK.md`](HELPDESK.md).
+
 ---
 
 ## Title & Ownership (`title` module)

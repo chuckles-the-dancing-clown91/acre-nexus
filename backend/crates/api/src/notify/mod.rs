@@ -272,6 +272,102 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                \n\nDetails: {description}\n\n— {company}",
         sms: "{company} reminder: {title} due {due_date} ({days_left} day(s)).",
     },
+    // ---- Phase 5: resident portal round-out ----
+    DefaultTemplate {
+        key: "resident_message",
+        subject: "New message from {resident}: {subject}",
+        body: "Hi {recipient},\n\n{resident} sent a message about {property}:\n\n\
+               \"{preview}\"\n\nReply from the messages console.\n\n— {company}",
+        sms: "New resident message from {resident}: {subject}",
+    },
+    DefaultTemplate {
+        key: "manager_message",
+        subject: "New message from {company}: {subject}",
+        body: "Hi {recipient},\n\nYou have a new message from {company} about your \
+               tenancy:\n\n\"{preview}\"\n\nRead and reply from your resident portal \
+               under My messages.\n\n— {company}",
+        sms: "{company}: you have a new message — {subject}. Reply from your portal.",
+    },
+    DefaultTemplate {
+        key: "maintenance_request",
+        subject: "New maintenance request from {resident}: {title}",
+        body: "Hi {recipient},\n\n{resident} submitted a {priority}-priority maintenance \
+               request for {property}: {title}. Triage it on the maintenance board.\n\n\
+               — {company}",
+        sms: "New maintenance request from {resident}: {title} ({priority}).",
+    },
+    DefaultTemplate {
+        key: "maintenance_update",
+        subject: "Update on your maintenance request: {title}",
+        body: "Hi {recipient},\n\nYour maintenance request \"{title}\" is now \
+               {status}.\n\nYou can follow progress from your resident portal under \
+               Maintenance.\n\n— {company}",
+        sms: "{company}: your maintenance request \"{title}\" is now {status}.",
+    },
+    // ---- Phase 6: helpdesk & maintenance operations ----
+    DefaultTemplate {
+        key: "ticket_assigned",
+        subject: "Assigned to you: {title}",
+        body: "Hi {recipient},\n\nThe work order \"{title}\" ({priority} priority) at \
+               {property} has been assigned to you{due_line}.\n\n— {company}",
+        sms: "{company}: work order assigned to you — {title} ({priority}).",
+    },
+    DefaultTemplate {
+        key: "ticket_dispatch",
+        subject: "Work order from {company}: {title}",
+        body: "Hi {recipient},\n\n{company} has dispatched a work order to you:\n\n\
+               {title} ({priority} priority)\nProperty: {property}{due_line}\n\n\
+               {description}\n\nPlease confirm scheduling with the property manager.\n\n\
+               — {company}",
+        sms: "{company} dispatched a work order: {title} at {property}.",
+    },
+    DefaultTemplate {
+        key: "maintenance_reply",
+        subject: "Reply on your maintenance request: {title}",
+        body: "Hi {recipient},\n\n{author} replied to your maintenance request \
+               \"{title}\":\n\n\"{preview}\"\n\nRead and respond from your resident \
+               portal under Maintenance.\n\n— {company}",
+        sms: "{company}: {author} replied to your request \"{title}\" — see your portal.",
+    },
+    DefaultTemplate {
+        key: "ticket_follow_up",
+        subject: "Follow up due: {title} (waiting on {waiting_on})",
+        body: "Hi {recipient},\n\nThe work order \"{title}\" has been waiting on \
+               {waiting_on} and its follow-up date ({date}) has arrived. Chase it \
+               from the maintenance board.\n\n— {company}",
+        sms: "Follow up due: {title} — waiting on {waiting_on} since {date}.",
+    },
+    DefaultTemplate {
+        key: "inventory_low",
+        subject: "Low stock: {name} ({quantity} left)",
+        body: "Hi {recipient},\n\nInventory for \"{name}\" is down to {quantity} \
+               (reorder level {reorder_level}). Time to reorder.\n\n— {company}",
+        sms: "Low stock: {name} — {quantity} left (reorder at {reorder_level}).",
+    },
+    DefaultTemplate {
+        key: "ticket_reviewed",
+        subject: "{stars} — {resident} rated \"{title}\"",
+        body: "Hi {recipient},\n\n{resident} rated the completed work order \
+               \"{title}\": {stars} ({rating}/5).\n\n\"{comment}\"\n\n— {company}",
+        sms: "{resident} rated \"{title}\": {rating}/5.",
+    },
+    DefaultTemplate {
+        key: "ticket_sla_breached",
+        subject: "SLA breached ({kind}): {title}",
+        body: "Hi {recipient},\n\nThe {priority}-priority work order \"{title}\" has \
+               passed its {kind} SLA target. Triage it on the maintenance board.\n\n\
+               — {company}",
+        sms: "SLA breached ({kind}): {title} ({priority}).",
+    },
+    DefaultTemplate {
+        key: "deposit_disposition_closed",
+        subject: "Your security deposit statement — {refund} refunded",
+        body: "Hi {recipient},\n\nYour security deposit of {deposit} has been settled: \
+               {withheld} was withheld ({deduction_count} deduction(s)) and {refund} is \
+               being returned to you. The itemized disposition statement is available \
+               from your resident portal under My lease.\n\n— {company}",
+        sms: "{company}: your deposit is settled — {refund} refunded. Statement in your portal.",
+    },
 ];
 
 /// A rendered, ready-to-send message. `subject` doubles as the title for
@@ -742,6 +838,75 @@ pub async fn in_app(
         Err(e) => {
             tracing::debug!("in-app notification skipped (likely duplicate): {e}");
             None
+        }
+    }
+}
+
+/// Notify one specific person across every direct channel: email (always,
+/// to `email`), plus the in-app inbox and a web-push job when the address
+/// belongs to a platform account. This is the resident-update path — portal
+/// users hear in their inbox/phone, plain-email tenants still get the mail.
+#[allow(clippy::too_many_arguments)]
+pub async fn notify_person(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    email: &str,
+    template: &str,
+    vars_json: serde_json::Value,
+    owner: Option<(&str, Uuid)>,
+    trigger: &str,
+) {
+    let email = email.trim();
+    if email.is_empty() {
+        return;
+    }
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("template".into(), json!(template));
+    payload.insert("to".into(), json!(email));
+    payload.insert("vars".into(), vars_json.clone());
+    if let Some((otype, oid)) = owner {
+        payload.insert("owner_type".into(), json!(otype));
+        payload.insert("owner_id".into(), json!(oid.to_string()));
+    }
+    payload.insert("trigger".into(), json!(trigger));
+
+    if let Err(e) = crate::scheduler::enqueue(
+        db,
+        tenant_id,
+        "auto_email",
+        serde_json::Value::Object(payload.clone()),
+        0,
+    )
+    .await
+    {
+        tracing::error!("failed to enqueue auto_email: {e}");
+    }
+
+    // In-app + push only exist for someone with an account — in THIS tenant.
+    // Emails are globally unique across the platform and lease contact
+    // addresses are free-form staff input, so an unscoped match could hand
+    // one org's ticket details to another org's user.
+    let user = entity::prelude::User::find()
+        .filter(entity::user::Column::TenantId.eq(tenant_id))
+        .filter(entity::user::Column::Email.eq(email.to_lowercase()))
+        .one(db)
+        .await
+        .ok()
+        .flatten();
+    if let Some(user) = user {
+        in_app(db, tenant_id, &user, template, &vars_json, owner, trigger).await;
+        payload.insert("user_id".into(), json!(user.id.to_string()));
+        if let Err(e) = crate::scheduler::enqueue(
+            db,
+            tenant_id,
+            "auto_push",
+            serde_json::Value::Object(payload),
+            0,
+        )
+        .await
+        {
+            tracing::error!("failed to enqueue auto_push: {e}");
         }
     }
 }

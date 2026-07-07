@@ -39,9 +39,22 @@ pub async fn get_ticket(
         .one(&db)
         .await?
         .map(|t| crate::mail::ticket_address(&t.slug, ticket.id));
+    let quotes = super::quotes::quotes_for_ticket(&db, scope.tenant_id, ticket.id).await?;
+    let lines = super::lines::lines_for_ticket(&db, scope.tenant_id, ticket.id).await?;
+    let asset_name = match ticket.asset_id {
+        Some(aid) => entity::prelude::Asset::find_by_id(aid)
+            .filter(entity::asset::Column::TenantId.eq(scope.tenant_id))
+            .one(&db)
+            .await?
+            .map(|a| a.name),
+        None => None,
+    };
     Ok(Json(TicketDetailDto {
         ticket: TicketDto::from(ticket),
         comments,
+        lines,
+        asset_name,
+        quotes,
         inbound_email_address,
     }))
 }

@@ -114,6 +114,20 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "message:read",
+        category: "Rentals",
+        label: "View resident messages",
+        description: "Read resident ↔ manager message threads.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "message:manage",
+        category: "Rentals",
+        label: "Reply to resident messages",
+        description: "Reply to, close, and reopen resident message threads.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "title:read",
         category: "Properties",
         label: "View title",

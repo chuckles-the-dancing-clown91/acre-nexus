@@ -74,6 +74,14 @@ pub const CALENDAR_DEFAULT_LEAD_DAYS: &str = "calendar.default_lead_days";
 pub const CALENDAR_SCAN_INTERVAL_SECS: &str = "calendar.scan_interval_secs";
 /// Auto-create a renewal reminder for every active lease with an end date.
 pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
+/// SLA first-response targets per priority (`urgent:4,high:8,…`, hours).
+pub const HELPDESK_SLA_RESPONSE_HOURS: &str = "helpdesk.sla_response_hours";
+/// SLA resolution targets per priority (`urgent:24,high:72,…`, hours).
+pub const HELPDESK_SLA_RESOLVE_HOURS: &str = "helpdesk.sla_resolve_hours";
+/// Seconds the per-tenant helpdesk scan sleeps between runs.
+pub const HELPDESK_SCAN_INTERVAL_SECS: &str = "helpdesk.scan_interval_secs";
+/// Auto-open a make-ready ticket when a move-out inspection completes.
+pub const HELPDESK_AUTO_TURNOVER: &str = "helpdesk.auto_turnover";
 
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -365,6 +373,42 @@ pub const CATALOG: &[SettingDef] = &[
         description: "Automatically keep a renewal reminder on every active \
                       lease's end date.",
         group: "Calendar",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: HELPDESK_SLA_RESPONSE_HOURS,
+        label: "SLA: first-response hours",
+        description: "Target hours to first staff response per priority, as \
+                      `priority:hours` pairs (0 disables a priority's target).",
+        group: "Helpdesk",
+        kind: SettingKind::Text,
+        default: || json!("urgent:4,high:8,normal:24,low:72"),
+    },
+    SettingDef {
+        key: HELPDESK_SLA_RESOLVE_HOURS,
+        label: "SLA: resolution hours",
+        description: "Target hours to resolution per priority, as \
+                      `priority:hours` pairs (0 disables a priority's target).",
+        group: "Helpdesk",
+        kind: SettingKind::Text,
+        default: || json!("urgent:24,high:72,normal:168,low:336"),
+    },
+    SettingDef {
+        key: HELPDESK_SCAN_INTERVAL_SECS,
+        label: "Helpdesk scan interval (seconds)",
+        description: "How often the helpdesk scan checks for SLA breaches and \
+                      due preventive-maintenance plans.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(3600),
+    },
+    SettingDef {
+        key: HELPDESK_AUTO_TURNOVER,
+        label: "Auto make-ready on move-out",
+        description: "Completing a move-out inspection opens a turnover ticket \
+                      and flags the unit make-ready.",
+        group: "Helpdesk",
         kind: SettingKind::Bool,
         default: || json!(true),
     },

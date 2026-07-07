@@ -11,8 +11,9 @@ Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
 The next slice of work, in dependency order:
 
-- [ ] **Portal round-out (Phase 5)**: lease + documents view and maintenance
-      requests in the renter portal (rent payment shipped with Phase 3).
+- [x] **Portal round-out (Phase 5)**: lease + documents view, maintenance
+      requests, messaging, move-in/move-out inspections, and security-deposit
+      disposition — shipped, see [`PORTAL.md`](PORTAL.md).
 - [x] **Accounts payable (#58)**: vendor bills → approval → pay, riding the
       Phase 3 ledger + payment execution — shipped, see
       [`PAYMENTS.md`](PAYMENTS.md#accounts-payable-vendor-bills).
@@ -178,37 +179,58 @@ approve/deny with adverse-action notice, fully audited.
 
 ---
 
-## Phase 5 — Tenant lifecycle & resident portal 🟡  *(Pillar 3)*
+## Phase 5 — Tenant lifecycle & resident portal ✅  *(Pillar 3)*
+
+**Shipped** — see [`PORTAL.md`](PORTAL.md) for the as-built design.
 
 - **Applicant → tenant conversion** ✅ (shipped with Phase 2): approved
   application becomes a lease with one action — identity/attributes/vehicles
   copied, fees auto-applied, lease document auto-generated, listing closed;
   deposit + first month now collect through the Phase 3 payment pipeline.
-- **Resident portal** 🟡: renters already apply white-glove from their
-  profile (`/account/profile`), track applications (`/account/applications`),
-  maintain vehicles, sign remotely, and **pay rent** — balance, one-click
-  pay, saved methods, autopay, receipts (`/account/payments`, shipped with
-  Phase 3); still to come — view lease + documents, submit maintenance
-  requests, and message the manager.
-- **Move-in/move-out** ⬜: checklists, inspections (photos via documents),
-  deposit disposition.
+- **Resident portal** ✅: renters apply white-glove from their profile
+  (`/account/profile`), track applications (`/account/applications`),
+  maintain vehicles, sign remotely, **pay rent** (`/account/payments`,
+  Phase 3), and now — **view their lease + documents** (signed lease,
+  receipts, statements via audited signed-URL downloads, `/account/lease`),
+  **submit maintenance requests** with photos and a live timeline
+  (`/account/maintenance`), and **message the manager** (threaded
+  conversations answered from the console, `/account/messages`), all through
+  identity-scoped `/my/*` routes.
+- **Move-in/move-out** ✅: move-in/move-out **inspections** with a standard
+  condition checklist + photos via the document service, and
+  **security-deposit disposition** — itemized deductions posted through the
+  trust ledger, the refund executed on the provider payout rail, and a
+  generated statement PDF filed on the lease + emailed to the resident.
 
-**DoD:** an applicant self-serves from approval → signed lease → autopay →
-portal, end to end.
+**DoD (met):** an applicant self-serves from approval → signed lease →
+autopay → portal, end to end — and moves out with an inspected unit and a
+settled, statemented deposit.
 
 ---
 
-## Phase 6 — Helpdesk & maintenance ops ⬜  *(Pillar 6)*
+## Phase 6 — Helpdesk & maintenance ops ✅  *(Pillar 6)*
 
-- **Support desk**: SLAs, priorities, queues, and resident-facing ticketing on
-  top of the maintenance module; threaded comms.
-- **External connector** (optional): Zendesk/Intercom sync for tenants who run
-  their own helpdesk.
-- **Contractor dispatch**: assignment notifications, scheduling, quotes →
-  approval → invoice → payment (ties to Phases 1–3).
+**Shipped** — see [`HELPDESK.md`](HELPDESK.md) for the as-built design.
 
-**DoD:** a resident opens a ticket from the portal, it routes to a contractor
-with an SLA, and resolution + cost flow back to the property ledger.
+- **Support desk** ✅: per-priority **SLA policy** (first-response +
+  resolution targets stamped on every ticket, re-stamped on priority change,
+  breach states on the board and detail view), a per-tenant `helpdesk_scan`
+  job surfacing breaches to staff, and resident-facing ticketing + threaded
+  comms (shipped with Phase 5).
+- **Contractor dispatch** ✅: assignment notifications (member in-app+email,
+  contractor dispatch email with schedule + scope), scheduling on the
+  ticket, **quotes → approval** (approval gated like vendor bills, feeding
+  the ticket's cost) → **invoice → payment** through the Phase 3
+  accounts-payable loop, landing on the property ledger.
+- **Preventive maintenance + turnover** ✅: recurring `maintenance_plan`s
+  auto-open tickets on cadence; completing a move-out inspection auto-opens
+  a make-ready ticket and flags the unit (setting-gated).
+- **External connector** (optional): deferred — the Phase 1 provider
+  framework is the natural home when a client runs an external desk.
+
+**DoD (met):** a resident opens a ticket from the portal, it routes to a
+contractor with an SLA, and resolution + cost flow back to the property
+ledger.
 
 ---
 
@@ -243,8 +265,8 @@ controls and monitored SLOs.
 Phase 0 ✅
    └─ Phase 1 ✅ (substrate)
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
-        ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 🟡 (tenant lifecycle/portal)
-        ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ⬜ (helpdesk)
+        ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
+        ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
         └─ Phase 7 ⬜ (real data)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```

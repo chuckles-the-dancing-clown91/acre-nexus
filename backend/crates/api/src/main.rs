@@ -30,12 +30,14 @@ mod billing;
 mod config;
 mod cors;
 mod db;
+mod deposits;
 mod dto;
 mod enrichment;
 mod error;
 mod esign;
 mod finance;
 mod guards;
+mod helpdesk;
 mod leasedoc;
 mod listing_sync;
 mod mail;
@@ -116,6 +118,7 @@ async fn rocket() -> _ {
     scheduler::spawn(db.clone());
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
+    helpdesk::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
 

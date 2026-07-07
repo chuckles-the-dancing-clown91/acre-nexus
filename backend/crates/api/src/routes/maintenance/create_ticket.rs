@@ -39,6 +39,21 @@ pub async fn create_ticket(
         Some(p) if !p.trim().is_empty() => p,
         _ => "normal".to_string(),
     };
+    // Attach only equipment registered on this property.
+    let asset_id = match b.asset_id {
+        Some(aid) => {
+            entity::prelude::Asset::find_by_id(aid)
+                .filter(entity::asset::Column::TenantId.eq(scope.tenant_id))
+                .filter(entity::asset::Column::PropertyId.eq(pid))
+                .one(&db)
+                .await?
+                .ok_or_else(|| ApiError::NotFound("asset not found on this property".into()))?;
+            Some(aid)
+        }
+        None => None,
+    };
+    let (response_due, resolve_due) =
+        crate::helpdesk::sla_targets(&db, scope.tenant_id, &priority, now).await;
     let model = entity::maintenance_ticket::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -53,8 +68,21 @@ pub async fn create_ticket(
         assignee_user_id: Set(b.assignee_user_id),
         assignee_entity_id: Set(b.assignee_entity_id),
         reporter: Set(b.reporter),
+        location: Set(b.location.filter(|s| !s.trim().is_empty())),
+        access_notes: Set(b.access_notes.filter(|s| !s.trim().is_empty())),
+        permission_to_enter: Set(b.permission_to_enter.unwrap_or(false)),
+        asset_id: Set(asset_id),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(b.due_date),
         cost_cents: Set(b.cost_cents),
+        first_response_at: Set(None),
+        resolved_at: Set(None),
+        sla_response_due_at: Set(response_due.map(Into::into)),
+        sla_resolve_due_at: Set(resolve_due.map(Into::into)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };

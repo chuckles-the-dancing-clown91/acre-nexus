@@ -618,8 +618,9 @@ async fn handle_stripe_event(
         }
         "payout.paid" | "payout.failed" => {
             let success = event_type == "payout.paid";
-            // The `payout` rail carries both owner draws and vendor-bill
-            // payments — try the bill ledger first, then owner payouts.
+            // The `payout` rail carries owner draws, vendor-bill payments,
+            // and deposit refunds — try bills, then deposit refunds, then
+            // owner payouts.
             let matched_bill = crate::payables::settle_by_external_id(
                 db,
                 tenant_id,
@@ -630,7 +631,7 @@ async fn handle_stripe_event(
             )
             .await;
             if !matched_bill {
-                crate::payouts::settle_by_external_id(
+                let matched_deposit = crate::deposits::settle_by_external_id(
                     db,
                     tenant_id,
                     external_id,
@@ -639,6 +640,17 @@ async fn handle_stripe_event(
                     (!success).then(|| "payout failed".to_string()),
                 )
                 .await;
+                if !matched_deposit {
+                    crate::payouts::settle_by_external_id(
+                        db,
+                        tenant_id,
+                        external_id,
+                        reference,
+                        success,
+                        (!success).then(|| "payout failed".to_string()),
+                    )
+                    .await;
+                }
             }
             JobOutcome::completed(json!({ "provider": "stripe", "event": event_type }))
         }
@@ -750,6 +762,31 @@ pub async fn lease_for_user(
         .find(|l| l.status == "active")
         .or(leases.first())
         .cloned())
+}
+
+/// Like [`lease_for_user`], but falls back to the most recent **past** lease
+/// (ended / expired) when no current one matches — a moved-out resident still
+/// reads their documents and deposit statement.
+pub async fn any_lease_for_user(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    user_id: Uuid,
+) -> ApiResult<Option<entity::lease::Model>> {
+    if let Some(lease) = lease_for_user(db, tenant_id, user_id).await? {
+        return Ok(Some(lease));
+    }
+    let me = User::find_by_id(user_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
+    let email = me.email.to_lowercase();
+    let mut leases = Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(tenant_id))
+        .filter(entity::lease::Column::TenantEmail.eq(email))
+        .all(db)
+        .await?;
+    leases.sort_by(|a, b| b.start_date.cmp(&a.start_date));
+    Ok(leases.into_iter().next())
 }
 
 #[cfg(test)]

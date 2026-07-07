@@ -15,8 +15,10 @@ import type { LeaseDetail } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
+import { DepositCard } from "@/components/DepositCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { EsignCard } from "@/components/EsignCard";
+import { InspectionsCard } from "@/components/InspectionsCard";
 
 const CHARGE_KINDS = ["fee", "discount", "rebate", "amenity"];
 
@@ -269,6 +271,12 @@ export default function LeaseDetailPage() {
 
       {/* Stored files: signed PDFs, addenda, move-in photos, … */}
       <DocumentsCard ownerType="lease" ownerId={id} title="Documents" />
+
+      {/* Move-in / move-out inspections (Phase 5) */}
+      <InspectionsCard leaseId={id} manage={manage} />
+
+      {/* Security-deposit disposition (Phase 5) */}
+      <DepositCard leaseId={id} manage={manage} />
 
       {/* Payment ledger */}
       <Card className="overflow-hidden">

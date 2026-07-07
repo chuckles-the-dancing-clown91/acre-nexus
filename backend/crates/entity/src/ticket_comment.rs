@@ -14,6 +14,10 @@ pub struct Model {
     pub author_user_id: Option<Uuid>,
     /// `comment` | `status` | `assignment`.
     pub kind: String,
+    /// `public` (residents see it) | `internal` (staff-only note).
+    pub visibility: String,
+    /// Display name of the author (resident or staff member).
+    pub author_name: Option<String>,
     pub body: String,
     pub created_at: DateTimeWithTimeZone,
 }
