@@ -30,6 +30,7 @@ mod billing;
 mod config;
 mod cors;
 mod db;
+mod deposits;
 mod dto;
 mod enrichment;
 mod error;

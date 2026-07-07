@@ -110,6 +110,10 @@ pub struct MyLeaseResp {
     pub property_name: String,
     pub property_address: String,
     pub unit_label: Option<String>,
+    pub tenant_name: String,
+    /// Lease term, ISO dates.
+    pub start_date: String,
+    pub end_date: Option<String>,
     pub status: String,
     pub payment_status: String,
     pub rent_cents: i64,

@@ -35,6 +35,7 @@ mod m20240101_000027_payables;
 mod m20240101_000028_calendar;
 mod m20240101_000029_email;
 mod m20240101_000030_webhooks;
+mod m20240101_000031_resident_portal;
 
 pub struct Migrator;
 
@@ -72,6 +73,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000028_calendar::Migration),
             Box::new(m20240101_000029_email::Migration),
             Box::new(m20240101_000030_webhooks::Migration),
+            Box::new(m20240101_000031_resident_portal::Migration),
         ]
     }
 }

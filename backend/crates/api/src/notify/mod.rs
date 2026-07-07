@@ -272,6 +272,47 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                \n\nDetails: {description}\n\n— {company}",
         sms: "{company} reminder: {title} due {due_date} ({days_left} day(s)).",
     },
+    // ---- Phase 5: resident portal round-out ----
+    DefaultTemplate {
+        key: "resident_message",
+        subject: "New message from {resident}: {subject}",
+        body: "Hi {recipient},\n\n{resident} sent a message about {property}:\n\n\
+               \"{preview}\"\n\nReply from the messages console.\n\n— {company}",
+        sms: "New resident message from {resident}: {subject}",
+    },
+    DefaultTemplate {
+        key: "manager_message",
+        subject: "New message from {company}: {subject}",
+        body: "Hi {recipient},\n\nYou have a new message from {company} about your \
+               tenancy:\n\n\"{preview}\"\n\nRead and reply from your resident portal \
+               under My messages.\n\n— {company}",
+        sms: "{company}: you have a new message — {subject}. Reply from your portal.",
+    },
+    DefaultTemplate {
+        key: "maintenance_request",
+        subject: "New maintenance request from {resident}: {title}",
+        body: "Hi {recipient},\n\n{resident} submitted a {priority}-priority maintenance \
+               request for {property}: {title}. Triage it on the maintenance board.\n\n\
+               — {company}",
+        sms: "New maintenance request from {resident}: {title} ({priority}).",
+    },
+    DefaultTemplate {
+        key: "maintenance_update",
+        subject: "Update on your maintenance request: {title}",
+        body: "Hi {recipient},\n\nYour maintenance request \"{title}\" is now \
+               {status}.\n\nYou can follow progress from your resident portal under \
+               Maintenance.\n\n— {company}",
+        sms: "{company}: your maintenance request \"{title}\" is now {status}.",
+    },
+    DefaultTemplate {
+        key: "deposit_disposition_closed",
+        subject: "Your security deposit statement — {refund} refunded",
+        body: "Hi {recipient},\n\nYour security deposit of {deposit} has been settled: \
+               {withheld} was withheld ({deduction_count} deduction(s)) and {refund} is \
+               being returned to you. The itemized disposition statement is available \
+               from your resident portal under My lease.\n\n— {company}",
+        sms: "{company}: your deposit is settled — {refund} refunded. Statement in your portal.",
+    },
 ];
 
 /// A rendered, ready-to-send message. `subject` doubles as the title for

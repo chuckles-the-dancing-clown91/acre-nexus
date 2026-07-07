@@ -24,6 +24,9 @@ pub enum Permission {
     /// Maintenance work orders / tickets.
     MaintenanceRead,
     MaintenanceManage,
+    /// Resident ↔ manager messaging threads.
+    MessageRead,
+    MessageManage,
     /// Title: ownership (deed) + liens / encumbrances.
     TitleRead,
     TitleManage,
@@ -106,6 +109,8 @@ impl Permission {
             Permission::VehicleManage => "vehicle:manage",
             Permission::MaintenanceRead => "maintenance:read",
             Permission::MaintenanceManage => "maintenance:manage",
+            Permission::MessageRead => "message:read",
+            Permission::MessageManage => "message:manage",
             Permission::TitleRead => "title:read",
             Permission::TitleManage => "title:manage",
             Permission::ListingRead => "listing:read",
@@ -166,6 +171,8 @@ pub const ALL_PERMS: &[Permission] = &[
     VehicleManage,
     MaintenanceRead,
     MaintenanceManage,
+    MessageRead,
+    MessageManage,
     TitleRead,
     TitleManage,
     ListingRead,

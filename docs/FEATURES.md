@@ -53,14 +53,14 @@ The biggest gap for "total" management — most operators live in their books.
 
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
-| **Resident portal** (pay, requests, docs, messages) | ⬜ | P1 | renter persona exists in RBAC |
+| **Resident portal** (pay, requests, docs, messages) | ✅ | P1 | Phase 5 — see `PORTAL.md` |
 | Applicant → tenant **conversion** | ⬜ | P1 | one action: approved app → lease |
 | **Lease generation** from templates + **e-sign** | ✅ | — | envelopes, signer links, ESIGN audit trail, signed PDF |
 | Renewals, amendments, addenda | ⬜ | P2 | versioned docs + e-sign |
-| **Security deposit** mgmt + disposition + statements | ⬜ | P1 | escrow accounting tie-in |
+| **Security deposit** mgmt + disposition + statements | ✅ | P1 | Phase 5 — trust-ledger postings + refund + statement PDF |
 | Renters **insurance** tracking / requirement | ⬜ | P2 | policy expiry reminders |
 | Communications: email / SMS / in-app + broadcast | 🟡 | P1 | outbound + inbound email→ticket/lead + comms log shipped (`docs/EMAIL.md`) |
-| Move-in / move-out **inspections** w/ photos | ⬜ | P2 | condition reports |
+| Move-in / move-out **inspections** w/ photos | ✅ | P2 | Phase 5 — checklist + document-service photos |
 | Package mgmt, amenity booking, community board | ⬜ | P3 | multifamily nice-to-haves |
 
 ## 4. Maintenance & operations

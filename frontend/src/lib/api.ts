@@ -49,6 +49,7 @@ import type {
   PublicTheme,
   RecordPaymentInput,
   ScreeningReport,
+  TicketComment,
   TicketDetail,
   TokenResponse,
   Unit,
@@ -957,6 +958,157 @@ export const api = {
     request<{ cancelled: boolean }>("/my/autopay", {
       method: "DELETE",
       auth: true,
+    }),
+
+  // ---- renter portal: lease documents, maintenance, messages (Phase 5) ----
+  myDocuments: () => request<DocumentEntry[]>("/my/documents", { auth: true }),
+  myDocumentDownloadUrl: (id: string) =>
+    request<{ url: string; expires_at: string }>(
+      `/my/documents/${id}/download`,
+      { auth: true }
+    ),
+  myTickets: () => request<MaintenanceTicket[]>("/my/tickets", { auth: true }),
+  createMyTicket: (body: CreateMyTicketInput) =>
+    request<MaintenanceTicket>("/my/tickets", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  myTicket: (id: string) =>
+    request<MyTicketDetail>(`/my/tickets/${id}`, { auth: true }),
+  addMyTicketComment: (id: string, body: string) =>
+    request<TicketComment>(`/my/tickets/${id}/comments`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  /** Register a photo against the resident's request, then PUT the bytes to
+   *  the signed URL (same two-step contract as the staff document service). */
+  uploadMyTicketPhoto: async (
+    id: string,
+    file: File | (Blob & { name?: string })
+  ): Promise<DocumentEntry> => {
+    const mime = file.type || "application/octet-stream";
+    const reg = await request<UploadDocumentResponse>(
+      `/my/tickets/${id}/photos`,
+      {
+        method: "POST",
+        auth: true,
+        body: {
+          filename: (file as File).name ?? "photo.jpg",
+          mime_type: mime,
+          size_bytes: file.size,
+        },
+      }
+    );
+    const res = await fetch(reg.upload_url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": mime },
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, "upload_failed", "file upload failed");
+    }
+    return reg.document;
+  },
+  myThreads: () => request<MessageThread[]>("/my/messages", { auth: true }),
+  createMyThread: (body: { subject: string; body: string }) =>
+    request<MessageThreadDetail>("/my/messages", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  myThread: (id: string) =>
+    request<MessageThreadDetail>(`/my/messages/${id}`, { auth: true }),
+  replyMyThread: (id: string, body: string) =>
+    request<ThreadMessage>(`/my/messages/${id}`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  myInspections: () =>
+    request<InspectionDetail[]>("/my/inspections", { auth: true }),
+  myDeposit: () => request<LeaseDeposit>("/my/deposit", { auth: true }),
+
+  // ---- resident messaging (console) ----
+  messageThreads: (status?: string) => {
+    const suffix = status ? `?status=${status}` : "";
+    return request<MessageThread[]>(`/messages${suffix}`, { auth: true });
+  },
+  messageThread: (id: string) =>
+    request<MessageThreadDetail>(`/messages/${id}`, { auth: true }),
+  replyMessageThread: (id: string, body: string) =>
+    request<ThreadMessage>(`/messages/${id}/reply`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  updateMessageThread: (id: string, status: "open" | "closed") =>
+    request<MessageThread>(`/messages/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+
+  // ---- tenant lifecycle: inspections + deposit disposition ----
+  leaseInspections: (leaseId: string) =>
+    request<Inspection[]>(`/leases/${leaseId}/inspections`, { auth: true }),
+  createInspection: (leaseId: string, body: CreateInspectionInput) =>
+    request<InspectionDetail>(`/leases/${leaseId}/inspections`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  inspection: (id: string) =>
+    request<InspectionDetail>(`/inspections/${id}`, { auth: true }),
+  updateInspection: (
+    id: string,
+    body: { scheduled_date?: string; notes?: string }
+  ) =>
+    request<InspectionDetail>(`/inspections/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  completeInspection: (id: string) =>
+    request<InspectionDetail>(`/inspections/${id}/complete`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    }),
+  addInspectionItem: (id: string, body: { area: string; item: string }) =>
+    request<InspectionItem>(`/inspections/${id}/items`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateInspectionItem: (
+    id: string,
+    body: { condition?: string; notes?: string }
+  ) =>
+    request<InspectionItem>(`/inspection-items/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  deleteInspectionItem: (id: string) =>
+    request<{ deleted: boolean }>(`/inspection-items/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  leaseDeposit: (leaseId: string) =>
+    request<LeaseDeposit>(`/leases/${leaseId}/deposit`, { auth: true }),
+  saveDepositDisposition: (leaseId: string, body: DispositionInput) =>
+    request<DepositDisposition>(`/leases/${leaseId}/deposit/disposition`, {
+      method: "PUT",
+      auth: true,
+      body,
+    }),
+  finalizeDepositDisposition: (id: string) =>
+    request<DepositDisposition>(`/deposit-dispositions/${id}/finalize`, {
+      method: "POST",
+      auth: true,
+      body: {},
     }),
 
   // ---- bank feeds + reconciliation ----
@@ -2395,6 +2547,9 @@ export interface MyLease {
   property_name: string;
   property_address: string;
   unit_label: string | null;
+  tenant_name: string;
+  start_date: string;
+  end_date: string | null;
   status: string;
   payment_status: string;
   rent_cents: number;
@@ -2446,4 +2601,123 @@ export interface ComputePayoutInput {
   entity_id: string;
   period_start: string;
   period_end: string;
+}
+
+// ---- Phase 5: resident portal round-out ----
+
+export interface CreateMyTicketInput {
+  title: string;
+  description?: string;
+  category?: string;
+  priority?: string;
+}
+
+export interface MyTicketDetail extends MaintenanceTicket {
+  comments: TicketComment[];
+  documents: DocumentEntry[];
+}
+
+export interface ThreadMessage {
+  id: string;
+  thread_id: string;
+  sender_user_id: string;
+  sender_kind: "resident" | "staff";
+  sender_name: string;
+  body: string;
+  created_at: string;
+}
+
+export interface MessageThread {
+  id: string;
+  lease_id: string;
+  property_id: string;
+  subject: string;
+  status: "open" | "closed";
+  last_message_at: string;
+  created_at: string;
+  resident_name: string | null;
+  property_address: string | null;
+  message_count: number;
+  last_sender_kind: string | null;
+  last_preview: string | null;
+}
+
+export interface MessageThreadDetail extends MessageThread {
+  messages: ThreadMessage[];
+}
+
+export interface InspectionItem {
+  id: string;
+  inspection_id: string;
+  area: string;
+  item: string;
+  condition: string;
+  notes: string | null;
+  sort_order: number;
+}
+
+export interface Inspection {
+  id: string;
+  lease_id: string;
+  property_id: string;
+  unit_id: string | null;
+  kind: "move_in" | "move_out";
+  status: "draft" | "completed";
+  scheduled_date: string | null;
+  completed_at: string | null;
+  notes: string | null;
+  item_count: number;
+  rated_count: number;
+  created_at: string;
+}
+
+export interface InspectionDetail extends Inspection {
+  items: InspectionItem[];
+}
+
+export interface CreateInspectionInput {
+  kind: "move_in" | "move_out";
+  scheduled_date?: string;
+  notes?: string;
+  blank?: boolean;
+}
+
+export interface DepositDeduction {
+  id: string;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+}
+
+export interface DepositDisposition {
+  id: string;
+  lease_id: string;
+  property_id: string;
+  status: "draft" | "processing" | "closed" | "failed";
+  deposit_cents: number;
+  deposit_label: string;
+  withheld_cents: number;
+  withheld_label: string;
+  refund_cents: number | null;
+  refund_label: string | null;
+  notes: string | null;
+  failure_reason: string | null;
+  statement_document_id: string | null;
+  deductions: DepositDeduction[];
+  finalized_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+}
+
+export interface DispositionInput {
+  deductions: { description: string; amount_cents: number }[];
+  notes?: string;
+}
+
+export interface LeaseDeposit {
+  lease_id: string;
+  deposit_cents: number | null;
+  deposit_label: string | null;
+  deposit_paid: boolean;
+  disposition: DepositDisposition | null;
 }

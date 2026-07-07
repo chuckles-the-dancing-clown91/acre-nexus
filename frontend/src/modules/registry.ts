@@ -184,6 +184,21 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
+    key: "messaging",
+    label: "Resident Messaging",
+    description:
+      "Resident ↔ manager message threads: residents write from the portal, staff reply from the console.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/messages",
+        label: "Messages",
+        icon: "mail",
+        permission: "message:read",
+      },
+    ],
+  },
+  {
     key: "title",
     label: "Title & Ownership",
     description:

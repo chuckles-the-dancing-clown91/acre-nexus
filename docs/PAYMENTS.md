@@ -217,7 +217,20 @@ Every transition audits (`vendor_bill.create/submit/approve/reject/pay/settle/vo
 - `PUT /my/autopay` / `DELETE /my/autopay`.
 
 No staff permission is required — everything is scoped to the resident's own
-lease.
+lease. Phase 5 widened the portal beyond payments (lease + documents,
+maintenance, messaging, deposit disposition) — see [`PORTAL.md`](PORTAL.md).
+
+### Security-deposit disposition (Phase 5)
+
+At move-out the deposit held in trust settles through a **disposition**:
+itemized deductions post `Dr Security Deposits Held + Dr Operating Bank / Cr
+Trust Bank + Cr Other Fee Income` (one balanced transaction — the trust
+invariant holds), the remainder refunds to the resident on the same provider
+payout rail as owner draws (`deposit_refund` job; the `payout.*` webhook
+matches bills → deposit refunds → owner draws), and settlement posts
+`Dr Security Deposits Held / Cr Trust Bank`, files a statement PDF on the
+lease, and emails the resident. Full design in
+[`PORTAL.md`](PORTAL.md#security-deposit-disposition).
 
 ## Financial dashboards
 

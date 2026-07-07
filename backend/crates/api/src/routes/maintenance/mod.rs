@@ -8,6 +8,7 @@ pub mod dto;
 pub mod get_ticket;
 pub mod list_property_tickets;
 pub mod list_tickets;
+pub mod portal;
 pub mod property_maintenance;
 pub mod update_ticket;
 

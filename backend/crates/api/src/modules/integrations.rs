@@ -91,6 +91,9 @@ impl PlatformModule for IntegrationsModule {
             documents::update::update,
             documents::download::download,
             documents::delete::delete,
+            // renter portal: the resident's own lease documents
+            documents::portal::my_documents,
+            documents::portal::my_document_download,
             // local object-store blob endpoints (dev/CI backend)
             documents::blob::put_blob,
             documents::blob::get_blob,

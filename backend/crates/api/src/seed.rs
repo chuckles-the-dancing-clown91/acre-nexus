@@ -720,6 +720,147 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
     seed_profile(db, taylor_user, "Taylor", "Brooks").await?;
 
+    // ---- Phase 5 demo: resident request, messaging, move-in inspection ----
+    // A resident-reported maintenance request from the portal, in triage.
+    let now = Utc::now();
+    entity::maintenance_ticket::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        property_id: Set(maple_court),
+        unit_id: Set(Some(unit_a)),
+        lease_id: Set(Some(current)),
+        title: Set("Bedroom window won't latch".into()),
+        description: Set(Some(
+            "The latch on the bedroom window doesn't catch — it stays closed but won't lock."
+                .into(),
+        )),
+        category: Set("general".into()),
+        priority: Set("normal".into()),
+        status: Set("triage".into()),
+        assignee_user_id: Set(None),
+        assignee_entity_id: Set(None),
+        reporter: Set(Some("Taylor Brooks".into())),
+        due_date: Set(None),
+        cost_cents: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // A resident ↔ manager conversation with a staff reply.
+    let thread_id = Uuid::new_v4();
+    entity::message_thread::ActiveModel {
+        id: Set(thread_id),
+        tenant_id: Set(northwind),
+        lease_id: Set(current),
+        property_id: Set(maple_court),
+        subject: Set("Package room access".into()),
+        status: Set("open".into()),
+        created_by: Set(taylor_user),
+        last_message_at: Set(now.into()),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::message::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        thread_id: Set(thread_id),
+        sender_user_id: Set(taylor_user),
+        sender_kind: Set("resident".into()),
+        sender_name: Set("Taylor Brooks".into()),
+        body: Set("Hi — my fob stopped opening the package room this week. \
+                   Could you take a look?"
+            .into()),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::message::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(northwind),
+        thread_id: Set(thread_id),
+        sender_user_id: Set(jordan),
+        sender_kind: Set("staff".into()),
+        sender_name: Set("Jordan Mills".into()),
+        body: Set(
+            "Thanks for flagging it, Taylor — we've reset your fob's access. \
+                   Give it a try and reply here if it still won't scan."
+                .into(),
+        ),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // A completed move-in inspection on Taylor's lease with a few rated rows.
+    let inspection_id = Uuid::new_v4();
+    entity::inspection::ActiveModel {
+        id: Set(inspection_id),
+        tenant_id: Set(northwind),
+        lease_id: Set(current),
+        property_id: Set(maple_court),
+        unit_id: Set(Some(unit_a)),
+        kind: Set("move_in".into()),
+        status: Set("completed".into()),
+        scheduled_date: Set(Some("2024-08-30".into())),
+        completed_at: Set(Some(now.into())),
+        completed_by: Set(Some(jordan)),
+        notes: Set(Some(
+            "Unit in good shape at move-in; minor carpet wear noted in the bedroom.".into(),
+        )),
+        created_by: Set(Some(jordan)),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    for (idx, (area, item, condition, notes)) in [
+        (
+            "Entry & living areas",
+            "Doors, locks & hardware",
+            "good",
+            None,
+        ),
+        (
+            "Entry & living areas",
+            "Walls, ceiling & trim",
+            "good",
+            None,
+        ),
+        (
+            "Kitchen",
+            "Appliances (range, fridge, dishwasher)",
+            "good",
+            None,
+        ),
+        (
+            "Bedrooms",
+            "Flooring / carpet",
+            "fair",
+            Some("Light wear near the closet."),
+        ),
+        ("Systems & safety", "Smoke / CO detectors", "good", None),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        entity::inspection_item::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(northwind),
+            inspection_id: Set(inspection_id),
+            area: Set(area.into()),
+            item: Set(item.into()),
+            condition: Set(condition.into()),
+            notes: Set(notes.map(str::to_string)),
+            sort_order: Set(idx as i32),
+            created_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
     // Maple Holdings' books: seed the default chart of accounts.
     crate::accounting::ensure_chart(db, northwind, maple).await?;
 

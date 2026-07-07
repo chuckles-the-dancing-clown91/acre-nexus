@@ -244,3 +244,15 @@ pub const ASSIGNMENT_REMOVE: &str = "assignment.remove";
 pub const SETTING_UPDATE: &str = "setting.update";
 pub const APPLICATION_ADVANCE: &str = "application.advance";
 pub const APPLICATION_REUSE: &str = "application.reuse";
+
+// ---- Phase 5: resident portal, messaging, inspections, deposits ----
+pub const MESSAGE_THREAD_CREATE: &str = "message_thread.create";
+pub const MESSAGE_SEND: &str = "message.send";
+pub const MESSAGE_THREAD_UPDATE: &str = "message_thread.update";
+pub const INSPECTION_CREATE: &str = "inspection.create";
+pub const INSPECTION_UPDATE: &str = "inspection.update";
+pub const INSPECTION_COMPLETE: &str = "inspection.complete";
+pub const DEPOSIT_DISPOSITION_CREATE: &str = "deposit_disposition.create";
+pub const DEPOSIT_DISPOSITION_UPDATE: &str = "deposit_disposition.update";
+pub const DEPOSIT_DISPOSITION_FINALIZE: &str = "deposit_disposition.finalize";
+pub const DEPOSIT_DISPOSITION_SETTLE: &str = "deposit_disposition.settle";

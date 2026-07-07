@@ -557,6 +557,82 @@ pub async fn post_payment_settled(
     .await
 }
 
+/// Deposit deductions are withheld at disposition: escrow releases the
+/// withheld amount (trust cash falls exactly as the amount owed back does)
+/// and the funds land in operating cash as recognized income.
+/// `Dr Security Deposits Held + Dr Operating Bank / Cr Trust Bank + Cr Other
+/// Fee Income` — one balanced transaction that satisfies the trust invariant.
+#[allow(clippy::too_many_arguments)]
+pub async fn post_deposit_withheld(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    property_id: Option<Uuid>,
+    lease_id: Uuid,
+    date: &str,
+    amount_cents: i64,
+    source_id: Uuid,
+    posted_by: Option<Uuid>,
+) -> ApiResult<entity::ledger_txn::Model> {
+    let held = account(db, tenant_id, entity_id, subtypes::SECURITY_DEPOSITS).await?;
+    let trust = account(db, tenant_id, entity_id, subtypes::TRUST_BANK).await?;
+    let operating = account(db, tenant_id, entity_id, subtypes::OPERATING_BANK).await?;
+    let income = account(db, tenant_id, entity_id, subtypes::FEE_INCOME).await?;
+    post(
+        db,
+        tenant_id,
+        PostArgs {
+            entity_id,
+            txn_date: date,
+            memo: "Security deposit withheld",
+            source_type: "deposit_disposition",
+            source_id: Some(source_id),
+            posted_by,
+        },
+        vec![
+            Leg::debit(held.id, amount_cents).on(property_id, Some(lease_id)),
+            Leg::credit(trust.id, amount_cents).on(property_id, Some(lease_id)),
+            Leg::debit(operating.id, amount_cents).on(property_id, Some(lease_id)),
+            Leg::credit(income.id, amount_cents).on(property_id, Some(lease_id)),
+        ],
+    )
+    .await
+}
+
+/// The deposit refund settles: escrow cash returns to the resident and the
+/// liability extinguishes with it. `Dr Security Deposits Held / Cr Trust Bank`.
+#[allow(clippy::too_many_arguments)]
+pub async fn post_deposit_refund(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    property_id: Option<Uuid>,
+    lease_id: Uuid,
+    date: &str,
+    amount_cents: i64,
+    source_id: Uuid,
+) -> ApiResult<entity::ledger_txn::Model> {
+    let held = account(db, tenant_id, entity_id, subtypes::SECURITY_DEPOSITS).await?;
+    let trust = account(db, tenant_id, entity_id, subtypes::TRUST_BANK).await?;
+    post(
+        db,
+        tenant_id,
+        PostArgs {
+            entity_id,
+            txn_date: date,
+            memo: "Security deposit refunded",
+            source_type: "deposit_disposition",
+            source_id: Some(source_id),
+            posted_by: None,
+        },
+        vec![
+            Leg::debit(held.id, amount_cents).on(property_id, Some(lease_id)),
+            Leg::credit(trust.id, amount_cents).on(property_id, Some(lease_id)),
+        ],
+    )
+    .await
+}
+
 /// A late fee is assessed: `Dr Accounts Receivable / Cr Late Fee Income`.
 #[allow(clippy::too_many_arguments)]
 pub async fn post_late_fee(

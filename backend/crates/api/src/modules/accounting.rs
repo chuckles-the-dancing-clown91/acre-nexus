@@ -45,6 +45,7 @@ impl PlatformModule for AccountingModule {
                 "bank_feed_sync",
                 "payout_execute",
                 crate::payables::PAY_JOB_KIND,
+                crate::deposits::REFUND_JOB_KIND,
             ],
             default_enabled: true,
             preview: false,
@@ -106,6 +107,9 @@ impl PlatformModule for AccountingModule {
             "payout_execute" => Some(crate::payouts::handle_payout_job(ctx.db, ctx.job).await),
             k if k == crate::payables::PAY_JOB_KIND => {
                 Some(crate::payables::handle_pay_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::deposits::REFUND_JOB_KIND => {
+                Some(crate::deposits::handle_refund_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }

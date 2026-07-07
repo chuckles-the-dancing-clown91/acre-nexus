@@ -35,6 +35,7 @@ pub mod integrations;
 pub mod lease_builder;
 pub mod leasing;
 pub mod maintenance;
+pub mod messaging;
 pub mod properties;
 pub mod rentals;
 pub mod theming;
@@ -173,6 +174,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(calendar::CalendarModule),
         Box::new(lease_builder::LeaseBuilderModule),
         Box::new(maintenance::MaintenanceModule),
+        Box::new(messaging::MessagingModule),
         Box::new(title::TitleModule),
         Box::new(leasing::LeasingModule),
         Box::new(vendor_api::VendorApiModule),

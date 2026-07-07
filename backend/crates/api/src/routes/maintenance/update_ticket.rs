@@ -86,6 +86,37 @@ pub async fn update_ticket(
         if let Err(e) = comment.insert(&db).await {
             tracing::error!("failed to log status comment: {e}");
         }
+
+        // A resident-reported request emails the resident on every status
+        // move, so the portal round-trips (best-effort).
+        if let Some(lease_id) = saved.lease_id {
+            let lease = entity::prelude::Lease::find_by_id(lease_id)
+                .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
+                .one(&db)
+                .await?;
+            if let Some(email) = lease
+                .as_ref()
+                .and_then(|l| l.tenant_email.as_deref())
+                .filter(|e| !e.trim().is_empty())
+            {
+                let payload = serde_json::json!({
+                    "template": "maintenance_update",
+                    "to": email,
+                    "owner_type": "maintenance_ticket",
+                    "owner_id": saved.id,
+                    "trigger": format!("status:{new_status}"),
+                    "vars": {
+                        "title": saved.title,
+                        "status": new_status.replace('_', " "),
+                    },
+                });
+                if let Err(e) =
+                    crate::scheduler::enqueue(&db, scope.tenant_id, "auto_email", payload, 0).await
+                {
+                    tracing::error!("failed to enqueue maintenance update email: {e}");
+                }
+            }
+        }
     }
 
     crate::audit::record(
