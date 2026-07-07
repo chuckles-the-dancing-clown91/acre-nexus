@@ -268,3 +268,10 @@ pub const MAINTENANCE_PLAN_RUN: &str = "maintenance_plan.run";
 // ---- Full maintenance system: equipment registry ----
 pub const ASSET_CREATE: &str = "asset.create";
 pub const ASSET_UPDATE: &str = "asset.update";
+
+// ---- Maintenance operations: lines, inventory, reviews ----
+pub const TICKET_LINE_ADD: &str = "ticket_line.add";
+pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
+pub const INVENTORY_CREATE: &str = "inventory_item.create";
+pub const INVENTORY_UPDATE: &str = "inventory_item.update";
+pub const TICKET_REVIEW: &str = "ticket.review";

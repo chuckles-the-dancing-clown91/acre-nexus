@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 import { toast } from "sonner";
 import { Badge, Button, Card } from "@/components/ui";
+import { InventoryCard } from "@/components/InventoryCard";
 
 const STATUSES = [
   "open",
@@ -159,6 +160,11 @@ export default function MaintenancePage() {
                         SLA breached
                       </span>
                     )}
+                    {t.waiting_on && (
+                      <span className="ml-2 font-semibold text-warn">
+                        waiting on {t.waiting_on}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="truncate text-sm text-ink-2">
@@ -196,6 +202,8 @@ export default function MaintenancePage() {
       </Card>
 
       <PlansCard properties={properties} manage={manage} />
+
+      <InventoryCard manage={manage} />
     </div>
   );
 }

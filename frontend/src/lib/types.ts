@@ -712,6 +712,13 @@ export interface MaintenanceTicket {
   permission_to_enter: boolean;
   /** Registered equipment being serviced. */
   asset_id: string | null;
+  /** What an on-hold ticket is blocked by. */
+  waiting_on: string | null;
+  /** ISO date the waiting-on follow-up is due. */
+  follow_up_date: string | null;
+  /** Resident feedback after resolution (1–5). */
+  rating: number | null;
+  review_comment: string | null;
   due_date: string | null;
   cost_cents: number | null;
   cost_label: string | null;
@@ -769,9 +776,45 @@ export interface TicketComment {
 
 export interface TicketDetail extends MaintenanceTicket {
   comments: TicketComment[];
+  lines: TicketLine[];
   asset_name: string | null;
   quotes: TicketQuote[];
   inbound_email_address: string | null;
+}
+
+/** One itemized part / labor / fee entry on a work order. */
+export interface TicketLine {
+  id: string;
+  ticket_id: string;
+  kind: "part" | "labor" | "fee" | "other";
+  description: string;
+  inventory_item_id: string | null;
+  serial_number: string | null;
+  quantity: number;
+  unit_cost_cents: number;
+  unit_cost_label: string;
+  total_cents: number;
+  total_label: string;
+  created_at: string;
+}
+
+/** A stockroom item the maintenance team draws from. */
+export interface InventoryItem {
+  id: string;
+  property_id: string | null;
+  name: string;
+  sku: string | null;
+  category: string;
+  quantity: number;
+  unit_cost_cents: number | null;
+  unit_cost_label: string | null;
+  reorder_level: number;
+  low_stock: boolean;
+  storage_location: string | null;
+  serial_numbers: string[];
+  notes: string | null;
+  status: "active" | "archived";
+  created_at: string;
 }
 
 /** A registered piece of serviceable equipment (AC, water heater, appliance). */
@@ -845,6 +888,10 @@ export interface UpdateTicketInput {
   access_notes?: string;
   permission_to_enter?: boolean;
   asset_id?: string;
+  /** Set with status on_hold: parts|vendor|resident|owner|other ("none" clears). */
+  waiting_on?: string;
+  follow_up_date?: string;
+  follow_up_note?: string;
   due_date?: string;
   cost_cents?: number;
 }

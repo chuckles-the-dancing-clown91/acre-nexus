@@ -4,7 +4,7 @@
 //! being serviced; manuals and photos ride the document service
 //! (`owner_type = "asset"`).
 
-use super::dto::{AssetDto, CreateAssetReq, UpdateAssetReq};
+use super::dto::{clean, AssetDto, CreateAssetReq, UpdateAssetReq};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
@@ -46,10 +46,6 @@ fn valid_date(label: &str, d: &Option<String>) -> Result<Option<String>, ApiErro
             .map(|_| Some(d.to_string()))
             .map_err(|_| ApiError::BadRequest(format!("{label} must be YYYY-MM-DD"))),
     }
-}
-
-fn clean(v: Option<String>) -> Option<String> {
-    v.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 /// `GET /assets?property_id&unit_id&status` — the equipment registry.

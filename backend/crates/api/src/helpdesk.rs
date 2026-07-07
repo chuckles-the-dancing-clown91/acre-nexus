@@ -16,10 +16,13 @@
 use crate::error::ApiResult;
 use crate::modules::JobOutcome;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use entity::prelude::{BackgroundJob, MaintenancePlan, MaintenanceTicket, Tenant, Unit};
+use entity::prelude::{
+    BackgroundJob, InventoryItem, MaintenancePlan, MaintenanceTicket, Tenant, Unit,
+};
+use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Set,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
+    QueryFilter, Set,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -162,6 +165,14 @@ pub async fn handle_scan_job(
         Ok(n) => summary["plan_tickets_opened"] = json!(n),
         Err(e) => tracing::error!("helpdesk: plan scan failed: {e}"),
     }
+    match notify_follow_ups(db, tenant_id).await {
+        Ok(n) => summary["follow_ups_notified"] = json!(n),
+        Err(e) => tracing::error!("helpdesk: follow-up scan failed: {e}"),
+    }
+    match notify_low_stock(db, tenant_id).await {
+        Ok(n) => summary["low_stock_notified"] = json!(n),
+        Err(e) => tracing::error!("helpdesk: low-stock scan failed: {e}"),
+    }
 
     tracing::info!(tenant = %tenant_id, ?summary, "helpdesk scan ran");
     let interval =
@@ -286,6 +297,107 @@ async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<
     Ok(opened)
 }
 
+/// Chase waiting-on tickets whose follow-up date arrived: notify maintenance
+/// staff once per ticket per follow-up date (the trigger carries the date, so
+/// re-dating the follow-up re-arms the reminder).
+async fn notify_follow_ups(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+) -> Result<u32, sea_orm::DbErr> {
+    let today = Utc::now().date_naive().to_string();
+    let waiting = MaintenanceTicket::find()
+        .filter(entity::maintenance_ticket::Column::TenantId.eq(tenant_id))
+        .filter(entity::maintenance_ticket::Column::WaitingOn.is_not_null())
+        .filter(entity::maintenance_ticket::Column::FollowUpDate.lte(today.clone()))
+        .filter(
+            entity::maintenance_ticket::Column::Status
+                .is_in(crate::routes::maintenance::OPEN_STATUSES.to_vec()),
+        )
+        .all(db)
+        .await?;
+    let mut notified = 0u32;
+    for ticket in waiting {
+        let (Some(waiting_on), Some(date)) = (&ticket.waiting_on, &ticket.follow_up_date) else {
+            continue;
+        };
+        crate::notify::notify_staff(
+            db,
+            tenant_id,
+            "maintenance:read",
+            "ticket_follow_up",
+            json!({
+                "title": ticket.title,
+                "waiting_on": waiting_on,
+                "date": date,
+            }),
+            Some(("maintenance_ticket", ticket.id)),
+            &format!("follow_up:{date}"),
+            None,
+        )
+        .await;
+        notified += 1;
+    }
+    Ok(notified)
+}
+
+/// Flag stock that fell to its reorder level — once per episode.
+/// `low_stock_alerted_at` marks an alert as out; restocking above the level
+/// clears it, so the next drop alerts again (a permanent dedupe key like the
+/// quantity alone would silence any repeat of a previously-seen quantity
+/// forever). Only rows with something to do are fetched: newly-low items
+/// plus items with an outstanding alert to re-arm.
+async fn notify_low_stock(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+) -> Result<u32, sea_orm::DbErr> {
+    use entity::inventory_item::Column as Inv;
+    let is_low = Expr::col(Inv::ReorderLevel)
+        .gt(0)
+        .and(Expr::col(Inv::Quantity).lte(Expr::col(Inv::ReorderLevel)));
+    let items = InventoryItem::find()
+        .filter(Inv::TenantId.eq(tenant_id))
+        .filter(Inv::Status.eq("active"))
+        .filter(
+            Condition::any()
+                .add(Inv::LowStockAlertedAt.is_not_null())
+                .add(is_low),
+        )
+        .all(db)
+        .await?;
+    let now = Utc::now();
+    let mut notified = 0u32;
+    for item in items {
+        let low = item.reorder_level > 0 && item.quantity <= item.reorder_level;
+        if low && item.low_stock_alerted_at.is_none() {
+            crate::notify::notify_staff(
+                db,
+                tenant_id,
+                "maintenance:read",
+                "inventory_low",
+                json!({
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "reorder_level": item.reorder_level,
+                }),
+                Some(("inventory_item", item.id)),
+                &format!("low_stock:{}", now.timestamp()),
+                None,
+            )
+            .await;
+            let mut am: entity::inventory_item::ActiveModel = item.into();
+            am.low_stock_alerted_at = Set(Some(now.into()));
+            am.update(db).await?;
+            notified += 1;
+        } else if !low && item.low_stock_alerted_at.is_some() {
+            // Restocked — re-arm the alert for the next episode.
+            let mut am: entity::inventory_item::ActiveModel = item.into();
+            am.low_stock_alerted_at = Set(None);
+            am.update(db).await?;
+        }
+    }
+    Ok(notified)
+}
+
 // ---------------------------------------------------------------------------
 // Ticket creation shared by the scan + turnover hook
 // ---------------------------------------------------------------------------
@@ -332,6 +444,11 @@ pub async fn open_ticket(
         access_notes: Set(None),
         permission_to_enter: Set(false),
         asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(spec.due_date),
         cost_cents: Set(None),
         first_response_at: Set(None),

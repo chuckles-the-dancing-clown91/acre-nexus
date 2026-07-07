@@ -10,7 +10,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, iam, type Member } from "@/lib/api";
-import type { Asset, Counterparty, TicketDetail } from "@/lib/types";
+import type {
+  Asset,
+  Counterparty,
+  InventoryItem,
+  TicketDetail,
+} from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 import { toast } from "sonner";
@@ -65,6 +70,10 @@ export default function TicketDetailPage() {
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
   const [noteMode, setNoteMode] = useState<"public" | "internal">("public");
+  const [holdPrompt, setHoldPrompt] = useState(false);
+  const [waitingOn, setWaitingOn] = useState("parts");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
 
   const load = useCallback(() => {
     api
@@ -224,6 +233,19 @@ export default function TicketDetailPage() {
           </Badge>
           {ticket.location && <Badge tone="neutral">{ticket.location}</Badge>}
           {ticket.asset_name && <Badge tone="info">{ticket.asset_name}</Badge>}
+          {ticket.waiting_on && (
+            <Badge tone="warn">
+              waiting on {ticket.waiting_on}
+              {ticket.follow_up_date
+                ? ` · follow up ${ticket.follow_up_date}`
+                : ""}
+            </Badge>
+          )}
+          {ticket.rating != null && (
+            <Badge tone={ticket.rating >= 4 ? "good" : "warn"}>
+              {"★".repeat(ticket.rating)} resident rating
+            </Badge>
+          )}
           {ticket.access_notes && (
             <span className="text-ink-3">Access: {ticket.access_notes}</span>
           )}
@@ -235,12 +257,16 @@ export default function TicketDetailPage() {
               className={select}
               value={ticket.status}
               disabled={!manage || busy}
-              onChange={(e) =>
+              onChange={(e) => {
+                if (e.target.value === "on_hold") {
+                  setHoldPrompt(true);
+                  return;
+                }
                 void run(
                   () => api.updateTicket(ticket.id, { status: e.target.value }),
                   "Status updated."
-                )
-              }
+                );
+              }}
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -271,7 +297,7 @@ export default function TicketDetailPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Assigned member
+            Internal team
             <select
               className={select}
               value={ticket.assignee_user_id ?? ""}
@@ -288,15 +314,24 @@ export default function TicketDetailPage() {
               }}
             >
               <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.name}
-                </option>
-              ))}
+              {members
+                .filter((m) =>
+                  [
+                    "maintenance",
+                    "property_manager",
+                    "back_office",
+                    "tenant_owner",
+                  ].includes(m.profile_type)
+                )
+                .map((m) => (
+                  <option key={m.user_id} value={m.user_id}>
+                    {m.name} ({m.profile_type.replace("_", " ")})
+                  </option>
+                ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
-            Contractor
+            External contractor
             <select
               className={select}
               value={ticket.assignee_entity_id ?? ""}
@@ -362,6 +397,69 @@ export default function TicketDetailPage() {
             />
           </label>
         </div>
+        {holdPrompt && (
+          <form
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-line-2 bg-warn-soft p-3 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!followUpDate || !followUpNote.trim()) {
+                toast.error(
+                  "Waiting-on needs a follow-up date and a note — what are we chasing?"
+                );
+                return;
+              }
+              void run(async () => {
+                await api.updateTicket(ticket.id, {
+                  status: "on_hold",
+                  waiting_on: waitingOn,
+                  follow_up_date: followUpDate,
+                  follow_up_note: followUpNote.trim(),
+                });
+                setHoldPrompt(false);
+                setFollowUpNote("");
+              }, "On hold — follow-up scheduled.");
+            }}
+          >
+            <span className="font-semibold">Waiting on</span>
+            <select
+              className={select}
+              value={waitingOn}
+              onChange={(e) => setWaitingOn(e.target.value)}
+            >
+              {["parts", "vendor", "resident", "owner", "other"].map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-ink-3">
+              follow up
+              <input
+                type="date"
+                className={select}
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+              />
+            </label>
+            <input
+              className={`${field} max-w-[280px]`}
+              placeholder="Follow-up note — what are we chasing?"
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+            />
+            <Button type="submit" disabled={busy}>
+              Put on hold
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setHoldPrompt(false)}
+            >
+              Cancel
+            </Button>
+          </form>
+        )}
+
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-ink-3">
             Cost: <span className="font-mono">{ticket.cost_label ?? "—"}</span>
@@ -376,6 +474,30 @@ export default function TicketDetailPage() {
             )}
         </div>
       </Card>
+
+      {/* Resident review */}
+      {ticket.rating != null && (
+        <Card className="p-5">
+          <h2 className="mb-1 font-display text-lg font-bold">
+            Resident review
+          </h2>
+          <div className="text-lg">
+            {"★".repeat(ticket.rating)}
+            <span className="text-ink-3">{"☆".repeat(5 - ticket.rating)}</span>
+            <span className="ml-2 text-sm text-ink-3">
+              {ticket.rating}/5 · {ticket.reporter ?? "resident"}
+            </span>
+          </div>
+          {ticket.review_comment && (
+            <p className="mt-1 text-sm text-ink-2">
+              &ldquo;{ticket.review_comment}&rdquo;
+            </p>
+          )}
+        </Card>
+      )}
+
+      {/* Parts, labor & fees — totals drive the ticket cost */}
+      <LinesCard ticket={ticket} manage={manage} busy={busy} run={run} />
 
       {/* Contractor quotes */}
       <QuotesCard
@@ -599,6 +721,228 @@ function QuotesCard({
                     Reject
                   </Button>
                 </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function LinesCard({
+  ticket,
+  manage,
+  busy,
+  run,
+}: {
+  ticket: TicketDetail;
+  manage: boolean;
+  busy: boolean;
+  run: (fn: () => Promise<unknown>, ok?: string) => Promise<void>;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [stock, setStock] = useState<InventoryItem[]>([]);
+  const [kind, setKind] = useState("part");
+  const [itemId, setItemId] = useState("");
+  const [serial, setSerial] = useState("");
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [unitCost, setUnitCost] = useState("");
+
+  useEffect(() => {
+    if (!adding) return;
+    api
+      .inventory({ status: "active" })
+      .then(setStock)
+      .catch((e) => logError("failed to load inventory", e));
+  }, [adding]);
+
+  const selected = stock.find((i) => i.id === itemId);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const qty = parseInt(quantity, 10);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error("Quantity must be positive.");
+      return;
+    }
+    const cents = unitCost.trim()
+      ? Math.round(parseFloat(unitCost) * 100)
+      : undefined;
+    if (unitCost.trim() && (!Number.isFinite(cents!) || cents! < 0)) {
+      toast.error("Unit cost must be a valid amount.");
+      return;
+    }
+    if (kind !== "part" || !itemId) {
+      if (!description.trim()) {
+        toast.error("Give the line a description.");
+        return;
+      }
+    }
+    if (selected && selected.serial_numbers.length > 0 && !serial) {
+      toast.error("This item is serialized — pick the serial being used.");
+      return;
+    }
+    await run(async () => {
+      await api.addTicketLine(ticket.id, {
+        kind,
+        description: description.trim() || undefined,
+        inventory_item_id: kind === "part" && itemId ? itemId : undefined,
+        serial_number: serial || undefined,
+        quantity: qty,
+        unit_cost_cents: cents,
+      });
+      setAdding(false);
+      setItemId("");
+      setSerial("");
+      setDescription("");
+      setQuantity("1");
+      setUnitCost("");
+    }, "Line added — ticket cost updated.");
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between border-b border-line px-5 py-4">
+        <h2 className="font-display text-lg font-bold">Parts, labor & fees</h2>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-sm">{ticket.cost_label ?? "$0"}</span>
+          {manage && !adding && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setAdding(true)}
+            >
+              Add line
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="space-y-3 p-5 text-sm">
+        {adding && (
+          <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+            <select
+              className={select}
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value);
+                if (e.target.value !== "part") {
+                  setItemId("");
+                  setSerial("");
+                }
+              }}
+            >
+              {["part", "labor", "fee", "other"].map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+            {kind === "part" && (
+              <select
+                className={select}
+                value={itemId}
+                onChange={(e) => {
+                  setItemId(e.target.value);
+                  setSerial("");
+                }}
+              >
+                <option value="">Not from inventory</option>
+                {stock.map((i) => (
+                  <option key={i.id} value={i.id} disabled={i.quantity === 0}>
+                    {i.name} ({i.quantity} on hand)
+                  </option>
+                ))}
+              </select>
+            )}
+            {selected && selected.serial_numbers.length > 0 && (
+              <select
+                className={select}
+                value={serial}
+                onChange={(e) => setSerial(e.target.value)}
+              >
+                <option value="">Serial…</option>
+                {selected.serial_numbers.map((sn) => (
+                  <option key={sn} value={sn}>
+                    {sn}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input
+              className={`${field} max-w-[240px]`}
+              placeholder={
+                selected ? selected.name : "Description, e.g. “2h labor”"
+              }
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <input
+              className={`${field} max-w-[70px]`}
+              inputMode="numeric"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+            <input
+              className={`${field} max-w-[110px]`}
+              placeholder={
+                selected?.unit_cost_label
+                  ? `${selected.unit_cost_label}/unit`
+                  : "$/unit"
+              }
+              inputMode="decimal"
+              value={unitCost}
+              onChange={(e) => setUnitCost(e.target.value)}
+            />
+            <Button type="submit" disabled={busy}>
+              Add
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setAdding(false)}
+            >
+              Cancel
+            </Button>
+          </form>
+        )}
+        {ticket.lines.length === 0 && !adding && (
+          <p className="text-ink-3">
+            No lines yet — itemize parts from inventory, labor, and fees; the
+            total becomes the ticket&apos;s cost.
+          </p>
+        )}
+        {ticket.lines.map((l) => (
+          <div
+            key={l.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line px-4 py-2.5"
+          >
+            <div className="min-w-0">
+              <span className="font-semibold">{l.description}</span>
+              <span className="ml-2 text-xs text-ink-3">
+                {l.kind}
+                {l.serial_number ? ` · s/n ${l.serial_number}` : ""} ·{" "}
+                {l.quantity} × {l.unit_cost_label}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono">{l.total_label}</span>
+              {manage && (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(
+                      () => api.removeTicketLine(l.id),
+                      l.inventory_item_id
+                        ? "Line removed — stock returned."
+                        : "Line removed."
+                    )
+                  }
+                >
+                  ✕
+                </Button>
               )}
             </div>
           </div>

@@ -48,8 +48,11 @@ Mounted by the `maintenance` module:
 - `POST /my/tickets/<id>/comments` — resident comment (staff notified).
 - `POST /my/tickets/<id>/photos` — two-step signed-URL upload of a photo
   against the request (`owner_type = maintenance_ticket`).
-- Staff status changes on a resident-reported ticket email the resident
-  (`maintenance_update` template), so the loop round-trips.
+- Staff status changes and public replies reach the resident on every
+  direct channel — email + in-app inbox + web push (`notify_person`).
+- `POST /my/tickets/<id>/review` — once the request is resolved/closed the
+  resident rates the repair (1–5 stars + optional comment, once); staff see
+  the rating on the ticket and are notified.
 
 ### Message the manager (`/account/messages` ↔ `/console/messages`)
 

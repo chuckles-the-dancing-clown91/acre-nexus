@@ -1,8 +1,9 @@
 //! Contractor quotes on a work order (Phase 6): record a quote against a
 //! ticket (`maintenance:manage`), then approve or reject it with the same
 //! permission that approves vendor bills (`payable:approve`). Approval
-//! stamps the quoted amount onto the ticket's cost, so the existing
-//! ticket → vendor-bill prefill carries it straight into accounts payable.
+//! lands the quoted amount as a labor line — lines are the single source of
+//! the ticket's cost — so the existing ticket → vendor-bill prefill carries
+//! it straight into accounts payable.
 
 use super::dto::{CreateQuoteReq, TicketQuoteDto};
 use crate::auth::AuthUser;
@@ -48,8 +49,8 @@ pub async fn quotes_for_ticket(
         .collect())
 }
 
-/// A tenant-scoped ticket, or 404.
-async fn find_ticket(
+/// A tenant-scoped ticket, or 404 (shared across the ticket sub-routes).
+pub(super) async fn find_ticket(
     db: &crate::db::RequestDb,
     tenant_id: Uuid,
     id: &str,
@@ -166,17 +167,40 @@ async fn decide(
     am.decided_at = Set(Some(now.into()));
     let saved = am.update(&db).await?;
 
-    // Approval feeds the ticket: the quoted amount becomes the working cost
-    // (the vendor-bill prefill reads it) and the contractor is attached if
-    // the ticket had none.
+    // Approval feeds the ticket: the quoted amount lands as a labor line, so
+    // the itemized total — the single source of the ticket's cost, which the
+    // vendor-bill prefill reads — always includes the contractor's work
+    // (and survives parts being added or removed around it). The contractor
+    // is attached if the ticket had none.
     if approve {
-        let mut tam: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
-        tam.cost_cents = Set(Some(amount));
         if ticket.assignee_entity_id.is_none() {
+            let mut tam: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
             tam.assignee_entity_id = Set(Some(entity_id));
+            tam.updated_at = Set(now.into());
+            tam.update(&db).await?;
         }
-        tam.updated_at = Set(now.into());
-        tam.update(&db).await?;
+        entity::ticket_line::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(scope.tenant_id),
+            ticket_id: Set(ticket.id),
+            kind: Set("labor".into()),
+            description: Set(format!("Approved quote: {}", saved.description)),
+            inventory_item_id: Set(None),
+            serial_number: Set(None),
+            quantity: Set(1),
+            unit_cost_cents: Set(amount),
+            total_cents: Set(amount),
+            created_by: Set(Some(user.user_id)),
+            created_at: Set(now.into()),
+        }
+        .insert(&db)
+        .await?;
+        let ticket = MaintenanceTicket::find_by_id(ticket.id)
+            .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
+            .one(&db)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
+        super::lines::sync_ticket_cost(&db, scope.tenant_id, ticket).await?;
     }
 
     crate::audit::record(

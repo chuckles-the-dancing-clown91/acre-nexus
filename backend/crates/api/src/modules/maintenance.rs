@@ -47,6 +47,13 @@ impl PlatformModule for MaintenanceModule {
             maintenance::portal::my_ticket_detail,
             maintenance::portal::add_my_comment,
             maintenance::portal::add_my_ticket_photo,
+            maintenance::portal::review_my_ticket,
+            // parts / labor / fees + the stockroom
+            maintenance::lines::add_line,
+            maintenance::lines::remove_line,
+            maintenance::inventory::list_inventory,
+            maintenance::inventory::create_inventory,
+            maintenance::inventory::update_inventory,
             // equipment registry (assets)
             maintenance::assets::list_assets,
             maintenance::assets::create_asset,

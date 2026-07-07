@@ -776,6 +776,60 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         .await?;
     }
 
+    // The stockroom: common parts, one serialized item, one already at its
+    // reorder level so the low-stock alert demos.
+    for (name, sku, category, qty, unit_cost, reorder, serials) in [
+        (
+            "HVAC filter 20x25x1 (MERV 11)",
+            Some("FLT-2025-11"),
+            "part",
+            24,
+            Some(1_200i64),
+            6,
+            Vec::<&str>::new(),
+        ),
+        (
+            "Kitchen faucet cartridge",
+            Some("MOEN-1225"),
+            "part",
+            2,
+            Some(2_400),
+            3,
+            vec![],
+        ),
+        (
+            "Water heater element 4500W",
+            Some("WH-4500"),
+            "part",
+            2,
+            Some(3_500),
+            0,
+            vec!["WH45-00117", "WH45-00118"],
+        ),
+    ] {
+        entity::inventory_item::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(northwind),
+            property_id: Set(None),
+            name: Set(name.into()),
+            sku: Set(sku.map(str::to_string)),
+            category: Set(category.into()),
+            quantity: Set(qty),
+            unit_cost_cents: Set(unit_cost),
+            reorder_level: Set(reorder),
+            storage_location: Set(Some("Shop — shelf B".into())),
+            serial_numbers: Set(json!(serials)),
+            notes: Set(None),
+            low_stock_alerted_at: Set(None),
+            status: Set("active".into()),
+            created_by: Set(Some(jordan)),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
     // ---- Phase 5 demo: resident request, messaging, move-in inspection ----
     // A resident-reported maintenance request from the portal, in triage.
     let demo_ticket = Uuid::new_v4();
@@ -800,6 +854,11 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         access_notes: Set(Some("Weekdays after 5pm, or use the lockbox.".into())),
         permission_to_enter: Set(true),
         asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(Some(now.into())),
@@ -1550,6 +1609,11 @@ async fn seed_ticket(
         access_notes: Set(None),
         permission_to_enter: Set(false),
         asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(Some(now.into())),

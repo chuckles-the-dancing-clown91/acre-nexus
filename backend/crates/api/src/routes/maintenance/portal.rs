@@ -4,7 +4,7 @@
 //! Residents open requests, follow the timeline, add comments, and attach
 //! photos through the document service.
 
-use super::dto::{AddCommentReq, TicketCommentDto, TicketDto};
+use super::dto::{AddCommentReq, ReviewReq, TicketCommentDto, TicketDto};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::routes::documents::dto::{DocumentDto, UploadDocumentResp};
@@ -16,6 +16,7 @@ use chrono::Utc;
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
 use schemars::JsonSchema;
+use sea_orm::sea_query::Expr;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -173,6 +174,11 @@ pub async fn create_my_ticket(
         access_notes: Set(b.access_notes.filter(|s| !s.trim().is_empty())),
         permission_to_enter: Set(b.permission_to_enter.unwrap_or(false)),
         asset_id: Set(None),
+        waiting_on: Set(None),
+        follow_up_date: Set(None),
+        rating: Set(None),
+        review_comment: Set(None),
+        reviewed_at: Set(None),
         due_date: Set(None),
         cost_cents: Set(None),
         first_response_at: Set(None),
@@ -428,4 +434,109 @@ pub async fn add_my_ticket_photo(
         upload_url: signed.url,
         upload_url_expires_at: signed.expires_at.to_rfc3339(),
     }))
+}
+
+/// `POST /my/tickets/<id>/review` — the resident rates the completed repair
+/// (1–5 + optional comment), once. Staff hear about it.
+#[rocket_okapi::openapi(tag = "Renter Portal")]
+#[post("/my/tickets/<id>/review", data = "<body>")]
+pub async fn review_my_ticket(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+    body: Json<ReviewReq>,
+) -> ApiResult<Json<TicketDto>> {
+    let lease = my_lease(&db, scope.tenant_id, user.user_id).await?;
+    let ticket = my_ticket(&db, scope.tenant_id, lease.id, id).await?;
+    let b = body.into_inner();
+    if !(1..=5).contains(&b.rating) {
+        return Err(ApiError::BadRequest("rating must be 1–5".into()));
+    }
+    if !matches!(ticket.status.as_str(), "resolved" | "closed") {
+        return Err(ApiError::BadRequest(
+            "you can rate a repair once it's resolved".into(),
+        ));
+    }
+    if ticket.rating.is_some() {
+        return Err(ApiError::BadRequest(
+            "this request has already been rated".into(),
+        ));
+    }
+
+    let now = Utc::now();
+    let rating = b.rating;
+    let comment = b
+        .comment
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty());
+    let title = ticket.title.clone();
+    let ticket_id = ticket.id;
+    // Conditional on rating still being NULL: a double-submitted review
+    // must not overwrite the first (the check above read pre-transaction
+    // state).
+    let updated = MaintenanceTicket::update_many()
+        .col_expr(
+            entity::maintenance_ticket::Column::Rating,
+            Expr::value(rating),
+        )
+        .col_expr(
+            entity::maintenance_ticket::Column::ReviewComment,
+            Expr::value(comment.clone()),
+        )
+        .col_expr(
+            entity::maintenance_ticket::Column::ReviewedAt,
+            Expr::value(now),
+        )
+        .col_expr(
+            entity::maintenance_ticket::Column::UpdatedAt,
+            Expr::value(now),
+        )
+        .filter(entity::maintenance_ticket::Column::Id.eq(ticket_id))
+        .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
+        .filter(entity::maintenance_ticket::Column::Rating.is_null())
+        .exec(&db)
+        .await?;
+    if updated.rows_affected == 0 {
+        return Err(ApiError::BadRequest(
+            "this request has already been rated".into(),
+        ));
+    }
+    let saved = MaintenanceTicket::find_by_id(ticket_id)
+        .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
+
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::TICKET_REVIEW,
+        Some("maintenance_ticket"),
+        Some(ticket_id.to_string()),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({ "rating": rating })),
+    )
+    .await;
+
+    crate::notify::notify_staff(
+        &db,
+        scope.tenant_id,
+        "maintenance:read",
+        "ticket_reviewed",
+        serde_json::json!({
+            "title": title,
+            "resident": lease.tenant_name,
+            "rating": rating,
+            "stars": "★".repeat(rating as usize),
+            "comment": comment.unwrap_or_else(|| "(no comment)".into()),
+        }),
+        Some(("maintenance_ticket", ticket_id)),
+        "reviewed",
+        Some(user.user_id),
+    )
+    .await;
+
+    Ok(Json(TicketDto::from(saved)))
 }

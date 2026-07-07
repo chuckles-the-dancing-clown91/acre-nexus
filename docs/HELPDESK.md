@@ -89,6 +89,49 @@ docs, and photos file against the asset through the document service
   registry and shows the asset chip, and the property profile gains an
   **Equipment & assets** card.
 
+## Parts, costs & the stockroom
+
+- **Ticket lines** (`ticket_line`): itemized `part` / `labor` / `fee` /
+  `other` entries on a work order — description, quantity, unit cost. When
+  any lines exist their totals are the **single source of the ticket's
+  cost** (the vendor-bill prefill reads it): approving a quote lands the
+  quoted amount as a labor line, and a manual `cost_cents` PATCH is
+  rejected — edit the lines instead. `POST /tickets/{id}/lines` ·
+  `DELETE /ticket-lines/{id}` (`maintenance:manage`).
+- **Inventory** (`inventory_item`): the stockroom — SKU, quantity on hand,
+  unit cost, reorder level, storage location, and a **serial-number pool**
+  for serialized stock. A part line pulled from inventory validates stock
+  (under a row lock — concurrent pulls can't oversell or take the same
+  serial), decrements it, and consumes the chosen serial; deleting the line
+  restocks (and returns the serial). `GET/POST /inventory` ·
+  `PATCH /inventory/{id}` (restock/correct/archive). The helpdesk scan
+  raises a **low-stock alert** (`inventory_low` template) once per episode:
+  when quantity falls to/below the reorder level, with the alert re-armed
+  once restocking lifts it back above.
+
+## Waiting-on discipline & follow-ups
+
+Putting a ticket **on hold** demands a reason: `waiting_on`
+(`parts` / `vendor` / `resident` / `owner` / `other`), a `follow_up_date`,
+and a follow-up note (logged as an internal timeline entry) — enforced
+server-side (the invariant is `on_hold` ⇔ a waiting reason is set: no
+parking without a reason, no waiting tag on an active ticket), prompted
+inline in the console. The helpdesk scan chases the date: when it arrives,
+staff get a `ticket_follow_up` notification (once per ticket per date —
+re-dating the follow-up re-arms it). Leaving on-hold clears the waiting
+state.
+
+## Resident updates & reviews
+
+- **Updates pushed and emailed**: every resident-facing event — staff public
+  replies (`maintenance_reply`) and status changes (`maintenance_update`) —
+  now goes through `notify::notify_person`: email always, plus the in-app
+  inbox and web push when the address belongs to a portal account.
+- **Reviews**: once a request is resolved/closed the resident rates it from
+  the portal (1–5 stars + optional comment, once per ticket —
+  `POST /my/tickets/{id}/review`). The rating shows on the console ticket
+  (badge + review card) and staff are notified (`ticket_reviewed`).
+
 ## Contractor dispatch
 
 - **Assignment notifications** (`PATCH /tickets/{id}`): assigning a member
@@ -101,8 +144,9 @@ docs, and photos file against the asset through the document service
   (`POST /tickets/{id}/quotes`, `maintenance:manage`; contractor defaults to
   the ticket's assignee). Approving (`POST /ticket-quotes/{id}/approve`,
   gated by `payable:approve` — the same people who approve vendor bills)
-  stamps the quoted amount as the ticket's cost and attaches the contractor
-  if the ticket had none. Rejection just closes the quote.
+  lands the quoted amount as a labor line — so the ticket's cost includes
+  it alongside any parts — and attaches the contractor if the ticket had
+  none. Rejection just closes the quote.
 - **Invoice → payment**: the Phase 3 accounts-payable loop finishes the job —
   `POST /payables { maintenance_ticket_id }` prefills the vendor (the
   ticket's contractor), property, amount (the approved quote), and memo;
@@ -145,6 +189,11 @@ runs an external desk, and nothing here precludes it.
 
 | Method | Path | Permission |
 |--------|------|-----------|
+| POST | `/tickets/{id}/lines` | `maintenance:manage` |
+| DELETE | `/ticket-lines/{id}` | `maintenance:manage` |
+| GET | `/inventory` | `maintenance:read` |
+| POST | `/inventory` | `maintenance:manage` |
+| PATCH | `/inventory/{id}` | `maintenance:manage` |
 | GET | `/assets` | `maintenance:read` |
 | POST | `/assets` | `maintenance:manage` |
 | PATCH | `/assets/{id}` | `maintenance:manage` |
@@ -160,15 +209,20 @@ Quotes ride along on `GET /tickets/{id}`.
 ## Audit, templates, schema
 
 - Audit actions: `ticket_quote.add/approve/reject`,
-  `maintenance_plan.create/update/run`, `asset.create/update` (plus the
-  existing `ticket.*`).
+  `maintenance_plan.create/update/run`, `asset.create/update`,
+  `ticket_line.add/remove`, `inventory_item.create/update`, `ticket.review`
+  (plus the existing `ticket.*`).
 - Templates: `ticket_assigned`, `ticket_dispatch`, `ticket_sla_breached`,
-  `maintenance_reply`.
+  `maintenance_reply`, `ticket_follow_up`, `inventory_low`,
+  `ticket_reviewed`.
 - Migrations: `m20240101_000032_helpdesk` (four SLA/lifecycle columns on
   `maintenance_ticket`, plus `ticket_quote` and `maintenance_plan`) and
   `m20240101_000033_maintenance_full` (the `asset` registry; ticket
   `location`/`access_notes`/`permission_to_enter`/`asset_id`; comment
-  `visibility`/`author_name`) — tenant-scoped, RLS-enforced.
+  `visibility`/`author_name`) and `m20240101_000034_maintenance_ops`
+  (`inventory_item`, `ticket_line`; ticket
+  `waiting_on`/`follow_up_date`/`rating`/`review_comment`/`reviewed_at`) —
+  tenant-scoped, RLS-enforced.
 
 ## Definition of Done (met)
 

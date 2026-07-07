@@ -37,6 +37,15 @@ pub struct Model {
     pub permission_to_enter: bool,
     /// The registered equipment being serviced ([`super::asset`]).
     pub asset_id: Option<Uuid>,
+    /// What an on-hold ticket is blocked by:
+    /// `parts` | `vendor` | `resident` | `owner` | `other`.
+    pub waiting_on: Option<String>,
+    /// ISO date the waiting-on follow-up is due (the scan reminds).
+    pub follow_up_date: Option<String>,
+    /// Resident feedback after resolution (1–5).
+    pub rating: Option<i32>,
+    pub review_comment: Option<String>,
+    pub reviewed_at: Option<DateTimeWithTimeZone>,
     pub due_date: Option<String>,
     /// Actual/estimated cost in cents.
     pub cost_cents: Option<i64>,

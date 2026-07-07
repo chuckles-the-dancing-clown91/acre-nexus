@@ -7,6 +7,8 @@
 import type {
   Application,
   Asset,
+  InventoryItem,
+  TicketLine,
   CreateAssetInput,
   UpdateAssetInput,
   ApplicationWorkflow,
@@ -396,6 +398,71 @@ export const api = {
       method: "POST",
       auth: true,
       body: { body, visibility },
+    }),
+  // ---- ticket lines (parts / labor / fees) + inventory ----
+  addTicketLine: (
+    ticketId: string,
+    body: {
+      kind?: string;
+      description?: string;
+      inventory_item_id?: string;
+      serial_number?: string;
+      quantity?: number;
+      unit_cost_cents?: number;
+    }
+  ) =>
+    request<TicketLine>(`/tickets/${ticketId}/lines`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  removeTicketLine: (id: string) =>
+    request<{ deleted: boolean }>(`/ticket-lines/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  inventory: (
+    params: { property_id?: string; status?: string; low_stock?: boolean } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.status) qs.set("status", params.status);
+    if (params.low_stock) qs.set("low_stock", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<InventoryItem[]>(`/inventory${suffix}`, { auth: true });
+  },
+  createInventory: (body: {
+    property_id?: string;
+    name: string;
+    sku?: string;
+    category?: string;
+    quantity?: number;
+    unit_cost_cents?: number;
+    reorder_level?: number;
+    storage_location?: string;
+    serial_numbers?: string[];
+    notes?: string;
+  }) =>
+    request<InventoryItem>("/inventory", { method: "POST", auth: true, body }),
+  updateInventory: (
+    id: string,
+    body: {
+      name?: string;
+      sku?: string;
+      category?: string;
+      quantity?: number;
+      unit_cost_cents?: number;
+      reorder_level?: number;
+      storage_location?: string;
+      serial_numbers?: string[];
+      notes?: string;
+      status?: "active" | "archived";
+    }
+  ) =>
+    request<InventoryItem>(`/inventory/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
     }),
   // ---- equipment registry (assets) ----
   assets: (
@@ -1105,6 +1172,12 @@ export const api = {
       method: "POST",
       auth: true,
       body: { body },
+    }),
+  reviewMyTicket: (id: string, rating: number, comment?: string) =>
+    request<MaintenanceTicket>(`/my/tickets/${id}/review`, {
+      method: "POST",
+      auth: true,
+      body: { rating, comment },
     }),
   myInspections: () =>
     request<InspectionDetail[]>("/my/inspections", { auth: true }),

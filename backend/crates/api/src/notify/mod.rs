@@ -330,6 +330,28 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{company}: {author} replied to your request \"{title}\" — see your portal.",
     },
     DefaultTemplate {
+        key: "ticket_follow_up",
+        subject: "Follow up due: {title} (waiting on {waiting_on})",
+        body: "Hi {recipient},\n\nThe work order \"{title}\" has been waiting on \
+               {waiting_on} and its follow-up date ({date}) has arrived. Chase it \
+               from the maintenance board.\n\n— {company}",
+        sms: "Follow up due: {title} — waiting on {waiting_on} since {date}.",
+    },
+    DefaultTemplate {
+        key: "inventory_low",
+        subject: "Low stock: {name} ({quantity} left)",
+        body: "Hi {recipient},\n\nInventory for \"{name}\" is down to {quantity} \
+               (reorder level {reorder_level}). Time to reorder.\n\n— {company}",
+        sms: "Low stock: {name} — {quantity} left (reorder at {reorder_level}).",
+    },
+    DefaultTemplate {
+        key: "ticket_reviewed",
+        subject: "{stars} — {resident} rated \"{title}\"",
+        body: "Hi {recipient},\n\n{resident} rated the completed work order \
+               \"{title}\": {stars} ({rating}/5).\n\n\"{comment}\"\n\n— {company}",
+        sms: "{resident} rated \"{title}\": {rating}/5.",
+    },
+    DefaultTemplate {
         key: "ticket_sla_breached",
         subject: "SLA breached ({kind}): {title}",
         body: "Hi {recipient},\n\nThe {priority}-priority work order \"{title}\" has \
@@ -816,6 +838,75 @@ pub async fn in_app(
         Err(e) => {
             tracing::debug!("in-app notification skipped (likely duplicate): {e}");
             None
+        }
+    }
+}
+
+/// Notify one specific person across every direct channel: email (always,
+/// to `email`), plus the in-app inbox and a web-push job when the address
+/// belongs to a platform account. This is the resident-update path — portal
+/// users hear in their inbox/phone, plain-email tenants still get the mail.
+#[allow(clippy::too_many_arguments)]
+pub async fn notify_person(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    email: &str,
+    template: &str,
+    vars_json: serde_json::Value,
+    owner: Option<(&str, Uuid)>,
+    trigger: &str,
+) {
+    let email = email.trim();
+    if email.is_empty() {
+        return;
+    }
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("template".into(), json!(template));
+    payload.insert("to".into(), json!(email));
+    payload.insert("vars".into(), vars_json.clone());
+    if let Some((otype, oid)) = owner {
+        payload.insert("owner_type".into(), json!(otype));
+        payload.insert("owner_id".into(), json!(oid.to_string()));
+    }
+    payload.insert("trigger".into(), json!(trigger));
+
+    if let Err(e) = crate::scheduler::enqueue(
+        db,
+        tenant_id,
+        "auto_email",
+        serde_json::Value::Object(payload.clone()),
+        0,
+    )
+    .await
+    {
+        tracing::error!("failed to enqueue auto_email: {e}");
+    }
+
+    // In-app + push only exist for someone with an account — in THIS tenant.
+    // Emails are globally unique across the platform and lease contact
+    // addresses are free-form staff input, so an unscoped match could hand
+    // one org's ticket details to another org's user.
+    let user = entity::prelude::User::find()
+        .filter(entity::user::Column::TenantId.eq(tenant_id))
+        .filter(entity::user::Column::Email.eq(email.to_lowercase()))
+        .one(db)
+        .await
+        .ok()
+        .flatten();
+    if let Some(user) = user {
+        in_app(db, tenant_id, &user, template, &vars_json, owner, trigger).await;
+        payload.insert("user_id".into(), json!(user.id.to_string()));
+        if let Err(e) = crate::scheduler::enqueue(
+            db,
+            tenant_id,
+            "auto_push",
+            serde_json::Value::Object(payload),
+            0,
+        )
+        .await
+        {
+            tracing::error!("failed to enqueue auto_push: {e}");
         }
     }
 }

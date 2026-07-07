@@ -97,23 +97,20 @@ pub async fn add_comment(
                 .and_then(|l| l.tenant_email.as_deref())
                 .filter(|e| !e.trim().is_empty())
             {
-                let payload = serde_json::json!({
-                    "template": "maintenance_reply",
-                    "to": email,
-                    "owner_type": "maintenance_ticket",
-                    "owner_id": ticket.id,
-                    "trigger": format!("reply:{}", saved.id),
-                    "vars": {
+                crate::notify::notify_person(
+                    &db,
+                    scope.tenant_id,
+                    email,
+                    "maintenance_reply",
+                    serde_json::json!({
                         "title": ticket.title,
                         "author": saved.author_name.clone().unwrap_or_else(|| "the team".into()),
                         "preview": crate::routes::messages::preview(&saved.body),
-                    },
-                });
-                if let Err(e) =
-                    crate::scheduler::enqueue(&db, scope.tenant_id, "auto_email", payload, 0).await
-                {
-                    tracing::error!("failed to enqueue maintenance reply email: {e}");
-                }
+                    }),
+                    Some(("maintenance_ticket", ticket.id)),
+                    &format!("reply:{}", saved.id),
+                )
+                .await;
             }
         }
     }

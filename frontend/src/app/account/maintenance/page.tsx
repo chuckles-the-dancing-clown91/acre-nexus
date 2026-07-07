@@ -368,9 +368,37 @@ function RequestDetail({
 
   if (!detail) return <div className="py-3 text-sm text-ink-3">Loading…</div>;
 
+  const done = ["resolved", "closed"].includes(detail.status);
+
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-line p-4 text-sm">
       {detail.description && <p className="text-ink-2">{detail.description}</p>}
+
+      {done && detail.rating == null && (
+        <RateRepair
+          ticketId={detail.id}
+          onRated={() => {
+            void load();
+            onChange();
+          }}
+        />
+      )}
+      {detail.rating != null && (
+        <div className="rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-lg">
+            {"★".repeat(detail.rating)}
+            <span className="text-ink-3">{"☆".repeat(5 - detail.rating)}</span>
+          </span>
+          <span className="ml-2 text-xs text-ink-3">
+            Thanks for your feedback!
+          </span>
+          {detail.review_comment && (
+            <div className="text-ink-2">
+              &ldquo;{detail.review_comment}&rdquo;
+            </div>
+          )}
+        </div>
+      )}
 
       {detail.documents.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -434,5 +462,68 @@ function RequestDetail({
         </Button>
       </form>
     </div>
+  );
+}
+
+function RateRepair({
+  ticketId,
+  onRated,
+}: {
+  ticketId: string;
+  onRated: () => void;
+}) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (rating < 1) {
+      toast.error("Pick a star rating first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.reviewMyTicket(ticketId, rating, comment.trim() || undefined);
+      toast.success("Thanks — your feedback helps us do better.");
+      onRated();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-2 rounded-xl bg-surface-2 px-3 py-2"
+    >
+      <div className="font-semibold">How did we do?</div>
+      <div className="text-2xl">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            aria-label={`${n} star${n > 1 ? "s" : ""}`}
+            className={n <= rating ? "text-warn" : "text-ink-3"}
+            onClick={() => setRating(n)}
+          >
+            {n <= rating ? "★" : "☆"}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          className={field}
+          placeholder="Anything we should know? (optional)"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+        />
+        <Button type="submit" disabled={busy || rating < 1}>
+          Submit
+        </Button>
+      </div>
+    </form>
   );
 }

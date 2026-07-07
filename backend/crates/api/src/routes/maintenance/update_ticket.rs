@@ -55,6 +55,93 @@ pub async fn update_ticket(
     let was_resolved = existing.resolved_at.is_some();
     let property_id = existing.property_id;
 
+    // The waiting-on discipline: putting a ticket on hold (or re-tagging what
+    // it waits on) demands a reason, a follow-up date, and a note — so
+    // nothing parks silently. The scan chases the follow-up date. The
+    // invariant enforced here: after the update, on_hold ⇔ waiting_on set.
+    let waiting_change: Option<Option<String>> = match b.waiting_on.as_deref().map(str::trim) {
+        None => None,
+        Some("") | Some("none") => Some(None),
+        Some(w) if ["parts", "vendor", "resident", "owner", "other"].contains(&w) => {
+            Some(Some(w.to_string()))
+        }
+        Some(w) => {
+            return Err(ApiError::BadRequest(format!(
+                "invalid waiting_on: {w} (expected parts|vendor|resident|owner|other|none)"
+            )))
+        }
+    };
+    let final_status = b
+        .status
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&existing.status)
+        .to_string();
+    let final_waiting = match &waiting_change {
+        Some(w) => w.clone(),
+        None => existing.waiting_on.clone(),
+    };
+    if final_status == "on_hold" && final_waiting.is_none() {
+        return Err(ApiError::BadRequest(
+            "a ticket on hold needs waiting_on (parts|vendor|resident|owner|other), \
+             a follow_up_date, and a follow_up_note"
+                .into(),
+        ));
+    }
+    if final_status != "on_hold" && matches!(waiting_change, Some(Some(_))) {
+        return Err(ApiError::BadRequest(
+            "waiting_on applies to a ticket going on hold — set status to on_hold with it".into(),
+        ));
+    }
+    let mut waiting_note: Option<(String, String)> = None; // (label, note)
+    let mut follow_up_date: Option<String> = None; // normalized YYYY-MM-DD
+    if let Some(Some(w)) = &waiting_change {
+        let date = b
+            .follow_up_date
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+            .ok_or_else(|| {
+                ApiError::BadRequest("waiting_on requires follow_up_date (YYYY-MM-DD)".into())
+            })?;
+        // Store the normalized (zero-padded) form: the scan compares the
+        // column lexicographically, which is only sound for YYYY-MM-DD.
+        let date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|_| ApiError::BadRequest("follow_up_date must be YYYY-MM-DD".into()))?
+            .to_string();
+        let note = b
+            .follow_up_note
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .ok_or_else(|| {
+                ApiError::BadRequest(
+                    "waiting_on requires follow_up_note — what are we chasing?".into(),
+                )
+            })?;
+        waiting_note = Some((
+            format!("Waiting on {w} — follow up {date}"),
+            note.to_string(),
+        ));
+        follow_up_date = Some(date);
+    }
+
+    // Cost is derived from itemized lines whenever any exist — a manual
+    // override would just be silently recomputed away on the next line edit.
+    if b.cost_cents.is_some() {
+        let has_lines = entity::prelude::TicketLine::find()
+            .filter(entity::ticket_line::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::ticket_line::Column::TicketId.eq(tid))
+            .one(&db)
+            .await?
+            .is_some();
+        if has_lines {
+            return Err(ApiError::BadRequest(
+                "this ticket's cost is derived from its lines — edit the lines instead".into(),
+            ));
+        }
+    }
+
     let now = Utc::now();
     let mut am: entity::maintenance_ticket::ActiveModel = existing.into();
     if let Some(v) = b.title {
@@ -106,6 +193,16 @@ pub async fn update_ticket(
     if let Some(v) = b.cost_cents {
         am.cost_cents = Set(Some(v));
     }
+    if let Some(Some(w)) = &waiting_change {
+        am.waiting_on = Set(Some(w.clone()));
+        am.follow_up_date = Set(follow_up_date.clone());
+    }
+    // Off hold ⇒ no waiting state (an explicit clear only ever accompanies
+    // leaving on_hold — the guards above reject every other combination).
+    if final_status != "on_hold" {
+        am.waiting_on = Set(None);
+        am.follow_up_date = Set(None);
+    }
 
     // Any staff touch that moves the ticket (status, assignment, triage)
     // counts as the first response.
@@ -147,6 +244,24 @@ pub async fn update_ticket(
     am.updated_at = Set(now.into());
     let saved = am.update(&db).await?;
 
+    // The waiting-on follow-up note lands as an internal comment.
+    if let Some((label, note)) = &waiting_note {
+        let comment = entity::ticket_comment::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(scope.tenant_id),
+            ticket_id: Set(saved.id),
+            author_user_id: Set(Some(user.user_id)),
+            kind: Set("status".to_string()),
+            visibility: Set("internal".into()),
+            author_name: Set(None),
+            body: Set(format!("{label}: {note}")),
+            created_at: Set(Utc::now().into()),
+        };
+        if let Err(e) = comment.insert(&db).await {
+            tracing::error!("failed to log waiting-on note: {e}");
+        }
+    }
+
     // Log the status transition on the ticket timeline (best-effort).
     if let Some(new_status) = &status_changed {
         let comment = entity::ticket_comment::ActiveModel {
@@ -176,22 +291,19 @@ pub async fn update_ticket(
                 .and_then(|l| l.tenant_email.as_deref())
                 .filter(|e| !e.trim().is_empty())
             {
-                let payload = serde_json::json!({
-                    "template": "maintenance_update",
-                    "to": email,
-                    "owner_type": "maintenance_ticket",
-                    "owner_id": saved.id,
-                    "trigger": format!("status:{new_status}"),
-                    "vars": {
+                crate::notify::notify_person(
+                    &db,
+                    scope.tenant_id,
+                    email,
+                    "maintenance_update",
+                    serde_json::json!({
                         "title": saved.title,
                         "status": new_status.replace('_', " "),
-                    },
-                });
-                if let Err(e) =
-                    crate::scheduler::enqueue(&db, scope.tenant_id, "auto_email", payload, 0).await
-                {
-                    tracing::error!("failed to enqueue maintenance update email: {e}");
-                }
+                    }),
+                    Some(("maintenance_ticket", saved.id)),
+                    &format!("status:{new_status}"),
+                )
+                .await;
             }
         }
     }
