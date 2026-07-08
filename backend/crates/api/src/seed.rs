@@ -1317,8 +1317,164 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let (ps, pe) = month_bounds(last_month);
     crate::payouts::compute_payout(db, northwind, maple, &ps, &pe, None).await?;
 
+    // ---- Acquisitions & Flips: a few demo deals for the pipeline board ----
+    // The flips module is on by default, so Northwind's board shows a live
+    // acquisition pipeline with real underwriting the moment you open it.
+    let dd_checklist = serde_json::json!([
+        { "key": "inspection", "label": "General inspection", "done": true },
+        { "key": "title", "label": "Title search / commitment", "done": true },
+        { "key": "bids", "label": "Contractor rehab bids", "done": false },
+        { "key": "financing", "label": "Financing commitment", "done": false },
+        { "key": "insurance", "label": "Insurance quote", "done": false }
+    ]);
+    seed_deal(
+        db,
+        northwind,
+        "Elm Street Duplex",
+        "412 Elm St",
+        "Columbus",
+        "prospecting",
+        "rental",
+        "multi_family",
+        28_500_000,
+        None,
+        32_000_000,
+        3_500_000,
+        800_000,
+        320_000,
+        95_000,
+        650,
+        serde_json::json!([]),
+        now,
+    )
+    .await?;
+    seed_deal(
+        db,
+        northwind,
+        "Oak & 3rd Flip",
+        "1207 Oak Ave",
+        "Columbus",
+        "under_contract",
+        "flip",
+        "single_family",
+        21_000_000,
+        Some(19_800_000),
+        31_500_000,
+        6_000_000,
+        600_000,
+        0,
+        0,
+        0,
+        dd_checklist,
+        now,
+    )
+    .await?;
+    seed_deal(
+        db,
+        northwind,
+        "Birch Lane BRRRR",
+        "88 Birch Ln",
+        "Dublin",
+        "prospecting",
+        "brrrr",
+        "single_family",
+        16_500_000,
+        None,
+        24_000_000,
+        4_500_000,
+        500_000,
+        185_000,
+        52_000,
+        600,
+        serde_json::json!([]),
+        now,
+    )
+    .await?;
+
     tracing::info!("seed: complete");
     Ok(())
+}
+
+/// Seed one acquisition deal (plus its `created` event) with sensible default
+/// financing/projection knobs; the caller varies the headline economics.
+#[allow(clippy::too_many_arguments)]
+async fn seed_deal(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    name: &str,
+    address: &str,
+    city: &str,
+    stage: &str,
+    strategy: &str,
+    property_type: &str,
+    asking_cents: i64,
+    offer_cents: Option<i64>,
+    arv_cents: i64,
+    rehab_cents: i64,
+    closing_cents: i64,
+    rent_cents: i64,
+    expenses_cents: i64,
+    exit_cap_bps: i32,
+    checklist: serde_json::Value,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let opt = |c: i64| if c > 0 { Some(c) } else { None };
+    let opt_bps = |b: i32| if b > 0 { Some(b) } else { None };
+    entity::deal::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        name: Set(name.into()),
+        address: Set(address.into()),
+        city: Set(city.into()),
+        stage: Set(stage.into()),
+        strategy: Set(strategy.into()),
+        property_type: Set(Some(property_type.into())),
+        source: Set(Some("mls".into())),
+        broker_id: Set(None),
+        notes: Set(None),
+        asking_price_cents: Set(opt(asking_cents)),
+        offer_price_cents: Set(offer_cents),
+        earnest_money_cents: Set(None),
+        target_close_on: Set(None),
+        arv_cents: Set(opt(arv_cents)),
+        rehab_budget_cents: Set(opt(rehab_cents)),
+        closing_costs_cents: Set(opt(closing_cents)),
+        est_monthly_rent_cents: Set(opt(rent_cents)),
+        est_monthly_expenses_cents: Set(opt(expenses_cents)),
+        vacancy_bps: Set(Some(500)),
+        down_payment_bps: Set(Some(2500)),
+        interest_rate_bps: Set(Some(725)),
+        loan_term_years: Set(Some(30)),
+        rent_growth_bps: Set(Some(300)),
+        appreciation_bps: Set(Some(350)),
+        exit_cap_rate_bps: Set(opt_bps(exit_cap_bps)),
+        selling_costs_bps: Set(Some(700)),
+        hold_years: Set(Some(5)),
+        checklist: Set(checklist),
+        converted_property_id: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    entity::deal_event::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        deal_id: Set(id),
+        kind: Set("created".into()),
+        from_stage: Set(None),
+        to_stage: Set(Some(stage.into())),
+        body: Set(None),
+        actor_user_id: Set(None),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    Ok(id)
 }
 
 /// First + last day of `d`'s month, as `YYYY-MM-DD`.

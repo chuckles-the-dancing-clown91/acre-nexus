@@ -648,9 +648,53 @@ export const api = {
       body: { enabled },
     }),
 
-  // ---- flips module (preview) ----
+  // ---- flips module: acquisition deal pipeline + underwriting ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+  flipDeals: (params: { stage?: string; strategy?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.stage) qs.set("stage", params.stage);
+    if (params.strategy) qs.set("strategy", params.strategy);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<FlipDeal[]>(`/modules/flips/deals${suffix}`, { auth: true });
+  },
+  flipDeal: (id: string) =>
+    request<DealDetail>(`/modules/flips/deals/${id}`, { auth: true }),
+  createFlipDeal: (body: CreateDealInput) =>
+    request<FlipDeal>("/modules/flips/deals", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateFlipDeal: (id: string, body: UpdateDealInput) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  advanceFlipDealStage: (id: string, stage: string, note?: string) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}/stage`, {
+      method: "POST",
+      auth: true,
+      body: { stage, note },
+    }),
+  underwriteFlipDeal: (id: string, body: UnderwriteInput) =>
+    request<DealUnderwriting>(`/modules/flips/deals/${id}/underwrite`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateFlipChecklist: (id: string, checklist: DealChecklistItem[]) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}/checklist`, {
+      method: "PATCH",
+      auth: true,
+      body: { checklist },
+    }),
+  convertFlipDeal: (id: string) =>
+    request<ConvertDealResponse>(`/modules/flips/deals/${id}/convert`, {
+      method: "POST",
+      auth: true,
+    }),
 
   // ---- integrations: credential vault, notification log ----
   integrationSecrets: () =>
@@ -1826,10 +1870,196 @@ export interface FlipStage {
   label: string;
 }
 
+export interface DealSensitivityPoint {
+  rent_growth_bps: number;
+  rent_growth_pct: number;
+  irr_bps: number | null;
+  irr_pct: number | null;
+}
+
+/** Computed underwriting for a deal. Money values pair `*_cents` with a
+ * display `*_label`; rates are `*_bps` alongside a `*_pct` float. */
+export interface DealUnderwriting {
+  purchase_price_cents: number;
+  purchase_price_label: string;
+  total_project_cost_cents: number;
+  total_project_cost_label: string;
+  loan_amount_cents: number;
+  loan_amount_label: string;
+  down_payment_cents: number;
+  down_payment_label: string;
+  total_cash_invested_cents: number;
+  total_cash_invested_label: string;
+  monthly_debt_service_cents: number;
+  monthly_debt_service_label: string;
+  annual_debt_service_cents: number;
+  annual_debt_service_label: string;
+  gross_rent_annual_cents: number;
+  gross_rent_annual_label: string;
+  vacancy_loss_cents: number;
+  vacancy_loss_label: string;
+  effective_gross_income_cents: number;
+  effective_gross_income_label: string;
+  operating_expenses_annual_cents: number;
+  operating_expenses_annual_label: string;
+  noi_annual_cents: number;
+  noi_annual_label: string;
+  annual_cash_flow_cents: number;
+  annual_cash_flow_label: string;
+  cap_rate_bps: number;
+  cap_rate_pct: number;
+  cash_on_cash_bps: number;
+  cash_on_cash_pct: number;
+  dscr: number;
+  exit_value_cents: number;
+  exit_value_label: string;
+  loan_balance_at_exit_cents: number;
+  loan_balance_at_exit_label: string;
+  net_sale_proceeds_cents: number;
+  net_sale_proceeds_label: string;
+  irr_bps: number | null;
+  irr_pct: number | null;
+  total_profit_cents: number;
+  total_profit_label: string;
+  sensitivity: DealSensitivityPoint[];
+}
+
+export interface DealChecklistItem {
+  key: string;
+  label: string;
+  done: boolean;
+  note?: string | null;
+}
+
+/** An acquisition deal with its computed underwriting and parsed checklist. */
+export interface FlipDeal {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  stage: string;
+  stage_label: string;
+  strategy: string;
+  property_type: string | null;
+  source: string | null;
+  broker_id: string | null;
+  notes: string | null;
+  asking_price_cents: number | null;
+  asking_price_label: string | null;
+  offer_price_cents: number | null;
+  offer_price_label: string | null;
+  earnest_money_cents: number | null;
+  earnest_money_label: string | null;
+  target_close_on: string | null;
+  arv_cents: number | null;
+  arv_label: string | null;
+  rehab_budget_cents: number | null;
+  rehab_budget_label: string | null;
+  closing_costs_cents: number | null;
+  est_monthly_rent_cents: number | null;
+  est_monthly_rent_label: string | null;
+  est_monthly_expenses_cents: number | null;
+  vacancy_bps: number | null;
+  down_payment_bps: number | null;
+  interest_rate_bps: number | null;
+  loan_term_years: number | null;
+  rent_growth_bps: number | null;
+  appreciation_bps: number | null;
+  exit_cap_rate_bps: number | null;
+  selling_costs_bps: number | null;
+  hold_years: number | null;
+  checklist: DealChecklistItem[];
+  converted_property_id: string | null;
+  created_at: string;
+  updated_at: string;
+  underwriting: DealUnderwriting;
+}
+
+export interface DealEvent {
+  id: string;
+  kind: string;
+  from_stage: string | null;
+  to_stage: string | null;
+  body: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface DealDetail extends FlipDeal {
+  events: DealEvent[];
+}
+
 export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
-  deals: unknown[];
+  deals: FlipDeal[];
+}
+
+export interface CreateDealInput {
+  name: string;
+  address?: string;
+  city?: string;
+  strategy?: string;
+  property_type?: string;
+  source?: string;
+  broker_id?: string;
+  asking_price_cents?: number;
+  offer_price_cents?: number;
+  est_monthly_rent_cents?: number;
+  rehab_budget_cents?: number;
+  notes?: string;
+}
+
+/** Deal patch + underwriting assumptions. Every field optional. */
+export interface UpdateDealInput {
+  name?: string;
+  address?: string;
+  city?: string;
+  strategy?: string;
+  property_type?: string;
+  source?: string;
+  broker_id?: string;
+  notes?: string;
+  asking_price_cents?: number;
+  offer_price_cents?: number;
+  earnest_money_cents?: number;
+  target_close_on?: string;
+  arv_cents?: number;
+  rehab_budget_cents?: number;
+  closing_costs_cents?: number;
+  est_monthly_rent_cents?: number;
+  est_monthly_expenses_cents?: number;
+  vacancy_bps?: number;
+  down_payment_bps?: number;
+  interest_rate_bps?: number;
+  loan_term_years?: number;
+  rent_growth_bps?: number;
+  appreciation_bps?: number;
+  exit_cap_rate_bps?: number;
+  selling_costs_bps?: number;
+  hold_years?: number;
+}
+
+/** Ad-hoc "what-if" overrides for the stateless underwrite endpoint. */
+export type UnderwriteInput = Omit<
+  UpdateDealInput,
+  | "name"
+  | "address"
+  | "city"
+  | "strategy"
+  | "property_type"
+  | "source"
+  | "broker_id"
+  | "notes"
+  | "asking_price_cents"
+  | "offer_price_cents"
+  | "earnest_money_cents"
+  | "target_close_on"
+> & { purchase_price_cents?: number };
+
+export interface ConvertDealResponse {
+  deal: FlipDeal;
+  property_id: string;
 }
 
 // ---- integrations: secrets, notifications, documents ----

@@ -17,6 +17,7 @@ pub mod assignments;
 pub mod auth;
 pub mod banking;
 pub mod cap_table;
+pub mod deals;
 pub mod documents;
 pub mod domains;
 pub mod entities;

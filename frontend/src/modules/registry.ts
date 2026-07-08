@@ -301,15 +301,16 @@ export const MODULES: ModuleDef[] = [
   {
     key: "flips",
     label: "Acquisitions & Flips",
-    description: "Buy/flip deal pipeline with underwriting (preview).",
-    defaultEnabled: false,
-    preview: true,
+    description:
+      "Buy-side deal pipeline with underwriting (cap rate, cash-on-cash, IRR, DSCR), a due-diligence data room, and one-click conversion into an owned property.",
+    defaultEnabled: true,
+    preview: false,
     nav: [
       {
         href: "/console/flips",
-        label: "Flips",
+        label: "Acquisitions",
         icon: "dollar",
-        permission: "property:read",
+        permission: "deal:read",
       },
     ],
   },

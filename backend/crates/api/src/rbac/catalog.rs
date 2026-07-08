@@ -58,6 +58,21 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "deal:read",
+        category: "Acquisitions",
+        label: "View deals",
+        description: "View the acquisition pipeline, deals, and their underwriting.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "deal:write",
+        category: "Acquisitions",
+        label: "Manage deals",
+        description: "Create and edit deals, underwrite, advance stages, and \
+                      convert a closed deal into an owned property.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "lease:read",
         category: "Rentals",
         label: "View rentals",

@@ -28,6 +28,8 @@ pub mod bank_account;
 pub mod bank_txn;
 pub mod counterparty;
 pub mod counterparty_note;
+pub mod deal;
+pub mod deal_event;
 pub mod deposit_deduction;
 pub mod deposit_disposition;
 pub mod document;

@@ -11,6 +11,8 @@ pub use super::bank_account::Entity as BankAccount;
 pub use super::bank_txn::Entity as BankTxn;
 pub use super::counterparty::Entity as Counterparty;
 pub use super::counterparty_note::Entity as CounterpartyNote;
+pub use super::deal::Entity as Deal;
+pub use super::deal_event::Entity as DealEvent;
 pub use super::deposit_deduction::Entity as DepositDeduction;
 pub use super::deposit_disposition::Entity as DepositDisposition;
 pub use super::document::Entity as Document;

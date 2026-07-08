@@ -34,6 +34,12 @@ pub const MORTGAGE_UPDATE: &str = "mortgage.update";
 pub const MORTGAGE_DELETE: &str = "mortgage.delete";
 pub const WORKFLOW_ADVANCE: &str = "workflow.advance";
 
+// ---- Acquisitions (deal pipeline) ----
+pub const DEAL_CREATE: &str = "deal.create";
+pub const DEAL_UPDATE: &str = "deal.update";
+pub const DEAL_STAGE_ADVANCE: &str = "deal.stage_advance";
+pub const DEAL_CONVERT: &str = "deal.convert";
+
 // ---- Rentals ----
 pub const UNIT_CREATE: &str = "unit.create";
 pub const UNIT_UPDATE: &str = "unit.update";

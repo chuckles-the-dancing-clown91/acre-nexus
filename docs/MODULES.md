@@ -26,7 +26,7 @@ what a module is and how it is gated.
 | `vendor_api` | Vendor API | on | `/api-tokens`, `/api/v1/*` incl. `/api/v1/webhooks` (outbound subscriptions) + the `webhook_deliver` job (see `docs/WEBHOOKS.md`) |
 | `theming` | Branding & Theming | on | `/theme` |
 | `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/providers`, `/integrations/notifications`, `/integrations/inbound-emails`, `/notifications/*` (inbox + web push), `/documents` incl. `/my/documents` (resident lease documents), `/webhooks/{provider}` (incl. `inbound_email` routing) + the `auto_email`/`auto_sms`/`auto_push`/`auto_chat`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`, `docs/NOTIFICATIONS.md`, `docs/EMAIL.md`) |
-| `flips` | Acquisitions & Flips | **off (preview)** | `/modules/flips/pipeline` |
+| `flips` | Acquisitions & Flips | on | `/modules/flips/pipeline`, `/modules/flips/deals` (deal pipeline + underwriting + convert-to-property) + deal documents via the shared document service (see `docs/DEALS.md`) |
 
 ## Backend contract
 
@@ -92,8 +92,11 @@ module's navigation entries (with the permission that gates them). At runtime:
 
 ## The `flips` example
 
-`flips` is the reference module: shipped as a **preview** (off by default), it
-owns its permissions, contributes one self-gating route, and adds a lazily-loaded
-console page. Promoting it to GA is a one-line manifest change
-(`preview: false`, `default_enabled: true`); building out the domain means adding
-a `deal` entity + migration and richer routes — with no changes anywhere else.
+`flips` began life as the reference **preview** module and has since been built
+out into a full domain — the clearest demonstration of the plugin contract's
+promise that "adding a module is a file plus a registry line." It still owns its
+own permissions (`deal:read` / `deal:write`) and **self-gates** on per-tenant
+enablement, but now contributes a real deal pipeline + underwriting surface and a
+`deal`/`deal_event` entity pair, with **no central wiring touched** to go from
+preview scaffold to GA (`preview: false`, `default_enabled: true`). See
+[`DEALS.md`](DEALS.md).

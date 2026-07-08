@@ -27,7 +27,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Owner **draws/distributions** + contributions | ⬜ | P2 | owner payouts, statements |
 | **Owner statements** + owner portal | ⬜ | P2 | monthly packets, ledgers |
 | Budgets, forecasts, pro formas | ⬜ | P2 | per property/portfolio |
-| Investment underwriting calculators | 🟡 | P2 | cap rate, CoC, IRR, DSCR; cash-flow/equity already computed |
+| Investment underwriting calculators | ✅ | — | cap rate, CoC, IRR, DSCR + rent-growth sensitivity, on the acquisition `deal` (`docs/DEALS.md`) |
 | Late fees / fee schedules / autobill | ⬜ | P2 | rules engine on the ledger |
 | Receipt capture + OCR, expense tracking | ⬜ | P3 | document service + AI |
 | Depreciation schedules | ⬜ | P3 | tax basis tracking |
@@ -82,10 +82,10 @@ The biggest gap for "total" management — most operators live in their books.
 
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
-| Deal pipeline / strategy workflows | ✅ | — | rental/flip/BRRRR/hold/wholesale stages |
-| Underwriting models + sensitivity | 🟡 | P2 | calculators expansion |
-| Offers / LOIs / purchase contracts | ⬜ | P2 | deal object + e-sign |
-| Due-diligence checklists + **data room** | ⬜ | P2 | document service |
+| Deal pipeline / strategy workflows | ✅ | — | rental/flip/BRRRR/hold/wholesale stages; **buy-side `deal` pipeline** (prospecting→owned) + convert-to-property shipped (`docs/DEALS.md`) |
+| Underwriting models + sensitivity | ✅ | — | cap rate / cash-on-cash / IRR / DSCR + rent-growth sensitivity, live what-if (`docs/DEALS.md`) |
+| Offers / LOIs / purchase contracts | 🟡 | P2 | deal object + offer terms shipped; e-sign of the contract still open |
+| Due-diligence checklists + **data room** | ✅ | — | per-deal checklist + document-service data room (`owner_type=deal`) |
 | Closing mgmt (title, escrow, settlement) | ⬜ | P3 | title/liens modeled already |
 | **Rehab / construction** mgmt (scope, draws, change orders, lien waivers, progress photos) | ⬜ | P2 | core to flips |
 | CapEx budgeting + draws | ⬜ | P2 | |

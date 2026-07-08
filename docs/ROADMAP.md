@@ -234,15 +234,24 @@ ledger.
 
 ---
 
-## Phase 7 — Real data providers & marketplace depth ⬜  *(Pillar 2, "full")*
+## Phase 7 — Real data providers & investor depth 🟡  *(Pillar 2, "full")*
 
-- Swap simulated enrichment for **real** county-record / AVM / schools APIs
-  behind the existing provider interface (one function each).
-- **Media**: property photos/floorplans in the document store.
-- Optional: MLS/comps feed, permits/violations, insurance quotes.
+- [x] **Acquisitions & underwriting (#41/#42)** — shipped: the `flips` module is
+      now GA with a real `deal` domain (a buy-side pipeline `prospecting → offer
+      → under_contract → closing → owned`), an investor-grade underwriting engine
+      (cap rate / cash-on-cash / IRR / DSCR + rent-growth sensitivity), a
+      due-diligence checklist + data room, and one-click conversion into an owned
+      property. See [`DEALS.md`](DEALS.md).
+- [ ] Swap simulated enrichment for **real** county-record / AVM / schools APIs
+      behind the existing provider interface (one function each).
+- [ ] **Media**: property photos/floorplans in the document store.
+- [ ] Rehab / construction management (#40), disposition / broker (#43),
+      map / geospatial portfolio view (#57).
+- [ ] Optional: MLS/comps feed, permits/violations, insurance quotes.
 
 **DoD:** a real address enriches from live sources with graceful fallback to
-simulation when a provider is unavailable.
+simulation when a provider is unavailable. *(Acquisition vertical done; real
+data providers + media remain.)*
 
 ---
 
@@ -267,7 +276,7 @@ Phase 0 ✅
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
-        └─ Phase 7 ⬜ (real data)
+        └─ Phase 7 🟡 (acquisitions ✅ · real data ⬜)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```
 

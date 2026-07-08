@@ -17,9 +17,17 @@ describe("module registry", () => {
     expect(Object.keys(map).sort()).toEqual(MODULES.map((m) => m.key).sort());
   });
 
-  it("preview modules (flips) default to disabled", () => {
+  it("acquisitions (flips) is GA and on by default", () => {
     const map = defaultEnablement();
-    expect(map.flips).toBe(false);
+    expect(map.flips).toBe(true);
     expect(map.properties).toBe(true);
+    expect(moduleByKey("flips")?.preview).toBeFalsy();
+  });
+
+  it("any preview module defaults to disabled", () => {
+    const map = defaultEnablement();
+    for (const m of MODULES) {
+      if (m.preview) expect(map[m.key]).toBe(false);
+    }
   });
 });

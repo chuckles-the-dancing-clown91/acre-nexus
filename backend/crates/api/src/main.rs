@@ -30,6 +30,7 @@ mod billing;
 mod config;
 mod cors;
 mod db;
+mod deals;
 mod deposits;
 mod dto;
 mod enrichment;
@@ -63,6 +64,7 @@ mod state;
 mod storage;
 mod tenancy;
 mod tokens;
+mod underwriting;
 mod webhooks_out;
 mod workflow;
 
