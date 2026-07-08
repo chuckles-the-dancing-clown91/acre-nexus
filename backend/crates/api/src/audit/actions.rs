@@ -40,6 +40,14 @@ pub const DEAL_UPDATE: &str = "deal.update";
 pub const DEAL_STAGE_ADVANCE: &str = "deal.stage_advance";
 pub const DEAL_CONVERT: &str = "deal.convert";
 
+// ---- Rehab / construction ----
+pub const REHAB_PROJECT_CREATE: &str = "rehab.project_create";
+pub const REHAB_PROJECT_UPDATE: &str = "rehab.project_update";
+pub const REHAB_DRAW_CREATE: &str = "rehab.draw_create";
+pub const REHAB_DRAW_STATUS: &str = "rehab.draw_status";
+pub const REHAB_CHANGE_ORDER: &str = "rehab.change_order";
+pub const REHAB_LIEN_WAIVER: &str = "rehab.lien_waiver";
+
 // ---- Rentals ----
 pub const UNIT_CREATE: &str = "unit.create";
 pub const UNIT_UPDATE: &str = "unit.update";

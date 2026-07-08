@@ -249,10 +249,12 @@ ledger.
       [`PROPERTY_DATA.md`](PROPERTY_DATA.md).
 - [x] **Media** — property photos/floorplans in the document store, with a hero
       and a gallery rendered on the property profile.
+- [x] **Rehab / construction management (#40)** — shipped: the `rehab` module —
+      renovation budgets, scope lines, change orders, draw requests with progress
+      photos, and generated lien waivers. See [`REHAB.md`](REHAB.md).
 - [ ] Remaining real vendors (AVM / schools / county assessor) behind the
       provider seam; MLS/comps feed, permits/violations, insurance quotes.
-- [ ] Rehab / construction management (#40), disposition / broker (#43),
-      map / geospatial portfolio view (#57).
+- [ ] Disposition / broker (#43), map / geospatial portfolio view (#57).
 
 **DoD (met):** a real address enriches from live sources with graceful fallback
 to simulation when a provider is unavailable; photos render on the property
@@ -281,7 +283,7 @@ Phase 0 ✅
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
-        └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · #40/#43/#57 ⬜)
+        └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · rehab ✅ · #43/#57 ⬜)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```
 

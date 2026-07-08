@@ -6,8 +6,8 @@ processes, and whether it ships on by default. Tenants turn modules on and off
 from their software settings, which makes capabilities **sellable per feature**.
 
 The backend and frontend share a module **key** (`properties`, `property_intel`,
-`leasing`, `vendor_api`, `theming`, `flips`) so the two halves always agree on
-what a module is and how it is gated.
+`leasing`, `vendor_api`, `theming`, `flips`, `rehab`) so the two halves always
+agree on what a module is and how it is gated.
 
 ## Modules today
 
@@ -27,6 +27,7 @@ what a module is and how it is gated.
 | `theming` | Branding & Theming | on | `/theme` |
 | `integrations` | Integrations | on | `/integrations/secrets`, `/integrations/providers`, `/integrations/notifications`, `/integrations/inbound-emails`, `/notifications/*` (inbox + web push), `/documents` incl. `/my/documents` (resident lease documents), `/webhooks/{provider}` (incl. `inbound_email` routing) + the `auto_email`/`auto_sms`/`auto_push`/`auto_chat`/`webhook_event`/`document_retention` jobs (see `docs/INTEGRATIONS.md`, `docs/NOTIFICATIONS.md`, `docs/EMAIL.md`) |
 | `flips` | Acquisitions & Flips | on | `/modules/flips/pipeline`, `/modules/flips/deals` (deal pipeline + underwriting + convert-to-property) + deal documents via the shared document service (see `docs/DEALS.md`) |
+| `rehab` | Rehab & Construction | on | `/properties/{id}/rehab-projects`, `/rehab-projects/{id}`, `/rehab-lines/*`, `/rehab-change-orders/*`, `/rehab-draws/*` (budgets, draws w/ progress photos, change orders, lien-waiver PDFs) (see `docs/REHAB.md`) |
 
 ## Backend contract
 

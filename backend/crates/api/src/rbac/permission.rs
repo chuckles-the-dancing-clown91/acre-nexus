@@ -15,6 +15,9 @@ pub enum Permission {
     /// Acquisition deal pipeline (prospecting → owned) + underwriting.
     DealRead,
     DealWrite,
+    /// Rehab / construction projects: budgets, draws, change orders, lien waivers.
+    RehabRead,
+    RehabManage,
     /// Rentals: units, leases/tenancies, rent ledger.
     LeaseRead,
     LeaseManage,
@@ -106,6 +109,8 @@ impl Permission {
             Permission::FinanceManage => "finance:manage",
             Permission::DealRead => "deal:read",
             Permission::DealWrite => "deal:write",
+            Permission::RehabRead => "rehab:read",
+            Permission::RehabManage => "rehab:manage",
             Permission::LeaseRead => "lease:read",
             Permission::LeaseManage => "lease:manage",
             Permission::FeeRead => "fee:read",
@@ -170,6 +175,8 @@ pub const ALL_PERMS: &[Permission] = &[
     FinanceManage,
     DealRead,
     DealWrite,
+    RehabRead,
+    RehabManage,
     LeaseRead,
     LeaseManage,
     FeeRead,

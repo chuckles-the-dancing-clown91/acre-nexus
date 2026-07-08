@@ -87,8 +87,8 @@ The biggest gap for "total" management — most operators live in their books.
 | Offers / LOIs / purchase contracts | 🟡 | P2 | deal object + offer terms shipped; e-sign of the contract still open |
 | Due-diligence checklists + **data room** | ✅ | — | per-deal checklist + document-service data room (`owner_type=deal`) |
 | Closing mgmt (title, escrow, settlement) | ⬜ | P3 | title/liens modeled already |
-| **Rehab / construction** mgmt (scope, draws, change orders, lien waivers, progress photos) | ⬜ | P2 | core to flips |
-| CapEx budgeting + draws | ⬜ | P2 | |
+| **Rehab / construction** mgmt (scope, draws, change orders, lien waivers, progress photos) | ✅ | — | `rehab` module: budget + lines + draws (w/ photos) + change orders + generated lien-waiver PDFs (`docs/REHAB.md`) |
+| CapEx budgeting + draws | 🟡 | P2 | rehab budget + draws shipped; recurring CapEx reserve still open |
 | 1031 exchange tracking | ⬜ | P3 | |
 | Disposition / sale workflow + broker mgmt | 🟡 | P3 | flip "listed/sold" stages exist |
 

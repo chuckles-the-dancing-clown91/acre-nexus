@@ -1432,6 +1432,9 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
+    // ---- Rehab / construction: a live project with a funded draw + waiver ----
+    seed_rehab(db, northwind, maple_court, now).await?;
+
     tracing::info!("seed: complete");
     Ok(())
 }
@@ -1589,6 +1592,152 @@ async fn seed_property_photo(
     }
 
     Ok(doc_id)
+}
+
+/// Seed a demo rehab project on a property: a budget with scope lines, an
+/// approved change order, a funded draw, and a generated lien waiver PDF — the
+/// full issue #40 loop.
+async fn seed_rehab(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<()> {
+    let contractor = Uuid::new_v4();
+    entity::counterparty::ActiveModel {
+        id: Set(contractor),
+        tenant_id: Set(tenant_id),
+        kind: Set("contractor".into()),
+        name: Set("Ridgeline Construction".into()),
+        contact_name: Set(Some("Dana Ruiz".into())),
+        email: Set(Some("dana@ridgeline.example".into())),
+        phone: Set(None),
+        website: Set(None),
+        address: Set(None),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    let project = Uuid::new_v4();
+    entity::rehab_project::ActiveModel {
+        id: Set(project),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        name: Set("Unit turns + roof".into()),
+        status: Set("active".into()),
+        budget_cents: Set(6_500_000),
+        contingency_bps: Set(1000),
+        start_date: Set(None),
+        target_end_date: Set(None),
+        notes: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    for (i, (cat, amt)) in [
+        ("Roof replacement", 1_800_000i64),
+        ("Kitchen refresh", 2_200_000),
+        ("Paint & flooring", 1_500_000),
+    ]
+    .iter()
+    .enumerate()
+    {
+        entity::rehab_line::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            project_id: Set(project),
+            category: Set((*cat).into()),
+            description: Set(None),
+            budget_cents: Set(*amt),
+            sort_order: Set(i as i32),
+            created_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
+    entity::rehab_change_order::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        project_id: Set(project),
+        description: Set("Additional electrical panel".into()),
+        amount_cents: Set(300_000),
+        status: Set("approved".into()),
+        created_by: Set(None),
+        approved_by: Set(None),
+        created_at: Set(now.into()),
+        decided_at: Set(Some(now.into())),
+    }
+    .insert(db)
+    .await?;
+
+    let draw = Uuid::new_v4();
+    entity::rehab_draw::ActiveModel {
+        id: Set(draw),
+        tenant_id: Set(tenant_id),
+        project_id: Set(project),
+        number: Set(1),
+        title: Set("Draw 1 — demo + roof".into()),
+        amount_cents: Set(2_000_000),
+        status: Set("funded".into()),
+        contractor_id: Set(Some(contractor)),
+        notes: Set(None),
+        requested_by: Set(None),
+        approved_by: Set(None),
+        funded_at: Set(Some(now.into())),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    let address = Property::find_by_id(property_id)
+        .one(db)
+        .await?
+        .map(|p| format!("{}, {}", p.address, p.city))
+        .unwrap_or_default();
+    let body = crate::routes::rehab::waiver_body(
+        "conditional_progress",
+        "Ridgeline Construction",
+        &address,
+        &crate::dto::usd(2_000_000),
+        None,
+        &now.date_naive().format("%Y-%m-%d").to_string(),
+    );
+    let doc = crate::routes::rehab::store_waiver_pdf(
+        db,
+        tenant_id,
+        draw,
+        "lien-waiver-draw-1-conditional_progress.pdf",
+        &body,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("seed lien waiver: {e}"))?;
+
+    entity::rehab_lien_waiver::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        draw_id: Set(draw),
+        project_id: Set(project),
+        waiver_type: Set("conditional_progress".into()),
+        contractor_id: Set(Some(contractor)),
+        contractor_name: Set("Ridgeline Construction".into()),
+        amount_cents: Set(2_000_000),
+        through_date: Set(None),
+        status: Set("generated".into()),
+        document_id: Set(Some(doc)),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    Ok(())
 }
 
 /// First + last day of `d`'s month, as `YYYY-MM-DD`.

@@ -195,6 +195,14 @@ export default function PropertyProfilePage() {
           <Badge tone={statusTone(p.status)}>{p.status}</Badge>
         </div>
         <div className="flex items-center gap-2">
+          {can("rehab:read") && (
+            <Link
+              href={`/console/properties/${params.id}/rehab`}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-semibold"
+            >
+              Rehab
+            </Link>
+          )}
           <Link
             href={`/console/properties/${params.id}/tenants`}
             className="rounded-lg border border-line px-3 py-2 text-sm font-semibold"

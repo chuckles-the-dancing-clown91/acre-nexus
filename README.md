@@ -39,6 +39,10 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   (cap rate, cash-on-cash, IRR, DSCR + rent-growth sensitivity, live what-if), a
   due-diligence checklist and document data room, and one-click conversion of a
   closed deal into a fully-onboarded property — see [`docs/DEALS.md`](docs/DEALS.md).
+- **Rehab & construction** — renovation **budgets** with scope lines, **draw
+  requests** (with progress photos) against the budget, **change orders**, and
+  generated **lien waivers** per draw for flip/BRRRR projects — see
+  [`docs/REHAB.md`](docs/REHAB.md).
 - **Leasing funnel** — end to end: public listings site, three application
   doors (anonymous website, white-glove renter portal that auto-fills from the
   tenant's profile, back office), a settings-driven screening pipeline

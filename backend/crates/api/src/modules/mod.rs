@@ -37,6 +37,7 @@ pub mod leasing;
 pub mod maintenance;
 pub mod messaging;
 pub mod properties;
+pub mod rehab;
 pub mod rentals;
 pub mod theming;
 pub mod title;
@@ -182,6 +183,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(domains::DomainsModule),
         Box::new(integrations::IntegrationsModule),
         Box::new(flips::FlipsModule),
+        Box::new(rehab::RehabModule),
     ]
 }
 

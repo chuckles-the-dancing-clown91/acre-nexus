@@ -314,6 +314,17 @@ export const MODULES: ModuleDef[] = [
       },
     ],
   },
+  {
+    key: "rehab",
+    label: "Rehab & Construction",
+    description:
+      "Renovation budgets, draw requests with progress photos, change orders, and lien waivers for flip/BRRRR projects. Accessed from a property's Rehab page.",
+    defaultEnabled: true,
+    preview: false,
+    // Contextual: reached from the property profile's Rehab link, so no
+    // top-level nav entry.
+    nav: [],
+  },
 ];
 
 /** Lookup a module definition by key. */

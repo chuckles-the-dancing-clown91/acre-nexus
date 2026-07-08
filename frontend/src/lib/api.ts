@@ -863,6 +863,97 @@ export const api = {
       body: { document_id },
     }),
 
+  // ---- rehab / construction ----
+  rehabProjects: (propertyId: string) =>
+    request<RehabProject[]>(`/properties/${propertyId}/rehab-projects`, {
+      auth: true,
+    }),
+  createRehabProject: (propertyId: string, body: CreateRehabProjectInput) =>
+    request<RehabProjectDetail>(`/properties/${propertyId}/rehab-projects`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  rehabProject: (id: string) =>
+    request<RehabProjectDetail>(`/rehab-projects/${id}`, { auth: true }),
+  updateRehabProject: (id: string, body: Record<string, unknown>) =>
+    request<RehabProjectDetail>(`/rehab-projects/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  createRehabLine: (
+    projectId: string,
+    body: { category: string; description?: string; budget_cents?: number }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/lines`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteRehabLine: (id: string) =>
+    request<RehabProjectDetail>(`/rehab-lines/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  createChangeOrder: (
+    projectId: string,
+    body: { description: string; amount_cents: number }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/change-orders`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  decideChangeOrder: (id: string, approve: boolean) =>
+    request<RehabProjectDetail>(`/rehab-change-orders/${id}/decide`, {
+      method: "POST",
+      auth: true,
+      body: { approve },
+    }),
+  createRehabDraw: (
+    projectId: string,
+    body: {
+      title: string;
+      amount_cents: number;
+      contractor_id?: string;
+      notes?: string;
+    }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/draws`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  rehabDraw: (id: string) =>
+    request<RehabDrawDetail>(`/rehab-draws/${id}`, { auth: true }),
+  setDrawStatus: (id: string, status: string) =>
+    request<RehabProjectDetail>(`/rehab-draws/${id}/status`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+  createLienWaiver: (
+    drawId: string,
+    body: {
+      waiver_type: string;
+      contractor_name?: string;
+      amount_cents?: number;
+      through_date?: string;
+    }
+  ) =>
+    request<RehabDrawDetail>(`/rehab-draws/${drawId}/lien-waivers`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateLienWaiver: (id: string, status: string) =>
+    request<RehabDrawDetail>(`/rehab-lien-waivers/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+
   // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
   fees: () => request<Fee[]>("/fees", { auth: true }),
   createFee: (body: CreateFeeInput) =>
@@ -2185,6 +2276,106 @@ export interface PropertyMedia {
   hero_document_id: string | null;
   hero_url: string | null;
   items: PropertyMediaItem[];
+}
+
+// ---- rehab / construction ----
+export interface RehabLine {
+  id: string;
+  category: string;
+  description: string | null;
+  budget_cents: number;
+  budget_label: string;
+  sort_order: number;
+}
+
+export interface RehabChangeOrder {
+  id: string;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface RehabDraw {
+  id: string;
+  project_id: string;
+  number: number;
+  title: string;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  contractor_id: string | null;
+  contractor_name: string | null;
+  notes: string | null;
+  funded_at: string | null;
+  created_at: string;
+}
+
+export interface LienWaiver {
+  id: string;
+  draw_id: string;
+  waiver_type: string;
+  waiver_type_label: string;
+  contractor_name: string;
+  amount_cents: number;
+  amount_label: string;
+  through_date: string | null;
+  status: string;
+  document_id: string | null;
+  created_at: string;
+}
+
+export interface RehabProject {
+  id: string;
+  property_id: string;
+  name: string;
+  status: string;
+  base_budget_cents: number;
+  base_budget_label: string;
+  contingency_bps: number;
+  contingency_pct: number;
+  contingency_cents: number;
+  contingency_label: string;
+  adjusted_budget_cents: number;
+  adjusted_budget_label: string;
+  approved_change_orders_cents: number;
+  approved_change_orders_label: string;
+  drawn_cents: number;
+  drawn_label: string;
+  pending_draws_cents: number;
+  pending_draws_label: string;
+  remaining_cents: number;
+  remaining_label: string;
+  lines_budget_cents: number;
+  lines_budget_label: string;
+  start_date: string | null;
+  target_end_date: string | null;
+  notes: string | null;
+  line_count: number;
+  draw_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RehabProjectDetail extends RehabProject {
+  lines: RehabLine[];
+  draws: RehabDraw[];
+  change_orders: RehabChangeOrder[];
+}
+
+export interface RehabDrawDetail extends RehabDraw {
+  lien_waivers: LienWaiver[];
+}
+
+export interface CreateRehabProjectInput {
+  name: string;
+  budget_cents?: number;
+  contingency_bps?: number;
+  start_date?: string;
+  target_end_date?: string;
+  notes?: string;
 }
 
 export interface RegisterDocumentInput {

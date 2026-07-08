@@ -23,6 +23,8 @@ pub const OWNER_TYPES: &[&str] = &[
     "maintenance_ticket",
     "inspection",
     "asset",
+    "rehab_project",
+    "rehab_draw",
     "tenant",
 ];
 
@@ -41,6 +43,7 @@ pub const CATEGORIES: &[&str] = &[
     "notice",
     "photo",
     "floorplan",
+    "waiver",
     "other",
 ];
 

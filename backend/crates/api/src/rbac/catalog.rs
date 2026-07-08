@@ -73,6 +73,21 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "rehab:read",
+        category: "Acquisitions",
+        label: "View rehab projects",
+        description: "View rehab budgets, draws, change orders, and lien waivers.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "rehab:manage",
+        category: "Acquisitions",
+        label: "Manage rehab projects",
+        description: "Create rehab budgets, request/approve draws and change \
+                      orders, and generate lien waivers.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "lease:read",
         category: "Rentals",
         label: "View rentals",
