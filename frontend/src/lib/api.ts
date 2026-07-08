@@ -639,6 +639,42 @@ export const api = {
   platformMetrics: () =>
     request<PlatformMetrics>("/platform/metrics", { auth: true }),
 
+  // ---- SaaS billing: platform plane (staff) ----
+  platformBillingOverview: () =>
+    request<BillingOverview>("/platform/billing/overview", { auth: true }),
+  platformBillingInvoices: (
+    params: { status?: string; period?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.period) qs.set("period", params.period);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<PlatformInvoice[]>(`/platform/billing/invoices${suffix}`, {
+      auth: true,
+    });
+  },
+  platformBillingRun: (period?: string) =>
+    request<{ period: string; generated: number }>("/platform/billing/run", {
+      method: "POST",
+      auth: true,
+      body: { period },
+    }),
+  platformInvoicePay: (id: string) =>
+    request<PlatformInvoice>(`/platform/billing/invoices/${id}/pay`, {
+      method: "POST",
+      auth: true,
+    }),
+  platformInvoiceVoid: (id: string) =>
+    request<PlatformInvoice>(`/platform/billing/invoices/${id}/void`, {
+      method: "POST",
+      auth: true,
+    }),
+  platformSetPlan: (tenantId: string, plan: string) =>
+    request<{ tenant_id: string; plan: string }>(
+      `/platform/billing/tenants/${tenantId}/plan`,
+      { method: "PATCH", auth: true, body: { plan } }
+    ),
+
   // ---- modules (tenant software settings) ----
   modules: () => request<ModuleInfo[]>("/modules", { auth: true }),
   setModule: (key: string, enabled: boolean) =>
@@ -973,6 +1009,14 @@ export const api = {
   // ---- global search (Phase 8) ----
   search: (q: string) =>
     request<SearchResp>(`/search?q=${encodeURIComponent(q)}`, { auth: true }),
+
+  // ---- SaaS billing: workspace self-serve (Phase 8) ----
+  billingSubscription: () =>
+    request<BillingSubscription>("/billing/subscription", { auth: true }),
+  billingInvoices: () =>
+    request<PlatformInvoice[]>("/billing/invoices", { auth: true }),
+  billingInvoice: (id: string) =>
+    request<PlatformInvoice>(`/billing/invoices/${id}`, { auth: true }),
   /** Fetch a report export (CSV/PDF) as an authenticated blob for download. */
   downloadReport: async (path: string): Promise<Blob> => {
     const headers: Record<string, string> = {};
@@ -2469,6 +2513,95 @@ export interface SearchHit {
 export interface SearchResp {
   query: string;
   hits: SearchHit[];
+}
+
+// ---- SaaS billing (Phase 8) ----
+export interface BillingPlan {
+  key: string;
+  name: string;
+  base_cents: number;
+  base_label: string;
+  included_units: number;
+  overage_cents: number;
+  overage_label: string;
+  blurb: string;
+  features: string[];
+  current: boolean;
+}
+export interface BillingEstimateLine {
+  description: string;
+  quantity: number;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface BillingEstimate {
+  unit_count: number;
+  included_units: number;
+  base_cents: number;
+  base_label: string;
+  overage_cents: number;
+  overage_label: string;
+  total_cents: number;
+  total_label: string;
+  lines: BillingEstimateLine[];
+}
+export interface BillingSubscription {
+  plan: string;
+  plan_name: string;
+  status: string;
+  properties: number;
+  units: number;
+  estimate: BillingEstimate;
+  outstanding_cents: number;
+  outstanding_label: string;
+  plans: BillingPlan[];
+}
+export interface InvoiceLine {
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+  unit_price_label: string;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface PlatformInvoice {
+  id: string;
+  tenant_id: string;
+  period: string;
+  plan: string;
+  status: string;
+  unit_count: number;
+  included_units: number;
+  base_cents: number;
+  base_label: string;
+  overage_cents: number;
+  overage_label: string;
+  total_cents: number;
+  total_label: string;
+  issued_at: string | null;
+  due_date: string | null;
+  paid_at: string | null;
+  lines: InvoiceLine[];
+}
+export interface TenantBilling {
+  tenant_id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  status: string;
+  units: number;
+  mrr_cents: number;
+  mrr_label: string;
+  outstanding_cents: number;
+  outstanding_label: string;
+}
+export interface BillingOverview {
+  tenant_count: number;
+  mrr_cents: number;
+  mrr_label: string;
+  outstanding_cents: number;
+  outstanding_label: string;
+  tenants: TenantBilling[];
 }
 
 export interface AgingBuckets {

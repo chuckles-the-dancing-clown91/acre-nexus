@@ -147,7 +147,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Global **search** | ✅ | — | `search` module: command palette across properties/tenants/entities/tickets/LLCs, tenant-scoped + permission-aware |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
 | **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |
-| SaaS **billing/metering** for client workspaces | ⬜ | P2 | plans modeled |
+| SaaS **billing/metering** for client workspaces | ✅ | — | per-door metered plans, auto monthly `platform_invoice`, self-serve + HQ console (`docs/SAAS_BILLING.md`) |
 | Calendar / scheduling / reminders engine | ✅ | — | `reminder` + per-tenant scan + console calendar (`docs/CALENDAR.md`) |
 
 ## 10. Optional verticals (expand TAM)

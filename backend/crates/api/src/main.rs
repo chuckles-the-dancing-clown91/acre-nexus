@@ -55,6 +55,7 @@ mod rbac;
 mod reminders;
 mod rentals_occupancy;
 mod routes;
+mod saas;
 mod scheduler;
 mod screening;
 mod secrets;
@@ -121,6 +122,7 @@ async fn rocket() -> _ {
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
+    saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
 

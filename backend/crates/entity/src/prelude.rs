@@ -54,6 +54,8 @@ pub use super::owner_payout::Entity as OwnerPayout;
 pub use super::ownership::Entity as Ownership;
 pub use super::payment_method::Entity as PaymentMethod;
 pub use super::permission::Entity as Permission;
+pub use super::platform_invoice::Entity as PlatformInvoice;
+pub use super::platform_invoice_line::Entity as PlatformInvoiceLine;
 pub use super::platform_staff::Entity as PlatformStaff;
 pub use super::portfolio::Entity as Portfolio;
 pub use super::profile_type::Entity as ProfileType;

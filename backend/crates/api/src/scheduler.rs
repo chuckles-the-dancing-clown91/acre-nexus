@@ -119,6 +119,26 @@ async fn advance(
     am.attempts = Set(job.attempts + 1);
     am.updated_at = Set(now.into());
 
+    // Core platform jobs are not tenant-toggleable modules, so they are
+    // dispatched directly (never parked by module enablement). SaaS billing
+    // only ever reschedules itself, so a compact outcome application suffices.
+    if job.kind == crate::saas::BILLING_KIND {
+        let outcome = crate::saas::handle_billing_job(db, &job).await;
+        am.status = Set(outcome.status.clone());
+        if let Some(run_at) = outcome.run_at {
+            am.run_at = Set(run_at.into());
+        }
+        if let Some(result) = outcome.result {
+            am.result = Set(Some(result));
+        }
+        if let Some(err) = &outcome.error {
+            am.last_error = Set(Some(err.clone()));
+        }
+        tracing::info!(job = %job.id, kind = %job.kind, status = %outcome.status, "core job advanced");
+        am.update(db).await?;
+        return Ok(());
+    }
+
     match crate::modules::module_for_job_kind(&job.kind) {
         Some(module) => {
             let manifest = module.manifest();

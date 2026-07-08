@@ -289,3 +289,9 @@ pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
 pub const INVENTORY_CREATE: &str = "inventory_item.create";
 pub const INVENTORY_UPDATE: &str = "inventory_item.update";
 pub const TICKET_REVIEW: &str = "ticket.review";
+
+// ---- SaaS platform billing (Phase 8) ----
+pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";
+pub const PLATFORM_INVOICE_PAID: &str = "platform_invoice.paid";
+pub const PLATFORM_INVOICE_VOID: &str = "platform_invoice.void";
+pub const TENANT_PLAN_CHANGE: &str = "tenant.plan_change";

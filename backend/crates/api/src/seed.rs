@@ -1435,6 +1435,30 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // ---- Rehab / construction: a live project with a funded draw + waiver ----
     seed_rehab(db, northwind, maple_court, now).await?;
 
+    // ---- SaaS platform billing: two past invoices per workspace so the
+    // billing console + subscription page aren't empty on a fresh install.
+    // The older one is settled; the most recent stays open (payable).
+    let today = now.date_naive();
+    let last_period = crate::saas::previous_month(today);
+    let prior_anchor = chrono::NaiveDate::from_ymd_opt(
+        last_period[..4].parse().unwrap_or_else(|_| today.year()),
+        last_period[5..].parse().unwrap_or(1),
+        1,
+    )
+    .unwrap_or(today);
+    let prior_period = crate::saas::previous_month(prior_anchor);
+    for tid in [northwind, cascade] {
+        if let Some(tenant) = Tenant::find_by_id(tid).one(db).await? {
+            let paid = crate::saas::generate_invoice(db, &tenant, &prior_period).await?;
+            let mut am: entity::platform_invoice::ActiveModel = paid.into();
+            am.status = Set("paid".into());
+            am.paid_at = Set(Some(now.into()));
+            am.updated_at = Set(now.into());
+            am.update(db).await?;
+            crate::saas::generate_invoice(db, &tenant, &last_period).await?;
+        }
+    }
+
     tracing::info!("seed: complete");
     Ok(())
 }

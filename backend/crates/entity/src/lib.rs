@@ -71,6 +71,8 @@ pub mod owner_payout;
 pub mod ownership;
 pub mod payment_method;
 pub mod permission;
+pub mod platform_invoice;
+pub mod platform_invoice_line;
 pub mod platform_staff;
 pub mod portfolio;
 pub mod profile_type;

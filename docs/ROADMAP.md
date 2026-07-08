@@ -271,13 +271,17 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
       analytics, custom report builder.
 - [x] **Global search (#55)** — shipped: the `search` module — a permission-aware
       command palette across properties, tenants, entities, tickets, and LLCs.
-- [ ] **SaaS billing**: meter + bill client workspaces (plans already modeled).
+- [x] **SaaS billing** — shipped: per-door metered subscriptions (three plans,
+      base fee + per-unit overage), automatic monthly `platform_invoice`
+      generation, a workspace self-serve subscription/invoice view, and an Acre
+      HQ billing console (MRR, plan management, billing run, settle/void). See
+      [`SAAS_BILLING.md`](SAAS_BILLING.md).
 - [ ] **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance,
       rate limiting, observability/metrics, load testing, backup/restore drills.
 - [ ] MFA/2FA, SSO/SAML/SCIM (enterprise); GDPR/CCPA data requests.
 
 **DoD:** a paying tenant runs the full lifecycle in production with compliant
-controls and monitored SLOs. *(Standard PM reports done; billing + hardening +
+controls and monitored SLOs. *(Reports, search, and SaaS billing done; hardening +
 the rest remain.)*
 
 ---
@@ -291,7 +295,7 @@ Phase 0 ✅
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
         └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · rehab ✅ · #43/#57 ⬜)
-                         all ─→ Phase 8 🟡 (PM reports + search ✅ · billing/hardening ⬜)
+                         all ─→ Phase 8 🟡 (PM reports + search + SaaS billing ✅ · hardening ⬜)
 ```
 
 ## Sequencing notes

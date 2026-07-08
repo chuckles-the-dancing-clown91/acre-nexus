@@ -161,6 +161,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 collapsed={sidebarCollapsed}
               />
             )}
+            {can("billing:read") && (
+              <NavLink
+                href="/console/billing"
+                label="Billing"
+                icon="card"
+                pathname={pathname}
+                collapsed={sidebarCollapsed}
+              />
+            )}
           </nav>
 
           {can("tenant:manage") && (
@@ -205,6 +214,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 <Icon name="globe" size={17} />
                 {!sidebarCollapsed && "Platform admin"}
               </Link>
+              {can("platform:admin") && (
+                <NavLink
+                  href="/console/platform/billing"
+                  label="Billing"
+                  icon="card"
+                  pathname={pathname}
+                  collapsed={sidebarCollapsed}
+                />
+              )}
               {can("user:read") && (
                 <NavLink
                   href="/console/platform/users"
