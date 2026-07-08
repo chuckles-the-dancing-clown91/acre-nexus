@@ -1317,7 +1317,450 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     let (ps, pe) = month_bounds(last_month);
     crate::payouts::compute_payout(db, northwind, maple, &ps, &pe, None).await?;
 
+    // ---- Acquisitions & Flips: a few demo deals for the pipeline board ----
+    // The flips module is on by default, so Northwind's board shows a live
+    // acquisition pipeline with real underwriting the moment you open it.
+    let dd_checklist = serde_json::json!([
+        { "key": "inspection", "label": "General inspection", "done": true },
+        { "key": "title", "label": "Title search / commitment", "done": true },
+        { "key": "bids", "label": "Contractor rehab bids", "done": false },
+        { "key": "financing", "label": "Financing commitment", "done": false },
+        { "key": "insurance", "label": "Insurance quote", "done": false }
+    ]);
+    seed_deal(
+        db,
+        northwind,
+        "Elm Street Duplex",
+        "412 Elm St",
+        "Columbus",
+        "prospecting",
+        "rental",
+        "multi_family",
+        28_500_000,
+        None,
+        32_000_000,
+        3_500_000,
+        800_000,
+        320_000,
+        95_000,
+        650,
+        serde_json::json!([]),
+        now,
+    )
+    .await?;
+    seed_deal(
+        db,
+        northwind,
+        "Oak & 3rd Flip",
+        "1207 Oak Ave",
+        "Columbus",
+        "under_contract",
+        "flip",
+        "single_family",
+        21_000_000,
+        Some(19_800_000),
+        31_500_000,
+        6_000_000,
+        600_000,
+        0,
+        0,
+        0,
+        dd_checklist,
+        now,
+    )
+    .await?;
+    seed_deal(
+        db,
+        northwind,
+        "Birch Lane BRRRR",
+        "88 Birch Ln",
+        "Dublin",
+        "prospecting",
+        "brrrr",
+        "single_family",
+        16_500_000,
+        None,
+        24_000_000,
+        4_500_000,
+        500_000,
+        185_000,
+        52_000,
+        600,
+        serde_json::json!([]),
+        now,
+    )
+    .await?;
+
+    // ---- Property media: a hero photo + a second shot for the gallery ----
+    seed_property_photo(
+        db,
+        northwind,
+        maple_court,
+        "front-elevation.svg",
+        "Maple Court",
+        "Front elevation",
+        "#6366f1",
+        "#0ea5e9",
+        true,
+        now,
+    )
+    .await?;
+    seed_property_photo(
+        db,
+        northwind,
+        maple_court,
+        "courtyard.svg",
+        "Maple Court",
+        "Courtyard",
+        "#0ea5e9",
+        "#10b981",
+        false,
+        now,
+    )
+    .await?;
+    seed_property_photo(
+        db,
+        northwind,
+        riverside_flats,
+        "riverside.svg",
+        "Riverside Flats",
+        "River frontage",
+        "#f59e0b",
+        "#ef4444",
+        true,
+        now,
+    )
+    .await?;
+
+    // ---- Rehab / construction: a live project with a funded draw + waiver ----
+    seed_rehab(db, northwind, maple_court, now).await?;
+
+    // ---- SaaS platform billing: two past invoices per workspace so the
+    // billing console + subscription page aren't empty on a fresh install.
+    // The older one is settled; the most recent stays open (payable).
+    let today = now.date_naive();
+    let last_period = crate::saas::previous_month(today);
+    let prior_anchor = chrono::NaiveDate::from_ymd_opt(
+        last_period[..4].parse().unwrap_or_else(|_| today.year()),
+        last_period[5..].parse().unwrap_or(1),
+        1,
+    )
+    .unwrap_or(today);
+    let prior_period = crate::saas::previous_month(prior_anchor);
+    for tid in [northwind, cascade] {
+        if let Some(tenant) = Tenant::find_by_id(tid).one(db).await? {
+            let paid = crate::saas::generate_invoice(db, &tenant, &prior_period).await?;
+            let mut am: entity::platform_invoice::ActiveModel = paid.into();
+            am.status = Set("paid".into());
+            am.paid_at = Set(Some(now.into()));
+            am.updated_at = Set(now.into());
+            am.update(db).await?;
+            crate::saas::generate_invoice(db, &tenant, &last_period).await?;
+        }
+    }
+
     tracing::info!("seed: complete");
+    Ok(())
+}
+
+/// Seed one acquisition deal (plus its `created` event) with sensible default
+/// financing/projection knobs; the caller varies the headline economics.
+#[allow(clippy::too_many_arguments)]
+async fn seed_deal(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    name: &str,
+    address: &str,
+    city: &str,
+    stage: &str,
+    strategy: &str,
+    property_type: &str,
+    asking_cents: i64,
+    offer_cents: Option<i64>,
+    arv_cents: i64,
+    rehab_cents: i64,
+    closing_cents: i64,
+    rent_cents: i64,
+    expenses_cents: i64,
+    exit_cap_bps: i32,
+    checklist: serde_json::Value,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<Uuid> {
+    let id = Uuid::new_v4();
+    let opt = |c: i64| if c > 0 { Some(c) } else { None };
+    let opt_bps = |b: i32| if b > 0 { Some(b) } else { None };
+    entity::deal::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant_id),
+        name: Set(name.into()),
+        address: Set(address.into()),
+        city: Set(city.into()),
+        stage: Set(stage.into()),
+        strategy: Set(strategy.into()),
+        property_type: Set(Some(property_type.into())),
+        source: Set(Some("mls".into())),
+        broker_id: Set(None),
+        notes: Set(None),
+        asking_price_cents: Set(opt(asking_cents)),
+        offer_price_cents: Set(offer_cents),
+        earnest_money_cents: Set(None),
+        target_close_on: Set(None),
+        arv_cents: Set(opt(arv_cents)),
+        rehab_budget_cents: Set(opt(rehab_cents)),
+        closing_costs_cents: Set(opt(closing_cents)),
+        est_monthly_rent_cents: Set(opt(rent_cents)),
+        est_monthly_expenses_cents: Set(opt(expenses_cents)),
+        vacancy_bps: Set(Some(500)),
+        down_payment_bps: Set(Some(2500)),
+        interest_rate_bps: Set(Some(725)),
+        loan_term_years: Set(Some(30)),
+        rent_growth_bps: Set(Some(300)),
+        appreciation_bps: Set(Some(350)),
+        exit_cap_rate_bps: Set(opt_bps(exit_cap_bps)),
+        selling_costs_bps: Set(Some(700)),
+        hold_years: Set(Some(5)),
+        checklist: Set(checklist),
+        converted_property_id: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    entity::deal_event::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        deal_id: Set(id),
+        kind: Set("created".into()),
+        from_stage: Set(None),
+        to_stage: Set(Some(stage.into())),
+        body: Set(None),
+        actor_user_id: Set(None),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    Ok(id)
+}
+
+/// A lightweight SVG "photo" placeholder — a labelled gradient — so seeded media
+/// renders as a real image (the blob route serves the document's `image/svg+xml`
+/// content type). Real deployments upload real photos through the same path.
+fn placeholder_svg(title: &str, subtitle: &str, c1: &str, c2: &str) -> String {
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/></linearGradient></defs>
+<rect width="800" height="500" fill="url(#g)"/>
+<rect x="0" y="380" width="800" height="120" fill="#00000059"/>
+<text x="40" y="432" font-family="system-ui,Arial" font-size="40" fill="#ffffff" font-weight="700">{title}</text>
+<text x="40" y="472" font-family="system-ui,Arial" font-size="24" fill="#e5e7eb">{subtitle}</text>
+</svg>"##
+    )
+}
+
+/// Seed one property **photo** (stored in the object store) and optionally make
+/// it the property's hero. Demonstrates the Phase 7 media surface end to end.
+#[allow(clippy::too_many_arguments)]
+async fn seed_property_photo(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    filename: &str,
+    title: &str,
+    subtitle: &str,
+    c1: &str,
+    c2: &str,
+    make_hero: bool,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<Uuid> {
+    let bytes = placeholder_svg(title, subtitle, c1, c2).into_bytes();
+    let doc_id = Uuid::new_v4();
+    let storage_key = format!("{tenant_id}/{doc_id}");
+    crate::storage::ObjectStore::from_env()?
+        .put_bytes(&storage_key, &bytes)
+        .await?;
+
+    entity::document::ActiveModel {
+        id: Set(doc_id),
+        tenant_id: Set(tenant_id),
+        owner_type: Set("property".into()),
+        owner_id: Set(property_id),
+        filename: Set(filename.into()),
+        category: Set(Some("photo".into())),
+        requires_wet_ink: Set(false),
+        physical_location: Set(None),
+        mime_type: Set("image/svg+xml".into()),
+        size_bytes: Set(bytes.len() as i64),
+        checksum: Set(Some(crate::storage::sha256_hex(&bytes))),
+        version: Set(1),
+        previous_version_id: Set(None),
+        storage_key: Set(storage_key),
+        status: Set("stored".into()),
+        retention_expires_at: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    if make_hero {
+        if let Some(p) = Property::find_by_id(property_id).one(db).await? {
+            let mut am: entity::property::ActiveModel = p.into();
+            am.image_url = Set(Some(format!("doc:{doc_id}")));
+            am.update(db).await?;
+        }
+    }
+
+    Ok(doc_id)
+}
+
+/// Seed a demo rehab project on a property: a budget with scope lines, an
+/// approved change order, a funded draw, and a generated lien waiver PDF — the
+/// full issue #40 loop.
+async fn seed_rehab(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<()> {
+    let contractor = Uuid::new_v4();
+    entity::counterparty::ActiveModel {
+        id: Set(contractor),
+        tenant_id: Set(tenant_id),
+        kind: Set("contractor".into()),
+        name: Set("Ridgeline Construction".into()),
+        contact_name: Set(Some("Dana Ruiz".into())),
+        email: Set(Some("dana@ridgeline.example".into())),
+        phone: Set(None),
+        website: Set(None),
+        address: Set(None),
+        notes: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    let project = Uuid::new_v4();
+    entity::rehab_project::ActiveModel {
+        id: Set(project),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        name: Set("Unit turns + roof".into()),
+        status: Set("active".into()),
+        budget_cents: Set(6_500_000),
+        contingency_bps: Set(1000),
+        start_date: Set(None),
+        target_end_date: Set(None),
+        notes: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    for (i, (cat, amt)) in [
+        ("Roof replacement", 1_800_000i64),
+        ("Kitchen refresh", 2_200_000),
+        ("Paint & flooring", 1_500_000),
+    ]
+    .iter()
+    .enumerate()
+    {
+        entity::rehab_line::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            project_id: Set(project),
+            category: Set((*cat).into()),
+            description: Set(None),
+            budget_cents: Set(*amt),
+            sort_order: Set(i as i32),
+            created_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+
+    entity::rehab_change_order::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        project_id: Set(project),
+        description: Set("Additional electrical panel".into()),
+        amount_cents: Set(300_000),
+        status: Set("approved".into()),
+        created_by: Set(None),
+        approved_by: Set(None),
+        created_at: Set(now.into()),
+        decided_at: Set(Some(now.into())),
+    }
+    .insert(db)
+    .await?;
+
+    let draw = Uuid::new_v4();
+    entity::rehab_draw::ActiveModel {
+        id: Set(draw),
+        tenant_id: Set(tenant_id),
+        project_id: Set(project),
+        number: Set(1),
+        title: Set("Draw 1 — demo + roof".into()),
+        amount_cents: Set(2_000_000),
+        status: Set("funded".into()),
+        contractor_id: Set(Some(contractor)),
+        notes: Set(None),
+        requested_by: Set(None),
+        approved_by: Set(None),
+        funded_at: Set(Some(now.into())),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    let address = Property::find_by_id(property_id)
+        .one(db)
+        .await?
+        .map(|p| format!("{}, {}", p.address, p.city))
+        .unwrap_or_default();
+    let body = crate::routes::rehab::waiver_body(
+        "conditional_progress",
+        "Ridgeline Construction",
+        &address,
+        &crate::dto::usd(2_000_000),
+        None,
+        &now.date_naive().format("%Y-%m-%d").to_string(),
+    );
+    let doc = crate::routes::rehab::store_waiver_pdf(
+        db,
+        tenant_id,
+        draw,
+        "lien-waiver-draw-1-conditional_progress.pdf",
+        &body,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("seed lien waiver: {e}"))?;
+
+    entity::rehab_lien_waiver::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        draw_id: Set(draw),
+        project_id: Set(project),
+        waiver_type: Set("conditional_progress".into()),
+        contractor_id: Set(Some(contractor)),
+        contractor_name: Set("Ridgeline Construction".into()),
+        amount_cents: Set(2_000_000),
+        through_date: Set(None),
+        status: Set("generated".into()),
+        document_id: Set(Some(doc)),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
     Ok(())
 }
 

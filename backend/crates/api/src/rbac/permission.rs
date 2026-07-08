@@ -12,6 +12,14 @@ pub enum Permission {
     /// Property financing (mortgages / loans).
     FinanceRead,
     FinanceManage,
+    /// Acquisition deal pipeline (prospecting → owned) + underwriting.
+    DealRead,
+    DealWrite,
+    /// Rehab / construction projects: budgets, draws, change orders, lien waivers.
+    RehabRead,
+    RehabManage,
+    /// Standard PM reports: rent roll, T-12, aging, delinquency (+ exports).
+    ReportRead,
     /// Rentals: units, leases/tenancies, rent ledger.
     LeaseRead,
     LeaseManage,
@@ -101,6 +109,11 @@ impl Permission {
             Permission::EntityManage => "entity:manage",
             Permission::FinanceRead => "finance:read",
             Permission::FinanceManage => "finance:manage",
+            Permission::DealRead => "deal:read",
+            Permission::DealWrite => "deal:write",
+            Permission::RehabRead => "rehab:read",
+            Permission::RehabManage => "rehab:manage",
+            Permission::ReportRead => "report:read",
             Permission::LeaseRead => "lease:read",
             Permission::LeaseManage => "lease:manage",
             Permission::FeeRead => "fee:read",
@@ -163,6 +176,11 @@ pub const ALL_PERMS: &[Permission] = &[
     EntityManage,
     FinanceRead,
     FinanceManage,
+    DealRead,
+    DealWrite,
+    RehabRead,
+    RehabManage,
+    ReportRead,
     LeaseRead,
     LeaseManage,
     FeeRead,

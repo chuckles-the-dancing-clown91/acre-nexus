@@ -65,19 +65,28 @@ impl PlatformModule for EnrichmentModule {
         };
 
         match enrichment::runner::run_source(db, &property, source).await {
-            Ok(summary) => {
+            Ok(outcome) => {
+                let detail = json!({
+                    "provider": outcome.provider,
+                    "fell_back": outcome.fell_back,
+                    "reason": outcome.reason,
+                    "summary": outcome.summary,
+                });
                 record_run(
                     db,
                     &property,
                     source,
                     "succeeded",
+                    &outcome.provider,
                     Some(job.id),
-                    summary.clone(),
+                    detail,
                 )
                 .await;
                 Some(JobOutcome::completed(json!({
                     "source": source.as_str(),
-                    "summary": summary,
+                    "provider": outcome.provider,
+                    "fell_back": outcome.fell_back,
+                    "summary": outcome.summary,
                 })))
             }
             Err(e) => {
@@ -88,6 +97,7 @@ impl PlatformModule for EnrichmentModule {
                         &property,
                         source,
                         "failed",
+                        source.provider(),
                         Some(job.id),
                         json!({ "error": e.to_string() }),
                     )
@@ -174,11 +184,13 @@ async fn orchestrate(db: &DatabaseConnection, job: &entity::background_job::Mode
 /// HTTP request (and so no actor) behind it. `PROPERTY_ENRICH` (recorded when
 /// the job is *enqueued*) only proves someone asked for enrichment; this
 /// proves data actually changed (or that it didn't, and why).
+#[allow(clippy::too_many_arguments)]
 async fn record_run<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
     source: Source,
     status: &str,
+    provider: &str,
     job_id: Option<Uuid>,
     detail: serde_json::Value,
 ) {
@@ -189,7 +201,7 @@ async fn record_run<C: ConnectionTrait>(
         source: Set(source.as_str().to_string()),
         status: Set(status.to_string()),
         job_id: Set(job_id),
-        provider: Set(source.provider().to_string()),
+        provider: Set(provider.to_string()),
         detail: Set(Some(detail)),
         created_at: Set(chrono::Utc::now().into()),
     };

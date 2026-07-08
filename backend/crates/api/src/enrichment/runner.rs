@@ -1,7 +1,9 @@
 //! Runs a single enrichment [`Source`] for a property: call the provider (live
 //! or simulated), persist the result to the property-data tables, and return a
-//! JSON summary. Errors propagate as [`EnrichmentError`] so the job scheduler can
-//! retry/fail; the caller ([`crate::modules`]) records the `enrichment_run`.
+//! [`SourceOutcome`] (summary + which provider actually served it). A live
+//! provider that is unavailable **falls back to simulation** rather than erroring
+//! — only real failures (e.g. the database) return `Err`, which the scheduler
+//! retries/fails. The caller ([`crate::modules`]) records the `enrichment_run`.
 
 use super::data::{err, EnrichmentError};
 use super::source::Source;
@@ -17,12 +19,38 @@ fn db_err(e: sea_orm::DbErr) -> EnrichmentError {
     err(format!("db error: {e}"))
 }
 
-/// Run one source against `property`, persisting results. Returns a summary.
+/// The result of running one source: the data summary plus **which provider
+/// actually produced it**. `fell_back` is set when a live provider was
+/// attempted but was unavailable and simulation stood in — the graceful-fallback
+/// path is a success (the property still gets enriched), just an observable one.
+pub struct SourceOutcome {
+    pub summary: Value,
+    pub provider: String,
+    pub fell_back: bool,
+    pub reason: Option<String>,
+}
+
+impl SourceOutcome {
+    /// A source served by its deterministic simulated provider (no live attempt).
+    fn simulated(summary: Value) -> Self {
+        SourceOutcome {
+            summary,
+            provider: "simulated".into(),
+            fell_back: false,
+            reason: None,
+        }
+    }
+}
+
+/// Run one source against `property`, persisting results. Returns the outcome
+/// (summary + provider used). A returned `Err` is a *real* failure (e.g. the
+/// database) that the scheduler should retry — provider unavailability is not an
+/// error, it falls back to simulation and returns `Ok` with `fell_back = true`.
 pub async fn run_source<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
     source: Source,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     match source {
         Source::Geocode => run_geocode(db, property).await,
         Source::Parcel => run_parcel(db, property).await,
@@ -92,37 +120,69 @@ async fn load_or_init_detail<C: ConnectionTrait>(
 async fn run_geocode<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
-    let geo = geocode::geocode(&full_address(property)).await?;
+) -> Result<SourceOutcome, EnrichmentError> {
+    // Attempt the live Census geocoder; on any provider failure fall back to a
+    // deterministic simulated geocode so enrichment still succeeds.
+    let (geo, provider, fell_back, reason) = match geocode::geocode(&full_address(property)).await {
+        Ok(g) => (g, "census_geocoder", false, None),
+        Err(e) => {
+            tracing::warn!(
+                "live geocoder unavailable for {} ({e}); falling back to simulation",
+                property.id
+            );
+            let g = simulated::geocode(property.id, &property.address, &property.city);
+            (g, "simulated", true, Some(e.to_string()))
+        }
+    };
+
     let detail = load_or_init_detail(db, property).await?;
     let mut am: entity::property_detail::ActiveModel = detail.into();
     am.latitude = Set(Some(geo.latitude));
     am.longitude = Set(Some(geo.longitude));
     am.geocode_accuracy = Set(Some(geo.accuracy.clone()));
     am.matched_address = Set(Some(geo.matched_address.clone()));
+    // Only stamp county/FIPS when the live layer resolved them — never clobber a
+    // real value (or a simulated parcel's) with the fallback's `None`.
+    if let Some(county) = geo.county.clone() {
+        am.county = Set(Some(county));
+    }
+    if let Some(fips) = geo.fips.clone() {
+        am.fips = Set(Some(fips));
+    }
     am.last_enriched_at = Set(Some(Utc::now().into()));
     am.updated_at = Set(Utc::now().into());
     am.update(db).await.map_err(db_err)?;
-    Ok(json!({
-        "latitude": geo.latitude,
-        "longitude": geo.longitude,
-        "matched_address": geo.matched_address,
-    }))
+
+    Ok(SourceOutcome {
+        summary: json!({
+            "latitude": geo.latitude,
+            "longitude": geo.longitude,
+            "matched_address": geo.matched_address,
+            "county": geo.county,
+            "fips": geo.fips,
+        }),
+        provider: provider.to_string(),
+        fell_back,
+        reason,
+    })
 }
 
 async fn run_parcel<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let parcel = simulated::parcel(&mut rng, &property.city, property.year_built);
     let detail = load_or_init_detail(db, property).await?;
+    // Preserve real county / FIPS if the live geocoder already resolved them.
+    let existing_county = detail.county.clone();
+    let existing_fips = detail.fips.clone();
     let mut am: entity::property_detail::ActiveModel = detail.into();
     am.apn = Set(Some(parcel.apn.clone()));
     am.zoning = Set(Some(parcel.zoning));
     am.subdivision = Set(Some(parcel.subdivision));
-    am.county = Set(Some(parcel.county));
-    am.fips = Set(Some(parcel.fips));
+    am.county = Set(Some(existing_county.unwrap_or(parcel.county)));
+    am.fips = Set(Some(existing_fips.unwrap_or(parcel.fips)));
     am.owner_of_record = Set(Some(parcel.owner_of_record));
     am.last_sale_date = Set(Some(parcel.last_sale_date));
     am.last_sale_price_cents = Set(Some(parcel.last_sale_price_cents));
@@ -141,13 +201,13 @@ async fn run_parcel<C: ConnectionTrait>(
     am.last_enriched_at = Set(Some(Utc::now().into()));
     am.updated_at = Set(Utc::now().into());
     am.update(db).await.map_err(db_err)?;
-    Ok(json!({ "apn": parcel.apn }))
+    Ok(SourceOutcome::simulated(json!({ "apn": parcel.apn })))
 }
 
 async fn run_tax<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let base_value = (property.monthly_rent_cents as f64 * 150.0) as i64;
     let base_assessed = (base_value as f64 * 0.85) as i64;
@@ -177,13 +237,13 @@ async fn run_tax<C: ConnectionTrait>(
         .await
         .map_err(db_err)?;
     }
-    Ok(json!({ "years": years.len() }))
+    Ok(SourceOutcome::simulated(json!({ "years": years.len() })))
 }
 
 async fn run_valuation<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let base_value = (property.monthly_rent_cents as f64 * 150.0) as i64;
     let as_of = Utc::now().format("%Y-%m-%d").to_string();
@@ -204,16 +264,16 @@ async fn run_valuation<C: ConnectionTrait>(
     .insert(db)
     .await
     .map_err(db_err)?;
-    Ok(json!({
+    Ok(SourceOutcome::simulated(json!({
         "estimated_value_cents": v.estimated_value_cents,
         "estimated_rent_cents": v.estimated_rent_cents,
-    }))
+    })))
 }
 
 async fn run_schools<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let schools = simulated::schools(&mut rng);
     PropertySchool::delete_many()
@@ -239,13 +299,15 @@ async fn run_schools<C: ConnectionTrait>(
         .await
         .map_err(db_err)?;
     }
-    Ok(json!({ "schools": schools.len() }))
+    Ok(SourceOutcome::simulated(
+        json!({ "schools": schools.len() }),
+    ))
 }
 
 async fn run_utilities<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
-) -> Result<Value, EnrichmentError> {
+) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let utils = simulated::utilities(&mut rng);
     PropertyUtility::delete_many()
@@ -269,5 +331,7 @@ async fn run_utilities<C: ConnectionTrait>(
         .await
         .map_err(db_err)?;
     }
-    Ok(json!({ "utilities": utils.len() }))
+    Ok(SourceOutcome::simulated(
+        json!({ "utilities": utils.len() }),
+    ))
 }

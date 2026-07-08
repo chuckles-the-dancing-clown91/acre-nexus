@@ -34,6 +34,20 @@ pub const MORTGAGE_UPDATE: &str = "mortgage.update";
 pub const MORTGAGE_DELETE: &str = "mortgage.delete";
 pub const WORKFLOW_ADVANCE: &str = "workflow.advance";
 
+// ---- Acquisitions (deal pipeline) ----
+pub const DEAL_CREATE: &str = "deal.create";
+pub const DEAL_UPDATE: &str = "deal.update";
+pub const DEAL_STAGE_ADVANCE: &str = "deal.stage_advance";
+pub const DEAL_CONVERT: &str = "deal.convert";
+
+// ---- Rehab / construction ----
+pub const REHAB_PROJECT_CREATE: &str = "rehab.project_create";
+pub const REHAB_PROJECT_UPDATE: &str = "rehab.project_update";
+pub const REHAB_DRAW_CREATE: &str = "rehab.draw_create";
+pub const REHAB_DRAW_STATUS: &str = "rehab.draw_status";
+pub const REHAB_CHANGE_ORDER: &str = "rehab.change_order";
+pub const REHAB_LIEN_WAIVER: &str = "rehab.lien_waiver";
+
 // ---- Rentals ----
 pub const UNIT_CREATE: &str = "unit.create";
 pub const UNIT_UPDATE: &str = "unit.update";
@@ -275,3 +289,9 @@ pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
 pub const INVENTORY_CREATE: &str = "inventory_item.create";
 pub const INVENTORY_UPDATE: &str = "inventory_item.update";
 pub const TICKET_REVIEW: &str = "ticket.review";
+
+// ---- SaaS platform billing (Phase 8) ----
+pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";
+pub const PLATFORM_INVOICE_PAID: &str = "platform_invoice.paid";
+pub const PLATFORM_INVOICE_VOID: &str = "platform_invoice.void";
+pub const TENANT_PLAN_CHANGE: &str = "tenant.plan_change";

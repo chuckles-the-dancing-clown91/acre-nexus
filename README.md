@@ -30,7 +30,19 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   templated lease documents, maintenance work orders, and tenant history.
 - **Property intelligence** — automated enrichment (geocoding, parcel, tax,
   valuation, schools, utilities) behind a provider interface with deterministic
-  simulated sources and a live geocoder.
+  simulated sources and a **live geocoder** (real coordinates + county/FIPS);
+  every source **gracefully falls back to simulation** when a provider is
+  unavailable. Property **photos/floorplans** in the document store render on the
+  profile with a hero image.
+- **Acquisitions & underwriting** — a buy-side **deal pipeline** (prospecting →
+  offer → under contract → closing → owned) with investor-grade underwriting
+  (cap rate, cash-on-cash, IRR, DSCR + rent-growth sensitivity, live what-if), a
+  due-diligence checklist and document data room, and one-click conversion of a
+  closed deal into a fully-onboarded property — see [`docs/DEALS.md`](docs/DEALS.md).
+- **Rehab & construction** — renovation **budgets** with scope lines, **draw
+  requests** (with progress photos) against the budget, **change orders**, and
+  generated **lien waivers** per draw for flip/BRRRR projects — see
+  [`docs/REHAB.md`](docs/REHAB.md).
 - **Leasing funnel** — end to end: public listings site, three application
   doors (anonymous website, white-glove renter portal that auto-fills from the
   tenant's profile, back office), a settings-driven screening pipeline
@@ -66,6 +78,9 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   delinquency, NOI, portfolio value) from live ledger rollups + monthly
   snapshots, charted with a dependency-free SVG component; residents get a
   full pay-rent portal (balance, one-click pay, methods, autopay, receipts).
+- **Standard PM reports** — rent roll, **T-12** (off the general ledger), AR
+  **aging**, and **delinquency**, each viewable in the console and exportable to
+  CSV or PDF — see [`docs/REPORTS.md`](docs/REPORTS.md).
 - **Per-tenant settings** — a code-defined catalog of workspace knobs
   (screening policy, signing-link expiry, signer caps, document retention and
   titles, application reuse, auto-approve …) editable from the console, each

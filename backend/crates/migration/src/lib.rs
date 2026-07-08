@@ -39,6 +39,9 @@ mod m20240101_000031_resident_portal;
 mod m20240101_000032_helpdesk;
 mod m20240101_000033_maintenance_full;
 mod m20240101_000034_maintenance_ops;
+mod m20240101_000035_deals;
+mod m20240101_000036_rehab;
+mod m20240101_000037_platform_billing;
 
 pub struct Migrator;
 
@@ -80,6 +83,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000032_helpdesk::Migration),
             Box::new(m20240101_000033_maintenance_full::Migration),
             Box::new(m20240101_000034_maintenance_ops::Migration),
+            Box::new(m20240101_000035_deals::Migration),
+            Box::new(m20240101_000036_rehab::Migration),
+            Box::new(m20240101_000037_platform_billing::Migration),
         ]
     }
 }

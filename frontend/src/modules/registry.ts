@@ -301,15 +301,43 @@ export const MODULES: ModuleDef[] = [
   {
     key: "flips",
     label: "Acquisitions & Flips",
-    description: "Buy/flip deal pipeline with underwriting (preview).",
-    defaultEnabled: false,
-    preview: true,
+    description:
+      "Buy-side deal pipeline with underwriting (cap rate, cash-on-cash, IRR, DSCR), a due-diligence data room, and one-click conversion into an owned property.",
+    defaultEnabled: true,
+    preview: false,
     nav: [
       {
         href: "/console/flips",
-        label: "Flips",
+        label: "Acquisitions",
         icon: "dollar",
-        permission: "property:read",
+        permission: "deal:read",
+      },
+    ],
+  },
+  {
+    key: "rehab",
+    label: "Rehab & Construction",
+    description:
+      "Renovation budgets, draw requests with progress photos, change orders, and lien waivers for flip/BRRRR projects. Accessed from a property's Rehab page.",
+    defaultEnabled: true,
+    preview: false,
+    // Contextual: reached from the property profile's Rehab link, so no
+    // top-level nav entry.
+    nav: [],
+  },
+  {
+    key: "reports",
+    label: "Reports & Exports",
+    description:
+      "Standard PM reports — rent roll, T-12, aging, and delinquency — with CSV/PDF export.",
+    defaultEnabled: true,
+    preview: false,
+    nav: [
+      {
+        href: "/console/reports",
+        label: "Reports",
+        icon: "chart",
+        permission: "report:read",
       },
     ],
   },

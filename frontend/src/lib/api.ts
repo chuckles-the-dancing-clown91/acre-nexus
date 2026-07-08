@@ -639,6 +639,42 @@ export const api = {
   platformMetrics: () =>
     request<PlatformMetrics>("/platform/metrics", { auth: true }),
 
+  // ---- SaaS billing: platform plane (staff) ----
+  platformBillingOverview: () =>
+    request<BillingOverview>("/platform/billing/overview", { auth: true }),
+  platformBillingInvoices: (
+    params: { status?: string; period?: string } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.period) qs.set("period", params.period);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<PlatformInvoice[]>(`/platform/billing/invoices${suffix}`, {
+      auth: true,
+    });
+  },
+  platformBillingRun: (period?: string) =>
+    request<{ period: string; generated: number }>("/platform/billing/run", {
+      method: "POST",
+      auth: true,
+      body: { period },
+    }),
+  platformInvoicePay: (id: string) =>
+    request<PlatformInvoice>(`/platform/billing/invoices/${id}/pay`, {
+      method: "POST",
+      auth: true,
+    }),
+  platformInvoiceVoid: (id: string) =>
+    request<PlatformInvoice>(`/platform/billing/invoices/${id}/void`, {
+      method: "POST",
+      auth: true,
+    }),
+  platformSetPlan: (tenantId: string, plan: string) =>
+    request<{ tenant_id: string; plan: string }>(
+      `/platform/billing/tenants/${tenantId}/plan`,
+      { method: "PATCH", auth: true, body: { plan } }
+    ),
+
   // ---- modules (tenant software settings) ----
   modules: () => request<ModuleInfo[]>("/modules", { auth: true }),
   setModule: (key: string, enabled: boolean) =>
@@ -648,9 +684,53 @@ export const api = {
       body: { enabled },
     }),
 
-  // ---- flips module (preview) ----
+  // ---- flips module: acquisition deal pipeline + underwriting ----
   flipPipeline: () =>
     request<FlipPipeline>("/modules/flips/pipeline", { auth: true }),
+  flipDeals: (params: { stage?: string; strategy?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.stage) qs.set("stage", params.stage);
+    if (params.strategy) qs.set("strategy", params.strategy);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<FlipDeal[]>(`/modules/flips/deals${suffix}`, { auth: true });
+  },
+  flipDeal: (id: string) =>
+    request<DealDetail>(`/modules/flips/deals/${id}`, { auth: true }),
+  createFlipDeal: (body: CreateDealInput) =>
+    request<FlipDeal>("/modules/flips/deals", {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateFlipDeal: (id: string, body: UpdateDealInput) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  advanceFlipDealStage: (id: string, stage: string, note?: string) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}/stage`, {
+      method: "POST",
+      auth: true,
+      body: { stage, note },
+    }),
+  underwriteFlipDeal: (id: string, body: UnderwriteInput) =>
+    request<DealUnderwriting>(`/modules/flips/deals/${id}/underwrite`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateFlipChecklist: (id: string, checklist: DealChecklistItem[]) =>
+    request<FlipDeal>(`/modules/flips/deals/${id}/checklist`, {
+      method: "PATCH",
+      auth: true,
+      body: { checklist },
+    }),
+  convertFlipDeal: (id: string) =>
+    request<ConvertDealResponse>(`/modules/flips/deals/${id}/convert`, {
+      method: "POST",
+      auth: true,
+    }),
 
   // ---- integrations: credential vault, notification log ----
   integrationSecrets: () =>
@@ -807,6 +887,163 @@ export const api = {
       throw new ApiError(res.status, "upload_failed", "file upload failed");
     }
     return reg.document;
+  },
+
+  // ---- property media: photos / floorplans + hero ----
+  propertyMedia: (id: string) =>
+    request<PropertyMedia>(`/properties/${id}/media`, { auth: true }),
+  setPropertyHero: (id: string, document_id: string | null) =>
+    request<PropertyMedia>(`/properties/${id}/hero`, {
+      method: "PATCH",
+      auth: true,
+      body: { document_id },
+    }),
+
+  // ---- rehab / construction ----
+  rehabProjects: (propertyId: string) =>
+    request<RehabProject[]>(`/properties/${propertyId}/rehab-projects`, {
+      auth: true,
+    }),
+  createRehabProject: (propertyId: string, body: CreateRehabProjectInput) =>
+    request<RehabProjectDetail>(`/properties/${propertyId}/rehab-projects`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  rehabProject: (id: string) =>
+    request<RehabProjectDetail>(`/rehab-projects/${id}`, { auth: true }),
+  updateRehabProject: (id: string, body: Record<string, unknown>) =>
+    request<RehabProjectDetail>(`/rehab-projects/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
+  createRehabLine: (
+    projectId: string,
+    body: { category: string; description?: string; budget_cents?: number }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/lines`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  deleteRehabLine: (id: string) =>
+    request<RehabProjectDetail>(`/rehab-lines/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
+  createChangeOrder: (
+    projectId: string,
+    body: { description: string; amount_cents: number }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/change-orders`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  decideChangeOrder: (id: string, approve: boolean) =>
+    request<RehabProjectDetail>(`/rehab-change-orders/${id}/decide`, {
+      method: "POST",
+      auth: true,
+      body: { approve },
+    }),
+  createRehabDraw: (
+    projectId: string,
+    body: {
+      title: string;
+      amount_cents: number;
+      contractor_id?: string;
+      notes?: string;
+    }
+  ) =>
+    request<RehabProjectDetail>(`/rehab-projects/${projectId}/draws`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  rehabDraw: (id: string) =>
+    request<RehabDrawDetail>(`/rehab-draws/${id}`, { auth: true }),
+  setDrawStatus: (id: string, status: string) =>
+    request<RehabProjectDetail>(`/rehab-draws/${id}/status`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+  createLienWaiver: (
+    drawId: string,
+    body: {
+      waiver_type: string;
+      contractor_name?: string;
+      amount_cents?: number;
+      through_date?: string;
+    }
+  ) =>
+    request<RehabDrawDetail>(`/rehab-draws/${drawId}/lien-waivers`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  updateLienWaiver: (id: string, status: string) =>
+    request<RehabDrawDetail>(`/rehab-lien-waivers/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+
+  // ---- standard PM reports (Phase 8) ----
+  rentRoll: (params: { property_id?: string; portfolio_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.portfolio_id) qs.set("portfolio_id", params.portfolio_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<RentRollResp>(`/reports/rent-roll${suffix}`, { auth: true });
+  },
+  t12Report: (entity: string) =>
+    request<T12Resp>(`/reports/t12?entity=${encodeURIComponent(entity)}`, {
+      auth: true,
+    }),
+  agingReport: () => request<AgingResp>("/reports/aging", { auth: true }),
+  delinquencyReport: () =>
+    request<DelinquencyResp>("/reports/delinquency", { auth: true }),
+  ownerStatement: (entity: string, from?: string, to?: string) => {
+    const qs = new URLSearchParams({ entity });
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    return request<OwnerStatementResp>(`/reports/owner-statement?${qs}`, {
+      auth: true,
+    });
+  },
+  tax1099: (year?: string) => {
+    const qs = year ? `?year=${encodeURIComponent(year)}` : "";
+    return request<Tax1099Resp>(`/reports/1099${qs}`, { auth: true });
+  },
+
+  // ---- global search (Phase 8) ----
+  search: (q: string) =>
+    request<SearchResp>(`/search?q=${encodeURIComponent(q)}`, { auth: true }),
+
+  // ---- SaaS billing: workspace self-serve (Phase 8) ----
+  billingSubscription: () =>
+    request<BillingSubscription>("/billing/subscription", { auth: true }),
+  billingInvoices: () =>
+    request<PlatformInvoice[]>("/billing/invoices", { auth: true }),
+  billingInvoice: (id: string) =>
+    request<PlatformInvoice>(`/billing/invoices/${id}`, { auth: true }),
+  /** Fetch a report export (CSV/PDF) as an authenticated blob for download. */
+  downloadReport: async (path: string): Promise<Blob> => {
+    const headers: Record<string, string> = {};
+    const token = tokenStore.access;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const acting = actingTenant.get();
+    if (acting) headers["X-Tenant"] = acting;
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, "export_failed", "report export failed");
+    }
+    return res.blob();
   },
 
   // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
@@ -1826,10 +2063,196 @@ export interface FlipStage {
   label: string;
 }
 
+export interface DealSensitivityPoint {
+  rent_growth_bps: number;
+  rent_growth_pct: number;
+  irr_bps: number | null;
+  irr_pct: number | null;
+}
+
+/** Computed underwriting for a deal. Money values pair `*_cents` with a
+ * display `*_label`; rates are `*_bps` alongside a `*_pct` float. */
+export interface DealUnderwriting {
+  purchase_price_cents: number;
+  purchase_price_label: string;
+  total_project_cost_cents: number;
+  total_project_cost_label: string;
+  loan_amount_cents: number;
+  loan_amount_label: string;
+  down_payment_cents: number;
+  down_payment_label: string;
+  total_cash_invested_cents: number;
+  total_cash_invested_label: string;
+  monthly_debt_service_cents: number;
+  monthly_debt_service_label: string;
+  annual_debt_service_cents: number;
+  annual_debt_service_label: string;
+  gross_rent_annual_cents: number;
+  gross_rent_annual_label: string;
+  vacancy_loss_cents: number;
+  vacancy_loss_label: string;
+  effective_gross_income_cents: number;
+  effective_gross_income_label: string;
+  operating_expenses_annual_cents: number;
+  operating_expenses_annual_label: string;
+  noi_annual_cents: number;
+  noi_annual_label: string;
+  annual_cash_flow_cents: number;
+  annual_cash_flow_label: string;
+  cap_rate_bps: number;
+  cap_rate_pct: number;
+  cash_on_cash_bps: number;
+  cash_on_cash_pct: number;
+  dscr: number;
+  exit_value_cents: number;
+  exit_value_label: string;
+  loan_balance_at_exit_cents: number;
+  loan_balance_at_exit_label: string;
+  net_sale_proceeds_cents: number;
+  net_sale_proceeds_label: string;
+  irr_bps: number | null;
+  irr_pct: number | null;
+  total_profit_cents: number;
+  total_profit_label: string;
+  sensitivity: DealSensitivityPoint[];
+}
+
+export interface DealChecklistItem {
+  key: string;
+  label: string;
+  done: boolean;
+  note?: string | null;
+}
+
+/** An acquisition deal with its computed underwriting and parsed checklist. */
+export interface FlipDeal {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  stage: string;
+  stage_label: string;
+  strategy: string;
+  property_type: string | null;
+  source: string | null;
+  broker_id: string | null;
+  notes: string | null;
+  asking_price_cents: number | null;
+  asking_price_label: string | null;
+  offer_price_cents: number | null;
+  offer_price_label: string | null;
+  earnest_money_cents: number | null;
+  earnest_money_label: string | null;
+  target_close_on: string | null;
+  arv_cents: number | null;
+  arv_label: string | null;
+  rehab_budget_cents: number | null;
+  rehab_budget_label: string | null;
+  closing_costs_cents: number | null;
+  est_monthly_rent_cents: number | null;
+  est_monthly_rent_label: string | null;
+  est_monthly_expenses_cents: number | null;
+  vacancy_bps: number | null;
+  down_payment_bps: number | null;
+  interest_rate_bps: number | null;
+  loan_term_years: number | null;
+  rent_growth_bps: number | null;
+  appreciation_bps: number | null;
+  exit_cap_rate_bps: number | null;
+  selling_costs_bps: number | null;
+  hold_years: number | null;
+  checklist: DealChecklistItem[];
+  converted_property_id: string | null;
+  created_at: string;
+  updated_at: string;
+  underwriting: DealUnderwriting;
+}
+
+export interface DealEvent {
+  id: string;
+  kind: string;
+  from_stage: string | null;
+  to_stage: string | null;
+  body: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface DealDetail extends FlipDeal {
+  events: DealEvent[];
+}
+
 export interface FlipPipeline {
   preview: boolean;
   stages: FlipStage[];
-  deals: unknown[];
+  deals: FlipDeal[];
+}
+
+export interface CreateDealInput {
+  name: string;
+  address?: string;
+  city?: string;
+  strategy?: string;
+  property_type?: string;
+  source?: string;
+  broker_id?: string;
+  asking_price_cents?: number;
+  offer_price_cents?: number;
+  est_monthly_rent_cents?: number;
+  rehab_budget_cents?: number;
+  notes?: string;
+}
+
+/** Deal patch + underwriting assumptions. Every field optional. */
+export interface UpdateDealInput {
+  name?: string;
+  address?: string;
+  city?: string;
+  strategy?: string;
+  property_type?: string;
+  source?: string;
+  broker_id?: string;
+  notes?: string;
+  asking_price_cents?: number;
+  offer_price_cents?: number;
+  earnest_money_cents?: number;
+  target_close_on?: string;
+  arv_cents?: number;
+  rehab_budget_cents?: number;
+  closing_costs_cents?: number;
+  est_monthly_rent_cents?: number;
+  est_monthly_expenses_cents?: number;
+  vacancy_bps?: number;
+  down_payment_bps?: number;
+  interest_rate_bps?: number;
+  loan_term_years?: number;
+  rent_growth_bps?: number;
+  appreciation_bps?: number;
+  exit_cap_rate_bps?: number;
+  selling_costs_bps?: number;
+  hold_years?: number;
+}
+
+/** Ad-hoc "what-if" overrides for the stateless underwrite endpoint. */
+export type UnderwriteInput = Omit<
+  UpdateDealInput,
+  | "name"
+  | "address"
+  | "city"
+  | "strategy"
+  | "property_type"
+  | "source"
+  | "broker_id"
+  | "notes"
+  | "asking_price_cents"
+  | "offer_price_cents"
+  | "earnest_money_cents"
+  | "target_close_on"
+> & { purchase_price_cents?: number };
+
+export interface ConvertDealResponse {
+  deal: FlipDeal;
+  property_id: string;
 }
 
 // ---- integrations: secrets, notifications, documents ----
@@ -1927,6 +2350,350 @@ export interface DocumentEntry {
   status: string;
   retention_expires_at: string | null;
   created_at: string;
+}
+
+export interface PropertyMediaItem {
+  document_id: string;
+  filename: string;
+  category: string | null;
+  mime_type: string;
+  size_bytes: number;
+  /** Short-lived signed URL, renderable in an `<img>`. */
+  url: string | null;
+  is_hero: boolean;
+  created_at: string;
+}
+
+export interface PropertyMedia {
+  hero_document_id: string | null;
+  hero_url: string | null;
+  items: PropertyMediaItem[];
+}
+
+// ---- rehab / construction ----
+export interface RehabLine {
+  id: string;
+  category: string;
+  description: string | null;
+  budget_cents: number;
+  budget_label: string;
+  sort_order: number;
+}
+
+export interface RehabChangeOrder {
+  id: string;
+  description: string;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface RehabDraw {
+  id: string;
+  project_id: string;
+  number: number;
+  title: string;
+  amount_cents: number;
+  amount_label: string;
+  status: string;
+  contractor_id: string | null;
+  contractor_name: string | null;
+  notes: string | null;
+  funded_at: string | null;
+  created_at: string;
+}
+
+export interface LienWaiver {
+  id: string;
+  draw_id: string;
+  waiver_type: string;
+  waiver_type_label: string;
+  contractor_name: string;
+  amount_cents: number;
+  amount_label: string;
+  through_date: string | null;
+  status: string;
+  document_id: string | null;
+  created_at: string;
+}
+
+export interface RehabProject {
+  id: string;
+  property_id: string;
+  name: string;
+  status: string;
+  base_budget_cents: number;
+  base_budget_label: string;
+  contingency_bps: number;
+  contingency_pct: number;
+  contingency_cents: number;
+  contingency_label: string;
+  adjusted_budget_cents: number;
+  adjusted_budget_label: string;
+  approved_change_orders_cents: number;
+  approved_change_orders_label: string;
+  drawn_cents: number;
+  drawn_label: string;
+  pending_draws_cents: number;
+  pending_draws_label: string;
+  remaining_cents: number;
+  remaining_label: string;
+  lines_budget_cents: number;
+  lines_budget_label: string;
+  start_date: string | null;
+  target_end_date: string | null;
+  notes: string | null;
+  line_count: number;
+  draw_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RehabProjectDetail extends RehabProject {
+  lines: RehabLine[];
+  draws: RehabDraw[];
+  change_orders: RehabChangeOrder[];
+}
+
+export interface RehabDrawDetail extends RehabDraw {
+  lien_waivers: LienWaiver[];
+}
+
+export interface CreateRehabProjectInput {
+  name: string;
+  budget_cents?: number;
+  contingency_bps?: number;
+  start_date?: string;
+  target_end_date?: string;
+  notes?: string;
+}
+
+// ---- standard PM reports (Phase 8) ----
+export interface RentRollRow {
+  property_name: string;
+  unit: string;
+  tenant_name: string;
+  rent_cents: number;
+  rent_label: string;
+  term: string;
+  status: string;
+  payment_status: string;
+  balance_cents: number;
+  balance_label: string;
+}
+export interface RentRollResp {
+  generated_at: string;
+  rows: RentRollRow[];
+  lease_count: number;
+  total_rent_cents: number;
+  total_rent_label: string;
+  total_balance_cents: number;
+  total_balance_label: string;
+}
+
+export interface T12Row {
+  account_name: string;
+  kind: string;
+  monthly_cents: number[];
+  total_cents: number;
+  total_label: string;
+}
+export interface T12Resp {
+  generated_at: string;
+  entity_id: string;
+  months: string[];
+  income: T12Row[];
+  expenses: T12Row[];
+  income_totals_cents: number[];
+  expense_totals_cents: number[];
+  noi_totals_cents: number[];
+  total_income_label: string;
+  total_expense_label: string;
+  net_cents: number;
+  net_label: string;
+}
+
+export interface SearchHit {
+  kind: string;
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+}
+export interface SearchResp {
+  query: string;
+  hits: SearchHit[];
+}
+
+// ---- SaaS billing (Phase 8) ----
+export interface BillingPlan {
+  key: string;
+  name: string;
+  base_cents: number;
+  base_label: string;
+  included_units: number;
+  overage_cents: number;
+  overage_label: string;
+  blurb: string;
+  features: string[];
+  current: boolean;
+}
+export interface BillingEstimateLine {
+  description: string;
+  quantity: number;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface BillingEstimate {
+  unit_count: number;
+  included_units: number;
+  base_cents: number;
+  base_label: string;
+  overage_cents: number;
+  overage_label: string;
+  total_cents: number;
+  total_label: string;
+  lines: BillingEstimateLine[];
+}
+export interface BillingSubscription {
+  plan: string;
+  plan_name: string;
+  status: string;
+  properties: number;
+  units: number;
+  estimate: BillingEstimate;
+  outstanding_cents: number;
+  outstanding_label: string;
+  plans: BillingPlan[];
+}
+export interface InvoiceLine {
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+  unit_price_label: string;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface PlatformInvoice {
+  id: string;
+  tenant_id: string;
+  period: string;
+  plan: string;
+  status: string;
+  unit_count: number;
+  included_units: number;
+  base_cents: number;
+  base_label: string;
+  overage_cents: number;
+  overage_label: string;
+  total_cents: number;
+  total_label: string;
+  issued_at: string | null;
+  due_date: string | null;
+  paid_at: string | null;
+  lines: InvoiceLine[];
+}
+export interface TenantBilling {
+  tenant_id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  status: string;
+  units: number;
+  mrr_cents: number;
+  mrr_label: string;
+  outstanding_cents: number;
+  outstanding_label: string;
+}
+export interface BillingOverview {
+  tenant_count: number;
+  mrr_cents: number;
+  mrr_label: string;
+  outstanding_cents: number;
+  outstanding_label: string;
+  tenants: TenantBilling[];
+}
+
+export interface AgingBuckets {
+  current_cents: number;
+  d1_30_cents: number;
+  d31_60_cents: number;
+  d61_90_cents: number;
+  over90_cents: number;
+  total_cents: number;
+}
+export interface AgingRow extends AgingBuckets {
+  tenant_name: string;
+  property_name: string;
+}
+export interface AgingResp extends AgingBuckets {
+  generated_at: string;
+  rows: AgingRow[];
+}
+
+export interface DelinquencyRow {
+  tenant_name: string;
+  property_name: string;
+  unit: string;
+  payment_status: string;
+  balance_cents: number;
+  balance_label: string;
+  days_late: number;
+  oldest_due_date: string | null;
+}
+export interface DelinquencyResp {
+  generated_at: string;
+  rows: DelinquencyRow[];
+  tenant_count: number;
+  total_balance_cents: number;
+  total_balance_label: string;
+}
+
+export interface StatementLine {
+  name: string;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface OwnerStatementResp {
+  generated_at: string;
+  entity_id: string;
+  entity_name: string;
+  period_start: string;
+  period_end: string;
+  rent_collected_cents: number;
+  rent_collected_label: string;
+  expense_lines: StatementLine[];
+  expenses_cents: number;
+  expenses_label: string;
+  mgmt_fee_cents: number;
+  mgmt_fee_label: string;
+  net_cents: number;
+  net_label: string;
+}
+
+export interface Recipient1099 {
+  form: string;
+  box_label: string;
+  recipient_id: string;
+  name: string;
+  tin: string | null;
+  address: string | null;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface Tax1099Resp {
+  generated_at: string;
+  year: number;
+  threshold_cents: number;
+  threshold_label: string;
+  nec: Recipient1099[];
+  misc: Recipient1099[];
+  nec_total_cents: number;
+  nec_total_label: string;
+  misc_total_cents: number;
+  misc_total_label: string;
 }
 
 export interface RegisterDocumentInput {

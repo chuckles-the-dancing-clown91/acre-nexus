@@ -58,6 +58,44 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "deal:read",
+        category: "Acquisitions",
+        label: "View deals",
+        description: "View the acquisition pipeline, deals, and their underwriting.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "deal:write",
+        category: "Acquisitions",
+        label: "Manage deals",
+        description: "Create and edit deals, underwrite, advance stages, and \
+                      convert a closed deal into an owned property.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "rehab:read",
+        category: "Acquisitions",
+        label: "View rehab projects",
+        description: "View rehab budgets, draws, change orders, and lien waivers.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "rehab:manage",
+        category: "Acquisitions",
+        label: "Manage rehab projects",
+        description: "Create rehab budgets, request/approve draws and change \
+                      orders, and generate lien waivers.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "report:read",
+        category: "Accounting",
+        label: "View reports",
+        description: "View and export standard PM reports — rent roll, T-12, \
+                      aging, and delinquency.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "lease:read",
         category: "Rentals",
         label: "View rentals",

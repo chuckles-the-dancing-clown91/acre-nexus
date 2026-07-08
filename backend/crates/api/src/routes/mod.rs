@@ -16,7 +16,9 @@ pub mod applications;
 pub mod assignments;
 pub mod auth;
 pub mod banking;
+pub mod billing;
 pub mod cap_table;
+pub mod deals;
 pub mod documents;
 pub mod domains;
 pub mod entities;
@@ -45,8 +47,11 @@ pub mod portfolios;
 pub mod properties;
 pub mod property_intel;
 pub mod public;
+pub mod rehab;
 pub mod reminders;
 pub mod rentals;
+pub mod reports;
+pub mod search;
 pub mod settings;
 pub mod tenant_history;
 pub mod theme;
@@ -87,6 +92,18 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         platform::impersonate::impersonate,
         platform::impersonations::list_impersonations,
         platform::impersonations::revoke_impersonation,
+        // SaaS billing — platform plane (staff, cross-tenant)
+        platform::billing::overview,
+        platform::billing::invoices,
+        platform::billing::run,
+        platform::billing::mark_paid,
+        platform::billing::void,
+        platform::billing::set_plan,
+        // SaaS billing — workspace self-serve
+        billing::subscription::subscription,
+        billing::invoices::list,
+        billing::invoices::get,
+        billing::invoices::export_invoice,
         // public routing entrypoint (host -> tenant + audience + theme)
         domains::resolve::resolve,
         // module management (tenant software settings)

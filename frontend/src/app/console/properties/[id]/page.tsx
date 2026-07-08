@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { api, type DocumentEntry, type PropertyDocuments } from "@/lib/api";
+import {
+  api,
+  type DocumentEntry,
+  type PropertyDocuments,
+  type PropertyMedia,
+  type PropertyMediaItem,
+} from "@/lib/api";
 import type {
   EnrichmentRun,
   Lease,
@@ -25,12 +31,13 @@ import { DocumentsCard } from "@/components/DocumentsCard";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 
-type TabKey = "overview" | "financials" | "maintenance" | "documents";
+type TabKey = "overview" | "financials" | "maintenance" | "media" | "documents";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "financials", label: "Financials" },
   { key: "maintenance", label: "Maintenance" },
+  { key: "media", label: "Media" },
   { key: "documents", label: "Documents" },
 ];
 
@@ -48,6 +55,7 @@ export default function PropertyProfilePage() {
   const [ownership, setOwnership] = useState<Ownership[]>([]);
   const [liens, setLiens] = useState<Lien[]>([]);
   const [propDocs, setPropDocs] = useState<PropertyDocuments | null>(null);
+  const [media, setMedia] = useState<PropertyMedia | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
   const [error, setError] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
@@ -97,6 +105,14 @@ export default function PropertyProfilePage() {
       .catch((e) => logError("failed to load documents", e));
   }, [id]);
 
+  const loadMedia = useCallback(() => {
+    if (!id) return;
+    api
+      .propertyMedia(id)
+      .then(setMedia)
+      .catch((e) => logError("failed to load media", e));
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     api
@@ -107,7 +123,8 @@ export default function PropertyProfilePage() {
     loadFinancing();
     loadOps();
     loadDocs();
-  }, [id, loadIntel, loadFinancing, loadOps, loadDocs]);
+    loadMedia();
+  }, [id, loadIntel, loadFinancing, loadOps, loadDocs, loadMedia]);
 
   // Advance the investment workflow to a chosen stage.
   const advance = useCallback(
@@ -178,6 +195,14 @@ export default function PropertyProfilePage() {
           <Badge tone={statusTone(p.status)}>{p.status}</Badge>
         </div>
         <div className="flex items-center gap-2">
+          {can("rehab:read") && (
+            <Link
+              href={`/console/properties/${params.id}/rehab`}
+              className="rounded-lg border border-line px-3 py-2 text-sm font-semibold"
+            >
+              Rehab
+            </Link>
+          )}
           <Link
             href={`/console/properties/${params.id}/tenants`}
             className="rounded-lg border border-line px-3 py-2 text-sm font-semibold"
@@ -361,6 +386,14 @@ export default function PropertyProfilePage() {
       )}
       {tab === "financials" && <FinancialsTab data={financials} />}
       {tab === "maintenance" && <MaintenanceTab data={maint} />}
+      {tab === "media" && (
+        <MediaTab
+          id={id}
+          data={media}
+          reload={loadMedia}
+          canWrite={can("property:write")}
+        />
+      )}
       {tab === "documents" && (
         <DocumentsTab id={id} data={propDocs} reload={loadDocs} />
       )}
@@ -1079,6 +1112,142 @@ function TicketList({ tickets }: { tickets: MaintenanceTicket[] }) {
 }
 
 // ---- Documents tab ---------------------------------------------------------
+
+function MediaTab({
+  id,
+  data,
+  reload,
+  canWrite,
+}: {
+  id: string;
+  data: PropertyMedia | null;
+  reload: () => void;
+  canWrite: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.uploadDocument(
+        {
+          owner_type: "property",
+          owner_id: id,
+          filename: file.name,
+          mime_type: file.type || "application/octet-stream",
+          category: "photo",
+        },
+        file
+      );
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+      logError("failed to upload photo", err);
+    } finally {
+      setBusy(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function makeHero(item: PropertyMediaItem) {
+    if (!id) return;
+    try {
+      await api.setPropertyHero(id, item.is_hero ? null : item.document_id);
+      reload();
+    } catch (err) {
+      logError("failed to set hero", err);
+    }
+  }
+
+  const items = data?.items ?? [];
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-display text-lg font-bold">
+            Photos & floorplans
+          </h3>
+          <p className="text-sm text-ink-3">
+            Property media, stored in the document service. Set one as the hero
+            shown on the profile header.
+          </p>
+        </div>
+        {canWrite && (
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onUpload}
+            />
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => fileInput.current?.click()}
+            >
+              {busy ? "Uploading…" : "Upload photo"}
+            </Button>
+          </>
+        )}
+      </div>
+
+      {error && <div className="text-sm text-bad">{error}</div>}
+
+      {items.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-sm text-ink-3">
+          No photos yet.
+          {canWrite && " Upload one to build the property gallery."}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          {items.map((item) => (
+            <div key={item.document_id} className="space-y-2">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-line bg-surface-2">
+                {item.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.url}
+                    alt={item.filename}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs text-ink-3">
+                    {item.filename}
+                  </div>
+                )}
+                {item.is_hero && (
+                  <span className="absolute left-2 top-2">
+                    <Badge tone="accent">Hero</Badge>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs text-ink-3">
+                  {item.filename}
+                </span>
+                {canWrite && (
+                  <button
+                    onClick={() => makeHero(item)}
+                    className="shrink-0 text-xs font-semibold text-accent-2 hover:underline"
+                  >
+                    {item.is_hero ? "Unset hero" : "Set as hero"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function DocumentsTab({
   id,

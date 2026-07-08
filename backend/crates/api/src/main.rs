@@ -30,6 +30,7 @@ mod billing;
 mod config;
 mod cors;
 mod db;
+mod deals;
 mod deposits;
 mod dto;
 mod enrichment;
@@ -50,10 +51,12 @@ mod payouts;
 mod pdf;
 mod pii;
 mod providers;
+mod ratelimit;
 mod rbac;
 mod reminders;
 mod rentals_occupancy;
 mod routes;
+mod saas;
 mod scheduler;
 mod screening;
 mod secrets;
@@ -63,6 +66,7 @@ mod state;
 mod storage;
 mod tenancy;
 mod tokens;
+mod underwriting;
 mod webhooks_out;
 mod workflow;
 
@@ -119,6 +123,7 @@ async fn rocket() -> _ {
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
+    saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
 
@@ -134,6 +139,7 @@ async fn rocket() -> _ {
         .merge(("limits.string", "1MiB"));
     let mut app = rocket::custom(figment)
         .manage(state)
+        .attach(ratelimit::RateLimiter::from_env())
         .attach(cors::Cors)
         .attach(db::TxCommit)
         .attach(audit::AuditFairing);
@@ -205,5 +211,14 @@ async fn rocket() -> _ {
         }),
     );
 
-    app.mount("/", routes![cors::preflight])
+    app.mount("/", routes![cors::preflight]).mount(
+        "/",
+        routes![
+            ratelimit::reject_get,
+            ratelimit::reject_post,
+            ratelimit::reject_put,
+            ratelimit::reject_patch,
+            ratelimit::reject_delete,
+        ],
+    )
 }

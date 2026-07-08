@@ -234,28 +234,61 @@ ledger.
 
 ---
 
-## Phase 7 — Real data providers & marketplace depth ⬜  *(Pillar 2, "full")*
+## Phase 7 — Real data providers & investor depth 🟡  *(Pillar 2, "full")*
 
-- Swap simulated enrichment for **real** county-record / AVM / schools APIs
-  behind the existing provider interface (one function each).
-- **Media**: property photos/floorplans in the document store.
-- Optional: MLS/comps feed, permits/violations, insurance quotes.
+- [x] **Acquisitions & underwriting (#41/#42)** — shipped: the `flips` module is
+      now GA with a real `deal` domain (a buy-side pipeline `prospecting → offer
+      → under_contract → closing → owned`), an investor-grade underwriting engine
+      (cap rate / cash-on-cash / IRR / DSCR + rent-growth sensitivity), a
+      due-diligence checklist + data room, and one-click conversion into an owned
+      property. See [`DEALS.md`](DEALS.md).
+- [x] **Real data providers + graceful fallback** — shipped: the live Census
+      geocoder now returns real coordinates **+ county / FIPS**, and every source
+      **gracefully falls back to simulation** when a provider is unavailable
+      (recording which provider actually served it). See
+      [`PROPERTY_DATA.md`](PROPERTY_DATA.md).
+- [x] **Media** — property photos/floorplans in the document store, with a hero
+      and a gallery rendered on the property profile.
+- [x] **Rehab / construction management (#40)** — shipped: the `rehab` module —
+      renovation budgets, scope lines, change orders, draw requests with progress
+      photos, and generated lien waivers. See [`REHAB.md`](REHAB.md).
+- [ ] Remaining real vendors (AVM / schools / county assessor) behind the
+      provider seam; MLS/comps feed, permits/violations, insurance quotes.
+- [ ] Disposition / broker (#43), map / geospatial portfolio view (#57).
 
-**DoD:** a real address enriches from live sources with graceful fallback to
-simulation when a provider is unavailable.
+**DoD (met):** a real address enriches from live sources with graceful fallback
+to simulation when a provider is unavailable; photos render on the property
+profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
 
 ---
 
-## Phase 8 — Reporting, billing & GA hardening ⬜
+## Phase 8 — Reporting, billing & GA hardening 🟡
 
-- **Reporting**: owner statements, rent rolls, **1099**/tax exports, portfolio
-  analytics.
-- **SaaS billing**: meter + bill client workspaces (plans already modeled).
-- **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance, rate
-  limiting, observability/metrics, load testing, backup/restore drills.
+- [x] **Standard PM reports (#56)** — shipped: the `reports` module — rent roll,
+      T-12 (off the general ledger), AR aging, and delinquency, each with CSV/PDF
+      export. See [`REPORTS.md`](REPORTS.md).
+- [x] **Owner statements + 1099/tax exports** — shipped: a cash-basis owner
+      statement per legal entity (reconciling with owner payouts) and the annual
+      1099-NEC (vendors) + 1099-MISC (owner rents) export, both CSV/PDF. See
+      [`REPORTS.md`](REPORTS.md).
+- [ ] **Reporting** (rest): portfolio analytics, custom report builder.
+- [x] **Global search (#55)** — shipped: the `search` module — a permission-aware
+      command palette across properties, tenants, entities, tickets, and LLCs.
+- [x] **SaaS billing** — shipped: per-door metered subscriptions (three plans,
+      base fee + per-unit overage), automatic monthly `platform_invoice`
+      generation, a workspace self-serve subscription/invoice view, and an Acre
+      HQ billing console (MRR, plan management, billing run, settle/void). See
+      [`SAAS_BILLING.md`](SAAS_BILLING.md).
+- [ ] **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance,
+      observability/metrics, load testing, backup/restore drills.
+  - [x] **Rate limiting (#67)** — shipped: a fixed-window Rocket fairing with a
+        tight auth bucket + generous general bucket, `X-RateLimit-*` headers, and
+        `429` + `Retry-After` on breach. See [`RATE_LIMITING.md`](RATE_LIMITING.md).
+- [ ] MFA/2FA, SSO/SAML/SCIM (enterprise); GDPR/CCPA data requests.
 
 **DoD:** a paying tenant runs the full lifecycle in production with compliant
-controls and monitored SLOs.
+controls and monitored SLOs. *(Reports, search, and SaaS billing done; hardening +
+the rest remain.)*
 
 ---
 
@@ -267,8 +300,8 @@ Phase 0 ✅
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
-        └─ Phase 7 ⬜ (real data)
-                         all ─→ Phase 8 ⬜ (reporting/billing/GA)
+        └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · rehab ✅ · #43/#57 ⬜)
+                         all ─→ Phase 8 🟡 (PM reports + search + SaaS billing ✅ · hardening ⬜)
 ```
 
 ## Sequencing notes

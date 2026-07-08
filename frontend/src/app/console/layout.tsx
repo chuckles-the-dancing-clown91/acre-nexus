@@ -9,6 +9,7 @@ import { ModulesProvider, useModules } from "@/lib/modules";
 import { MODULES } from "@/modules/registry";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { Icon } from "@/components/Icon";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { clsx } from "@/lib/clsx";
@@ -96,6 +97,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
         >
           <Icon name="wrench" size={16} />
         </button>
+        <GlobalSearch />
         <div className="ml-auto flex items-center gap-3">
           <NotificationBell />
           <ThemeToggle />
@@ -159,6 +161,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 collapsed={sidebarCollapsed}
               />
             )}
+            {can("billing:read") && (
+              <NavLink
+                href="/console/billing"
+                label="Billing"
+                icon="card"
+                pathname={pathname}
+                collapsed={sidebarCollapsed}
+              />
+            )}
           </nav>
 
           {can("tenant:manage") && (
@@ -203,6 +214,15 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 <Icon name="globe" size={17} />
                 {!sidebarCollapsed && "Platform admin"}
               </Link>
+              {can("platform:admin") && (
+                <NavLink
+                  href="/console/platform/billing"
+                  label="Billing"
+                  icon="card"
+                  pathname={pathname}
+                  collapsed={sidebarCollapsed}
+                />
+              )}
               {can("user:read") && (
                 <NavLink
                   href="/console/platform/users"

@@ -42,6 +42,8 @@ impl PlatformModule for PropertiesModule {
             properties::profile::profile,
             properties::financials::financials,
             properties::update::update,
+            properties::media::list_media,
+            properties::media::set_hero,
             onboarding::onboard::onboard,
             portfolio::summary::summary,
             portfolio::llc_groups::llc_groups,

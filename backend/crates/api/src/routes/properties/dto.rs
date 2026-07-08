@@ -51,7 +51,10 @@ impl From<entity::property::Model> for PropertyResp {
             workflow_stage: p.workflow_stage,
             purchase_price_cents: p.purchase_price_cents,
             acquired_on: p.acquired_on,
-            image_url: p.image_url,
+            // A `doc:{id}` hero sentinel isn't a renderable URL — it's resolved
+            // to a signed URL only on the full profile. Elsewhere (list cards)
+            // present it as "no direct URL" rather than a broken image src.
+            image_url: p.image_url.filter(|u| !u.starts_with("doc:")),
         }
     }
 }
