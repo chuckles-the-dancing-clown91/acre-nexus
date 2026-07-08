@@ -23,12 +23,16 @@ pub fn err(msg: impl Into<String>) -> EnrichmentError {
     EnrichmentError(msg.into())
 }
 
-/// Coordinates + match quality from the geocoder.
+/// Coordinates + match quality from the geocoder. The Census *geographies*
+/// endpoint also returns the real county + county FIPS; the simulated fallback
+/// leaves those `None`.
 pub struct GeoData {
     pub latitude: f64,
     pub longitude: f64,
     pub matched_address: String,
     pub accuracy: String,
+    pub county: Option<String>,
+    pub fips: Option<String>,
 }
 
 /// Parcel / county-record attributes.

@@ -39,8 +39,14 @@ pub const CATEGORIES: &[&str] = &[
     "receipt",
     "statement",
     "notice",
+    "photo",
+    "floorplan",
     "other",
 ];
+
+/// Document categories that are property **media** (photos / floorplans),
+/// surfaced as an image gallery on the property profile.
+pub const MEDIA_CATEGORIES: &[&str] = &["photo", "floorplan"];
 
 /// Normalise a caller-supplied category to a trimmed lowercase value, rejecting
 /// anything outside [`CATEGORIES`]. `None`/empty clears it.

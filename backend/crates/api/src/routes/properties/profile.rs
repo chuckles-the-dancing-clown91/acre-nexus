@@ -79,7 +79,10 @@ pub async fn profile(
         cost_breakdown.push(line("Debt service", -econ.debt_service_cents));
     }
 
-    let image_url = p.image_url.clone();
+    // The hero may be a `doc:{id}` sentinel referencing a stored media document;
+    // resolve it to a fresh signed URL (a plain URL passes through unchanged).
+    let image_url =
+        super::media::resolve_hero_url(&db, scope.tenant_id, p.image_url.as_deref()).await;
     Ok(Json(PropertyProfileResp {
         property: PropertyResp::from(p),
         image_url,

@@ -40,15 +40,27 @@ Code lives in `api/src/enrichment/`, one responsibility per file:
 | `simulated.rs` | deterministic simulated providers (parcel/tax/valuation/schools/utilities) |
 | `runner.rs` | call a provider for one source, persist the result, return a summary |
 
-### Providers (pluggable)
+### Providers (pluggable) + graceful fallback
 
 Every source sits behind the same interface. One is a **real** integration —
-the free, keyless **U.S. Census geocoder** (`geocode.rs`) — which proves genuine
-outbound validation: it returns live coordinates + a normalised matched address.
-The rest are **deterministic simulated** providers seeded from the property, so
-the state machine and durability are real while CI stays hermetic and repeated
-runs are idempotent. Replacing a simulated source with a real API (county
-assessor, an AVM vendor, GreatSchools, …) is a one-function change.
+the free, keyless **U.S. Census geocoder** (`geocode.rs`). It calls the
+**geographies** endpoint, so a live geocode returns not just coordinates + a
+normalised matched address but the **real county and county FIPS** — genuine
+government data, not a stand-in. The remaining sources are **deterministic
+simulated** providers seeded from the property, so the state machine and
+durability are real while CI stays hermetic and repeated runs are idempotent.
+Replacing a simulated source with a real API (county assessor, an AVM vendor,
+GreatSchools, …) is a one-function change.
+
+**Graceful fallback (roadmap Phase 7 DoD).** A live provider that is
+unavailable does **not** fail the job — the runner falls back to the simulated
+provider so the property still gets enriched, and records *which provider
+actually served the source* on the `enrichment_run` (`provider` = `census_geocoder`
+vs `simulated`, plus `detail.fell_back` + a reason). So a real address enriches
+from live sources, and degrades cleanly to simulation when the source can't be
+reached. Only a *real* failure (e.g. the database) is retried/failed by the
+scheduler. Real, credentialed vendors slot in per-source behind the same
+`LIVE_PROVIDERS` gate the payments/screening providers already use.
 
 > Networking note: in this managed environment outbound HTTPS goes through an
 > agent proxy that MITMs TLS, so the geocoder client trusts the proxy CA bundle
@@ -95,7 +107,9 @@ All under the `property_intel` module (JWT; tenant-scoped):
 |--------|------|-----------|-------------|
 | GET | `/properties/{id}/intel` | `property:read` | Aggregated detail + valuations + taxes + schools + utilities |
 | POST | `/properties/{id}/enrich` | `property:write` | Enqueue enrichment (body `{ "sources": [...] }`, omit for all). Audited as `property.enrich`. Requires the module enabled. |
-| GET | `/properties/{id}/enrichment` | `property:read` | Recent enrichment runs (newest first) |
+| GET | `/properties/{id}/enrichment` | `property:read` | Recent enrichment runs (newest first, each with the provider used + fallback flag) |
+| GET | `/properties/{id}/media` | `property:read` | Property photos + floorplans, each with a fresh signed URL; plus the hero |
+| PATCH | `/properties/{id}/hero` | `property:write` | Promote a media document to the hero photo (`{ "document_id": … }`), or clear it with `null` |
 
 `POST /properties/{id}/enrich` accepts any subset of
 `geocode`, `parcel`, `tax`, `valuation`, `schools`, `utilities`; an empty/omitted
@@ -104,10 +118,34 @@ sources.
 
 ---
 
+---
+
+## Media (photos / floorplans)
+
+Property **media** rides the polymorphic [`document`](INTEGRATIONS.md) service —
+`owner_type = "property"`, category `photo` / `floorplan` — so photos share the
+upload / versioning / signed-URL / retention machinery of every other document.
+
+- `GET /properties/{id}/media` returns the property's image documents, each with
+  a **fresh short-lived signed GET URL** the console renders inline in an
+  `<img>`, newest first.
+- The **hero** photo is stored as a stable `doc:{id}` sentinel in
+  `property.image_url`; the profile builder (and the media endpoint) resolve it
+  to a fresh signed URL on every read, so the hero never points at a URL that has
+  since expired. `PATCH /properties/{id}/hero` sets or clears it.
+
+The property profile has a **Media** tab: an image gallery with upload and
+"set as hero"; the resolved hero shows in the profile header. Northwind's demo
+seeds a hero + gallery photo on two properties so the feature renders out of the
+box.
+
+---
+
 ## Frontend
 
 The property profile page (`/console/properties/[id]`) renders the parcel /
 county record, the AVM valuation + rent estimate, the tax history table, schools,
 and utilities, with an **Enrich data** button that triggers the queue and
-refreshes as jobs complete. Demo data for two properties is populated at seed
-time via the engine's simulated providers.
+refreshes as jobs complete, plus a **Media** tab for photos/floorplans. Demo
+data for two properties is populated at seed time via the engine's simulated
+providers (and the live geocoder resolves real coordinates + county on demand).

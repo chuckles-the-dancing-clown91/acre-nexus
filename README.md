@@ -30,7 +30,10 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   templated lease documents, maintenance work orders, and tenant history.
 - **Property intelligence** — automated enrichment (geocoding, parcel, tax,
   valuation, schools, utilities) behind a provider interface with deterministic
-  simulated sources and a live geocoder.
+  simulated sources and a **live geocoder** (real coordinates + county/FIPS);
+  every source **gracefully falls back to simulation** when a provider is
+  unavailable. Property **photos/floorplans** in the document store render on the
+  profile with a hero image.
 - **Acquisitions & underwriting** — a buy-side **deal pipeline** (prospecting →
   offer → under contract → closing → owned) with investor-grade underwriting
   (cap rate, cash-on-cash, IRR, DSCR + rent-growth sensitivity, live what-if), a

@@ -853,6 +853,16 @@ export const api = {
     return reg.document;
   },
 
+  // ---- property media: photos / floorplans + hero ----
+  propertyMedia: (id: string) =>
+    request<PropertyMedia>(`/properties/${id}/media`, { auth: true }),
+  setPropertyHero: (id: string, document_id: string | null) =>
+    request<PropertyMedia>(`/properties/${id}/hero`, {
+      method: "PATCH",
+      auth: true,
+      body: { document_id },
+    }),
+
   // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
   fees: () => request<Fee[]>("/fees", { auth: true }),
   createFee: (body: CreateFeeInput) =>
@@ -2157,6 +2167,24 @@ export interface DocumentEntry {
   status: string;
   retention_expires_at: string | null;
   created_at: string;
+}
+
+export interface PropertyMediaItem {
+  document_id: string;
+  filename: string;
+  category: string | null;
+  mime_type: string;
+  size_bytes: number;
+  /** Short-lived signed URL, renderable in an `<img>`. */
+  url: string | null;
+  is_hero: boolean;
+  created_at: string;
+}
+
+export interface PropertyMedia {
+  hero_document_id: string | null;
+  hero_url: string | null;
+  items: PropertyMediaItem[];
 }
 
 export interface RegisterDocumentInput {

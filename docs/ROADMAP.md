@@ -242,16 +242,21 @@ ledger.
       (cap rate / cash-on-cash / IRR / DSCR + rent-growth sensitivity), a
       due-diligence checklist + data room, and one-click conversion into an owned
       property. See [`DEALS.md`](DEALS.md).
-- [ ] Swap simulated enrichment for **real** county-record / AVM / schools APIs
-      behind the existing provider interface (one function each).
-- [ ] **Media**: property photos/floorplans in the document store.
+- [x] **Real data providers + graceful fallback** — shipped: the live Census
+      geocoder now returns real coordinates **+ county / FIPS**, and every source
+      **gracefully falls back to simulation** when a provider is unavailable
+      (recording which provider actually served it). See
+      [`PROPERTY_DATA.md`](PROPERTY_DATA.md).
+- [x] **Media** — property photos/floorplans in the document store, with a hero
+      and a gallery rendered on the property profile.
+- [ ] Remaining real vendors (AVM / schools / county assessor) behind the
+      provider seam; MLS/comps feed, permits/violations, insurance quotes.
 - [ ] Rehab / construction management (#40), disposition / broker (#43),
       map / geospatial portfolio view (#57).
-- [ ] Optional: MLS/comps feed, permits/violations, insurance quotes.
 
-**DoD:** a real address enriches from live sources with graceful fallback to
-simulation when a provider is unavailable. *(Acquisition vertical done; real
-data providers + media remain.)*
+**DoD (met):** a real address enriches from live sources with graceful fallback
+to simulation when a provider is unavailable; photos render on the property
+profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
 
 ---
 
@@ -276,7 +281,7 @@ Phase 0 ✅
         ├─ Phase 2 ✅ (documents + e-sign) ─┐
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
-        └─ Phase 7 🟡 (acquisitions ✅ · real data ⬜)
+        └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · #40/#43/#57 ⬜)
                          all ─→ Phase 8 ⬜ (reporting/billing/GA)
 ```
 

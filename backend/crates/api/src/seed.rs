@@ -1391,6 +1391,47 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
+    // ---- Property media: a hero photo + a second shot for the gallery ----
+    seed_property_photo(
+        db,
+        northwind,
+        maple_court,
+        "front-elevation.svg",
+        "Maple Court",
+        "Front elevation",
+        "#6366f1",
+        "#0ea5e9",
+        true,
+        now,
+    )
+    .await?;
+    seed_property_photo(
+        db,
+        northwind,
+        maple_court,
+        "courtyard.svg",
+        "Maple Court",
+        "Courtyard",
+        "#0ea5e9",
+        "#10b981",
+        false,
+        now,
+    )
+    .await?;
+    seed_property_photo(
+        db,
+        northwind,
+        riverside_flats,
+        "riverside.svg",
+        "Riverside Flats",
+        "River frontage",
+        "#f59e0b",
+        "#ef4444",
+        true,
+        now,
+    )
+    .await?;
+
     tracing::info!("seed: complete");
     Ok(())
 }
@@ -1475,6 +1516,79 @@ async fn seed_deal(
     .await?;
 
     Ok(id)
+}
+
+/// A lightweight SVG "photo" placeholder — a labelled gradient — so seeded media
+/// renders as a real image (the blob route serves the document's `image/svg+xml`
+/// content type). Real deployments upload real photos through the same path.
+fn placeholder_svg(title: &str, subtitle: &str, c1: &str, c2: &str) -> String {
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/></linearGradient></defs>
+<rect width="800" height="500" fill="url(#g)"/>
+<rect x="0" y="380" width="800" height="120" fill="#00000059"/>
+<text x="40" y="432" font-family="system-ui,Arial" font-size="40" fill="#ffffff" font-weight="700">{title}</text>
+<text x="40" y="472" font-family="system-ui,Arial" font-size="24" fill="#e5e7eb">{subtitle}</text>
+</svg>"##
+    )
+}
+
+/// Seed one property **photo** (stored in the object store) and optionally make
+/// it the property's hero. Demonstrates the Phase 7 media surface end to end.
+#[allow(clippy::too_many_arguments)]
+async fn seed_property_photo(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    filename: &str,
+    title: &str,
+    subtitle: &str,
+    c1: &str,
+    c2: &str,
+    make_hero: bool,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<Uuid> {
+    let bytes = placeholder_svg(title, subtitle, c1, c2).into_bytes();
+    let doc_id = Uuid::new_v4();
+    let storage_key = format!("{tenant_id}/{doc_id}");
+    crate::storage::ObjectStore::from_env()?
+        .put_bytes(&storage_key, &bytes)
+        .await?;
+
+    entity::document::ActiveModel {
+        id: Set(doc_id),
+        tenant_id: Set(tenant_id),
+        owner_type: Set("property".into()),
+        owner_id: Set(property_id),
+        filename: Set(filename.into()),
+        category: Set(Some("photo".into())),
+        requires_wet_ink: Set(false),
+        physical_location: Set(None),
+        mime_type: Set("image/svg+xml".into()),
+        size_bytes: Set(bytes.len() as i64),
+        checksum: Set(Some(crate::storage::sha256_hex(&bytes))),
+        version: Set(1),
+        previous_version_id: Set(None),
+        storage_key: Set(storage_key),
+        status: Set("stored".into()),
+        retention_expires_at: Set(None),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    if make_hero {
+        if let Some(p) = Property::find_by_id(property_id).one(db).await? {
+            let mut am: entity::property::ActiveModel = p.into();
+            am.image_url = Set(Some(format!("doc:{doc_id}")));
+            am.update(db).await?;
+        }
+    }
+
+    Ok(doc_id)
 }
 
 /// First + last day of `d`'s month, as `YYYY-MM-DD`.

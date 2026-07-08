@@ -3,7 +3,7 @@
 //! seeded from the property so repeated runs are idempotent and tests are
 //! hermetic. Swapping in a real provider is a matter of replacing one function.
 
-use super::data::{ParcelData, SchoolData, TaxYear, UtilityData, ValuationData};
+use super::data::{GeoData, ParcelData, SchoolData, TaxYear, UtilityData, ValuationData};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -42,6 +42,25 @@ pub fn rng_for(property_id: Uuid, address: &str) -> Rng {
     let mut seed = [0u8; 8];
     seed.copy_from_slice(&digest[..8]);
     Rng(u64::from_le_bytes(seed))
+}
+
+/// Deterministic **simulated** geocode — the graceful fallback when the live
+/// Census geocoder is unavailable. Produces stable, plausible continental-US
+/// coordinates seeded from the property so repeated runs are idempotent; county
+/// / FIPS are left to the (simulated) parcel source.
+pub fn geocode(property_id: Uuid, address: &str, city: &str) -> GeoData {
+    let mut rng = rng_for(property_id, address);
+    // Continental US bounding box, roughly: lat 25–49, lon −124–−67.
+    let latitude = 25.0 + rng.range(0, 240_000) as f64 / 10_000.0;
+    let longitude = -124.0 + rng.range(0, 570_000) as f64 / 10_000.0;
+    GeoData {
+        latitude,
+        longitude,
+        matched_address: format!("{address}, {city}"),
+        accuracy: "approximate".into(),
+        county: None,
+        fips: None,
+    }
 }
 
 /// Extract a 2-letter state code from a `"City, ST"` string (best-effort).
@@ -244,4 +263,30 @@ pub fn utilities(rng: &mut Rng) -> Vec<UtilityData> {
             ),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn geocode_fallback_is_deterministic_and_in_us() {
+        let id = Uuid::from_u128(0x1234_5678_9abc_def0_1122_3344_5566_7788);
+        let a = geocode(id, "100 Main St", "Columbus, OH");
+        let b = geocode(id, "100 Main St", "Columbus, OH");
+        // Same input → same coordinates (idempotent fallback).
+        assert_eq!(a.latitude, b.latitude);
+        assert_eq!(a.longitude, b.longitude);
+        // Plausible continental-US coordinates.
+        assert!((25.0..=49.0).contains(&a.latitude), "lat {}", a.latitude);
+        assert!(
+            (-124.0..=-67.0).contains(&a.longitude),
+            "lon {}",
+            a.longitude
+        );
+        // The fallback resolves no county/FIPS (the parcel source fills those).
+        assert_eq!(a.county, None);
+        assert_eq!(a.fips, None);
+        assert_eq!(a.matched_address, "100 Main St, Columbus, OH");
+    }
 }

@@ -122,11 +122,11 @@ The biggest gap for "total" management — most operators live in their books.
 
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
-| Enrichment: parcel, tax, valuation, schools, utilities, geo | ✅ | — | live geocoder + simulated providers |
-| Swap simulated → **real** county/AVM/schools APIs | 🟡 | P2 | one-function provider swap |
+| Enrichment: parcel, tax, valuation, schools, utilities, geo | ✅ | — | live geocoder (real county/FIPS) + simulated providers, with graceful fallback |
+| Swap simulated → **real** county/AVM/schools APIs | 🟡 | P2 | provider seam + graceful fallback shipped (geocode is live: real county/FIPS); AVM/schools vendors still simulated (`docs/PROPERTY_DATA.md`) |
 | Comps / market trends / rent estimates | 🟡 | P3 | AVM exists |
 | Hazard/flood/crime/demographics/permits | 🟡 | P3 | flood zone exists |
-| **Photos / media / floor plans / virtual tours** | ⬜ | P1 | document/media service |
+| **Photos / media / floor plans / virtual tours** | ✅ | — | photos/floorplans in the document store + hero, rendered on the profile (`docs/PROPERTY_DATA.md`) |
 | Lease **abstraction** (AI extract terms from PDFs) | ⬜ | P3 | document AI |
 
 ## 9. Platform, integrations & cross-cutting
