@@ -123,7 +123,7 @@ async fn build(db: &crate::db::RequestDb, tenant_id: Uuid) -> ApiResult<AgingRes
             buckets,
         });
     }
-    rows.sort_by(|a, b| b.buckets.total_cents.cmp(&a.buckets.total_cents));
+    rows.sort_by_key(|r| std::cmp::Reverse(r.buckets.total_cents));
 
     Ok(AgingResp {
         generated_at: today.to_string(),

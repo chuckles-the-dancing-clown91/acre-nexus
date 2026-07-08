@@ -91,7 +91,7 @@ async fn nec_recipients(
             }
         })
         .collect();
-    out.sort_by(|a, b| b.amount_cents.cmp(&a.amount_cents));
+    out.sort_by_key(|r| std::cmp::Reverse(r.amount_cents));
     Ok(out)
 }
 
@@ -159,7 +159,7 @@ async fn misc_recipients(
             }
         })
         .collect();
-    out.sort_by(|a, b| b.amount_cents.cmp(&a.amount_cents));
+    out.sort_by_key(|r| std::cmp::Reverse(r.amount_cents));
     Ok(out)
 }
 
