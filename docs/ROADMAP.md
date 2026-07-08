@@ -269,7 +269,8 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
       export. See [`REPORTS.md`](REPORTS.md).
 - [ ] **Reporting** (rest): owner statements, **1099**/tax exports, portfolio
       analytics, custom report builder.
-- [ ] **Global search (#55)** across properties/tenants/leases/entities.
+- [x] **Global search (#55)** — shipped: the `search` module — a permission-aware
+      command palette across properties, tenants, entities, tickets, and LLCs.
 - [ ] **SaaS billing**: meter + bill client workspaces (plans already modeled).
 - [ ] **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance,
       rate limiting, observability/metrics, load testing, backup/restore drills.
@@ -290,7 +291,7 @@ Phase 0 ✅
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
         └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · rehab ✅ · #43/#57 ⬜)
-                         all ─→ Phase 8 🟡 (PM reports ✅ · billing/hardening ⬜)
+                         all ─→ Phase 8 🟡 (PM reports + search ✅ · billing/hardening ⬜)
 ```
 
 ## Sequencing notes

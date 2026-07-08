@@ -144,7 +144,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API + signed outbound webhooks (subscribe/replay) shipped |
 | **Mobile apps** (manager / resident / inspector, offline) | ⬜ | P3 | |
 | **MFA/2FA**, SSO/SAML/SCIM (enterprise) | ⬜ | P2 | |
-| Global **search** | ⬜ | P2 | |
+| Global **search** | ✅ | — | `search` module: command palette across properties/tenants/entities/tickets/LLCs, tenant-scoped + permission-aware |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
 | **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |
 | SaaS **billing/metering** for client workspaces | ⬜ | P2 | plans modeled |

@@ -9,6 +9,7 @@ import { ModulesProvider, useModules } from "@/lib/modules";
 import { MODULES } from "@/modules/registry";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { Icon } from "@/components/Icon";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { clsx } from "@/lib/clsx";
@@ -96,6 +97,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
         >
           <Icon name="wrench" size={16} />
         </button>
+        <GlobalSearch />
         <div className="ml-auto flex items-center gap-3">
           <NotificationBell />
           <ThemeToggle />

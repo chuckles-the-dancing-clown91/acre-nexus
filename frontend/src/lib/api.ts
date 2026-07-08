@@ -969,6 +969,10 @@ export const api = {
   agingReport: () => request<AgingResp>("/reports/aging", { auth: true }),
   delinquencyReport: () =>
     request<DelinquencyResp>("/reports/delinquency", { auth: true }),
+
+  // ---- global search (Phase 8) ----
+  search: (q: string) =>
+    request<SearchResp>(`/search?q=${encodeURIComponent(q)}`, { auth: true }),
   /** Fetch a report export (CSV/PDF) as an authenticated blob for download. */
   downloadReport: async (path: string): Promise<Blob> => {
     const headers: Record<string, string> = {};
@@ -2453,6 +2457,18 @@ export interface T12Resp {
   total_expense_label: string;
   net_cents: number;
   net_label: string;
+}
+
+export interface SearchHit {
+  kind: string;
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+}
+export interface SearchResp {
+  query: string;
+  hits: SearchHit[];
 }
 
 export interface AgingBuckets {

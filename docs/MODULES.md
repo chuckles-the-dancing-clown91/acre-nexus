@@ -6,7 +6,7 @@ processes, and whether it ships on by default. Tenants turn modules on and off
 from their software settings, which makes capabilities **sellable per feature**.
 
 The backend and frontend share a module **key** (`properties`, `property_intel`,
-`leasing`, `vendor_api`, `theming`, `flips`, `rehab`, `reports`) so the two halves always
+`leasing`, `vendor_api`, `theming`, `flips`, `rehab`, `reports`, `search`) so the two halves always
 agree on what a module is and how it is gated.
 
 ## Modules today
@@ -29,6 +29,7 @@ agree on what a module is and how it is gated.
 | `flips` | Acquisitions & Flips | on | `/modules/flips/pipeline`, `/modules/flips/deals` (deal pipeline + underwriting + convert-to-property) + deal documents via the shared document service (see `docs/DEALS.md`) |
 | `rehab` | Rehab & Construction | on | `/properties/{id}/rehab-projects`, `/rehab-projects/{id}`, `/rehab-lines/*`, `/rehab-change-orders/*`, `/rehab-draws/*` (budgets, draws w/ progress photos, change orders, lien-waiver PDFs) (see `docs/REHAB.md`) |
 | `reports` | Reports & Exports | on | `/reports/rent-roll`, `/reports/t12`, `/reports/aging`, `/reports/delinquency` (+ `/…/export?format=csv\|pdf`) (see `docs/REPORTS.md`) |
+| `search` | Global Search | on | `/search?q=` — one box across properties, tenants, entities, tickets, and LLCs; tenant-scoped and permission-aware (each result type self-gates on its read permission) |
 
 ## Backend contract
 
