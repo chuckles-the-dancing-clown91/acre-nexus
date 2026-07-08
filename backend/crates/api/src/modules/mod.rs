@@ -39,6 +39,7 @@ pub mod messaging;
 pub mod properties;
 pub mod rehab;
 pub mod rentals;
+pub mod reports;
 pub mod theming;
 pub mod title;
 pub mod vendor_api;
@@ -184,6 +185,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(integrations::IntegrationsModule),
         Box::new(flips::FlipsModule),
         Box::new(rehab::RehabModule),
+        Box::new(reports::ReportsModule),
     ]
 }
 

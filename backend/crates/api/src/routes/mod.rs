@@ -49,6 +49,7 @@ pub mod public;
 pub mod rehab;
 pub mod reminders;
 pub mod rentals;
+pub mod reports;
 pub mod settings;
 pub mod tenant_history;
 pub mod theme;

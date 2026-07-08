@@ -78,6 +78,9 @@ portfolio tooling that incumbent PM software treats as an afterthought.
   delinquency, NOI, portfolio value) from live ledger rollups + monthly
   snapshots, charted with a dependency-free SVG component; residents get a
   full pay-rent portal (balance, one-click pay, methods, autopay, receipts).
+- **Standard PM reports** — rent roll, **T-12** (off the general ledger), AR
+  **aging**, and **delinquency**, each viewable in the console and exportable to
+  CSV or PDF — see [`docs/REPORTS.md`](docs/REPORTS.md).
 - **Per-tenant settings** — a code-defined catalog of workspace knobs
   (screening policy, signing-link expiry, signer caps, document retention and
   titles, application reuse, auto-approve …) editable from the console, each

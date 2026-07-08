@@ -88,6 +88,14 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "report:read",
+        category: "Accounting",
+        label: "View reports",
+        description: "View and export standard PM reports — rent roll, T-12, \
+                      aging, and delinquency.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "lease:read",
         category: "Rentals",
         label: "View rentals",

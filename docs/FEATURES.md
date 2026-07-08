@@ -111,7 +111,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
 | KPI dashboards | 🟡 | P1 | portfolio summary exists; add **time-series charts** |
-| Rent roll, T-12, aging, delinquency reports | ⬜ | P1 | standard PM reports |
+| Rent roll, T-12, aging, delinquency reports | ✅ | — | `reports` module: all four off the live ledger + rentals, with CSV/PDF export (`docs/REPORTS.md`) |
 | Custom report builder + scheduled exports | ⬜ | P3 | |
 | Owner / investor reporting | ⬜ | P2 | statements, K-1s for syndications |
 | Performance analytics + benchmarking | ⬜ | P3 | |

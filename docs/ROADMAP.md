@@ -262,16 +262,22 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
 
 ---
 
-## Phase 8 — Reporting, billing & GA hardening ⬜
+## Phase 8 — Reporting, billing & GA hardening 🟡
 
-- **Reporting**: owner statements, rent rolls, **1099**/tax exports, portfolio
-  analytics.
-- **SaaS billing**: meter + bill client workspaces (plans already modeled).
-- **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance, rate
-  limiting, observability/metrics, load testing, backup/restore drills.
+- [x] **Standard PM reports (#56)** — shipped: the `reports` module — rent roll,
+      T-12 (off the general ledger), AR aging, and delinquency, each with CSV/PDF
+      export. See [`REPORTS.md`](REPORTS.md).
+- [ ] **Reporting** (rest): owner statements, **1099**/tax exports, portfolio
+      analytics, custom report builder.
+- [ ] **Global search (#55)** across properties/tenants/leases/entities.
+- [ ] **SaaS billing**: meter + bill client workspaces (plans already modeled).
+- [ ] **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance,
+      rate limiting, observability/metrics, load testing, backup/restore drills.
+- [ ] MFA/2FA, SSO/SAML/SCIM (enterprise); GDPR/CCPA data requests.
 
 **DoD:** a paying tenant runs the full lifecycle in production with compliant
-controls and monitored SLOs.
+controls and monitored SLOs. *(Standard PM reports done; billing + hardening +
+the rest remain.)*
 
 ---
 
@@ -284,7 +290,7 @@ Phase 0 ✅
         ├─ Phase 3 ✅ (payments + charts) ──┼─ Phase 5 ✅ (tenant lifecycle/portal)
         ├─ Phase 4 ✅ (screening) ──────────┘        └─ Phase 6 ✅ (helpdesk)
         └─ Phase 7 🟡 (acquisitions ✅ · real data + media ✅ · rehab ✅ · #43/#57 ⬜)
-                         all ─→ Phase 8 ⬜ (reporting/billing/GA)
+                         all ─→ Phase 8 🟡 (PM reports ✅ · billing/hardening ⬜)
 ```
 
 ## Sequencing notes

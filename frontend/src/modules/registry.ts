@@ -325,6 +325,22 @@ export const MODULES: ModuleDef[] = [
     // top-level nav entry.
     nav: [],
   },
+  {
+    key: "reports",
+    label: "Reports & Exports",
+    description:
+      "Standard PM reports — rent roll, T-12, aging, and delinquency — with CSV/PDF export.",
+    defaultEnabled: true,
+    preview: false,
+    nav: [
+      {
+        href: "/console/reports",
+        label: "Reports",
+        icon: "chart",
+        permission: "report:read",
+      },
+    ],
+  },
 ];
 
 /** Lookup a module definition by key. */

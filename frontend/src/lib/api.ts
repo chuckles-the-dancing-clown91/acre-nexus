@@ -954,6 +954,38 @@ export const api = {
       body: { status },
     }),
 
+  // ---- standard PM reports (Phase 8) ----
+  rentRoll: (params: { property_id?: string; portfolio_id?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.property_id) qs.set("property_id", params.property_id);
+    if (params.portfolio_id) qs.set("portfolio_id", params.portfolio_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<RentRollResp>(`/reports/rent-roll${suffix}`, { auth: true });
+  },
+  t12Report: (entity: string) =>
+    request<T12Resp>(`/reports/t12?entity=${encodeURIComponent(entity)}`, {
+      auth: true,
+    }),
+  agingReport: () => request<AgingResp>("/reports/aging", { auth: true }),
+  delinquencyReport: () =>
+    request<DelinquencyResp>("/reports/delinquency", { auth: true }),
+  /** Fetch a report export (CSV/PDF) as an authenticated blob for download. */
+  downloadReport: async (path: string): Promise<Blob> => {
+    const headers: Record<string, string> = {};
+    const token = tokenStore.access;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const acting = actingTenant.get();
+    if (acting) headers["X-Tenant"] = acting;
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, "export_failed", "report export failed");
+    }
+    return res.blob();
+  },
+
   // ---- leasing lifecycle: fees, vehicles, charges, documents, history ----
   fees: () => request<Fee[]>("/fees", { auth: true }),
   createFee: (body: CreateFeeInput) =>
@@ -2376,6 +2408,86 @@ export interface CreateRehabProjectInput {
   start_date?: string;
   target_end_date?: string;
   notes?: string;
+}
+
+// ---- standard PM reports (Phase 8) ----
+export interface RentRollRow {
+  property_name: string;
+  unit: string;
+  tenant_name: string;
+  rent_cents: number;
+  rent_label: string;
+  term: string;
+  status: string;
+  payment_status: string;
+  balance_cents: number;
+  balance_label: string;
+}
+export interface RentRollResp {
+  generated_at: string;
+  rows: RentRollRow[];
+  lease_count: number;
+  total_rent_cents: number;
+  total_rent_label: string;
+  total_balance_cents: number;
+  total_balance_label: string;
+}
+
+export interface T12Row {
+  account_name: string;
+  kind: string;
+  monthly_cents: number[];
+  total_cents: number;
+  total_label: string;
+}
+export interface T12Resp {
+  generated_at: string;
+  entity_id: string;
+  months: string[];
+  income: T12Row[];
+  expenses: T12Row[];
+  income_totals_cents: number[];
+  expense_totals_cents: number[];
+  noi_totals_cents: number[];
+  total_income_label: string;
+  total_expense_label: string;
+  net_cents: number;
+  net_label: string;
+}
+
+export interface AgingBuckets {
+  current_cents: number;
+  d1_30_cents: number;
+  d31_60_cents: number;
+  d61_90_cents: number;
+  over90_cents: number;
+  total_cents: number;
+}
+export interface AgingRow extends AgingBuckets {
+  tenant_name: string;
+  property_name: string;
+}
+export interface AgingResp extends AgingBuckets {
+  generated_at: string;
+  rows: AgingRow[];
+}
+
+export interface DelinquencyRow {
+  tenant_name: string;
+  property_name: string;
+  unit: string;
+  payment_status: string;
+  balance_cents: number;
+  balance_label: string;
+  days_late: number;
+  oldest_due_date: string | null;
+}
+export interface DelinquencyResp {
+  generated_at: string;
+  rows: DelinquencyRow[];
+  tenant_count: number;
+  total_balance_cents: number;
+  total_balance_label: string;
 }
 
 export interface RegisterDocumentInput {
