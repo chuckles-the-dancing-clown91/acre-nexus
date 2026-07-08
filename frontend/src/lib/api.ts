@@ -1005,6 +1005,18 @@ export const api = {
   agingReport: () => request<AgingResp>("/reports/aging", { auth: true }),
   delinquencyReport: () =>
     request<DelinquencyResp>("/reports/delinquency", { auth: true }),
+  ownerStatement: (entity: string, from?: string, to?: string) => {
+    const qs = new URLSearchParams({ entity });
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    return request<OwnerStatementResp>(`/reports/owner-statement?${qs}`, {
+      auth: true,
+    });
+  },
+  tax1099: (year?: string) => {
+    const qs = year ? `?year=${encodeURIComponent(year)}` : "";
+    return request<Tax1099Resp>(`/reports/1099${qs}`, { auth: true });
+  },
 
   // ---- global search (Phase 8) ----
   search: (q: string) =>
@@ -2637,6 +2649,51 @@ export interface DelinquencyResp {
   tenant_count: number;
   total_balance_cents: number;
   total_balance_label: string;
+}
+
+export interface StatementLine {
+  name: string;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface OwnerStatementResp {
+  generated_at: string;
+  entity_id: string;
+  entity_name: string;
+  period_start: string;
+  period_end: string;
+  rent_collected_cents: number;
+  rent_collected_label: string;
+  expense_lines: StatementLine[];
+  expenses_cents: number;
+  expenses_label: string;
+  mgmt_fee_cents: number;
+  mgmt_fee_label: string;
+  net_cents: number;
+  net_label: string;
+}
+
+export interface Recipient1099 {
+  form: string;
+  box_label: string;
+  recipient_id: string;
+  name: string;
+  tin: string | null;
+  address: string | null;
+  amount_cents: number;
+  amount_label: string;
+}
+export interface Tax1099Resp {
+  generated_at: string;
+  year: number;
+  threshold_cents: number;
+  threshold_label: string;
+  nec: Recipient1099[];
+  misc: Recipient1099[];
+  nec_total_cents: number;
+  nec_total_label: string;
+  misc_total_cents: number;
+  misc_total_label: string;
 }
 
 export interface RegisterDocumentInput {

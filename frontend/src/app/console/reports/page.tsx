@@ -1,7 +1,8 @@
 "use client";
 
-// Standard PM reports (roadmap Phase 8, issue #56): rent roll, T-12, aging, and
-// delinquency — each viewable inline and exportable to CSV / PDF.
+// Standard PM reports (roadmap Phase 8): rent roll, T-12, aging, delinquency,
+// owner statements, and the annual 1099 tax export — each viewable inline and
+// exportable to CSV / PDF.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -9,19 +10,29 @@ import {
   type AgingResp,
   type DelinquencyResp,
   type LegalEntity,
+  type OwnerStatementResp,
   type RentRollResp,
   type T12Resp,
+  type Tax1099Resp,
 } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 import { logError } from "@/lib/log";
 
-type ReportKey = "rent-roll" | "t12" | "aging" | "delinquency";
+type ReportKey =
+  | "rent-roll"
+  | "t12"
+  | "aging"
+  | "delinquency"
+  | "owner-statement"
+  | "1099";
 
 const TABS: { key: ReportKey; label: string }[] = [
   { key: "rent-roll", label: "Rent roll" },
   { key: "t12", label: "T-12" },
   { key: "aging", label: "Aging" },
   { key: "delinquency", label: "Delinquency" },
+  { key: "owner-statement", label: "Owner statement" },
+  { key: "1099", label: "1099 tax" },
 ];
 
 async function download(path: string, filename: string) {
@@ -374,6 +385,145 @@ function Delinquency() {
   );
 }
 
+function OwnerStatement() {
+  const [entities, setEntities] = useState<LegalEntity[]>([]);
+  const [entity, setEntity] = useState<string>("");
+  const [data, setData] = useState<OwnerStatementResp | null>(null);
+
+  useEffect(() => {
+    api
+      .legalEntities()
+      .then((es) => {
+        setEntities(es);
+        if (es[0]) setEntity(es[0].id);
+      })
+      .catch((e) => logError("legal entities", e));
+  }, []);
+
+  useEffect(() => {
+    if (!entity) return;
+    setData(null);
+    api
+      .ownerStatement(entity)
+      .then(setData)
+      .catch((e) => logError("owner statement", e));
+  }, [entity]);
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <select
+          value={entity}
+          onChange={(e) => setEntity(e.target.value)}
+          className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm"
+        >
+          {entities.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </select>
+        {entity && (
+          <ExportButtons
+            base={`/reports/owner-statement/export?entity=${entity}`}
+          />
+        )}
+      </div>
+      {!data ? (
+        <div className="text-ink-3">Loading…</div>
+      ) : (
+        <>
+          <div className="text-sm text-ink-3">
+            {data.period_start} → {data.period_end}
+          </div>
+          <DataTable
+            headers={["Item", "Amount"]}
+            rows={[
+              ["Rent collected", data.rent_collected_label],
+              ...data.expense_lines.map((l) => [
+                `  ${l.name}`,
+                `-${l.amount_label}`,
+              ]),
+              ["Total operating expenses", `-${data.expenses_label}`],
+              ["Management fee", `-${data.mgmt_fee_label}`],
+            ]}
+            totals={["NET OWNER DRAW", data.net_label]}
+          />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Tax1099() {
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear - 1, currentYear, currentYear - 2];
+  const [year, setYear] = useState<string>(String(currentYear - 1));
+  const [data, setData] = useState<Tax1099Resp | null>(null);
+
+  useEffect(() => {
+    setData(null);
+    api
+      .tax1099(year)
+      .then(setData)
+      .catch((e) => logError("1099", e));
+  }, [year]);
+
+  const recipientRows = (r: Tax1099Resp) =>
+    [...r.nec, ...r.misc].map((x) => [
+      x.form,
+      x.name,
+      x.tin ?? "—",
+      x.box_label,
+      x.amount_label,
+    ]);
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <select
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm"
+        >
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+        <ExportButtons base={`/reports/1099/export?year=${year}`} />
+      </div>
+      {!data ? (
+        <div className="text-ink-3">Loading…</div>
+      ) : (
+        <>
+          <div className="text-sm text-ink-3">
+            Recipients at or above {data.threshold_label} · NEC{" "}
+            {data.nec_total_label} · MISC {data.misc_total_label}
+          </div>
+          <DataTable
+            headers={["Form", "Recipient", "TIN/EIN", "Box", "Amount"]}
+            rows={recipientRows(data)}
+            totals={[
+              "TOTAL",
+              "",
+              "",
+              "",
+              data.nec_total_cents + data.misc_total_cents === 0
+                ? "$0"
+                : `$${(
+                    (data.nec_total_cents + data.misc_total_cents) /
+                    100
+                  ).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+            ]}
+          />
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function ReportsPage() {
   const [tab, setTab] = useState<ReportKey>("rent-roll");
   return (
@@ -406,6 +556,8 @@ export default function ReportsPage() {
       {tab === "t12" && <T12 />}
       {tab === "aging" && <Aging />}
       {tab === "delinquency" && <Delinquency />}
+      {tab === "owner-statement" && <OwnerStatement />}
+      {tab === "1099" && <Tax1099 />}
     </div>
   );
 }

@@ -6,12 +6,16 @@
 //! Reports read across the shipped rentals + general-ledger data: the rent roll
 //! from leases/units, T-12 from the ledger (reusing
 //! [`crate::accounting::account_activity`]), and aging/delinquency from the
-//! outstanding `lease_payment` receivables.
+//! outstanding `lease_payment` receivables. Phase 8 adds owner statements
+//! (per-entity cash-basis draws, reconciling with owner payouts) and the annual
+//! 1099 tax export (NEC for vendors, MISC for owner rents).
 
 pub mod aging;
 pub mod delinquency;
+pub mod owner_statement;
 pub mod rent_roll;
 pub mod t12;
+pub mod tax_1099;
 
 use crate::error::{ApiError, ApiResult};
 use chrono::NaiveDate;

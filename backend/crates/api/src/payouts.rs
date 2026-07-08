@@ -47,16 +47,25 @@ pub fn compute_amounts(
     }
 }
 
-/// Compute a draft payout for `(entity, period)` from settled payments and
-/// the entity's expense ledger.
-pub async fn compute_payout(
+/// Itemized cash-basis activity for an entity over a period: rent actually
+/// collected (settled, non-deposit payments on its properties) and operating
+/// expenses posted to its ledger — management fees excluded — broken out by
+/// account. Shared by payout computation and the owner-statement report so the
+/// two always reconcile.
+pub struct PeriodActivity {
+    pub rent_collected_cents: i64,
+    pub expenses_cents: i64,
+    /// `(account name, amount)` for each non-zero operating-expense account.
+    pub expense_lines: Vec<(String, i64)>,
+}
+
+pub async fn gather_period(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     entity_id: Uuid,
     period_start: &str,
     period_end: &str,
-    created_by: Option<Uuid>,
-) -> ApiResult<entity::owner_payout::Model> {
+) -> ApiResult<PeriodActivity> {
     // The entity's properties → their leases → settled payments in-period.
     let properties = Property::find()
         .filter(entity::property::Column::TenantId.eq(tenant_id))
@@ -88,8 +97,8 @@ pub async fn compute_payout(
         }
     }
 
-    // Operating expenses actually posted to the entity's books in-period —
-    // excluding management fees (this payout is about to charge its own).
+    // Operating expenses posted to the entity's books in-period — excluding
+    // management fees (a payout charges its own; the statement lists it apart).
     let activity = crate::accounting::account_activity(
         db,
         tenant_id,
@@ -98,19 +107,42 @@ pub async fn compute_payout(
         Some(period_end),
     )
     .await?;
-    let expenses: i64 = activity
-        .iter()
-        .filter(|a| {
-            a.account.kind == "expense"
-                && a.account.subtype.as_deref()
-                    != Some(crate::accounting::subtypes::MANAGEMENT_FEES)
-        })
-        .map(|a| a.balance_cents())
-        .sum();
+    let mut expense_lines: Vec<(String, i64)> = Vec::new();
+    let mut expenses: i64 = 0;
+    for a in activity {
+        if a.account.kind == "expense"
+            && a.account.subtype.as_deref() != Some(crate::accounting::subtypes::MANAGEMENT_FEES)
+        {
+            let bal = a.balance_cents();
+            if bal != 0 {
+                expenses += bal;
+                expense_lines.push((a.account.name.clone(), bal));
+            }
+        }
+    }
+    expense_lines.sort_by(|a, b| a.0.cmp(&b.0));
 
+    Ok(PeriodActivity {
+        rent_collected_cents: rent_collected,
+        expenses_cents: expenses,
+        expense_lines,
+    })
+}
+
+/// Compute a draft payout for `(entity, period)` from settled payments and
+/// the entity's expense ledger.
+pub async fn compute_payout(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    period_start: &str,
+    period_end: &str,
+    created_by: Option<Uuid>,
+) -> ApiResult<entity::owner_payout::Model> {
+    let act = gather_period(db, tenant_id, entity_id, period_start, period_end).await?;
     let mgmt_fee_bps =
         crate::settings::get_i64(db, tenant_id, crate::settings::PAYOUT_MGMT_FEE_BPS).await;
-    let amounts = compute_amounts(rent_collected, expenses, mgmt_fee_bps);
+    let amounts = compute_amounts(act.rent_collected_cents, act.expenses_cents, mgmt_fee_bps);
 
     let now = Utc::now();
     let payout = entity::owner_payout::ActiveModel {

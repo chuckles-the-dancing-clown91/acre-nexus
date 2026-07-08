@@ -267,8 +267,11 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
 - [x] **Standard PM reports (#56)** — shipped: the `reports` module — rent roll,
       T-12 (off the general ledger), AR aging, and delinquency, each with CSV/PDF
       export. See [`REPORTS.md`](REPORTS.md).
-- [ ] **Reporting** (rest): owner statements, **1099**/tax exports, portfolio
-      analytics, custom report builder.
+- [x] **Owner statements + 1099/tax exports** — shipped: a cash-basis owner
+      statement per legal entity (reconciling with owner payouts) and the annual
+      1099-NEC (vendors) + 1099-MISC (owner rents) export, both CSV/PDF. See
+      [`REPORTS.md`](REPORTS.md).
+- [ ] **Reporting** (rest): portfolio analytics, custom report builder.
 - [x] **Global search (#55)** — shipped: the `search` module — a permission-aware
       command palette across properties, tenants, entities, tickets, and LLCs.
 - [x] **SaaS billing** — shipped: per-door metered subscriptions (three plans,

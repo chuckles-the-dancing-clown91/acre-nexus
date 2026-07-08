@@ -113,7 +113,7 @@ The biggest gap for "total" management — most operators live in their books.
 | KPI dashboards | 🟡 | P1 | portfolio summary exists; add **time-series charts** |
 | Rent roll, T-12, aging, delinquency reports | ✅ | — | `reports` module: all four off the live ledger + rentals, with CSV/PDF export (`docs/REPORTS.md`) |
 | Custom report builder + scheduled exports | ⬜ | P3 | |
-| Owner / investor reporting | ⬜ | P2 | statements, K-1s for syndications |
+| Owner / investor reporting | 🟡 | P2 | owner statements (reconcile w/ payouts) + **1099-NEC/MISC** tax export shipped; K-1s for syndications remain (`docs/REPORTS.md`) |
 | Performance analytics + benchmarking | ⬜ | P3 | |
 | Map / geospatial portfolio view | ⬜ | P3 | lat/long already enriched |
 | Data export / API / warehouse sync | 🟡 | P2 | token API exists |
