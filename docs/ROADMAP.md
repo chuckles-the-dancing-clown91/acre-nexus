@@ -277,7 +277,10 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
       HQ billing console (MRR, plan management, billing run, settle/void). See
       [`SAAS_BILLING.md`](SAAS_BILLING.md).
 - [ ] **Hardening**: security review, **PCI/FCRA/SOC 2** posture, performance,
-      rate limiting, observability/metrics, load testing, backup/restore drills.
+      observability/metrics, load testing, backup/restore drills.
+  - [x] **Rate limiting (#67)** — shipped: a fixed-window Rocket fairing with a
+        tight auth bucket + generous general bucket, `X-RateLimit-*` headers, and
+        `429` + `Retry-After` on breach. See [`RATE_LIMITING.md`](RATE_LIMITING.md).
 - [ ] MFA/2FA, SSO/SAML/SCIM (enterprise); GDPR/CCPA data requests.
 
 **DoD:** a paying tenant runs the full lifecycle in production with compliant

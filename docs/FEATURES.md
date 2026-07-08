@@ -137,6 +137,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Pluggable modules (per-tenant on/off) | ✅ | — | |
 | White-label theming + **custom domains** | 🟡 | P2 | `custom_domain` field exists |
 | Durable background job queue | ✅ | — | retrying, scheduled |
+| API **rate limiting** / abuse protection | ✅ | — | fixed-window fairing, tight auth bucket + general bucket, `X-RateLimit-*` + `429`/`Retry-After` (`docs/RATE_LIMITING.md`) |
 | **Notifications** (email/SMS/push) + preferences | 🟡 | P1 | auto-email seed |
 | **Document storage + e-sign** | ✅ | — | Phase 1 storage + Phase 2 envelopes |
 | **Payments** processor + webhooks | ⬜ | P1 | |
