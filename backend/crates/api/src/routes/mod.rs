@@ -92,6 +92,8 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         platform::impersonate::impersonate,
         platform::impersonations::list_impersonations,
         platform::impersonations::revoke_impersonation,
+        // observability (staff)
+        crate::observability::observability,
         // SaaS billing — platform plane (staff, cross-tenant)
         platform::billing::overview,
         platform::billing::invoices,

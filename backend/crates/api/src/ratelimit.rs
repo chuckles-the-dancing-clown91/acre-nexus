@@ -115,6 +115,8 @@ impl RateLimiter {
 /// Paths that are never rate-limited (monitoring + docs + preflight).
 fn is_exempt(path: &str) -> bool {
     path == "/health"
+        || path == "/health/ready"
+        || path == "/metrics"
         || path == "/openapi.json"
         || path == REJECT_PATH
         || path.starts_with("/swagger-ui")

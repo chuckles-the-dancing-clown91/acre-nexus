@@ -638,6 +638,8 @@ export const api = {
     request<TenantSummary[]>("/platform/tenants", { auth: true }),
   platformMetrics: () =>
     request<PlatformMetrics>("/platform/metrics", { auth: true }),
+  platformObservability: () =>
+    request<Observability>("/platform/observability", { auth: true }),
 
   // ---- SaaS billing: platform plane (staff) ----
   platformBillingOverview: () =>
@@ -2614,6 +2616,16 @@ export interface BillingOverview {
   outstanding_cents: number;
   outstanding_label: string;
   tenants: TenantBilling[];
+}
+
+export interface Observability {
+  uptime_secs: number;
+  total_requests: number;
+  server_errors: number;
+  avg_latency_ms: number;
+  in_flight: number;
+  tenants: number;
+  jobs: Record<string, number>;
 }
 
 export interface AgingBuckets {

@@ -44,6 +44,7 @@ mod listing_sync;
 mod mail;
 mod modules;
 mod notify;
+mod observability;
 mod openapi;
 mod payables;
 mod payments;
@@ -139,6 +140,7 @@ async fn rocket() -> _ {
         .merge(("limits.string", "1MiB"));
     let mut app = rocket::custom(figment)
         .manage(state)
+        .attach(observability::MetricsFairing)
         .attach(ratelimit::RateLimiter::from_env())
         .attach(cors::Cors)
         .attach(db::TxCommit)
@@ -211,14 +213,19 @@ async fn rocket() -> _ {
         }),
     );
 
-    app.mount("/", routes![cors::preflight]).mount(
-        "/",
-        routes![
-            ratelimit::reject_get,
-            ratelimit::reject_post,
-            ratelimit::reject_put,
-            ratelimit::reject_patch,
-            ratelimit::reject_delete,
-        ],
-    )
+    app.mount("/", routes![cors::preflight])
+        .mount(
+            "/",
+            routes![
+                ratelimit::reject_get,
+                ratelimit::reject_post,
+                ratelimit::reject_put,
+                ratelimit::reject_patch,
+                ratelimit::reject_delete,
+            ],
+        )
+        .mount(
+            "/",
+            routes![observability::metrics, observability::readiness],
+        )
 }

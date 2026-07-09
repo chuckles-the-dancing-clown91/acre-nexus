@@ -138,6 +138,7 @@ The biggest gap for "total" management — most operators live in their books.
 | White-label theming + **custom domains** | 🟡 | P2 | `custom_domain` field exists |
 | Durable background job queue | ✅ | — | retrying, scheduled |
 | API **rate limiting** / abuse protection | ✅ | — | fixed-window fairing, tight auth bucket + general bucket, `X-RateLimit-*` + `429`/`Retry-After` (`docs/RATE_LIMITING.md`) |
+| **Observability** — metrics + health probes | ✅ | — | Prometheus `/metrics` (request counters + latency histogram + live gauges, token-lockable), `/health/ready`, staff System-health card (`docs/OBSERVABILITY.md`) |
 | **Notifications** (email/SMS/push) + preferences | 🟡 | P1 | auto-email seed |
 | **Document storage + e-sign** | ✅ | — | Phase 1 storage + Phase 2 envelopes |
 | **Payments** processor + webhooks | ⬜ | P1 | |
