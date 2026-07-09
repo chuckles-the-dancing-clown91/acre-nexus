@@ -19,6 +19,15 @@ const DEMO_PASSWORD: &str = "password";
 pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     ensure_catalogs(db).await?;
 
+    // Never populate demo tenants + shared-password (`password`) logins in
+    // production, even against an empty database — that's a footgun if a prod
+    // environment is ever misconfigured with AUTO_MIGRATE on (issue #23). The
+    // structural catalogs above are safe/idempotent and still run.
+    if crate::config::is_production() {
+        tracing::info!("seed: production environment, skipping demo data");
+        return Ok(());
+    }
+
     if Tenant::find().count(db).await? > 0 {
         tracing::info!("seed: tenants already present, skipping demo data");
         return Ok(());
