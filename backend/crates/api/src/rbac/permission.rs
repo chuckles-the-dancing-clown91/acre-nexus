@@ -18,6 +18,12 @@ pub enum Permission {
     /// Rehab / construction projects: budgets, draws, change orders, lien waivers.
     RehabRead,
     RehabManage,
+    /// Investor / syndication: commitments, capital calls, distribution waterfalls.
+    InvestorRead,
+    InvestorManage,
+    /// HOA / association management: members, dues, violations, ARC requests.
+    HoaRead,
+    HoaManage,
     /// Standard PM reports: rent roll, T-12, aging, delinquency (+ exports).
     ReportRead,
     /// Rentals: units, leases/tenancies, rent ledger.
@@ -113,6 +119,10 @@ impl Permission {
             Permission::DealWrite => "deal:write",
             Permission::RehabRead => "rehab:read",
             Permission::RehabManage => "rehab:manage",
+            Permission::InvestorRead => "investor:read",
+            Permission::InvestorManage => "investor:manage",
+            Permission::HoaRead => "hoa:read",
+            Permission::HoaManage => "hoa:manage",
             Permission::ReportRead => "report:read",
             Permission::LeaseRead => "lease:read",
             Permission::LeaseManage => "lease:manage",
@@ -180,6 +190,10 @@ pub const ALL_PERMS: &[Permission] = &[
     DealWrite,
     RehabRead,
     RehabManage,
+    InvestorRead,
+    InvestorManage,
+    HoaRead,
+    HoaManage,
     ReportRead,
     LeaseRead,
     LeaseManage,

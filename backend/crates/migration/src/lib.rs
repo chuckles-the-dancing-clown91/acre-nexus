@@ -43,6 +43,8 @@ mod m20240101_000035_deals;
 mod m20240101_000036_rehab;
 mod m20240101_000037_platform_billing;
 mod m20240101_000038_rls_empty_guc;
+mod m20240101_000039_syndication;
+mod m20240101_000040_hoa;
 
 pub struct Migrator;
 
@@ -88,6 +90,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000036_rehab::Migration),
             Box::new(m20240101_000037_platform_billing::Migration),
             Box::new(m20240101_000038_rls_empty_guc::Migration),
+            Box::new(m20240101_000039_syndication::Migration),
+            Box::new(m20240101_000040_hoa::Migration),
         ]
     }
 }

@@ -88,6 +88,38 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "investor:read",
+        category: "Acquisitions",
+        label: "View investors",
+        description: "View investor commitments, capital calls, and distributions \
+                      for a legal entity.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "investor:manage",
+        category: "Acquisitions",
+        label: "Manage investors",
+        description: "Add commitments, issue capital calls, and post distribution \
+                      waterfalls.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "hoa:read",
+        category: "HOA",
+        label: "View HOA",
+        description: "View associations, members, dues assessments, violations, \
+                      and architectural (ARC) requests.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "hoa:manage",
+        category: "HOA",
+        label: "Manage HOA",
+        description: "Manage associations and members, assess dues, log/resolve \
+                      violations, and decide ARC requests.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "report:read",
         category: "Accounting",
         label: "View reports",

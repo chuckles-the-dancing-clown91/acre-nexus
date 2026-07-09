@@ -94,6 +94,45 @@ async fn integration_suite() {
     a_tenant_cannot_reach_another_tenants_rows(&c).await;
     x_tenant_header_cannot_cross_a_non_staff_user(&c).await;
     rls_bites_for_a_non_superuser_role(&c).await;
+
+    // #13 — Beyond-GA vertical modules.
+    syndication_end_to_end(&c).await;
+    hoa_end_to_end(&c).await;
+}
+
+// ---- shared request helpers for the module scenarios ----
+
+/// POST a JSON body and return the status + parsed JSON response.
+async fn post_json(
+    c: &Ctx,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> (Status, serde_json::Value) {
+    let resp = c
+        .client
+        .post(path)
+        .header(bearer(token))
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch()
+        .await;
+    let status = resp.status();
+    let val = resp
+        .into_json::<serde_json::Value>()
+        .await
+        .unwrap_or(serde_json::Value::Null);
+    (status, val)
+}
+
+/// POST with no body (for action endpoints), returning the status.
+async fn post_empty(c: &Ctx, path: &str, token: &str) -> Status {
+    c.client
+        .post(path)
+        .header(bearer(token))
+        .dispatch()
+        .await
+        .status()
 }
 
 // ---- helpers -------------------------------------------------------------
@@ -518,4 +557,280 @@ async fn rls_bites_for_a_non_superuser_role(c: &Ctx) {
         "an unset tenant context is the intentional cross-tenant plane"
     );
     txn.rollback().await.unwrap();
+}
+
+// ---- #13: Beyond-GA vertical modules ----
+
+/// Insert a fresh legal entity (LLC) for a tenant so a scenario is isolated from
+/// seed data and re-runs.
+async fn create_llc(c: &Ctx, tenant: Uuid) -> Uuid {
+    let id = Uuid::new_v4();
+    entity::llc::ActiveModel {
+        id: Set(id),
+        tenant_id: Set(tenant),
+        name: Set("Syndication Test Fund LLC".into()),
+        ein: Set("00-0000000".into()),
+        state: Set("DE".into()),
+        entity_type: Set("llc".into()),
+        registered_agent: Set(None),
+        status: Set("active".into()),
+        created_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .expect("insert test llc");
+    id
+}
+
+/// Turn a per-tenant module on (for the default-off `hoa` module).
+async fn enable_module(c: &Ctx, tenant: Uuid, key: &str) {
+    entity::tenant_module::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant),
+        module_key: Set(key.into()),
+        enabled: Set(true),
+        updated_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .expect("enable module");
+}
+
+fn sum_field(lines: &serde_json::Value, field: &str) -> i64 {
+    lines
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l[field].as_i64().unwrap())
+        .sum()
+}
+
+async fn syndication_end_to_end(c: &Ctx) {
+    let nw = tenant_id(c, "northwind").await;
+    let llc = create_llc(c, nw).await;
+    let manage = mint(c, Some(nw), false, &["investor:read", "investor:manage"]);
+    let commitments = format!("/entities/{llc}/commitments");
+
+    // RBAC: no permission → 403; no token → 401.
+    let noperm = mint(c, Some(nw), false, &[]);
+    let r = c
+        .client
+        .get(commitments.as_str())
+        .header(bearer(&noperm))
+        .dispatch()
+        .await;
+    assert_eq!(
+        r.status(),
+        Status::Forbidden,
+        "commitments without investor:read must be 403"
+    );
+    let r = c.client.get(commitments.as_str()).dispatch().await;
+    assert_eq!(r.status(), Status::Unauthorized);
+
+    // A GP (manager) and an LP (investor), committing 1:3.
+    let (st, _) = post_json(
+        c,
+        &commitments,
+        &manage,
+        serde_json::json!({"owner_name":"GP Sponsor","role":"manager","committed_cents":1_000_000}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "add GP commitment");
+    let (st, _) = post_json(
+        c,
+        &commitments,
+        &manage,
+        serde_json::json!({"owner_name":"LP Investor","role":"investor","committed_cents":3_000_000}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "add LP commitment");
+
+    // Call 4,000,000 (split 1:3) and fund it → contributed capital = committed.
+    let (st, call) = post_json(
+        c,
+        &format!("/entities/{llc}/capital-calls"),
+        &manage,
+        serde_json::json!({"amount_cents":4_000_000}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "issue capital call");
+    let call_id = call["id"].as_str().unwrap();
+    assert_eq!(
+        sum_field(&call["lines"], "amount_cents"),
+        4_000_000,
+        "call lines sum to the called amount"
+    );
+    assert_eq!(
+        post_empty(c, &format!("/capital-calls/{call_id}/fund"), &manage).await,
+        Status::Ok,
+        "fund the capital call"
+    );
+
+    let r = c
+        .client
+        .get(commitments.as_str())
+        .header(bearer(&manage))
+        .dispatch()
+        .await;
+    assert_eq!(r.status(), Status::Ok);
+    let stack: serde_json::Value = r.into_json().await.unwrap();
+    assert_eq!(
+        stack["total_contributed_cents"].as_i64().unwrap(),
+        4_000_000,
+        "funding credited contributed capital"
+    );
+
+    // Distribution 1: 4,000,000 → all return of capital, no carry.
+    let (st, d1) = post_json(
+        c,
+        &format!("/entities/{llc}/distributions"),
+        &manage,
+        serde_json::json!({"amount_cents":4_000_000,"carry_bps":2000}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "post first distribution");
+    assert_eq!(
+        sum_field(&d1["lines"], "total_cents"),
+        4_000_000,
+        "distribution conserves the amount"
+    );
+    assert_eq!(
+        sum_field(&d1["lines"], "return_of_capital_cents"),
+        4_000_000,
+        "capital is returned before any profit"
+    );
+
+    // Distribution 2: 1,000,000 pure profit → 20% carry to the GP = 200,000.
+    let (st, d2) = post_json(
+        c,
+        &format!("/entities/{llc}/distributions"),
+        &manage,
+        serde_json::json!({"amount_cents":1_000_000,"carry_bps":2000}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "post second distribution");
+    assert_eq!(
+        sum_field(&d2["lines"], "carry_cents"),
+        200_000,
+        "GP carry = 20% of the 1,000,000 profit tier"
+    );
+    assert_eq!(
+        sum_field(&d2["lines"], "total_cents"),
+        1_000_000,
+        "distribution conserves the amount"
+    );
+}
+
+async fn hoa_end_to_end(c: &Ctx) {
+    let nw = tenant_id(c, "northwind").await;
+    enable_module(c, nw, "hoa").await;
+    let manage = mint(c, Some(nw), false, &["hoa:read", "hoa:manage"]);
+
+    // RBAC: no permission → 403; no token → 401.
+    let noperm = mint(c, Some(nw), false, &[]);
+    let r = c
+        .client
+        .get("/hoa/associations")
+        .header(bearer(&noperm))
+        .dispatch()
+        .await;
+    assert_eq!(
+        r.status(),
+        Status::Forbidden,
+        "hoa without hoa:read must be 403"
+    );
+    let r = c.client.get("/hoa/associations").dispatch().await;
+    assert_eq!(r.status(), Status::Unauthorized);
+
+    // Association with monthly dues + two members.
+    let (st, assoc) = post_json(
+        c,
+        "/hoa/associations",
+        &manage,
+        serde_json::json!({"name":"Maple Grove HOA","dues_cents":25_000,"dues_frequency":"monthly"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "create association");
+    let aid = assoc["id"].as_str().unwrap().to_string();
+
+    let (st, m1) = post_json(
+        c,
+        &format!("/hoa/associations/{aid}/members"),
+        &manage,
+        serde_json::json!({"name":"Alice","unit_label":"1A"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "add member 1");
+    let member1 = m1["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("/hoa/associations/{aid}/members"),
+        &manage,
+        serde_json::json!({"name":"Bob","unit_label":"1B"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "add member 2");
+
+    // Bill all active members (no member_id) → two assessments of 25,000.
+    let (st, assessments) = post_json(
+        c,
+        &format!("/hoa/associations/{aid}/assessments"),
+        &manage,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "assess dues to all members");
+    let arr = assessments.as_array().unwrap();
+    assert_eq!(
+        arr.len(),
+        2,
+        "assessing with no member_id bills every member"
+    );
+    assert!(arr
+        .iter()
+        .all(|a| a["amount_cents"].as_i64().unwrap() == 25_000));
+
+    // Violation → fine.
+    let (st, v) = post_json(
+        c,
+        &format!("/hoa/associations/{aid}/violations"),
+        &manage,
+        serde_json::json!({"member_id":member1,"kind":"landscaping","description":"overgrown"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "log violation");
+    let vid = v["id"].as_str().unwrap().to_string();
+    let vpath = format!("/hoa/violations/{vid}");
+    let resp = c
+        .client
+        .patch(vpath.as_str())
+        .header(bearer(&manage))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({"status":"fined","fine_cents":5_000}).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok, "fine the violation");
+    let vv: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(vv["status"].as_str().unwrap(), "fined");
+    assert_eq!(vv["fine_cents"].as_i64().unwrap(), 5_000);
+
+    // ARC request → approve.
+    let (st, arc) = post_json(
+        c,
+        &format!("/hoa/associations/{aid}/arc-requests"),
+        &manage,
+        serde_json::json!({"member_id":member1,"title":"New fence"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "submit ARC request");
+    let arc_id = arc["id"].as_str().unwrap().to_string();
+    let (st, decided) = post_json(
+        c,
+        &format!("/hoa/arc-requests/{arc_id}/decide"),
+        &manage,
+        serde_json::json!({"decision":"approved","note":"looks good"}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "decide ARC request");
+    assert_eq!(decided["status"].as_str().unwrap(), "approved");
 }

@@ -155,8 +155,8 @@ The biggest gap for "total" management — most operators live in their books.
 
 | Feature | Status | Pri | Notes |
 |---|---|---|---|
-| **Investor / syndication** suite (cap table, capital calls, waterfalls, distributions, K-1s, investor portal) | ⬜ | P3 | if targeting GP/LP |
-| **HOA / association** mgmt (dues, violations, ARC requests, board/voting) | ⬜ | P3 | distinct buyer |
+| **Investor / syndication** suite (cap table, capital calls, waterfalls, distributions, K-1s, investor portal) | 🟡 | P3 | core shipped — commitments, capital calls, distribution waterfalls ([`SYNDICATION.md`](SYNDICATION.md)); K-1s + investor portal remain |
+| **HOA / association** mgmt (dues, violations, ARC requests, board/voting) | 🟡 | P3 | core shipped — associations, members, dues, violations, ARC ([`HOA.md`](HOA.md)); board/voting remains |
 | **Short-term rental** (channel mgr, dynamic pricing, cleaning turns) | ⬜ | P3 | Airbnb/VRBO |
 | Affordable / LIHTC compliance | ⬜ | P3 | heavy compliance |
 | Commercial (CAM reconciliation, percentage rent) | ⬜ | P3 | different lease math |

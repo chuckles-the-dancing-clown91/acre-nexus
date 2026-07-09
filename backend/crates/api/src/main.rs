@@ -64,6 +64,7 @@ mod seed;
 mod settings;
 mod state;
 mod storage;
+mod syndication;
 mod tenancy;
 mod tokens;
 mod underwriting;

@@ -31,6 +31,7 @@ pub mod domains;
 pub mod enrichment;
 pub mod entities;
 pub mod flips;
+pub mod hoa;
 pub mod integrations;
 pub mod lease_builder;
 pub mod leasing;
@@ -41,6 +42,7 @@ pub mod rehab;
 pub mod rentals;
 pub mod reports;
 pub mod search;
+pub mod syndication;
 pub mod theming;
 pub mod title;
 pub mod vendor_api;
@@ -186,6 +188,8 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(integrations::IntegrationsModule),
         Box::new(flips::FlipsModule),
         Box::new(rehab::RehabModule),
+        Box::new(syndication::SyndicationModule),
+        Box::new(hoa::HoaModule),
         Box::new(reports::ReportsModule),
         Box::new(search::SearchModule),
     ]

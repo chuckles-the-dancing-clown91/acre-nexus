@@ -48,6 +48,21 @@ pub const REHAB_DRAW_STATUS: &str = "rehab.draw_status";
 pub const REHAB_CHANGE_ORDER: &str = "rehab.change_order";
 pub const REHAB_LIEN_WAIVER: &str = "rehab.lien_waiver";
 
+// ---- Investor / syndication ----
+pub const COMMITMENT_CREATE: &str = "investor.commitment_create";
+pub const CAPITAL_CALL_CREATE: &str = "investor.capital_call";
+pub const CAPITAL_CALL_FUND: &str = "investor.capital_call_fund";
+pub const DISTRIBUTION_POST: &str = "investor.distribution";
+
+// ---- HOA / association ----
+pub const HOA_ASSOCIATION_CREATE: &str = "hoa.association_create";
+pub const HOA_MEMBER_CREATE: &str = "hoa.member_create";
+pub const HOA_ASSESSMENT_CREATE: &str = "hoa.assessment_create";
+pub const HOA_VIOLATION_CREATE: &str = "hoa.violation_create";
+pub const HOA_VIOLATION_UPDATE: &str = "hoa.violation_update";
+pub const HOA_ARC_CREATE: &str = "hoa.arc_create";
+pub const HOA_ARC_DECIDE: &str = "hoa.arc_decide";
+
 // ---- Rentals ----
 pub const UNIT_CREATE: &str = "unit.create";
 pub const UNIT_UPDATE: &str = "unit.update";
