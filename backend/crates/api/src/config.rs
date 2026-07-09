@@ -46,9 +46,12 @@ impl Config {
         // `JWT_SECRET`). See issues #23/#24/#25.
         let jwt_secret = resolve_jwt_secret(env::var("JWT_SECRET").ok().as_deref(), production)
             .unwrap_or_else(|e| panic!("{e}"));
-        let pii_key =
-            resolve_pii_key(env::var("PII_ENC_KEY").ok().as_deref(), &jwt_secret, production)
-                .unwrap_or_else(|e| panic!("{e}"));
+        let pii_key = resolve_pii_key(
+            env::var("PII_ENC_KEY").ok().as_deref(),
+            &jwt_secret,
+            production,
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
         let secrets_key = resolve_secrets_key(
             env::var("SECRETS_ENC_KEY").ok().as_deref(),
             &jwt_secret,
@@ -69,7 +72,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(60 * 60 * 24 * 30),
-            auto_migrate: resolve_auto_migrate(env::var("AUTO_MIGRATE").ok().as_deref(), production),
+            auto_migrate: resolve_auto_migrate(
+                env::var("AUTO_MIGRATE").ok().as_deref(),
+                production,
+            ),
         }
     }
 
@@ -115,9 +121,11 @@ fn resolve_jwt_secret(var: Option<&str>, production: bool) -> Result<String, Str
         }
         _ => {
             if production {
-                return Err("JWT_SECRET is required in production (APP_ENV=production); \
+                return Err(
+                    "JWT_SECRET is required in production (APP_ENV=production); \
                             refusing to sign access tokens with a built-in dev default"
-                    .into());
+                        .into(),
+                );
             }
             tracing::warn!("JWT_SECRET not set; using an insecure dev default");
             Ok(DEV_JWT_SECRET.to_string())
@@ -148,9 +156,11 @@ fn resolve_pii_key(
         }
         _ => {
             if production {
-                return Err("PII_ENC_KEY is required in production (APP_ENV=production); \
+                return Err(
+                    "PII_ENC_KEY is required in production (APP_ENV=production); \
                             refusing to derive the PII key from JWT_SECRET"
-                    .into());
+                        .into(),
+                );
             }
             tracing::warn!("PII_ENC_KEY not set; deriving PII key from JWT_SECRET (dev only)");
         }
@@ -173,19 +183,25 @@ fn resolve_secrets_key(
                 return Ok(bytes);
             }
             if production {
-                return Err("SECRETS_ENC_KEY must be 64 hex chars (32 bytes) in production \
+                return Err(
+                    "SECRETS_ENC_KEY must be 64 hex chars (32 bytes) in production \
                             (APP_ENV=production)"
-                    .into());
+                        .into(),
+                );
             }
             tracing::warn!("SECRETS_ENC_KEY is not 64 hex chars; deriving a dev-only key");
         }
         _ => {
             if production {
-                return Err("SECRETS_ENC_KEY is required in production (APP_ENV=production); \
+                return Err(
+                    "SECRETS_ENC_KEY is required in production (APP_ENV=production); \
                             refusing to derive the integration-secrets key from JWT_SECRET"
-                    .into());
+                        .into(),
+                );
             }
-            tracing::warn!("SECRETS_ENC_KEY not set; deriving secrets key from JWT_SECRET (dev only)");
+            tracing::warn!(
+                "SECRETS_ENC_KEY not set; deriving secrets key from JWT_SECRET (dev only)"
+            );
         }
     }
     Ok(derived_key(b"acre-secrets-v1:", jwt_secret))
@@ -228,8 +244,7 @@ mod tests {
     use super::*;
 
     // A valid 64-hex-char (32-byte) key for the key-resolution tests.
-    const VALID_HEX_KEY: &str =
-        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+    const VALID_HEX_KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
     // A production-strength JWT secret (>= MIN_JWT_SECRET_LEN, not the default).
     const STRONG_JWT: &str = "a-strong-unique-production-secret-value";
 
@@ -271,7 +286,10 @@ mod tests {
         // Too short is rejected.
         assert!(resolve_jwt_secret(Some("too-short-secret"), true).is_err());
         // A strong, unique secret is accepted.
-        assert_eq!(resolve_jwt_secret(Some(STRONG_JWT), true).unwrap(), STRONG_JWT);
+        assert_eq!(
+            resolve_jwt_secret(Some(STRONG_JWT), true).unwrap(),
+            STRONG_JWT
+        );
     }
 
     // ---- #24: PII key fails closed in production ----
@@ -280,7 +298,10 @@ mod tests {
     fn pii_key_derives_in_dev_fails_closed_in_prod() {
         // Dev: derives from JWT secret when unset or malformed.
         assert_eq!(resolve_pii_key(None, "s", false).unwrap().len(), 32);
-        assert_eq!(resolve_pii_key(Some("nothex"), "s", false).unwrap().len(), 32);
+        assert_eq!(
+            resolve_pii_key(Some("nothex"), "s", false).unwrap().len(),
+            32
+        );
         // Prod: an explicit valid key is accepted...
         let bytes = resolve_pii_key(Some(VALID_HEX_KEY), "s", true).unwrap();
         assert_eq!(bytes.len(), 32);
@@ -295,7 +316,12 @@ mod tests {
     #[test]
     fn secrets_key_derives_in_dev_fails_closed_in_prod() {
         assert_eq!(resolve_secrets_key(None, "s", false).unwrap().len(), 32);
-        assert_eq!(resolve_secrets_key(Some(VALID_HEX_KEY), "s", true).unwrap().len(), 32);
+        assert_eq!(
+            resolve_secrets_key(Some(VALID_HEX_KEY), "s", true)
+                .unwrap()
+                .len(),
+            32
+        );
         assert!(resolve_secrets_key(None, "s", true).is_err());
         assert!(resolve_secrets_key(Some("nothex"), "s", true).is_err());
     }

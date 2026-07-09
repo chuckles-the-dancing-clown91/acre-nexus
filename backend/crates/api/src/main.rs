@@ -70,6 +70,9 @@ mod underwriting;
 mod webhooks_out;
 mod workflow;
 
+#[cfg(test)]
+mod itest;
+
 use config::Config;
 use migration::{Migrator, MigratorTrait};
 use rocket_okapi::okapi::merge::merge_specs;
@@ -126,7 +129,15 @@ async fn rocket() -> _ {
     saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
+    build_rocket(state)
+}
 
+/// Assemble the Rocket application — fairings, core + module routes, the merged
+/// OpenAPI document, and the Swagger/RapiDoc explorers — from a ready
+/// [`AppState`]. Split out from [`rocket`] so integration tests can build the
+/// exact same app against a test database, without the boot-time
+/// migrate/seed/scheduler side effects.
+pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
     // Accumulate the merged OpenAPI document as we mount routes. Core routes
     // first, then every pluggable module's routes — each module contributes both
     // its routes and a matching spec fragment.

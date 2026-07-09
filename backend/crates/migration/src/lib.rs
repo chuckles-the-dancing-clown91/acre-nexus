@@ -42,6 +42,7 @@ mod m20240101_000034_maintenance_ops;
 mod m20240101_000035_deals;
 mod m20240101_000036_rehab;
 mod m20240101_000037_platform_billing;
+mod m20240101_000038_rls_empty_guc;
 
 pub struct Migrator;
 
@@ -86,6 +87,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000035_deals::Migration),
             Box::new(m20240101_000036_rehab::Migration),
             Box::new(m20240101_000037_platform_billing::Migration),
+            Box::new(m20240101_000038_rls_empty_guc::Migration),
         ]
     }
 }

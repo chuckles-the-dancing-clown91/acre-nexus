@@ -13,8 +13,12 @@
 //!
 //! The tenant is resolved best-effort (JWT `tid` → `X-Tenant` → `Host`). When it is
 //! `None` (platform staff at Acre HQ, login, background paths) the GUC is left
-//! unset and the RLS policies' `IS NULL` branch allows all rows — i.e. the
-//! platform plane is the intentional cross-tenant path, exactly as before.
+//! unset and the RLS policies' "no tenant context" branch allows all rows — i.e.
+//! the platform plane is the intentional cross-tenant path, exactly as before.
+//! (A custom GUC set by `SET LOCAL` reverts to `''`, not `NULL`, after its
+//! transaction, so a reused pooled connection reports `''` here; the policy
+//! treats `''` and `NULL` alike — see migration `000038` — so the platform plane
+//! stays correct regardless of connection reuse.)
 
 use crate::state::AppState;
 use rocket::fairing::{Fairing, Info, Kind};

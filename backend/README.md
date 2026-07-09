@@ -61,4 +61,18 @@ existing ciphertext is only decryptable with the key that wrote it.
 cargo test
 ```
 
+Most tests are pure-logic unit tests and need no services. The **integration
+tests** (`crates/api/src/itest.rs`) boot the real Rocket app and exercise
+auth/RBAC enforcement and cross-tenant isolation (incl. RLS) over HTTP; they run
+only when `TEST_DATABASE_URL` points at a disposable Postgres, and skip
+otherwise so a plain `cargo test` stays green with no database:
+
+```bash
+createdb acre_it
+TEST_DATABASE_URL=postgres://localhost:5432/acre_it cargo test -p api itest
+```
+
+CI provisions a throwaway Postgres and sets `TEST_DATABASE_URL`, so these run on
+every push (see `.github/workflows/ci.yml`).
+
 See `../docs/API.md` for the endpoint reference and `../ARCHITECTURE.md` for design.
