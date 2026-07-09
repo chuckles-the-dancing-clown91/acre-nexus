@@ -1969,7 +1969,7 @@ async fn seed_lease_payment(
         format!(
             "RCT-{}-{}",
             &d[..4],
-            &id.simple().to_string()[..8].to_uppercase()
+            id.simple().to_string()[..8].to_uppercase()
         )
     });
     entity::lease_payment::ActiveModel {
