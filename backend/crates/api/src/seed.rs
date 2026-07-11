@@ -285,75 +285,85 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         db,
         northwind,
         maple,
-        "The Maple Court",
-        "123 Maple Ct",
-        "Portland, OR",
-        8,
-        8,
-        1_480_000,
-        "Stabilized",
-        2016,
-        "Dana K.",
+        PropSpec {
+            name: "The Maple Court",
+            address: "123 Maple Ct",
+            city: "Portland, OR",
+            units: 8,
+            occupied: 8,
+            rent_cents: 1_480_000,
+            status: "Stabilized",
+            year: 2016,
+            manager: "Dana K.",
+        },
     )
     .await?;
     seed_property(
         db,
         northwind,
         maple,
-        "Birchwood Lofts",
-        "88 Birch Ave",
-        "Portland, OR",
-        12,
-        11,
-        1_790_000,
-        "Vacant",
-        2019,
-        "Dana K.",
+        PropSpec {
+            name: "Birchwood Lofts",
+            address: "88 Birch Ave",
+            city: "Portland, OR",
+            units: 12,
+            occupied: 11,
+            rent_cents: 1_790_000,
+            status: "Vacant",
+            year: 2019,
+            manager: "Dana K.",
+        },
     )
     .await?;
     seed_property(
         db,
         northwind,
         harbor,
-        "Harbor View",
-        "700 Harbor Dr",
-        "Portland, OR",
-        24,
-        23,
-        5_060_000,
-        "Vacant",
-        2014,
-        "Marcus R.",
+        PropSpec {
+            name: "Harbor View",
+            address: "700 Harbor Dr",
+            city: "Portland, OR",
+            units: 24,
+            occupied: 23,
+            rent_cents: 5_060_000,
+            status: "Vacant",
+            year: 2014,
+            manager: "Marcus R.",
+        },
     )
     .await?;
     seed_property(
         db,
         northwind,
         alder,
-        "The Aldercroft",
-        "15 Alder St",
-        "Portland, OR",
-        6,
-        6,
-        777_000,
-        "Stabilized",
-        2011,
-        "Marcus R.",
+        PropSpec {
+            name: "The Aldercroft",
+            address: "15 Alder St",
+            city: "Portland, OR",
+            units: 6,
+            occupied: 6,
+            rent_cents: 777_000,
+            status: "Stabilized",
+            year: 2011,
+            manager: "Marcus R.",
+        },
     )
     .await?;
     seed_property(
         db,
         northwind,
         elm,
-        "Elmwood Residences",
-        "230 Elm Blvd",
-        "Lake Oswego, OR",
-        10,
-        9,
-        2_227_500,
-        "Vacant",
-        2021,
-        "Dana K.",
+        PropSpec {
+            name: "Elmwood Residences",
+            address: "230 Elm Blvd",
+            city: "Lake Oswego, OR",
+            units: 10,
+            occupied: 9,
+            rent_cents: 2_227_500,
+            status: "Vacant",
+            year: 2021,
+            manager: "Dana K.",
+        },
     )
     .await?;
 
@@ -364,45 +374,51 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         db,
         cascade,
         riverside,
-        "Riverside Flats",
-        "12 River Rd",
-        "Seattle, WA",
-        40,
-        38,
-        6_200_000,
-        "Stabilized",
-        2018,
-        "Lena T.",
+        PropSpec {
+            name: "Riverside Flats",
+            address: "12 River Rd",
+            city: "Seattle, WA",
+            units: 40,
+            occupied: 38,
+            rent_cents: 6_200_000,
+            status: "Stabilized",
+            year: 2018,
+            manager: "Lena T.",
+        },
     )
     .await?;
     seed_property(
         db,
         cascade,
         cnorth,
-        "Cascade North Apartments",
-        "400 North Ave",
-        "Bellevue, WA",
-        60,
-        57,
-        9_600_000,
-        "Vacant",
-        2020,
-        "Lena T.",
+        PropSpec {
+            name: "Cascade North Apartments",
+            address: "400 North Ave",
+            city: "Bellevue, WA",
+            units: 60,
+            occupied: 57,
+            rent_cents: 9_600_000,
+            status: "Vacant",
+            year: 2020,
+            manager: "Lena T.",
+        },
     )
     .await?;
     seed_property(
         db,
         cascade,
         cnorth,
-        "Birch & Main",
-        "88 Main St",
-        "Tacoma, WA",
-        24,
-        24,
-        4_100_000,
-        "Stabilized",
-        2015,
-        "Omar D.",
+        PropSpec {
+            name: "Birch & Main",
+            address: "88 Main St",
+            city: "Tacoma, WA",
+            units: 24,
+            occupied: 24,
+            rent_cents: 4_100_000,
+            status: "Stabilized",
+            year: 2015,
+            manager: "Omar D.",
+        },
     )
     .await?;
 
@@ -2618,21 +2634,38 @@ async fn seed_portfolio(
     Ok(id)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The variable attributes of a demo property (the rest are fixed). Grouped into
+/// a struct so `seed_property` reads clearly at each call site instead of a long
+/// positional argument list.
+struct PropSpec<'a> {
+    name: &'a str,
+    address: &'a str,
+    city: &'a str,
+    units: i32,
+    occupied: i32,
+    rent_cents: i64,
+    status: &'a str,
+    year: i32,
+    manager: &'a str,
+}
+
 async fn seed_property(
     db: &DatabaseConnection,
     tenant_id: Uuid,
     llc_id: Uuid,
-    name: &str,
-    address: &str,
-    city: &str,
-    units: i32,
-    occupied: i32,
-    rent_cents: i64,
-    status: &str,
-    year: i32,
-    manager: &str,
+    spec: PropSpec<'_>,
 ) -> anyhow::Result<Uuid> {
+    let PropSpec {
+        name,
+        address,
+        city,
+        units,
+        occupied,
+        rent_cents,
+        status,
+        year,
+        manager,
+    } = spec;
     let id = Uuid::new_v4();
     entity::property::ActiveModel {
         id: Set(id),
