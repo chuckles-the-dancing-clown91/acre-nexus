@@ -11,6 +11,12 @@ Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
 The next slice of work, in dependency order:
 
+- [x] **Prod-safety config guards (T0 · #23/#24/#25)**: production
+      (`APP_ENV=production`) now **fails closed** — `JWT_SECRET`, `PII_ENC_KEY`,
+      and `SECRETS_ENC_KEY` must be explicitly set (no derive-from-`JWT_SECRET`
+      fallback, weak/default `JWT_SECRET` rejected), `AUTO_MIGRATE` defaults off,
+      and demo data is never seeded in prod. See
+      [`backend/README.md`](../backend/README.md#production-safety-app_envproduction).
 - [x] **Portal round-out (Phase 5)**: lease + documents view, maintenance
       requests, messaging, move-in/move-out inspections, and security-deposit
       disposition — shipped, see [`PORTAL.md`](PORTAL.md).

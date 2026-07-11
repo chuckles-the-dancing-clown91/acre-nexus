@@ -22,5 +22,9 @@
 .idea/
 .vscode/
 
-# Local object store (document service dev backend)
+# Local object store (document service dev backend). The STORAGE_DIR default is
+# relative (`./data/objects`), so it lands under whichever crate dir the process
+# runs from — cover both the repo root and the `api` crate (server/tests).
 /backend/data/
+/backend/crates/api/data/
+**/data/objects/

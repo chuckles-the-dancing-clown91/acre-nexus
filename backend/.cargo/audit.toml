@@ -1,0 +1,16 @@
+# cargo-audit configuration (issue #65). Read by `cargo audit` when run from
+# `backend/`. Advisories are gating in CI (see .github/workflows/security.yml);
+# to accept a specific one, add its RustSec ID to `ignore` below WITH a comment
+# explaining why (e.g. not reachable, no fixed version yet, tracked upstream).
+[advisories]
+ignore = [
+    # rsa: "Marvin Attack" RSA timing sidechannel. No fixed upstream version
+    # exists. `rsa` is pulled only by sqlx's MySQL backend (sqlx-mysql); this app
+    # uses sqlx-postgres exclusively, so the vulnerable code is never compiled or
+    # reached. Re-evaluate if a MySQL backend is ever enabled or a fix ships.
+    "RUSTSEC-2023-0071",
+    # proc-macro-error2: unmaintained (advisory is a warning, not a
+    # vulnerability). Build-time-only proc-macro dependency pulled transitively;
+    # no runtime exposure. Tracked; will drop when upstreams migrate off it.
+    "RUSTSEC-2026-0173",
+]

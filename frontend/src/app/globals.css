@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind CSS v4: single import replaces the v3 base/components/utilities
+   directives. The JS theme config (colors → CSS vars, fonts, radii, the animate
+   plugin) is loaded via @config so the design tokens carry over unchanged. */
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 /*
  * Acre design tokens — ported verbatim from the Claude Design prototype

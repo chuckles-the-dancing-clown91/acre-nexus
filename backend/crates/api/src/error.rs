@@ -61,11 +61,15 @@ impl<'r> Responder<'r, 'static> for ApiError {
         // Tag the log line with the same id that lands in the audit_log row for
         // this request, so the two can be joined by `request_id`.
         let request_id = crate::audit::current_request_id(req);
+        // Surface 5xx-class errors to the metrics + error-reporting sink (#32),
+        // correlated by the same request id that lands in the audit log.
         if let ApiError::Db(e) = &self {
             tracing::error!(request_id = ?request_id, "db error: {e}");
+            crate::metrics::report_error(request_id, "db", &e.to_string());
         }
         if let ApiError::Internal(e) = &self {
             tracing::error!(request_id = ?request_id, "internal error: {e:?}");
+            crate::metrics::report_error(request_id, "internal", &format!("{e:?}"));
         }
         let body = serde_json::json!({
             "error": { "code": self.code(), "message": message }

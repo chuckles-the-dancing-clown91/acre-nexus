@@ -1,75 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, type DomainInfo } from "@/lib/api";
+import { useForm } from "react-hook-form";
+import {
+  useDomains,
+  useCreateDomain,
+  useVerifyDomain,
+  useDeleteDomain,
+  useVerifyDomainEmail,
+} from "@/lib/queries";
 import { Badge, Card, statusTone } from "@/components/ui";
 
 const AUDIENCES = ["admin", "owner", "renter"];
 
 export default function DomainsPage() {
-  const [domains, setDomains] = useState<DomainInfo[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [hostname, setHostname] = useState("");
-  const [audience, setAudience] = useState("admin");
-  const [busy, setBusy] = useState(false);
-  const [emailBusy, setEmailBusy] = useState<string | null>(null);
+  const domainsQuery = useDomains();
+  const domains = domainsQuery.data;
+  const create = useCreateDomain();
+  const verifyMut = useVerifyDomain();
+  const removeMut = useDeleteDomain();
+  const verifyEmailMut = useVerifyDomainEmail();
 
-  const load = () =>
-    api
-      .domains()
-      .then(setDomains)
-      .catch((e) => setError(e.message));
+  const error =
+    domainsQuery.error ||
+    create.error ||
+    verifyMut.error ||
+    removeMut.error ||
+    verifyEmailMut.error;
 
-  useEffect(() => {
-    load();
-  }, []);
+  const { register, handleSubmit, reset } = useForm<{
+    hostname: string;
+    audience: string;
+  }>({ defaultValues: { hostname: "", audience: "admin" } });
 
-  async function addDomain(e: React.FormEvent) {
-    e.preventDefault();
+  const onAdd = handleSubmit(({ hostname, audience }) => {
     if (!hostname.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api.createDomain(hostname.trim(), audience);
-      setHostname("");
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verify(id: string) {
-    try {
-      await api.verifyDomain(id);
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function remove(id: string) {
-    try {
-      await api.deleteDomain(id);
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function verifyEmail(id: string) {
-    setEmailBusy(id);
-    setError(null);
-    try {
-      await api.verifyDomainEmail(id);
-      await load();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setEmailBusy(null);
-    }
-  }
+    create.mutate(
+      { hostname: hostname.trim(), audience },
+      { onSuccess: () => reset() }
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -83,18 +52,17 @@ export default function DomainsPage() {
         </p>
       </div>
 
-      {error && <p className="text-bad">{error}</p>}
+      {error && <p className="text-bad">{error.message}</p>}
 
       <Card className="p-5">
         <h2 className="mb-3 font-display text-lg font-bold">
           Add a custom domain
         </h2>
-        <form onSubmit={addDomain} className="flex flex-wrap items-end gap-3">
+        <form onSubmit={onAdd} className="flex flex-wrap items-end gap-3">
           <label className="flex-1 min-w-[220px] text-sm">
             <span className="mb-1 block text-ink-3">Hostname</span>
             <input
-              value={hostname}
-              onChange={(e) => setHostname(e.target.value)}
+              {...register("hostname")}
               placeholder="portal.yourfirm.com"
               className="w-full rounded-lg border border-line bg-surface px-3 py-2"
             />
@@ -102,8 +70,7 @@ export default function DomainsPage() {
           <label className="text-sm">
             <span className="mb-1 block text-ink-3">Audience</span>
             <select
-              value={audience}
-              onChange={(e) => setAudience(e.target.value)}
+              {...register("audience")}
               className="rounded-lg border border-line bg-surface px-3 py-2 capitalize"
             >
               {AUDIENCES.map((a) => (
@@ -115,7 +82,7 @@ export default function DomainsPage() {
           </label>
           <button
             type="submit"
-            disabled={busy}
+            disabled={create.isPending}
             className="rounded-lg bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50"
           >
             Add domain
@@ -141,14 +108,14 @@ export default function DomainsPage() {
               <Badge tone={statusTone(d.tls_status)}>TLS {d.tls_status}</Badge>
               {!d.verified && (
                 <button
-                  onClick={() => verify(d.id)}
+                  onClick={() => verifyMut.mutate(d.id)}
                   className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold"
                 >
                   Verify DNS
                 </button>
               )}
               <button
-                onClick={() => remove(d.id)}
+                onClick={() => removeMut.mutate(d.id)}
                 className="rounded-lg border border-line px-3 py-1.5 text-sm text-ink-3"
               >
                 Remove
@@ -175,11 +142,17 @@ export default function DomainsPage() {
                     {d.email_verified ? "email verified" : "email unverified"}
                   </Badge>
                   <button
-                    onClick={() => verifyEmail(d.id)}
-                    disabled={emailBusy === d.id}
+                    onClick={() => verifyEmailMut.mutate(d.id)}
+                    disabled={
+                      verifyEmailMut.isPending &&
+                      verifyEmailMut.variables === d.id
+                    }
                     className="ml-auto rounded-lg border border-line px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
                   >
-                    {emailBusy === d.id ? "Verifying…" : "Verify email DNS"}
+                    {verifyEmailMut.isPending &&
+                    verifyEmailMut.variables === d.id
+                      ? "Verifying…"
+                      : "Verify email DNS"}
                   </button>
                 </div>
                 <p className="mb-3 text-ink-3">

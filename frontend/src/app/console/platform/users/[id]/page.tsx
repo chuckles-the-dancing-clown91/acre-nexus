@@ -14,7 +14,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/lib/auth";
 import { iam } from "@/lib/api";
 import type {
-  Membership,
   MembershipInput,
   ProfileDto,
   ProfileInput,

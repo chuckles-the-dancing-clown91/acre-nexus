@@ -1,0 +1,46 @@
+# Local / staging stack (issue #66): Postgres + backend + frontend.
+# Dev-shaped config (APP_ENV=development, AUTO_MIGRATE on) — do NOT use these
+# secrets in production; see docs/DEPLOYMENT.md for the prod shape.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: acre
+      POSTGRES_USER: acre
+      POSTGRES_PASSWORD: acre
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acre -d acre"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://acre:acre@db:5432/acre
+      APP_ENV: development
+      JWT_SECRET: dev-insecure-change-me
+      AUTO_MIGRATE: "1"
+      PUBLIC_API_URL: http://localhost:8000
+      PUBLIC_APP_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

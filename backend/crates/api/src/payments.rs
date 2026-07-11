@@ -314,7 +314,7 @@ pub async fn settle_payment(
     let receipt_number = format!(
         "RCT-{}-{}",
         now.format("%Y"),
-        &payment.id.simple().to_string()[..8].to_uppercase()
+        payment.id.simple().to_string()[..8].to_uppercase()
     );
 
     // Post to the owning entity's books (properties without an LLC keep

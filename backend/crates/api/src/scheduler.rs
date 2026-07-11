@@ -83,7 +83,10 @@ pub fn spawn(db: DatabaseConnection) {
     });
 }
 
-async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+/// Process all currently-due jobs by advancing each one step. Exposed to the
+/// crate so integration tests can drive the queue deterministically (one tick at
+/// a time) instead of waiting on the spawned interval.
+pub(crate) async fn run_due_jobs(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     let now = Utc::now();
     let due = BackgroundJob::find()
         .filter(entity::background_job::Column::RunAt.lte(now))
@@ -175,11 +178,20 @@ async fn advance(
                             "exhausted": true,
                         })));
                         tracing::warn!(job = %job.id, module = manifest.key, "job failed: retry budget exhausted");
+                        crate::metrics::record_job("failed");
                     } else {
                         tracing::info!(job = %job.id, module = manifest.key, status = %outcome.status, retry = outcome.retry, "job advanced");
+                        if outcome.retry {
+                            crate::metrics::record_job("retry");
+                        } else if outcome.status == "completed" || outcome.status == "failed" {
+                            crate::metrics::record_job(&outcome.status);
+                        }
                     }
                 }
-                None => am.status = Set("completed".into()),
+                None => {
+                    am.status = Set("completed".into());
+                    crate::metrics::record_job("completed");
+                }
             }
         }
         None => {

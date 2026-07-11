@@ -75,6 +75,12 @@ impl Fairing for AuditFairing {
         // Correlation id back to the caller.
         res.set_header(Header::new("X-Request-Id", trace.request_id.to_string()));
 
+        // Feed the metrics registry (#32): request rate/latency/status class.
+        crate::metrics::record_request(
+            res.status().code,
+            trace.started.elapsed().as_millis() as u64,
+        );
+
         let Some(state) = req.rocket().state::<AppState>() else {
             return;
         };

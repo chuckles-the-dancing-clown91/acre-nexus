@@ -14,6 +14,23 @@ jobs:
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
+    # A throwaway Postgres so the integration tests (auth/RBAC + tenant
+    # isolation, crates/api/src/itest.rs) run on every push. `trust` auth keeps
+    # it password-free and lets the RLS test connect as a second, non-superuser
+    # role.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: acre_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -39,6 +56,8 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+        env:
+          TEST_DATABASE_URL: postgres://postgres@localhost:5432/acre_test
 
   frontend:
     name: Frontend (Next.js)

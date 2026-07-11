@@ -97,7 +97,7 @@ pub fn sum_line_items(items: &[LineItem]) -> Result<i64, String> {
 /// Short human bill reference, unique enough per tenant (uniqueness is
 /// enforced by `uq_vendor_bill_number`).
 pub fn bill_number(id: Uuid) -> String {
-    format!("BILL-{}", &id.simple().to_string()[..8].to_uppercase())
+    format!("BILL-{}", id.simple().to_string()[..8].to_uppercase())
 }
 
 // ---------------------------------------------------------------------------

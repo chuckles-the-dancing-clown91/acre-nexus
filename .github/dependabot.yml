@@ -1,0 +1,38 @@
+# Dependency-currency automation (issue #65). Dependabot opens grouped update
+# PRs weekly for each ecosystem; the Security workflow (security.yml) gates on
+# advisories, and CodeQL provides SAST.
+version: 2
+updates:
+  # Backend (Rust workspace).
+  - package-ecosystem: "cargo"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "backend"]
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Frontend (Next.js / npm).
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "frontend"]
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # The GitHub Actions workflows themselves.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "ci"]
