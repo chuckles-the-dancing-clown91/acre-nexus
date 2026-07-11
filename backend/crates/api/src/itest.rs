@@ -98,6 +98,101 @@ async fn integration_suite() {
     // #13 — Beyond-GA vertical modules.
     syndication_end_to_end(&c).await;
     hoa_end_to_end(&c).await;
+
+    // #28 — background job queue retry/backoff/terminal-failure contract.
+    bg_job_queue_contract(&c).await;
+}
+
+/// #28 — the durable job queue's retry/backoff/terminal-failure contract, driven
+/// one deterministic tick at a time (see `modules::test_jobs`).
+async fn bg_job_queue_contract(c: &Ctx) {
+    use crate::scheduler::{enqueue_with_retries, run_due_jobs};
+    let nw = tenant_id(c, "northwind").await;
+
+    async fn job(c: &Ctx, id: Uuid) -> entity::background_job::Model {
+        entity::prelude::BackgroundJob::find_by_id(id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+    // Tick until the job reaches a terminal state (or we give up).
+    async fn drain(c: &Ctx, id: Uuid) -> entity::background_job::Model {
+        for _ in 0..8 {
+            let j = job(c, id).await;
+            if j.status == "failed" || j.status == "completed" {
+                return j;
+            }
+            run_due_jobs(&c.db).await.unwrap();
+        }
+        job(c, id).await
+    }
+
+    // (1) A job that always fails exhausts its budget → terminal `failed`, with
+    //     last_error populated and attempts capped at max_attempts.
+    let id = enqueue_with_retries(
+        &c.db,
+        nw,
+        "test_retry",
+        serde_json::json!({"fail_until": 99}),
+        0,
+        3,
+    )
+    .await
+    .unwrap();
+    let j = drain(c, id).await;
+    assert_eq!(j.status, "failed", "always-failing job must end failed");
+    assert_eq!(j.attempts, 3, "attempts must stop at max_attempts");
+    assert!(
+        j.last_error.is_some(),
+        "a failed job must record last_error"
+    );
+
+    // (2) A job that fails twice then succeeds → `completed` after 3 attempts.
+    let id = enqueue_with_retries(
+        &c.db,
+        nw,
+        "test_retry",
+        serde_json::json!({"fail_until": 2}),
+        0,
+        5,
+    )
+    .await
+    .unwrap();
+    let j = drain(c, id).await;
+    assert_eq!(j.status, "completed", "fail-then-succeed job must complete");
+    assert_eq!(j.attempts, 3, "two failures + one success = 3 attempts");
+
+    // (3) Backoff defers the retry: a long retry delay pushes run_at into the
+    //     future so the queue doesn't busy-loop.
+    let id = enqueue_with_retries(
+        &c.db,
+        nw,
+        "test_retry",
+        serde_json::json!({"fail_until": 99, "retry_delay_secs": 3600}),
+        0,
+        5,
+    )
+    .await
+    .unwrap();
+    run_due_jobs(&c.db).await.unwrap();
+    let after1 = job(c, id).await;
+    assert_eq!(after1.attempts, 1);
+    assert_eq!(after1.status, "pending");
+    let deadline = (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp();
+    assert!(
+        after1.run_at.timestamp() > deadline,
+        "a retry must be deferred by its backoff"
+    );
+
+    // (4) A subsequent tick does NOT reprocess the not-yet-due job — jobs are
+    //     durable and processed once per due window (no double-processing).
+    run_due_jobs(&c.db).await.unwrap();
+    let after2 = job(c, id).await;
+    assert_eq!(
+        after2.attempts, 1,
+        "a deferred job must not be re-run before run_at (no double-processing)"
+    );
 }
 
 // ---- shared request helpers for the module scenarios ----

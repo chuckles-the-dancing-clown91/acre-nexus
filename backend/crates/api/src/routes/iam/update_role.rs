@@ -53,7 +53,10 @@ pub async fn update_role(
         None,
     )
     .await;
-    let updated = Role::find_by_id(rid).one(&db).await?.unwrap();
+    let updated = Role::find_by_id(rid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("role vanished after update")))?;
     let perms = role_permissions(&db, rid).await?;
     Ok(Json(RoleDto {
         id: updated.id,

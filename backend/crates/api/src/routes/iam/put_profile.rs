@@ -43,6 +43,9 @@ pub async fn put_profile(
     )
     .await;
 
-    let p = UserProfile::find_by_id(uid).one(&db).await?.unwrap();
+    let p = UserProfile::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("profile vanished after upsert")))?;
     Ok(Json(p.into()))
 }

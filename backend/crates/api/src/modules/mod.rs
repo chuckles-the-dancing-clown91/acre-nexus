@@ -43,6 +43,8 @@ pub mod rentals;
 pub mod reports;
 pub mod search;
 pub mod syndication;
+#[cfg(test)]
+pub mod test_jobs;
 pub mod theming;
 pub mod title;
 pub mod vendor_api;
@@ -170,7 +172,8 @@ pub trait PlatformModule: Send + Sync {
 
 /// The single source of truth for which modules exist. Order is the mount order.
 pub fn registry() -> Vec<Box<dyn PlatformModule>> {
-    vec![
+    #[allow(unused_mut)]
+    let mut modules: Vec<Box<dyn PlatformModule>> = vec![
         Box::new(properties::PropertiesModule),
         Box::new(enrichment::EnrichmentModule),
         Box::new(entities::EntitiesModule),
@@ -192,7 +195,11 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(hoa::HoaModule),
         Box::new(reports::ReportsModule),
         Box::new(search::SearchModule),
-    ]
+    ];
+    // A deterministic job kind used only by the integration tests (#28).
+    #[cfg(test)]
+    modules.push(Box::new(test_jobs::TestJobsModule));
+    modules
 }
 
 /// The module that owns a given background-job kind, if any.

@@ -1,0 +1,8 @@
+# cargo-audit configuration (issue #65). Read by `cargo audit` when run from
+# `backend/`. Advisories are gating in CI (see .github/workflows/security.yml);
+# to accept a specific one, add its RustSec ID to `ignore` below WITH a comment
+# explaining why (e.g. not reachable, no fixed version yet, tracked upstream).
+[advisories]
+ignore = [
+    # "RUSTSEC-0000-0000", # rationale for accepting this advisory
+]
