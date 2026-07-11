@@ -1,7 +1,7 @@
+// Tailwind CSS v4 uses a dedicated PostCSS plugin; autoprefixer is built in.
 const config = {
   plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
+    "@tailwindcss/postcss": {},
   },
 };
 
