@@ -23,6 +23,7 @@ import {
   type CreateTokenResponse,
   type CreateUserInput,
   type CreateVendorBillInput,
+  type DomainInfo,
   type FinanceSeries,
   type InviteMemberInput,
   type Lead,
@@ -120,6 +121,8 @@ export const queryKeys = {
   }) => ["reminders", params ?? {}] as const,
   // CRM leads (#62)
   leads: (status?: string) => ["leads", status ?? ""] as const,
+  // White-label domains
+  domains: ["domains"] as const,
 };
 
 /** True when there's an access token to authenticate console requests. */
@@ -201,6 +204,46 @@ export function useRevokeApiToken() {
       qc.invalidateQueries({ queryKey: queryKeys.apiTokens });
     },
   });
+}
+
+// ---- White-label domains -----------------------------------------------------
+
+export function useDomains(opts?: QueryOpts<DomainInfo[]>) {
+  return useQuery({
+    queryKey: queryKeys.domains,
+    queryFn: () => api.domains(),
+    enabled: isAuthed(),
+    ...opts,
+  });
+}
+
+/** Mutations below all invalidate the domain list on success. */
+function useDomainMutation<TArgs>(fn: (args: TArgs) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, TArgs>({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.domains });
+    },
+  });
+}
+
+export function useCreateDomain() {
+  return useDomainMutation<{ hostname: string; audience: string }>(
+    ({ hostname, audience }) => api.createDomain(hostname, audience)
+  );
+}
+
+export function useVerifyDomain() {
+  return useDomainMutation<string>((id) => api.verifyDomain(id));
+}
+
+export function useDeleteDomain() {
+  return useDomainMutation<string>((id) => api.deleteDomain(id));
+}
+
+export function useVerifyDomainEmail() {
+  return useDomainMutation<string>((id) => api.verifyDomainEmail(id));
 }
 
 // ---- IAM: queries ------------------------------------------------------------
