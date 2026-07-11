@@ -178,11 +178,20 @@ async fn advance(
                             "exhausted": true,
                         })));
                         tracing::warn!(job = %job.id, module = manifest.key, "job failed: retry budget exhausted");
+                        crate::metrics::record_job("failed");
                     } else {
                         tracing::info!(job = %job.id, module = manifest.key, status = %outcome.status, retry = outcome.retry, "job advanced");
+                        if outcome.retry {
+                            crate::metrics::record_job("retry");
+                        } else if outcome.status == "completed" || outcome.status == "failed" {
+                            crate::metrics::record_job(&outcome.status);
+                        }
                     }
                 }
-                None => am.status = Set("completed".into()),
+                None => {
+                    am.status = Set("completed".into());
+                    crate::metrics::record_job("completed");
+                }
             }
         }
         None => {

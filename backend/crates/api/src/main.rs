@@ -42,6 +42,7 @@ mod helpdesk;
 mod leasedoc;
 mod listing_sync;
 mod mail;
+mod metrics;
 mod modules;
 mod notify;
 mod openapi;
@@ -108,6 +109,15 @@ async fn rocket() -> _ {
             .with_env_filter(env_filter())
             .try_init()
     };
+
+    // Surface unhandled panics to the error-reporting sink (#32), not just logs.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = info.to_string();
+        tracing::error!("panic: {msg}");
+        metrics::report_error(None, "panic", &msg);
+        default_hook(info);
+    }));
 
     let config = Config::global().clone();
     tracing::info!("connecting to database…");
@@ -222,6 +232,9 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
             ..Default::default()
         }),
     );
+
+    // Prometheus metrics scrape endpoint (#32) — plain text, unauthenticated.
+    app = app.mount("/", routes![metrics::endpoint]);
 
     app.mount("/", routes![cors::preflight]).mount(
         "/",
