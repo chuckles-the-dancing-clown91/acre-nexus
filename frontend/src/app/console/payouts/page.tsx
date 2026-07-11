@@ -49,7 +49,7 @@ export default function PayoutsPage() {
   const compute = useComputePayout();
   const execute = useExecutePayout();
 
-  const defaults = useMemo(lastMonthBounds, []);
+  const defaults = useMemo(() => lastMonthBounds(), []);
   const [entityId, setEntityId] = useState<string | undefined>(undefined);
   const [start, setStart] = useState(defaults.start);
   const [end, setEnd] = useState(defaults.end);
