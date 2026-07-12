@@ -46,6 +46,7 @@ mod m20240101_000038_rls_empty_guc;
 mod m20240101_000039_syndication;
 mod m20240101_000040_hoa;
 mod m20240101_000041_leasing_crm_renewals;
+mod m20240101_000042_federated_auth;
 
 pub struct Migrator;
 
@@ -94,6 +95,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000039_syndication::Migration),
             Box::new(m20240101_000040_hoa::Migration),
             Box::new(m20240101_000041_leasing_crm_renewals::Migration),
+            Box::new(m20240101_000042_federated_auth::Migration),
         ]
     }
 }

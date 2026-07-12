@@ -87,6 +87,16 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::logout::logout,
         auth::workspaces::workspaces,
         auth::switch_workspace::switch_workspace,
+        // federated login (OAuth/OIDC) — sandbox-first
+        auth::oauth::start,
+        auth::oauth::sandbox,
+        auth::oauth::callback,
+        // MFA (TOTP)
+        auth::mfa::setup,
+        auth::mfa::confirm,
+        auth::mfa::disable,
+        auth::mfa::status,
+        auth::mfa::verify,
         // platform (staff, cross-tenant)
         platform::tenants::tenants,
         platform::metrics::metrics,

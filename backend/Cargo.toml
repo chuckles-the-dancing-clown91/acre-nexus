@@ -36,6 +36,9 @@ jsonwebtoken = "9"
 argon2 = "0.5"
 rand = "0.8"
 sha2 = "0.10"
+# HMAC-SHA1 for RFC 6238 TOTP (authenticator-app MFA); SHA-1 is used *only*
+# for the standard TOTP construction, never for security hashing.
+sha1 = "0.10"
 # Constant-time HMAC-SHA256 for webhook signature verification + signed URLs.
 hmac = "0.12"
 # HKDF-SHA256 + P-256 ECDH/ECDSA for Web Push (RFC 8291 payload encryption +

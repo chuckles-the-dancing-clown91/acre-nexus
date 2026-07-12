@@ -81,3 +81,95 @@ pub struct SwitchResp {
 pub struct LogoutReq {
     pub refresh_token: String,
 }
+
+// ---------------------------------------------------------------------------
+// MFA (TOTP) + federated login (issue #63)
+// ---------------------------------------------------------------------------
+
+/// The result of a password login: a full session, or — when the account has
+/// TOTP MFA — a challenge that must be completed first. Untagged, so the
+/// no-MFA path serializes exactly like [`TokenResp`] (backward compatible).
+#[derive(Serialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum LoginResp {
+    Token(Box<TokenResp>),
+    Mfa(MfaChallengeResp),
+}
+
+/// A login step-up: the password/social factor passed, but the account has TOTP
+/// MFA enabled, so a second factor is required before a session is issued.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct MfaChallengeResp {
+    /// Always `true` — present so clients can branch on the response shape.
+    pub mfa_required: bool,
+    /// Short-lived token binding this challenge to the user. Return it to
+    /// `POST /auth/mfa/verify` with the current authenticator code.
+    pub mfa_token: String,
+}
+
+/// Begin a TOTP MFA enrolment — the secret to store in an authenticator app.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct TotpSetupResp {
+    /// The base32 shared secret (for manual entry).
+    pub secret: String,
+    /// `otpauth://` URI the authenticator imports (usually via a QR code).
+    pub otpauth_uri: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct TotpCodeReq {
+    /// The 6-digit code from the authenticator app.
+    pub code: String,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct MfaStatusResp {
+    pub enabled: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct MfaVerifyReq {
+    pub mfa_token: String,
+    pub code: String,
+}
+
+/// Kick off a social-login flow — returns the provider authorize URL to send
+/// the browser to.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct OauthStartReq {
+    /// `login` (default) or `link` (attach this provider to the signed-in user).
+    pub intent: Option<String>,
+    /// Workspace slug to provision a first-time social signup into. Required for
+    /// the `login` intent (a new user needs a home workspace).
+    pub tenant: Option<String>,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct OauthStartResp {
+    pub authorize_url: String,
+    /// True when the hermetic sandbox provider is in use (no live credentials).
+    pub sandbox: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct OauthCallbackReq {
+    pub code: String,
+    pub state: String,
+}
+
+/// The result of an OAuth callback — a session, an MFA challenge, or (for the
+/// `link` intent) a link confirmation. Exactly one payload field is set,
+/// keyed by `outcome`.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct OauthCallbackResp {
+    /// `session` | `mfa` | `linked`.
+    pub outcome: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session: Option<Box<TokenResp>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mfa: Option<MfaChallengeResp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}

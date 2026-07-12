@@ -34,6 +34,12 @@ The next slice of work, in dependency order:
       new rent + term), riding the Phase 2 document/e-sign substrate. See
       [`LEASING.md`](LEASING.md#lease-renewals-issue-44). *(Remaining §2: listing
       syndication to Zillow/Apartments.com/MLS, self-showing/lockboxes.)*
+- [x] **Federated login + MFA (#63)**: consumer-side **"Log in with Google /
+      Microsoft / Apple"** (OAuth/OIDC, sandbox-first + `LIVE_PROVIDERS`-gated),
+      account linking, and **TOTP MFA** with a login step-up — all minting the
+      same JWT session as password login. See
+      [`IAM.md`](IAM.md#federated-login--mfa-issue-63). *(Enterprise SSO/SAML/SCIM
+      stays in #12.)*
 - [ ] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
       top of the new general ledger.
 - [ ] **Scale guards**: pagination caps on `GET /applications`,

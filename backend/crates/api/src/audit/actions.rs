@@ -14,6 +14,16 @@ pub const AUTH_LOGOUT: &str = "auth.logout";
 pub const AUTH_REFRESH: &str = "auth.refresh";
 pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 
+// ---- Federated login + MFA (issue #63) ----
+/// A first-time social login provisioned a new user.
+pub const AUTH_OAUTH_SIGNUP: &str = "auth.oauth_signup";
+/// A social identity was linked to an existing account.
+pub const AUTH_OAUTH_LINK: &str = "auth.oauth_link";
+pub const AUTH_MFA_ENABLE: &str = "auth.mfa_enable";
+pub const AUTH_MFA_DISABLE: &str = "auth.mfa_disable";
+/// A login step-up (TOTP second factor) was completed.
+pub const AUTH_MFA_VERIFY: &str = "auth.mfa_verify";
+
 // ---- Properties / portfolio ----
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";

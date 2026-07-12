@@ -191,6 +191,45 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ---- federated login + MFA (issue #63) ----
+
+/** A login step-up: complete the TOTP challenge at `POST /auth/mfa/verify`. */
+export interface MfaChallenge {
+  mfa_required: true;
+  mfa_token: string;
+}
+
+/** Password (or social) login result: a full session, or an MFA challenge. */
+export type LoginResult = TokenResponse | MfaChallenge;
+
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge {
+  return (r as MfaChallenge).mfa_required === true;
+}
+
+export interface OauthStartResult {
+  authorize_url: string;
+  /** True when the hermetic sandbox provider is in use (no live credentials). */
+  sandbox: boolean;
+}
+
+export interface OauthCallbackResult {
+  /** `session` | `mfa` | `linked` */
+  outcome: string;
+  session?: TokenResponse;
+  mfa?: MfaChallenge;
+  provider?: string;
+  email?: string;
+}
+
+export interface TotpSetupResult {
+  secret: string;
+  otpauth_uri: string;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+}
+
 export const api = {
   // ---- public website ----
   publicListings: (tenant = DEFAULT_TENANT) =>
@@ -208,9 +247,15 @@ export const api = {
 
   // ---- auth ----
   login: (email: string, password: string) =>
-    request<TokenResponse>("/auth/login", {
+    request<LoginResult>("/auth/login", {
       method: "POST",
       body: { email, password },
+    }),
+  /** Complete a TOTP login step-up → a full session. */
+  mfaVerify: (mfaToken: string, code: string) =>
+    request<TokenResponse>("/auth/mfa/verify", {
+      method: "POST",
+      body: { mfa_token: mfaToken, code },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
   /** Workspaces the current user can switch between (Acre HQ + tenants). */
@@ -224,6 +269,54 @@ export const api = {
       method: "POST",
       auth: true,
       body: { tenant_id: tenantId },
+    }),
+
+  // ---- federated login (OAuth/OIDC) ----
+  /**
+   * Begin a social-login flow. `intent: "link"` (default `"login"`) attaches the
+   * provider to the signed-in account and requires auth; `"login"` provisions or
+   * signs in a user into the given workspace `tenant` slug.
+   */
+  oauthStart: (
+    provider: string,
+    opts: { intent?: "login" | "link"; tenant?: string } = {}
+  ) =>
+    request<OauthStartResult>(`/auth/oauth/${provider}/start`, {
+      method: "POST",
+      auth: opts.intent === "link",
+      tenant: opts.tenant,
+      body: { intent: opts.intent ?? "login", tenant: opts.tenant },
+    }),
+  oauthCallback: (
+    provider: string,
+    code: string,
+    state: string,
+    opts: { auth?: boolean } = {}
+  ) =>
+    request<OauthCallbackResult>(`/auth/oauth/${provider}/callback`, {
+      method: "POST",
+      auth: opts.auth ?? false,
+      body: { code, state },
+    }),
+
+  // ---- MFA (TOTP) ----
+  mfaStatus: () => request<MfaStatus>("/auth/mfa/status", { auth: true }),
+  mfaSetup: () =>
+    request<TotpSetupResult>("/auth/mfa/totp/setup", {
+      method: "POST",
+      auth: true,
+    }),
+  mfaConfirm: (code: string) =>
+    request<MfaStatus>("/auth/mfa/totp/confirm", {
+      method: "POST",
+      auth: true,
+      body: { code },
+    }),
+  mfaDisable: (code: string) =>
+    request<MfaStatus>("/auth/mfa/totp/disable", {
+      method: "POST",
+      auth: true,
+      body: { code },
     }),
 
   // ---- landlord / PM console ----

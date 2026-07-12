@@ -144,7 +144,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Outbound integration / webhook framework + **secrets/KMS** | ⬜ | P1 | enables every real provider |
 | Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API + signed outbound webhooks (subscribe/replay) shipped |
 | **Mobile apps** (manager / resident / inspector, offline) | ⬜ | P3 | |
-| **MFA/2FA**, SSO/SAML/SCIM (enterprise) | ⬜ | P2 | |
+| **Federated login** ("Log in with Google/Microsoft/Apple") + **MFA/2FA** | 🟡 | P2 | OAuth/OIDC social login (sandbox-first) + account linking + TOTP MFA shipped (#63); enterprise SSO/SAML/SCIM remains (#12). See `IAM.md` |
 | Global **search** | ✅ | — | `search` module: command palette across properties/tenants/entities/tickets/LLCs, tenant-scoped + permission-aware |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
 | **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |
