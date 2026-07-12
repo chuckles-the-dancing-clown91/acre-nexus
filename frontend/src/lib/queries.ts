@@ -24,10 +24,15 @@ import {
   type CreateUserInput,
   type CreateVendorBillInput,
   type DomainInfo,
+  type ConvertLeadInput,
+  type ConvertLeadResponse,
+  type CreateLeadInput,
   type FinanceSeries,
   type InviteMemberInput,
   type Lead,
   type LeadsResponse,
+  type ScheduleTourInput,
+  type ScheduleTourResponse,
   type LedgerAccount,
   type LedgerTxn,
   type LegalEntity,
@@ -900,5 +905,51 @@ export function useUpdateLead() {
       toast.success("Lead updated");
     },
     onError: notifyError("Couldn't update the lead"),
+  });
+}
+
+export function useCreateLead() {
+  const qc = useQueryClient();
+  return useMutation<Lead, Error, CreateLeadInput>({
+    mutationFn: (body) => api.createLead(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Lead created");
+    },
+    onError: notifyError("Couldn't create the lead"),
+  });
+}
+
+export function useScheduleTour() {
+  const qc = useQueryClient();
+  return useMutation<
+    ScheduleTourResponse,
+    Error,
+    { id: string; body: ScheduleTourInput }
+  >({
+    mutationFn: ({ id, body }) => api.scheduleTour(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      toast.success("Tour scheduled");
+    },
+    onError: notifyError("Couldn't schedule the tour"),
+  });
+}
+
+export function useConvertLead() {
+  const qc = useQueryClient();
+  return useMutation<
+    ConvertLeadResponse,
+    Error,
+    { id: string; body: ConvertLeadInput }
+  >({
+    mutationFn: ({ id, body }) => api.convertLead(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["applications"] });
+      toast.success("Lead converted to application");
+    },
+    onError: notifyError("Couldn't convert the lead"),
   });
 }

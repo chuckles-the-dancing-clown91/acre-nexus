@@ -55,6 +55,7 @@ mod providers;
 mod ratelimit;
 mod rbac;
 mod reminders;
+mod renewals;
 mod rentals_occupancy;
 mod routes;
 mod saas;

@@ -102,6 +102,34 @@ property's process tracker (`workflow_event`), the envelope's ESIGN trail
    one is left public by hand), advances the property workflow to `leased`,
    and notifies everyone.
 
+## CRM: leads → tours → application (issue #44)
+
+Before the apply funnel there's a **prospect pipeline**. A `lead` is a leasing
+prospect that progresses `new → contacted → toured → applied → closed`. Leads
+arrive three ways: the monitored leasing inbox creates/updates one from inbound
+email (`crate::mail` routes it here — see [`EMAIL.md`](EMAIL.md)), a public
+website enquiry, or **manual entry** at the front desk. The Leads console page
+(`leasing` module) is the CRM board.
+
+- `GET /leads?status=` (`application:read`) — the pipeline, most-recently-touched
+  first, plus the monitored inbox address that feeds it.
+- `POST /leads` (`application:write`) — manually enter a prospect (walk-in,
+  phone, referral); `source` ∈ `manual` | `website` | `referral` | `walk_in`.
+- `PATCH /leads/<id>` (`application:write`) — work a lead: contact details,
+  pipeline status, notes.
+- `POST /leads/<id>/tour` (`application:write`) — **schedule a showing**: drops a
+  `tour` reminder on the calendar (notified ahead through the substrate — see
+  [`CALENDAR.md`](CALENDAR.md)) and nudges a brand-new lead to `contacted`.
+- `POST /leads/<id>/convert` (`application:write`) — **convert to an
+  application** without leaving the platform: the lead's contact details seed a
+  back-office intake (`application.source = crm_lead`) that enters the exact same
+  screening pipeline as every other door, and the lead is marked `applied` and
+  linked to the new application (`lead.application_id`). A lead converts once.
+
+So a prospect moves lead → toured → applied entirely in-console, and the linked
+application then rides the pipeline below. `lead` gains `application_id`
+(migration `m20240101_000041`).
+
 ## Application workflow (pipeline)
 
 An application's `status` is a stage in a validated state machine
@@ -279,7 +307,55 @@ a live envelope refuses to sign a document already signed outside it), so an
 emailed link can never overwrite an in-person signature record.
 
 Schema (migration `m20240101_000020`): `esign_envelope`, `esign_signer`,
-`esign_event` — tenant-scoped with enforced RLS.
+`esign_event` — tenant-scoped with enforced RLS. An envelope carries a
+`purpose` (`lease` by default, or `renewal`) so completion applies the right
+side-effects (activate a new tenancy vs. bump an existing one — see Renewals),
+and the "latest lease agreement" lookups skip renewal addenda via the same
+distinction on `lease_document.purpose`.
+
+## Lease renewals (issue #44)
+
+The **ongoing-tenancy** motion: keep a resident by offering renewed terms
+(typically a rent increase + extended end date) rather than turning the unit.
+A renewal rides the same Phase 2 document + e-signature substrate as the initial
+lease — it just modifies, rather than replaces, the agreement.
+
+```
+PROPOSE  POST /leases/<id>/renewals {new_rent_cents, term_months|new_end_date?, new_start_date?, notes?}
+            • lease_renewal row (proposed) pins current→new rent + the new term
+            • a renewal ADDENDUM (lease_document, purpose=renewal_addendum) is generated
+            ▼
+SEND     POST /renewals/<id>/send {message?, signers?}
+            • esign envelope (purpose=renewal) on the addendum → resident + landlord
+            • signing links emailed/texted; renewal → sent
+            ▼
+SIGN     the tokenized public signing page (same as any envelope) → ESIGN trail
+            ▼
+APPLY    automatic on the final signature (esign::complete_envelope, renewal branch):
+            • lease.rent_cents ← new rent · lease.end_date ← new end · status → active
+            • renewal → activated · signed PDF filed on the lease
+            • the calendar scan re-dates the lease-renewal reminder to the new end
+```
+
+- `GET /leases/<id>/renewals` (`lease:read`) — the renewal history, each with its
+  signing envelope (signers + audit trail) so the console tracks progress.
+- `POST /leases/<id>/renewals` (`lease:manage`) — propose. `new_start_date`
+  defaults to the day after the current term; the end is `new_end_date`, else
+  `new_start_date + term_months`, else month-to-month. One in-flight renewal per
+  lease. A lease that is `ended`/`expired` can't be renewed (make a new lease).
+- `POST /renewals/<id>/send` (`lease:manage`) — send the addendum for signature
+  (defaults to the lease's resident + the sending user, like the initial lease).
+- `POST /renewals/<id>/cancel` (`lease:manage`) — withdraw an in-flight renewal,
+  voiding any open envelope so the signing links die.
+
+The renewal envelope is completely separate from the lease-agreement envelope:
+the lease page's e-signature card only ever shows `purpose = lease` envelopes,
+and the Renewals card shows the renewal's. The term math (`add_months` clamped to
+month-end, effective-date defaulting, rent-change %) lives in `crate::renewals`;
+the addendum body renders from `crate::leasedoc::render_renewal_addendum`. Titled
+by the `lease_documents.renewal_title` setting. Schema: `lease_renewal` +
+`esign_envelope.purpose` + `lease_document.purpose` (migration
+`m20240101_000041`).
 
 ## Property reflects the tenant
 

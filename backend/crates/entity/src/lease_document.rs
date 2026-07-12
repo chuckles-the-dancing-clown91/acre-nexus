@@ -19,6 +19,10 @@ pub struct Model {
     pub body: String,
     /// `text` | `html`.
     pub format: String,
+    /// `lease` (the residential lease agreement, the default) | `renewal_addendum`
+    /// (a lease-renewal addendum). Lets the "latest lease agreement" lookups
+    /// skip addenda.
+    pub purpose: String,
     /// `draft` | `sent` | `signed`.
     pub status: String,
     pub generated_at: DateTimeWithTimeZone,

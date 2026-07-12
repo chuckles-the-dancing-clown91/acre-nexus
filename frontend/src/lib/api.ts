@@ -1634,8 +1634,43 @@ export const api = {
     const suffix = status ? `?status=${status}` : "";
     return request<LeadsResponse>(`/leads${suffix}`, { auth: true });
   },
+  createLead: (body: CreateLeadInput) =>
+    request<Lead>("/leads", { method: "POST", auth: true, body }),
   updateLead: (id: string, body: UpdateLeadInput) =>
     request<Lead>(`/leads/${id}`, { method: "PATCH", auth: true, body }),
+  scheduleTour: (id: string, body: ScheduleTourInput) =>
+    request<ScheduleTourResponse>(`/leads/${id}/tour`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  convertLead: (id: string, body: ConvertLeadInput) =>
+    request<ConvertLeadResponse>(`/leads/${id}/convert`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- lease renewals (propose → addendum → e-sign → apply) ----
+  leaseRenewals: (leaseId: string) =>
+    request<Renewal[]>(`/leases/${leaseId}/renewals`, { auth: true }),
+  proposeRenewal: (leaseId: string, body: ProposeRenewalInput) =>
+    request<ProposeRenewalResponse>(`/leases/${leaseId}/renewals`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  sendRenewal: (renewalId: string, body: SendRenewalInput) =>
+    request<SendRenewalResponse>(`/renewals/${renewalId}/send`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  cancelRenewal: (renewalId: string) =>
+    request<Renewal>(`/renewals/${renewalId}/cancel`, {
+      method: "POST",
+      auth: true,
+    }),
 
   // ---- email integration: inbound comms log + domain deliverability ----
   inboundEmails: () =>
@@ -2837,6 +2872,8 @@ export interface LeaseDocDto {
   title: string;
   body: string;
   format: string;
+  /** lease | renewal_addendum */
+  purpose: string;
   status: string;
   generated_at: string;
   signed_at: string | null;
@@ -2882,6 +2919,8 @@ export interface EsignEnvelope {
   message: string | null;
   /** sent | partially_signed | completed | declined | voided */
   status: string;
+  /** lease | renewal */
+  purpose: string;
   body_hash: string;
   signed_document_id: string | null;
   sent_at: string;
@@ -2914,6 +2953,57 @@ export interface CreateEnvelopeResponse {
 
 export interface RemindEnvelopeResponse {
   reminded: number;
+  sign_links: EsignSignerLink[];
+}
+
+// ---- lease renewals ----
+
+export interface Renewal {
+  id: string;
+  lease_id: string;
+  /** proposed | sent | signed | activated | declined | cancelled */
+  status: string;
+  current_rent_cents: number;
+  current_rent_label: string;
+  new_rent_cents: number;
+  new_rent_label: string;
+  /** e.g. "+$150 / month (+8.3%)" */
+  rent_change_label: string;
+  new_start_date: string;
+  new_end_date: string | null;
+  term_months: number | null;
+  notes: string | null;
+  lease_document_id: string | null;
+  envelope_id: string | null;
+  /** The signing envelope (signers + audit trail) once the addendum is sent. */
+  envelope: EsignEnvelope | null;
+  activated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProposeRenewalInput {
+  new_rent_cents: number;
+  term_months?: number;
+  new_start_date?: string;
+  new_end_date?: string;
+  notes?: string;
+}
+
+export interface ProposeRenewalResponse {
+  renewal: Renewal;
+  document_id: string;
+  document_body: string;
+}
+
+export interface SendRenewalInput {
+  message?: string;
+  signers?: EsignSignerInput[];
+}
+
+export interface SendRenewalResponse {
+  renewal: Renewal;
+  envelope: EsignEnvelope;
   sign_links: EsignSignerLink[];
 }
 
@@ -3152,6 +3242,8 @@ export interface Lead {
   status: string;
   notes: string | null;
   last_message: string | null;
+  /** The application this lead was converted into, if any. */
+  application_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3162,11 +3254,48 @@ export interface LeadsResponse {
   leads: Lead[];
 }
 
+export interface CreateLeadInput {
+  name: string;
+  email: string;
+  phone?: string;
+  /** manual | website | referral | walk_in */
+  source?: string;
+  notes?: string;
+}
+
 export interface UpdateLeadInput {
   name?: string;
   phone?: string;
   status?: string;
   notes?: string;
+}
+
+export interface ScheduleTourInput {
+  /** YYYY-MM-DD */
+  date: string;
+  notes?: string;
+  lead_days?: number[];
+}
+
+export interface ScheduleTourResponse {
+  lead: Lead;
+  reminder: Reminder;
+}
+
+export interface ConvertLeadInput {
+  listing_id?: string;
+  annual_income_cents?: number;
+  credit_score?: number;
+  move_in?: string;
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
+  screening_consent?: boolean;
+}
+
+export interface ConvertLeadResponse {
+  lead: Lead;
+  application: Application;
 }
 
 // ---- inbound email comms log (#62) ----

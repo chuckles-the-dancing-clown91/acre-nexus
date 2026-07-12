@@ -73,6 +73,8 @@ pub struct EnvelopeDto {
     pub message: Option<String>,
     /// `sent` | `partially_signed` | `completed` | `declined` | `voided`.
     pub status: String,
+    /// `lease` | `renewal`.
+    pub purpose: String,
     /// SHA-256 of the document body every signer signs.
     pub body_hash: String,
     /// The stored signed PDF (document service id) once completed.
@@ -99,6 +101,7 @@ impl EnvelopeDto {
             title: envelope.title,
             message: envelope.message,
             status: envelope.status,
+            purpose: envelope.purpose,
             body_hash: envelope.body_hash,
             signed_document_id: envelope.signed_document_id,
             sent_at: envelope.sent_at.to_rfc3339(),
@@ -138,6 +141,27 @@ pub struct SignerLink {
     pub name: String,
     pub email: String,
     pub sign_url: String,
+}
+
+impl SignerLink {
+    /// Pair each `(signer_id, sign_url)` from [`crate::esign::issue_envelope`]
+    /// back with its persisted signer for the response.
+    pub fn from_pairs(
+        signers: &[entity::esign_signer::Model],
+        pairs: &[(Uuid, String)],
+    ) -> Vec<SignerLink> {
+        pairs
+            .iter()
+            .filter_map(|(id, url)| {
+                signers.iter().find(|s| s.id == *id).map(|s| SignerLink {
+                    signer_id: s.id,
+                    name: s.name.clone(),
+                    email: s.email.clone(),
+                    sign_url: url.clone(),
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

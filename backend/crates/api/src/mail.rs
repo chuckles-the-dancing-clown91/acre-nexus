@@ -316,6 +316,7 @@ async fn upsert_lead(
                 status: Set("new".into()),
                 notes: Set(None),
                 last_message: Set(Some(last_message)),
+                application_id: Set(None),
                 created_at: Set(now.into()),
                 updated_at: Set(now.into()),
             }

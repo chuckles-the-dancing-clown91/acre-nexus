@@ -27,6 +27,13 @@ The next slice of work, in dependency order:
       engine ([`CALENDAR.md`](CALENDAR.md)), inbound email→ticket/lead +
       SPF/DKIM/DMARC deliverability ([`EMAIL.md`](EMAIL.md)), and vendor
       outbound webhooks ([`WEBHOOKS.md`](WEBHOOKS.md)).
+- [x] **Leasing CRM & lease renewals (#44)**: closes the last gap in
+      [`FEATURES.md`](FEATURES.md) §2 — the pre-lease **CRM** prospect pipeline
+      (leads → tours → one-click convert-to-application) and the ongoing
+      **lease-renewal** workflow (propose → addendum → e-sign → auto-apply the
+      new rent + term), riding the Phase 2 document/e-sign substrate. See
+      [`LEASING.md`](LEASING.md#lease-renewals-issue-44). *(Remaining §2: listing
+      syndication to Zillow/Apartments.com/MLS, self-showing/lockboxes.)*
 - [ ] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
       top of the new general ledger.
 - [ ] **Scale guards**: pagination caps on `GET /applications`,

@@ -61,6 +61,7 @@ pub mod lease;
 pub mod lease_charge;
 pub mod lease_document;
 pub mod lease_payment;
+pub mod lease_renewal;
 pub mod ledger_account;
 pub mod ledger_entry;
 pub mod ledger_txn;

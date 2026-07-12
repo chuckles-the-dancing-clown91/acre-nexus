@@ -23,6 +23,10 @@ pub struct Model {
     pub message: Option<String>,
     /// `sent` | `partially_signed` | `completed` | `declined` | `voided`.
     pub status: String,
+    /// `lease` (initial lease signing → activates the tenancy, the default) |
+    /// `renewal` (a renewal addendum → bumps the tenancy's rent + term on
+    /// completion).
+    pub purpose: String,
     /// SHA-256 (hex) of the document body at send time — all signers sign
     /// exactly this text.
     pub body_hash: String,

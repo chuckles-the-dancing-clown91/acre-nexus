@@ -22,6 +22,8 @@ pub struct Model {
     pub notes: Option<String>,
     /// The latest inbound message (subject + excerpt).
     pub last_message: Option<String>,
+    /// The [`super::application`] this lead was converted into, if any (#44).
+    pub application_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

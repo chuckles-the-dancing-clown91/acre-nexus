@@ -8,6 +8,8 @@ pub struct LeaseDocDto {
     pub title: String,
     pub body: String,
     pub format: String,
+    /// `lease` | `renewal_addendum`.
+    pub purpose: String,
     pub status: String,
     pub generated_at: String,
     pub signed_at: Option<String>,
@@ -24,6 +26,7 @@ impl From<entity::lease_document::Model> for LeaseDocDto {
             title: d.title,
             body: d.body,
             format: d.format,
+            purpose: d.purpose,
             status: d.status,
             generated_at: d.generated_at.to_rfc3339(),
             signed_at: d.signed_at.map(|x| x.to_rfc3339()),

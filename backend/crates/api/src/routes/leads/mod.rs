@@ -2,6 +2,9 @@
 //! Reading needs `application:read`; working a lead needs `application:write`
 //! — leads are the front of the same funnel applications ride.
 
+pub mod convert;
+pub mod create;
 pub mod dto;
 pub mod list;
+pub mod tour;
 pub mod update;

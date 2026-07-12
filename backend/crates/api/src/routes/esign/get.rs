@@ -29,6 +29,8 @@ pub async fn get(
     let envelope = EsignEnvelope::find()
         .filter(entity::esign_envelope::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::esign_envelope::Column::LeaseId.eq(lid))
+        // The lease-agreement envelope — renewal addenda are tracked separately.
+        .filter(entity::esign_envelope::Column::Purpose.eq("lease"))
         .order_by_desc(entity::esign_envelope::Column::CreatedAt)
         .one(&db)
         .await?

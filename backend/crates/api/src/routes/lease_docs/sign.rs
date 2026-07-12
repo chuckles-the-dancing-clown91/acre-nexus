@@ -52,6 +52,8 @@ pub async fn sign(
     let doc = LeaseDocument::find()
         .filter(entity::lease_document::Column::LeaseId.eq(lid))
         .filter(entity::lease_document::Column::TenantId.eq(scope.tenant_id))
+        // In-person signing is for the lease agreement; addenda ride e-sign.
+        .filter(entity::lease_document::Column::Purpose.eq("lease"))
         .order_by_desc(entity::lease_document::Column::GeneratedAt)
         .one(&db)
         .await?

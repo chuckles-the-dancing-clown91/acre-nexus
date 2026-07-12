@@ -44,6 +44,7 @@ pub use super::lease::Entity as Lease;
 pub use super::lease_charge::Entity as LeaseCharge;
 pub use super::lease_document::Entity as LeaseDocument;
 pub use super::lease_payment::Entity as LeasePayment;
+pub use super::lease_renewal::Entity as LeaseRenewal;
 pub use super::ledger_account::Entity as LedgerAccount;
 pub use super::ledger_entry::Entity as LedgerEntry;
 pub use super::ledger_txn::Entity as LedgerTxn;

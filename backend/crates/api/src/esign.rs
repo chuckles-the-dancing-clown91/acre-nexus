@@ -183,6 +183,150 @@ pub async fn notify_signer(
 }
 
 // ---------------------------------------------------------------------------
+// Sending
+// ---------------------------------------------------------------------------
+
+/// A signer to place on an envelope, already validated by the caller.
+pub struct NewSigner {
+    pub role: String,
+    pub name: String,
+    pub email: String,
+    pub phone: Option<String>,
+}
+
+/// Create + send an e-signature envelope for `doc` (belonging to `lease`) to
+/// `signers`. Shared by the initial lease-signing route
+/// (`POST /leases/<id>/envelope`, `purpose = "lease"`) and the lease-renewal
+/// send route (`purpose = "renewal"`): mints one-time signing links, pins the
+/// document body hash, marks the document `sent`, queues each signer's
+/// email/SMS, and audits. Returns the envelope, its persisted signers, and the
+/// `(signer_id, sign_url)` pairs so the caller can surface copy/paste links.
+#[allow(clippy::too_many_arguments)]
+pub async fn issue_envelope(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    created_by: Uuid,
+    lease: &entity::lease::Model,
+    doc: &entity::lease_document::Model,
+    purpose: &str,
+    message: Option<String>,
+    signers: Vec<NewSigner>,
+) -> anyhow::Result<(
+    entity::esign_envelope::Model,
+    Vec<entity::esign_signer::Model>,
+    Vec<(Uuid, String)>,
+)> {
+    let body_hash = sha256_hex(doc.body.as_bytes());
+    let now = Utc::now();
+    let envelope = entity::esign_envelope::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(lease.id),
+        lease_document_id: Set(doc.id),
+        title: Set(doc.title.clone()),
+        message: Set(message.filter(|m| !m.trim().is_empty())),
+        status: Set("sent".into()),
+        purpose: Set(purpose.to_string()),
+        body_hash: Set(body_hash),
+        signed_document_id: Set(None),
+        created_by: Set(Some(created_by)),
+        sent_at: Set(now.into()),
+        completed_at: Set(None),
+        voided_at: Set(None),
+        void_reason: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // The document is now out for signature.
+    if doc.status != "sent" {
+        let mut dm: entity::lease_document::ActiveModel = doc.clone().into();
+        dm.status = Set("sent".into());
+        dm.update(db).await?;
+    }
+
+    let slug = tenant_slug(db, tenant_id).await;
+    let mut links: Vec<(Uuid, String)> = Vec::with_capacity(signers.len());
+    let mut saved_signers = Vec::with_capacity(signers.len());
+    for s in signers {
+        let (raw, hash) = generate_token();
+        let (token_ciphertext, token_nonce) = seal_token(&raw)?;
+        let saved = entity::esign_signer::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            envelope_id: Set(envelope.id),
+            role: Set(s.role),
+            name: Set(s.name),
+            email: Set(s.email),
+            phone: Set(s.phone),
+            token_hash: Set(hash),
+            token_ciphertext: Set(token_ciphertext),
+            token_nonce: Set(token_nonce),
+            status: Set("sent".into()),
+            viewed_at: Set(None),
+            signed_at: Set(None),
+            signed_name: Set(None),
+            signed_ip: Set(None),
+            signed_user_agent: Set(None),
+            decline_reason: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+
+        let url = sign_url(&slug, &raw);
+        record_event(
+            db,
+            tenant_id,
+            envelope.id,
+            Some(saved.id),
+            "sent",
+            json!({ "signer": saved.name, "email": saved.email, "role": saved.role }),
+            None,
+            None,
+        )
+        .await;
+        notify_signer(
+            db,
+            tenant_id,
+            &saved,
+            "esign_request",
+            "request",
+            json!({
+                "document_title": envelope.title,
+                "sign_url": url,
+                "signer": saved.name,
+                "message": envelope.message.clone().unwrap_or_default(),
+            }),
+        )
+        .await;
+
+        links.push((saved.id, url));
+        saved_signers.push(saved);
+    }
+
+    crate::audit::record(
+        db,
+        Some(created_by),
+        crate::audit::actions::ESIGN_SEND,
+        Some("esign_envelope"),
+        Some(envelope.id.to_string()),
+        Some(tenant_id),
+        Some(json!({
+            "lease_id": lease.id,
+            "purpose": purpose,
+            "signers": saved_signers.len(),
+        })),
+    )
+    .await;
+
+    Ok((envelope, saved_signers, links))
+}
+
+// ---------------------------------------------------------------------------
 // Completion
 // ---------------------------------------------------------------------------
 
@@ -279,9 +423,16 @@ pub async fn complete_envelope(
     dm.signed_ip = Set(last_ip);
     dm.update(db).await?;
 
-    // 2. Signing activates the tenancy (shared with in-person signing).
+    // 2. Apply the signing side-effects to the tenancy. An initial lease
+    //    signing activates the tenancy (shared with in-person signing); a
+    //    renewal addendum bumps the existing tenancy's rent + term in place.
+    let is_renewal = envelope.purpose == "renewal";
     let property_id = lease.property_id;
-    crate::rentals_occupancy::activate_lease_on_signing(db, tenant_id, lease).await?;
+    if is_renewal {
+        crate::renewals::apply_on_signed(db, tenant_id, lease, envelope).await?;
+    } else {
+        crate::rentals_occupancy::activate_lease_on_signing(db, tenant_id, lease).await?;
+    }
 
     // 3. Store the signed rendition (body + signature certificate) as a PDF.
     //    Storage trouble must not block a fully-signed envelope: degrade to a
@@ -322,8 +473,11 @@ pub async fn complete_envelope(
     let envelope = em.update(db).await?;
 
     // 5. The property's process advances toward "leased" automatically, so the
-    //    tracker reflects what actually happened.
-    advance_workflow_on_lease_signed(db, tenant_id, property_id, &signed_by).await;
+    //    tracker reflects what actually happened. A renewal's property is
+    //    already leased, so this only fires for an initial signing.
+    if !is_renewal {
+        advance_workflow_on_lease_signed(db, tenant_id, property_id, &signed_by).await;
+    }
 
     // 6. Audit trail + platform audit log.
     record_event(
@@ -744,6 +898,7 @@ mod tests {
             title: "Residential Lease Agreement".into(),
             message: None,
             status: "completed".into(),
+            purpose: "lease".into(),
             body_hash: "deadbeef".into(),
             signed_document_id: None,
             created_by: None,
