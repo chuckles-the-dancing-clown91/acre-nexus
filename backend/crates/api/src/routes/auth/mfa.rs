@@ -3,7 +3,7 @@
 //! is two-step — a secret is stored, then a valid code confirms it before the
 //! account is challenged at every login.
 
-use super::dto::{MfaStatusResp, MfaVerifyReq, TotpCodeReq, TotpSetupResp, TokenResp};
+use super::dto::{MfaStatusResp, MfaVerifyReq, TokenResp, TotpCodeReq, TotpSetupResp};
 use super::helpers::build_token_resp;
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
@@ -92,7 +92,9 @@ pub async fn confirm(
     let secret = mfa::open_secret(&state.config, &row.secret_ciphertext, &row.secret_nonce)
         .map_err(ApiError::Internal)?;
     if !totp::verify(&secret, body.code.trim(), now_secs()) {
-        return Err(ApiError::BadRequest("that code isn't valid — try again".into()));
+        return Err(ApiError::BadRequest(
+            "that code isn't valid — try again".into(),
+        ));
     }
     let now = Utc::now();
     let mut am: entity::user_totp::ActiveModel = row.into();
@@ -151,10 +153,7 @@ pub async fn disable(
 /// `GET /auth/mfa/status` — whether the signed-in user has MFA enabled.
 #[rocket_okapi::openapi(tag = "Auth")]
 #[get("/auth/mfa/status")]
-pub async fn status(
-    db: crate::db::RequestDb,
-    user: AuthUser,
-) -> ApiResult<Json<MfaStatusResp>> {
+pub async fn status(db: crate::db::RequestDb, user: AuthUser) -> ApiResult<Json<MfaStatusResp>> {
     let enabled = super::helpers::mfa_enabled(&db, user.user_id).await?;
     Ok(Json(MfaStatusResp { enabled }))
 }

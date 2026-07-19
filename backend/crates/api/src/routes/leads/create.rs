@@ -34,7 +34,9 @@ pub async fn create_lead(
     }
     let email = b.email.trim().to_lowercase();
     if !email.contains('@') {
-        return Err(ApiError::BadRequest(format!("invalid lead email '{email}'")));
+        return Err(ApiError::BadRequest(format!(
+            "invalid lead email '{email}'"
+        )));
     }
     let source = b.source.unwrap_or_else(|| "manual".into());
     if !SOURCES.contains(&source.as_str()) {

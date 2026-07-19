@@ -11,8 +11,8 @@ use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::oauth::{self, ExternalIdentity, FlowState};
 use crate::routes::iam::dto::NewMembership;
-use crate::routes::iam::helpers::{add_membership_inner, upsert_profile_inner};
 use crate::routes::iam::dto::ProfileInput;
+use crate::routes::iam::helpers::{add_membership_inner, upsert_profile_inner};
 use crate::state::AppState;
 use chrono::Utc;
 use entity::prelude::{FederatedIdentity, Tenant, User};
@@ -70,7 +70,15 @@ pub async fn start(
         }
     };
 
-    let res = oauth::start(&state.config, &db, provider, intent, tenant_id, link_user_id).await?;
+    let res = oauth::start(
+        &state.config,
+        &db,
+        provider,
+        intent,
+        tenant_id,
+        link_user_id,
+    )
+    .await?;
     Ok(Json(OauthStartResp {
         authorize_url: res.authorize_url,
         sandbox: res.sandbox,
@@ -145,7 +153,13 @@ async fn complete(
             )));
         }
         create_link(db, link_user_id, &identity).await?;
-        audit(db, link_user_id, crate::audit::actions::AUTH_OAUTH_LINK, None).await;
+        audit(
+            db,
+            link_user_id,
+            crate::audit::actions::AUTH_OAUTH_LINK,
+            None,
+        )
+        .await;
         return Ok(linked_resp(&identity));
     }
 
@@ -285,7 +299,13 @@ async fn provision_user(
     .await;
 
     create_link(db, uid, identity).await?;
-    audit(db, uid, crate::audit::actions::AUTH_OAUTH_SIGNUP, Some(tenant_id)).await;
+    audit(
+        db,
+        uid,
+        crate::audit::actions::AUTH_OAUTH_SIGNUP,
+        Some(tenant_id),
+    )
+    .await;
     Ok(user)
 }
 
@@ -331,12 +351,7 @@ fn split_name(name: &str) -> (Option<String>, Option<String>) {
     }
 }
 
-async fn audit(
-    db: &crate::db::RequestDb,
-    user_id: Uuid,
-    action: &str,
-    tenant_id: Option<Uuid>,
-) {
+async fn audit(db: &crate::db::RequestDb, user_id: Uuid, action: &str, tenant_id: Option<Uuid>) {
     crate::audit::record(
         db,
         Some(user_id),

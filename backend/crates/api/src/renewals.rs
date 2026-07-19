@@ -132,9 +132,18 @@ mod tests {
 
     #[test]
     fn add_months_clamps_month_end() {
-        assert_eq!(add_months_str("2026-01-31", 1).as_deref(), Some("2026-02-28"));
-        assert_eq!(add_months_str("2026-07-01", 12).as_deref(), Some("2027-07-01"));
-        assert_eq!(add_months_str("2026-07-01", 6).as_deref(), Some("2027-01-01"));
+        assert_eq!(
+            add_months_str("2026-01-31", 1).as_deref(),
+            Some("2026-02-28")
+        );
+        assert_eq!(
+            add_months_str("2026-07-01", 12).as_deref(),
+            Some("2027-07-01")
+        );
+        assert_eq!(
+            add_months_str("2026-07-01", 6).as_deref(),
+            Some("2027-01-01")
+        );
         assert_eq!(add_months_str("not-a-date", 12), None);
     }
 

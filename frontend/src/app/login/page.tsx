@@ -34,9 +34,10 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
 
   // Sandbox social-login affordance (no real provider credentials).
-  const [sandbox, setSandbox] = useState<{ provider: string; url: string } | null>(
-    null
-  );
+  const [sandbox, setSandbox] = useState<{
+    provider: string;
+    url: string;
+  } | null>(null);
   const [sandboxEmail, setSandboxEmail] = useState("new.renter@example.com");
 
   async function submit(e: React.FormEvent) {
@@ -157,8 +158,9 @@ export default function LoginPage() {
               {sandbox.provider} (sandbox)
             </h1>
             <p className="mb-6 text-sm text-ink-3">
-              No live {sandbox.provider} credentials are configured, so this is a
-              simulated sign-in. Enter an email to sign in (or provision) with.
+              No live {sandbox.provider} credentials are configured, so this is
+              a simulated sign-in. Enter an email to sign in (or provision)
+              with.
             </p>
             <form
               onSubmit={(e) => {
@@ -194,7 +196,9 @@ export default function LoginPage() {
             <h1 className="mb-1 font-display text-2xl font-extrabold">
               Welcome back
             </h1>
-            <p className="mb-6 text-sm text-ink-3">Sign in to your workspace.</p>
+            <p className="mb-6 text-sm text-ink-3">
+              Sign in to your workspace.
+            </p>
 
             <div className="mb-4 grid grid-cols-3 gap-2">
               {PROVIDERS.map((p) => (

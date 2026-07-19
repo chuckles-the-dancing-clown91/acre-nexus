@@ -131,12 +131,9 @@ fn sign_sandbox_code(cfg: &Config, c: &SandboxCodeClaims) -> anyhow::Result<Stri
 }
 
 fn verify_sandbox_code(cfg: &Config, token: &str) -> Option<SandboxCodeClaims> {
-    let data = decode::<SandboxCodeClaims>(
-        token,
-        &hs256_key(cfg).1,
-        &Validation::new(Algorithm::HS256),
-    )
-    .ok()?;
+    let data =
+        decode::<SandboxCodeClaims>(token, &hs256_key(cfg).1, &Validation::new(Algorithm::HS256))
+            .ok()?;
     (data.claims.typ == CODE_TYP).then_some(data.claims)
 }
 
@@ -338,7 +335,9 @@ pub async fn exchange<C: ConnectionTrait>(
         let c = verify_sandbox_code(cfg, code)
             .ok_or_else(|| ApiError::BadRequest("invalid sandbox code".into()))?;
         if c.provider != provider {
-            return Err(ApiError::BadRequest("sandbox code/provider mismatch".into()));
+            return Err(ApiError::BadRequest(
+                "sandbox code/provider mismatch".into(),
+            ));
         }
         ExternalIdentity {
             provider: provider.into(),

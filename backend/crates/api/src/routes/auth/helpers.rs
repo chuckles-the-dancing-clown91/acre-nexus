@@ -213,8 +213,8 @@ pub(crate) async fn auth_outcome(
     active: Option<Uuid>,
 ) -> ApiResult<AuthOutcome> {
     if mfa_enabled(db, user.id).await? {
-        let token =
-            crate::mfa::issue_challenge_token(&state.config, user.id).map_err(ApiError::Internal)?;
+        let token = crate::mfa::issue_challenge_token(&state.config, user.id)
+            .map_err(ApiError::Internal)?;
         Ok(AuthOutcome::Mfa(token))
     } else {
         Ok(AuthOutcome::Session(Box::new(

@@ -110,8 +110,8 @@ function MfaCard() {
         {enabled === false && !setup && (
           <>
             <p className="text-sm text-ink-2">
-              Protect your account with a time-based code from an app like Google
-              Authenticator, 1Password, or Authy.
+              Protect your account with a time-based code from an app like
+              Google Authenticator, 1Password, or Authy.
             </p>
             <Button onClick={begin} disabled={busy}>
               {busy ? "Starting…" : "Enable two-factor"}
@@ -142,7 +142,10 @@ function MfaCard() {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
-              <Button onClick={confirm} disabled={busy || code.trim().length < 6}>
+              <Button
+                onClick={confirm}
+                disabled={busy || code.trim().length < 6}
+              >
                 {busy ? "Confirming…" : "Confirm"}
               </Button>
               <Button
@@ -187,9 +190,10 @@ function MfaCard() {
 }
 
 function LinkedAccountsCard() {
-  const [sandbox, setSandbox] = useState<{ provider: string; url: string } | null>(
-    null
-  );
+  const [sandbox, setSandbox] = useState<{
+    provider: string;
+    url: string;
+  } | null>(null);
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -248,7 +252,8 @@ function LinkedAccountsCard() {
         ) : (
           <>
             <p className="text-sm text-ink-2">
-              Link a social account so you can &quot;Log in with&quot; it next time.
+              Link a social account so you can &quot;Log in with&quot; it next
+              time.
             </p>
             <div className="flex flex-wrap gap-2">
               {PROVIDERS.map((p) => (

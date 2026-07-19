@@ -46,7 +46,9 @@ function Callback() {
         throw new Error("Unexpected response from the sign-in provider.");
       }
     };
-    run().catch((e) => setError(e instanceof Error ? e.message : "Sign-in failed"));
+    run().catch((e) =>
+      setError(e instanceof Error ? e.message : "Sign-in failed")
+    );
   }, [params, router, establishSession]);
 
   async function submitMfa(e: React.FormEvent) {

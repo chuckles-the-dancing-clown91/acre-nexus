@@ -90,9 +90,11 @@ pub async fn propose(
             Some(d)
         }
         None => match b.term_months {
-            Some(m) => Some(renewals::add_months_str(&new_start_date, m as u32).ok_or_else(
-                || ApiError::BadRequest("could not compute the renewal end date".into()),
-            )?),
+            Some(m) => Some(
+                renewals::add_months_str(&new_start_date, m as u32).ok_or_else(|| {
+                    ApiError::BadRequest("could not compute the renewal end date".into())
+                })?,
+            ),
             None => None,
         },
     };
@@ -138,9 +140,12 @@ pub async fn propose(
         None => None,
     };
     let body_text = leasedoc::render_renewal_addendum(&lease, &property, unit.as_ref(), &renewal);
-    let title =
-        crate::settings::get_string(&db, scope.tenant_id, crate::settings::LEASE_RENEWAL_DOC_TITLE)
-            .await;
+    let title = crate::settings::get_string(
+        &db,
+        scope.tenant_id,
+        crate::settings::LEASE_RENEWAL_DOC_TITLE,
+    )
+    .await;
     let doc = entity::lease_document::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
