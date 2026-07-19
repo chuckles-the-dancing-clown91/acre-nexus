@@ -34,7 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 jsonwebtoken = "9"
 argon2 = "0.5"
-rand = "0.8"
+rand = "0.9"
 sha2 = "0.10"
 # HMAC-SHA1 for RFC 6238 TOTP (authenticator-app MFA); SHA-1 is used *only*
 # for the standard TOTP construction, never for security hashing.
