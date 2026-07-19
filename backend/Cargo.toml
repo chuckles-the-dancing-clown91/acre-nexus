@@ -40,7 +40,7 @@ sha2 = "0.10"
 # for the standard TOTP construction, never for security hashing.
 sha1 = "0.10"
 # Constant-time HMAC-SHA256 for webhook signature verification + signed URLs.
-hmac = "0.12"
+hmac = "0.13"
 # HKDF-SHA256 + P-256 ECDH/ECDSA for Web Push (RFC 8291 payload encryption +
 # RFC 8292 VAPID) — RustCrypto, no SDK.
 hkdf = "0.12"
