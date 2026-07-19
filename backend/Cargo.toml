@@ -48,7 +48,7 @@ p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
 # Field-level PII encryption at rest (SSN / government IDs).
 aes-gcm = "0.10"
 base64 = "0.22"
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 dotenvy = "0.15"
 # HTTP client for live enrichment providers (e.g. the US Census geocoder).
