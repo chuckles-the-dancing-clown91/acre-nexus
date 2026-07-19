@@ -44,7 +44,7 @@ hmac = "0.12"
 # HKDF-SHA256 + P-256 ECDH/ECDSA for Web Push (RFC 8291 payload encryption +
 # RFC 8292 VAPID) — RustCrypto, no SDK.
 hkdf = "0.12"
-p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
+p256 = { version = "0.14", features = ["ecdh", "ecdsa"] }
 # Field-level PII encryption at rest (SSN / government IDs).
 aes-gcm = "0.10"
 base64 = "0.22"
