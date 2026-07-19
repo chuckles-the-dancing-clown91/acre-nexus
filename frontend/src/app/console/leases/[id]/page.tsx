@@ -18,6 +18,7 @@ import { logError } from "@/lib/log";
 import { DepositCard } from "@/components/DepositCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { EsignCard } from "@/components/EsignCard";
+import { RenewalsCard } from "@/components/RenewalsCard";
 import { InspectionsCard } from "@/components/InspectionsCard";
 
 const CHARGE_KINDS = ["fee", "discount", "rebate", "amenity"];
@@ -268,6 +269,9 @@ export default function LeaseDetailPage() {
         ]}
         onChanged={load}
       />
+
+      {/* Lease renewals: propose new terms → addendum → e-sign → applied */}
+      <RenewalsCard lease={lease} manage={manage} onChanged={load} />
 
       {/* Stored files: signed PDFs, addenda, move-in photos, … */}
       <DocumentsCard ownerType="lease" ownerId={id} title="Documents" />

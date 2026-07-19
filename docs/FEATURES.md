@@ -41,12 +41,12 @@ The biggest gap for "total" management — most operators live in their books.
 | Public white-label listings site | ✅ | — | per-tenant branded |
 | Online applications + application fees | 🟡 | P1 | apply funnel exists; add fee payment |
 | **Tenant screening** (credit/criminal/eviction/income) | 🟡 | P1 | simulated job today → real FCRA provider |
-| Leasing **CRM** (leads, tours, follow-ups) | 🟡 | P2 | `lead` pipeline shipped (inbound-email fed); tours ride the calendar |
-| Listing **syndication** (Zillow, Apartments.com, MLS) | ⬜ | P2 | feed out to portals |
-| Tour scheduling / self-showing / lockboxes | ⬜ | P3 | calendar + access |
+| Leasing **CRM** (leads, tours, follow-ups) | ✅ | P2 | `lead` pipeline (inbound-email + manual entry) + tour scheduling + one-click convert-to-application (#44); see `LEASING.md` |
+| Listing **syndication** (Zillow, Apartments.com, MLS) | ⬜ | P2 | feed out to portals — the remaining §2 gap |
+| Tour scheduling / self-showing / lockboxes | 🟡 | P3 | tour scheduling ships as `tour` calendar reminders off a lead (#44); self-showing / lockbox access still open |
 | Rent **pricing / comps** optimization | 🟡 | P3 | AVM rent estimate exists |
 | Vacancy / days-on-market tracking | 🟡 | P2 | unit status exists |
-| Lease **renewals & rent increases** workflow | ⬜ | P1 | notices + e-sign |
+| Lease **renewals & rent increases** workflow | ✅ | P1 | propose → addendum → e-sign → auto-apply the new rent + term, riding the Phase 2 e-sign substrate (#44); see `LEASING.md` |
 | Waitlists | ⬜ | P3 | |
 
 ## 3. Tenant / resident experience
@@ -144,7 +144,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Outbound integration / webhook framework + **secrets/KMS** | ⬜ | P1 | enables every real provider |
 | Public/partner API + webhooks + integration marketplace | 🟡 | P2 | scoped token API + signed outbound webhooks (subscribe/replay) shipped |
 | **Mobile apps** (manager / resident / inspector, offline) | ⬜ | P3 | |
-| **MFA/2FA**, SSO/SAML/SCIM (enterprise) | ⬜ | P2 | |
+| **Federated login** ("Log in with Google/Microsoft/Apple") + **MFA/2FA** | 🟡 | P2 | OAuth/OIDC social login (sandbox-first) + account linking + TOTP MFA shipped (#63); enterprise SSO/SAML/SCIM remains (#12). See `IAM.md` |
 | Global **search** | ✅ | — | `search` module: command palette across properties/tenants/entities/tickets/LLCs, tenant-scoped + permission-aware |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
 | **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |

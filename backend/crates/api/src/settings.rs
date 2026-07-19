@@ -50,6 +50,7 @@ pub const ESIGN_MAX_SIGNERS: &str = "esign.max_signers";
 pub const ESIGN_SIGNED_DOC_RETENTION_DAYS: &str = "esign.signed_doc_retention_days";
 /// Title stamped on generated lease documents (and the envelopes sent for them).
 pub const LEASE_DOC_TITLE: &str = "lease_documents.title";
+pub const LEASE_RENEWAL_DOC_TITLE: &str = "lease_documents.renewal_title";
 /// Let residents enroll a saved method in autopay.
 pub const PAYMENTS_AUTOPAY_ENABLED: &str = "payments.autopay_enabled";
 /// Day of month rent falls due (clamped 1–28).
@@ -262,6 +263,15 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Lease documents",
         kind: SettingKind::Text,
         default: || json!("Residential Lease Agreement"),
+    },
+    SettingDef {
+        key: LEASE_RENEWAL_DOC_TITLE,
+        label: "Renewal addendum title",
+        description: "Title given to generated lease-renewal addenda and the \
+                      e-signature envelopes sent for them.",
+        group: "Lease documents",
+        kind: SettingKind::Text,
+        default: || json!("Lease Renewal Addendum"),
     },
     SettingDef {
         key: PAYMENTS_AUTOPAY_ENABLED,

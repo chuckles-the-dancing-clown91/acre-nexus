@@ -27,6 +27,8 @@ pub async fn get(
     let doc = LeaseDocument::find()
         .filter(entity::lease_document::Column::LeaseId.eq(lid))
         .filter(entity::lease_document::Column::TenantId.eq(scope.tenant_id))
+        // The lease agreement itself — renewal addenda are surfaced separately.
+        .filter(entity::lease_document::Column::Purpose.eq("lease"))
         .order_by_desc(entity::lease_document::Column::GeneratedAt)
         .one(&db)
         .await?

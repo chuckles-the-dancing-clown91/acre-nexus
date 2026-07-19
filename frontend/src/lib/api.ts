@@ -191,6 +191,45 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ---- federated login + MFA (issue #63) ----
+
+/** A login step-up: complete the TOTP challenge at `POST /auth/mfa/verify`. */
+export interface MfaChallenge {
+  mfa_required: true;
+  mfa_token: string;
+}
+
+/** Password (or social) login result: a full session, or an MFA challenge. */
+export type LoginResult = TokenResponse | MfaChallenge;
+
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge {
+  return (r as MfaChallenge).mfa_required === true;
+}
+
+export interface OauthStartResult {
+  authorize_url: string;
+  /** True when the hermetic sandbox provider is in use (no live credentials). */
+  sandbox: boolean;
+}
+
+export interface OauthCallbackResult {
+  /** `session` | `mfa` | `linked` */
+  outcome: string;
+  session?: TokenResponse;
+  mfa?: MfaChallenge;
+  provider?: string;
+  email?: string;
+}
+
+export interface TotpSetupResult {
+  secret: string;
+  otpauth_uri: string;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+}
+
 export const api = {
   // ---- public website ----
   publicListings: (tenant = DEFAULT_TENANT) =>
@@ -208,9 +247,15 @@ export const api = {
 
   // ---- auth ----
   login: (email: string, password: string) =>
-    request<TokenResponse>("/auth/login", {
+    request<LoginResult>("/auth/login", {
       method: "POST",
       body: { email, password },
+    }),
+  /** Complete a TOTP login step-up → a full session. */
+  mfaVerify: (mfaToken: string, code: string) =>
+    request<TokenResponse>("/auth/mfa/verify", {
+      method: "POST",
+      body: { mfa_token: mfaToken, code },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
   /** Workspaces the current user can switch between (Acre HQ + tenants). */
@@ -224,6 +269,54 @@ export const api = {
       method: "POST",
       auth: true,
       body: { tenant_id: tenantId },
+    }),
+
+  // ---- federated login (OAuth/OIDC) ----
+  /**
+   * Begin a social-login flow. `intent: "link"` (default `"login"`) attaches the
+   * provider to the signed-in account and requires auth; `"login"` provisions or
+   * signs in a user into the given workspace `tenant` slug.
+   */
+  oauthStart: (
+    provider: string,
+    opts: { intent?: "login" | "link"; tenant?: string } = {}
+  ) =>
+    request<OauthStartResult>(`/auth/oauth/${provider}/start`, {
+      method: "POST",
+      auth: opts.intent === "link",
+      tenant: opts.tenant,
+      body: { intent: opts.intent ?? "login", tenant: opts.tenant },
+    }),
+  oauthCallback: (
+    provider: string,
+    code: string,
+    state: string,
+    opts: { auth?: boolean } = {}
+  ) =>
+    request<OauthCallbackResult>(`/auth/oauth/${provider}/callback`, {
+      method: "POST",
+      auth: opts.auth ?? false,
+      body: { code, state },
+    }),
+
+  // ---- MFA (TOTP) ----
+  mfaStatus: () => request<MfaStatus>("/auth/mfa/status", { auth: true }),
+  mfaSetup: () =>
+    request<TotpSetupResult>("/auth/mfa/totp/setup", {
+      method: "POST",
+      auth: true,
+    }),
+  mfaConfirm: (code: string) =>
+    request<MfaStatus>("/auth/mfa/totp/confirm", {
+      method: "POST",
+      auth: true,
+      body: { code },
+    }),
+  mfaDisable: (code: string) =>
+    request<MfaStatus>("/auth/mfa/totp/disable", {
+      method: "POST",
+      auth: true,
+      body: { code },
     }),
 
   // ---- landlord / PM console ----
@@ -1634,8 +1727,43 @@ export const api = {
     const suffix = status ? `?status=${status}` : "";
     return request<LeadsResponse>(`/leads${suffix}`, { auth: true });
   },
+  createLead: (body: CreateLeadInput) =>
+    request<Lead>("/leads", { method: "POST", auth: true, body }),
   updateLead: (id: string, body: UpdateLeadInput) =>
     request<Lead>(`/leads/${id}`, { method: "PATCH", auth: true, body }),
+  scheduleTour: (id: string, body: ScheduleTourInput) =>
+    request<ScheduleTourResponse>(`/leads/${id}/tour`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  convertLead: (id: string, body: ConvertLeadInput) =>
+    request<ConvertLeadResponse>(`/leads/${id}/convert`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+
+  // ---- lease renewals (propose → addendum → e-sign → apply) ----
+  leaseRenewals: (leaseId: string) =>
+    request<Renewal[]>(`/leases/${leaseId}/renewals`, { auth: true }),
+  proposeRenewal: (leaseId: string, body: ProposeRenewalInput) =>
+    request<ProposeRenewalResponse>(`/leases/${leaseId}/renewals`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  sendRenewal: (renewalId: string, body: SendRenewalInput) =>
+    request<SendRenewalResponse>(`/renewals/${renewalId}/send`, {
+      method: "POST",
+      auth: true,
+      body,
+    }),
+  cancelRenewal: (renewalId: string) =>
+    request<Renewal>(`/renewals/${renewalId}/cancel`, {
+      method: "POST",
+      auth: true,
+    }),
 
   // ---- email integration: inbound comms log + domain deliverability ----
   inboundEmails: () =>
@@ -2837,6 +2965,8 @@ export interface LeaseDocDto {
   title: string;
   body: string;
   format: string;
+  /** lease | renewal_addendum */
+  purpose: string;
   status: string;
   generated_at: string;
   signed_at: string | null;
@@ -2882,6 +3012,8 @@ export interface EsignEnvelope {
   message: string | null;
   /** sent | partially_signed | completed | declined | voided */
   status: string;
+  /** lease | renewal */
+  purpose: string;
   body_hash: string;
   signed_document_id: string | null;
   sent_at: string;
@@ -2914,6 +3046,57 @@ export interface CreateEnvelopeResponse {
 
 export interface RemindEnvelopeResponse {
   reminded: number;
+  sign_links: EsignSignerLink[];
+}
+
+// ---- lease renewals ----
+
+export interface Renewal {
+  id: string;
+  lease_id: string;
+  /** proposed | sent | signed | activated | declined | cancelled */
+  status: string;
+  current_rent_cents: number;
+  current_rent_label: string;
+  new_rent_cents: number;
+  new_rent_label: string;
+  /** e.g. "+$150 / month (+8.3%)" */
+  rent_change_label: string;
+  new_start_date: string;
+  new_end_date: string | null;
+  term_months: number | null;
+  notes: string | null;
+  lease_document_id: string | null;
+  envelope_id: string | null;
+  /** The signing envelope (signers + audit trail) once the addendum is sent. */
+  envelope: EsignEnvelope | null;
+  activated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProposeRenewalInput {
+  new_rent_cents: number;
+  term_months?: number;
+  new_start_date?: string;
+  new_end_date?: string;
+  notes?: string;
+}
+
+export interface ProposeRenewalResponse {
+  renewal: Renewal;
+  document_id: string;
+  document_body: string;
+}
+
+export interface SendRenewalInput {
+  message?: string;
+  signers?: EsignSignerInput[];
+}
+
+export interface SendRenewalResponse {
+  renewal: Renewal;
+  envelope: EsignEnvelope;
   sign_links: EsignSignerLink[];
 }
 
@@ -3152,6 +3335,8 @@ export interface Lead {
   status: string;
   notes: string | null;
   last_message: string | null;
+  /** The application this lead was converted into, if any. */
+  application_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -3162,11 +3347,48 @@ export interface LeadsResponse {
   leads: Lead[];
 }
 
+export interface CreateLeadInput {
+  name: string;
+  email: string;
+  phone?: string;
+  /** manual | website | referral | walk_in */
+  source?: string;
+  notes?: string;
+}
+
 export interface UpdateLeadInput {
   name?: string;
   phone?: string;
   status?: string;
   notes?: string;
+}
+
+export interface ScheduleTourInput {
+  /** YYYY-MM-DD */
+  date: string;
+  notes?: string;
+  lead_days?: number[];
+}
+
+export interface ScheduleTourResponse {
+  lead: Lead;
+  reminder: Reminder;
+}
+
+export interface ConvertLeadInput {
+  listing_id?: string;
+  annual_income_cents?: number;
+  credit_score?: number;
+  move_in?: string;
+  has_pet?: boolean;
+  pet_details?: string;
+  is_military?: boolean;
+  screening_consent?: boolean;
+}
+
+export interface ConvertLeadResponse {
+  lead: Lead;
+  application: Application;
 }
 
 // ---- inbound email comms log (#62) ----

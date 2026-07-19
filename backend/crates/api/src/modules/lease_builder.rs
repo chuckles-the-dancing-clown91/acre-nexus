@@ -7,7 +7,7 @@
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{
-    applications, esign, fees, lease_charges, lease_docs, tenant_history, vehicles,
+    applications, esign, fees, lease_charges, lease_docs, renewals, tenant_history, vehicles,
 };
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
@@ -65,6 +65,11 @@ impl PlatformModule for LeaseBuilderModule {
             lease_docs::generate::generate,
             lease_docs::get::get,
             lease_docs::sign::sign,
+            // lease renewals (propose → addendum → e-sign → apply)
+            renewals::propose::propose,
+            renewals::list::list_renewals,
+            renewals::send::send,
+            renewals::cancel::cancel,
             // e-signature envelopes (remote signing)
             esign::create::create,
             esign::get::get,

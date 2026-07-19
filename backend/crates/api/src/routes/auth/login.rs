@@ -1,6 +1,6 @@
-use super::dto::{LoginReq, TokenResp};
-use super::helpers::{build_user_resp, issue_refresh_token, permissions_for};
-use crate::auth::{issue_access_token, verify_password};
+use super::dto::{LoginReq, LoginResp, MfaChallengeResp};
+use super::helpers::{auth_outcome, AuthOutcome};
+use crate::auth::verify_password;
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 use chrono::Utc;
@@ -9,14 +9,16 @@ use rocket::serde::json::Json;
 use rocket::{post, State};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 
-/// `POST /auth/login` — exchange email + password for an access/refresh token pair.
+/// `POST /auth/login` — exchange email + password for a session, or (when the
+/// account has TOTP MFA) an MFA challenge to complete first. The no-MFA
+/// response is exactly the historical access/refresh token pair.
 #[rocket_okapi::openapi(tag = "Auth")]
 #[post("/auth/login", data = "<body>")]
 pub async fn login(
     state: &State<AppState>,
     db: crate::db::RequestDb,
     body: Json<LoginReq>,
-) -> ApiResult<Json<TokenResp>> {
+) -> ApiResult<Json<LoginResp>> {
     let user = User::find()
         .filter(entity::user::Column::Email.eq(body.email.to_lowercase()))
         .one(&db)
@@ -45,35 +47,24 @@ pub async fn login(
     }
 
     let active = user.tenant_id;
-    let perms = permissions_for(&db, user.id, active).await?;
-    let access = issue_access_token(
-        &state.config,
-        user.id,
-        active,
-        user.is_platform_staff,
-        perms.clone(),
-    )
-    .map_err(ApiError::Internal)?;
-
-    let refresh = issue_refresh_token(&db, state.config.refresh_ttl_secs, user.id).await?;
-    let user_resp = build_user_resp(&db, &user, active, perms).await?;
-
-    crate::audit::record(
-        &db,
-        Some(user.id),
-        crate::audit::actions::AUTH_LOGIN,
-        Some("user"),
-        Some(user.id.to_string()),
-        active,
-        None,
-    )
-    .await;
-
-    Ok(Json(TokenResp {
-        access_token: access,
-        refresh_token: refresh,
-        token_type: "Bearer",
-        expires_in: state.config.access_ttl_secs,
-        user: user_resp,
-    }))
+    match auth_outcome(state, &db, &user, active).await? {
+        AuthOutcome::Session(token) => {
+            crate::audit::record(
+                &db,
+                Some(user.id),
+                crate::audit::actions::AUTH_LOGIN,
+                Some("user"),
+                Some(user.id.to_string()),
+                active,
+                None,
+            )
+            .await;
+            Ok(Json(LoginResp::Token(token)))
+        }
+        // MFA-enabled: the full login is recorded once the second factor clears.
+        AuthOutcome::Mfa(mfa_token) => Ok(Json(LoginResp::Mfa(MfaChallengeResp {
+            mfa_required: true,
+            mfa_token,
+        }))),
+    }
 }

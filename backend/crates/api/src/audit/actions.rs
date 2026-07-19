@@ -14,6 +14,16 @@ pub const AUTH_LOGOUT: &str = "auth.logout";
 pub const AUTH_REFRESH: &str = "auth.refresh";
 pub const AUTH_SWITCH_WORKSPACE: &str = "auth.switch_workspace";
 
+// ---- Federated login + MFA (issue #63) ----
+/// A first-time social login provisioned a new user.
+pub const AUTH_OAUTH_SIGNUP: &str = "auth.oauth_signup";
+/// A social identity was linked to an existing account.
+pub const AUTH_OAUTH_LINK: &str = "auth.oauth_link";
+pub const AUTH_MFA_ENABLE: &str = "auth.mfa_enable";
+pub const AUTH_MFA_DISABLE: &str = "auth.mfa_disable";
+/// A login step-up (TOTP second factor) was completed.
+pub const AUTH_MFA_VERIFY: &str = "auth.mfa_verify";
+
 // ---- Properties / portfolio ----
 pub const PROPERTY_CREATE: &str = "property.create";
 pub const PROPERTY_UPDATE: &str = "property.update";
@@ -69,6 +79,12 @@ pub const UNIT_UPDATE: &str = "unit.update";
 pub const LEASE_CREATE: &str = "lease.create";
 pub const LEASE_UPDATE: &str = "lease.update";
 pub const LEASE_PAYMENT_RECORD: &str = "lease.payment_record";
+
+// ---- Lease renewals (issue #44) ----
+pub const LEASE_RENEWAL_PROPOSE: &str = "lease_renewal.propose";
+pub const LEASE_RENEWAL_SEND: &str = "lease_renewal.send";
+pub const LEASE_RENEWAL_ACTIVATE: &str = "lease_renewal.activate";
+pub const LEASE_RENEWAL_CANCEL: &str = "lease_renewal.cancel";
 
 // ---- Leasing lifecycle: fees, charges, vehicles, documents, conversion ----
 pub const FEE_SCHEDULE_CREATE: &str = "fee_schedule.create";
@@ -230,6 +246,10 @@ pub const REMINDER_FIRE: &str = "reminder.fire";
 pub const EMAIL_INBOUND: &str = "email.inbound";
 pub const LEAD_CREATE: &str = "lead.create";
 pub const LEAD_UPDATE: &str = "lead.update";
+/// A tour was scheduled for a lead (creates a calendar `tour` reminder).
+pub const LEAD_TOUR_SCHEDULE: &str = "lead.tour_schedule";
+/// A lead was converted into a rental application without leaving the platform.
+pub const LEAD_CONVERT: &str = "lead.convert";
 /// SPF/DKIM/DMARC records were checked for a custom domain (per-record
 /// results in metadata).
 pub const DOMAIN_EMAIL_VERIFY: &str = "domain.verify_email";

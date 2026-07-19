@@ -1,8 +1,9 @@
-use super::dto::{MembershipSummary, UserResp, WorkspaceSummary};
-use crate::auth::{hash_secret, random_secret};
+use super::dto::{MembershipSummary, TokenResp, UserResp, WorkspaceSummary};
+use crate::auth::{hash_secret, issue_access_token, random_secret};
 use crate::error::{ApiError, ApiResult};
+use crate::state::AppState;
 use chrono::{Duration, Utc};
-use entity::prelude::{Membership, RolePermission, Tenant, UserRole};
+use entity::prelude::{Membership, RolePermission, Tenant, UserRole, UserTotp};
 use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -156,4 +157,68 @@ pub(crate) async fn issue_refresh_token(
     };
     model.insert(db).await?;
     Ok(secret)
+}
+
+/// Mint a full session — access token + rotating refresh token + the user
+/// snapshot — for `user` scoped to `active`. The shared tail of every
+/// successful authentication (password, federated, MFA-verified).
+pub(crate) async fn build_token_resp(
+    state: &AppState,
+    db: &impl ConnectionTrait,
+    user: &entity::user::Model,
+    active: Option<Uuid>,
+) -> ApiResult<TokenResp> {
+    let perms = permissions_for(db, user.id, active).await?;
+    let access = issue_access_token(
+        &state.config,
+        user.id,
+        active,
+        user.is_platform_staff,
+        perms.clone(),
+    )
+    .map_err(ApiError::Internal)?;
+    let refresh = issue_refresh_token(db, state.config.refresh_ttl_secs, user.id).await?;
+    let user_resp = build_user_resp(db, user, active, perms).await?;
+    Ok(TokenResp {
+        access_token: access,
+        refresh_token: refresh,
+        token_type: "Bearer",
+        expires_in: state.config.access_ttl_secs,
+        user: user_resp,
+    })
+}
+
+/// Whether the user has confirmed, enabled TOTP MFA.
+pub(crate) async fn mfa_enabled(db: &impl ConnectionTrait, user_id: Uuid) -> ApiResult<bool> {
+    Ok(UserTotp::find_by_id(user_id)
+        .one(db)
+        .await?
+        .map(|t| t.enabled)
+        .unwrap_or(false))
+}
+
+/// A just-authenticated user either gets a session, or — if MFA stands in the
+/// way — a challenge token to complete at `POST /auth/mfa/verify`.
+pub(crate) enum AuthOutcome {
+    Session(Box<TokenResp>),
+    Mfa(String),
+}
+
+/// Resolve the outcome of a successful first factor (password or social):
+/// a full session, unless the account has TOTP MFA enabled.
+pub(crate) async fn auth_outcome(
+    state: &AppState,
+    db: &impl ConnectionTrait,
+    user: &entity::user::Model,
+    active: Option<Uuid>,
+) -> ApiResult<AuthOutcome> {
+    if mfa_enabled(db, user.id).await? {
+        let token = crate::mfa::issue_challenge_token(&state.config, user.id)
+            .map_err(ApiError::Internal)?;
+        Ok(AuthOutcome::Mfa(token))
+    } else {
+        Ok(AuthOutcome::Session(Box::new(
+            build_token_resp(state, db, user, active).await?,
+        )))
+    }
 }

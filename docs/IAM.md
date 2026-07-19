@@ -117,6 +117,58 @@ to one **active workspace** at a time, and permissions are resolved for it:
 The `TenantScope` request guard honors the active `tid` first; staff with no
 active workspace can still impersonate via the legacy `X-Tenant` header.
 
+## Federated login & MFA (issue #63)
+
+Two more ways to authenticate, both minting the **same** JWT-access +
+rotating-refresh session as password login — distinct from the enterprise
+SSO/SAML/SCIM tracked in #12.
+
+### "Log in with Google / Microsoft / Apple" (OAuth 2.0 / OIDC)
+
+A `federated_identity` row links a provider account (`provider` + `subject`,
+globally unique) to an `app_user`, so a social login maps onto the existing
+identity model without disturbing it — login identity (`app_user`) stays
+separate from `user_profile`. **Sandbox-first and credential-gated**, exactly
+like every other integration (`crate::oauth` honors the `LIVE_PROVIDERS` gate):
+unless a provider is named there (with `oauth.<provider>.client_id` /
+`client_secret` in the secrets vault), a hermetic **sandbox provider** runs — no
+network, deterministic — so CI and demos work offline. The authorization-code
+flow (with PKCE) is carried across the redirect by a **signed state token**.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/auth/oauth/<provider>/start` | `intent=login` (needs a `tenant` slug to provision into) or `intent=link` (authenticated — attaches the provider to the signed-in user). Returns the provider `authorize_url` + a `sandbox` flag. |
+| GET | `/auth/oauth/<provider>/sandbox?state&email` | The sandbox provider's "consent" — redirects back to the app callback with a signed code (disabled when the provider is live). |
+| POST | `/auth/oauth/<provider>/callback` | Completes the flow: resolves the linked user, else auto-links a matching (provider-verified) email, else **provisions** a fresh `app_user` + renter `membership` + pending `user_profile`. Returns a `session`, an `mfa` challenge, or (link intent) a `linked` confirmation. |
+
+A first-time social login lands with a valid session **and** a workspace
+membership (renter persona, `renter` role); an existing account can link a
+provider and thereafter "Log in with" it.
+
+### TOTP MFA (authenticator app)
+
+`crate::totp` is a self-contained RFC 6238 (HMAC-SHA1) implementation — validated
+against the RFC reference vectors — so any standard authenticator app
+(Google Authenticator, 1Password, Authy) works. The shared secret is sealed at
+rest (AES-256-GCM under the PII key) in `user_totp`; enrolment is two-step.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/auth/mfa/status` | Whether the signed-in user has MFA enabled. |
+| POST | `/auth/mfa/totp/setup` | Mint a secret + `otpauth://` URI (not yet active). |
+| POST | `/auth/mfa/totp/confirm` | Verify the first code → **enable**. |
+| POST | `/auth/mfa/totp/disable` | Requires a current code. |
+| POST | `/auth/mfa/verify` | Complete a login step-up (challenge token + code → session). |
+
+When an MFA-enabled account clears its first factor, `POST /auth/login` (and the
+social callback) returns `{ mfa_required: true, mfa_token }` **instead of** a
+session — a short-lived, typed challenge token. `POST /auth/mfa/verify` exchanges
+it, with the current code, for the real session. The no-MFA login response is
+byte-for-byte the historical token pair (backward compatible). Both
+`federated_identity` and `user_totp` key on `user_id` with no `tenant_id` (like
+`refresh_token`), so they're readable during the pre-tenant login step and carry
+no RLS. Schema: migration `m20240101_000042`.
+
 ## Audit log
 
 `audit_log` now captures activity at two levels (best-effort; an audit write

@@ -13,7 +13,7 @@
 //! `{pet_details}`, `{vehicles}`.
 
 use crate::dto::usd;
-use entity::{lease, lease_charge, property, unit, vehicle};
+use entity::{lease, lease_charge, lease_renewal, property, unit, vehicle};
 use std::collections::HashMap;
 
 /// Replace every `{key}` in `template` from `vars`; unknown keys are left intact.
@@ -259,9 +259,125 @@ pub fn render(
     doc
 }
 
+/// A human label for a rent change, e.g. `"+$150.00 / month (+8.3%)"` or
+/// `"no change"`. The percentage is omitted when the prior rent is zero.
+pub fn rent_change_label(current_cents: i64, new_cents: i64) -> String {
+    let delta = new_cents - current_cents;
+    if delta == 0 {
+        return "no change".to_string();
+    }
+    let sign = if delta > 0 { "+" } else { "-" };
+    let amount = format!("{sign}{} / month", usd(delta.abs()));
+    if current_cents > 0 {
+        // One decimal place, computed in basis points to avoid float rounding.
+        let bps = (delta.abs() * 10_000) / current_cents;
+        let whole = bps / 100;
+        let frac = (bps % 100) / 10;
+        format!("{amount} ({sign}{whole}.{frac}%)")
+    } else {
+        amount
+    }
+}
+
+/// Render a **lease renewal addendum** (plain text) — the document a resident
+/// e-signs to accept renewed terms (typically a rent increase + extended end
+/// date). It modifies, rather than replaces, the original lease agreement.
+pub fn render_renewal_addendum(
+    lease: &lease::Model,
+    property: &property::Model,
+    unit: Option<&unit::Model>,
+    renewal: &lease_renewal::Model,
+) -> String {
+    let landlord = if property.manager.trim().is_empty() {
+        "Landlord".to_string()
+    } else {
+        property.manager.clone()
+    };
+    let premises = {
+        let mut s = format!("{}, {}", property.address, property.city);
+        if let Some(u) = unit {
+            s.push_str(&format!(", Unit {}", u.unit_number));
+        }
+        s
+    };
+    let new_end = renewal
+        .new_end_date
+        .clone()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "month-to-month".into());
+
+    let mut doc = String::new();
+    doc.push_str("LEASE RENEWAL ADDENDUM\n");
+    doc.push_str("======================\n\n");
+    doc.push_str(&format!(
+        "This Lease Renewal Addendum (\"Addendum\") modifies and extends the \
+         Residential Lease Agreement between {landlord} and {} for the premises \
+         at {premises}.\n\n",
+        lease.tenant_name
+    ));
+
+    doc.push_str("1. EXISTING LEASE\n");
+    doc.push_str(&format!(
+        "   The parties entered into a lease at a monthly rent of {}. All terms \
+         of the existing lease remain in full force except as modified below.\n\n",
+        usd(renewal.current_rent_cents)
+    ));
+
+    doc.push_str("2. RENEWED TERM\n");
+    doc.push_str(&format!(
+        "   Effective {}, the lease is renewed through {new_end}.\n",
+        renewal.new_start_date
+    ));
+    if let Some(months) = renewal.term_months {
+        doc.push_str(&format!("   Renewal term: {months} months.\n"));
+    }
+    doc.push('\n');
+
+    doc.push_str("3. RENT\n");
+    doc.push_str(&format!(
+        "   Beginning {}, the monthly rent is {} (previously {}) — {}.\n\n",
+        renewal.new_start_date,
+        usd(renewal.new_rent_cents),
+        usd(renewal.current_rent_cents),
+        rent_change_label(renewal.current_rent_cents, renewal.new_rent_cents)
+    ));
+
+    doc.push_str("4. ALL OTHER TERMS\n");
+    doc.push_str(
+        "   Except as expressly modified by this Addendum, every term and \
+         condition of the original lease remains unchanged and in effect.\n\n",
+    );
+
+    if let Some(notes) = renewal.notes.as_deref().filter(|n| !n.trim().is_empty()) {
+        doc.push_str("5. ADDITIONAL NOTES\n");
+        doc.push_str(&format!("   {notes}\n\n"));
+    }
+
+    doc.push_str("SIGNATURES\n");
+    doc.push_str(&format!(
+        "   Landlord: {landlord} ____________________  Date: __________\n"
+    ));
+    doc.push_str(&format!(
+        "   Resident: {} ____________________  Date: __________\n",
+        lease.tenant_name
+    ));
+
+    doc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rent_change_label_formats() {
+        // +8.3% on a $150 bump over $1800.
+        assert_eq!(rent_change_label(180_000, 195_000), "+$150 / month (+8.3%)");
+        assert_eq!(rent_change_label(180_000, 180_000), "no change");
+        assert_eq!(rent_change_label(200_000, 190_000), "-$100 / month (-5.0%)");
+        // No prior rent → percentage omitted.
+        assert_eq!(rent_change_label(0, 150_000), "+$1,500 / month");
+    }
 
     #[test]
     fn interpolate_replaces_known_and_keeps_unknown() {

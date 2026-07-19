@@ -202,6 +202,20 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
+          {/* Security is per-user (MFA + linked social identities) — no gate. */}
+          <Link
+            href="/console/security"
+            className={clsx(
+              "mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+              pathname.startsWith("/console/security")
+                ? "bg-accent-soft text-accent-2"
+                : "text-ink-2 hover:bg-surface-2"
+            )}
+          >
+            <Icon name="key" size={17} />
+            Security
+          </Link>
+
           {user.is_platform_staff && (
             <div className="mt-3 space-y-1">
               <Link

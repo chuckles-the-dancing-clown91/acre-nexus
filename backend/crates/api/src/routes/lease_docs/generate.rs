@@ -72,6 +72,7 @@ pub(crate) async fn generate_for_lease(
         ),
         body: Set(body),
         format: Set("text".into()),
+        purpose: Set("lease".into()),
         status: Set("draft".into()),
         generated_at: Set(now.into()),
         signed_at: Set(None),

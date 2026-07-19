@@ -12,13 +12,21 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api, tokenStore } from "./api";
-import type { User } from "./types";
+import { api, isMfaChallenge, tokenStore } from "./api";
+import type { LoginResult } from "./api";
+import type { TokenResponse, User } from "./types";
 
 interface AuthCtx {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /**
+   * Attempt a password login. Returns the raw result: a session (already
+   * applied) or an MFA challenge the caller must complete via
+   * `establishSession` after `api.mfaVerify`.
+   */
+  login: (email: string, password: string) => Promise<LoginResult>;
+  /** Apply a freshly minted session (from MFA verify or a social callback). */
+  establishSession: (tokens: TokenResponse) => void;
   logout: () => void;
   switchWorkspace: (tenantId: string | null) => Promise<void>;
   can: (perm: string) => boolean;
@@ -58,11 +66,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api.login(email, password);
-    tokenStore.set(res);
-    setUser(res.user);
+  const establishSession = useCallback((tokens: TokenResponse) => {
+    tokenStore.set(tokens);
+    setUser(tokens.user);
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<LoginResult> => {
+      const res = await api.login(email, password);
+      // A session applies immediately; an MFA challenge is handed back for the
+      // caller to complete.
+      if (!isMfaChallenge(res)) establishSession(res);
+      return res;
+    },
+    [establishSession]
+  );
 
   const logout = useCallback(() => {
     tokenStore.clear();
@@ -100,7 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ user, loading, login, logout, switchWorkspace, can }}
+      value={{
+        user,
+        loading,
+        login,
+        establishSession,
+        logout,
+        switchWorkspace,
+        can,
+      }}
     >
       {children}
     </Ctx.Provider>
