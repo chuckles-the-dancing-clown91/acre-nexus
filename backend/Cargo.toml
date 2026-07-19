@@ -35,7 +35,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 jsonwebtoken = "9"
 argon2 = "0.5"
 rand = "0.8"
-sha2 = "0.10"
+sha2 = "0.11"
 # HMAC-SHA1 for RFC 6238 TOTP (authenticator-app MFA); SHA-1 is used *only*
 # for the standard TOTP construction, never for security hashing.
 sha1 = "0.10"
