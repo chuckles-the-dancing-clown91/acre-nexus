@@ -12,6 +12,7 @@ import type { Asset, Unit } from "@/lib/types";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card } from "@/components/ui";
+import Link from "next/link";
 import { DocumentsCard } from "@/components/DocumentsCard";
 
 const KINDS = [
@@ -164,6 +165,12 @@ export function AssetsCard({ propertyId }: { propertyId: string }) {
                     <dd>{a.notes ?? "—"}</dd>
                   </div>
                 </dl>
+                <Link
+                  href={`/console/maintenance/assets/${a.id}`}
+                  className="inline-block text-sm font-semibold text-accent-2 hover:underline"
+                >
+                  Parts, warranty & service history →
+                </Link>
                 {manage && (
                   <Button
                     variant="outline"

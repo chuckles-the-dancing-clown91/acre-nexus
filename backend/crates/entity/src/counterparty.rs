@@ -23,6 +23,14 @@ pub struct Model {
     pub address: Option<String>,
     /// A short summary note kept inline; longer history lives in `counterparty_note`.
     pub notes: Option<String>,
+    /// Linked partner system, e.g. `alpha` (Alpha Power Wash); the API key is
+    /// in the vault under `partner.<id>.api_key`.
+    pub partner_kind: Option<String>,
+    pub partner_base_url: Option<String>,
+    pub partner_linked_at: Option<DateTimeWithTimeZone>,
+    /// `ok` | `error` after the last call.
+    pub partner_status: Option<String>,
+    pub partner_error: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

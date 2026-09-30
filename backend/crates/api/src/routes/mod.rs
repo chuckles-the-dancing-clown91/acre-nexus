@@ -42,6 +42,7 @@ pub mod modules;
 pub mod mortgages;
 pub mod notifications;
 pub mod onboarding;
+pub mod partner;
 pub mod payables;
 pub mod payments;
 pub mod payouts;

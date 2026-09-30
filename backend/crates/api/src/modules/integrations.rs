@@ -125,6 +125,9 @@ impl PlatformModule for IntegrationsModule {
                 if let Some(outcome) = crate::mail::handle_webhook_event(ctx.db, ctx.job).await {
                     return Some(outcome);
                 }
+                if let Some(outcome) = crate::partner::handle_webhook_event(ctx.db, ctx.job).await {
+                    return Some(outcome);
+                }
                 let provider = ctx
                     .job
                     .payload

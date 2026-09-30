@@ -708,6 +708,7 @@ export const api = {
   createMaintenancePlan: (body: {
     property_id: string;
     unit_id?: string;
+    asset_id?: string;
     title: string;
     description?: string;
     category?: string;
@@ -723,6 +724,7 @@ export const api = {
   updateMaintenancePlan: (
     id: string,
     body: {
+      asset_id?: string;
       title?: string;
       description?: string;
       category?: string;

@@ -49,6 +49,7 @@ mod modules;
 mod notify;
 mod oauth;
 mod openapi;
+mod partner;
 mod password_links;
 mod payables;
 mod payments;

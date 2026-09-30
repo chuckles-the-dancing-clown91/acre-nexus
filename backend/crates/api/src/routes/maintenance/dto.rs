@@ -52,6 +52,11 @@ pub struct TicketDto {
     /// `none` | `on_track` | `met` | `breached`, derived at read time.
     pub sla_response_state: String,
     pub sla_resolve_state: String,
+    /// Sent to a vendor's own system (Alpha): their job id and status.
+    pub partner_counterparty_id: Option<Uuid>,
+    pub partner_job_id: Option<String>,
+    pub partner_status: Option<String>,
+    pub partner_synced_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -61,6 +66,10 @@ impl From<entity::maintenance_ticket::Model> for TicketDto {
         let now = chrono::Utc::now();
         let to_utc = |ts: &Option<chrono::DateTime<chrono::FixedOffset>>| ts.map(|v| v.to_utc());
         TicketDto {
+            partner_counterparty_id: t.partner_counterparty_id,
+            partner_job_id: t.partner_job_id.clone(),
+            partner_status: t.partner_status.clone(),
+            partner_synced_at: t.partner_synced_at.map(|d| d.to_rfc3339()),
             cost_label: label(t.cost_cents),
             sla_response_state: crate::helpdesk::sla_state(
                 to_utc(&t.sla_response_due_at),

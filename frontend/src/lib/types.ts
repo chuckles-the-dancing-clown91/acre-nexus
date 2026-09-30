@@ -232,6 +232,21 @@ export interface PropertyMaintenance {
   open_cost_label: string;
   open: MaintenanceTicket[];
   history: MaintenanceTicket[];
+  /** Recorded cost of resolved work, all time / last 12 months. */
+  history_cost_cents: number;
+  history_cost_label: string;
+  last_12mo_cents: number;
+  /** Where the money went: cost by ticket category. */
+  by_category: {
+    category: string;
+    tickets: number;
+    cents: number;
+    label: string;
+  }[];
+  /** Expenses booked against this property. */
+  expenses_cents: number;
+  assets: Asset[];
+  plans: MaintenancePlan[];
 }
 
 export interface Kpi {
@@ -366,6 +381,9 @@ export interface Counterparty {
   website: string | null;
   address: string | null;
   notes: string | null;
+  /** Linked partner system (`alpha`), when this vendor runs one. */
+  partner_kind: string | null;
+  partner_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -737,6 +755,11 @@ export interface MaintenanceTicket {
   /** `none` | `on_track` | `met` | `breached`, derived server-side. */
   sla_response_state: string;
   sla_resolve_state: string;
+  /** Sent to a vendor's own system (Alpha): who, their job id and status. */
+  partner_counterparty_id: string | null;
+  partner_job_id: string | null;
+  partner_status: string | null;
+  partner_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -762,6 +785,8 @@ export interface MaintenancePlan {
   description: string | null;
   category: string;
   priority: string;
+  /** The appliance this routine is for (its parts pre-list on each ticket). */
+  asset_id: string | null;
   cadence_days: number;
   next_due_date: string;
   active: boolean;
@@ -787,6 +812,44 @@ export interface TicketDetail extends MaintenanceTicket {
   asset_name: string | null;
   quotes: TicketQuote[];
   inbound_email_address: string | null;
+  /** The parts loop: potential → needed → from stock / to order → used. */
+  parts: TicketPart[];
+}
+
+export type PartStatus =
+  | "potential"
+  | "needed"
+  | "from_stock"
+  | "to_order"
+  | "ordered"
+  | "pick_up"
+  | "received"
+  | "used"
+  | "skipped";
+
+/** One part on a work order, moving through the parts loop. */
+export interface TicketPart {
+  id: string;
+  ticket_id: string;
+  inventory_item_id: string | null;
+  name: string;
+  quantity: number;
+  status: PartStatus;
+  /** `asset` | `finding` | `plan` | `typed` */
+  source: string;
+  finding_comment_id: string | null;
+  need_by: string | null;
+  ship_to: "property" | "office" | "other" | null;
+  ship_to_note: string | null;
+  vendor: string | null;
+  tracking: string | null;
+  unit_cost_cents: number | null;
+  note: string | null;
+  /** On the shelf right now (stock items). */
+  in_stock: number | null;
+  ordered_at: string | null;
+  received_at: string | null;
+  created_at: string;
 }
 
 /** One itemized part / labor / fee entry on a work order. */
@@ -811,10 +874,16 @@ export interface InventoryItem {
   property_id: string | null;
   name: string;
   sku: string | null;
+  /** UPC / EAN or the workspace's own code — what the scanner reads. */
+  barcode: string | null;
+  unit: string;
+  vendor: string | null;
   category: string;
   quantity: number;
   unit_cost_cents: number | null;
   unit_cost_label: string | null;
+  /** Quantity × unit cost. */
+  value_cents: number;
   reorder_level: number;
   low_stock: boolean;
   storage_location: string | null;
@@ -838,6 +907,14 @@ export interface Asset {
   warranty_expires: string | null;
   /** `none` | `active` | `expired`, derived server-side. */
   warranty_state: string;
+  location: string | null;
+  purchased_on: string | null;
+  purchase_price_cents: number | null;
+  expected_life_years: number | null;
+  /** Years of expected life left; negative = past due. */
+  years_left: number | null;
+  warranty_provider: string | null;
+  warranty_notes: string | null;
   notes: string | null;
   status: "active" | "retired";
   created_at: string;
@@ -853,6 +930,12 @@ export interface CreateAssetInput {
   serial_number?: string;
   install_date?: string;
   warranty_expires?: string;
+  location?: string;
+  purchased_on?: string;
+  purchase_price_cents?: number;
+  expected_life_years?: number;
+  warranty_provider?: string;
+  warranty_notes?: string;
   notes?: string;
 }
 
@@ -864,6 +947,12 @@ export interface UpdateAssetInput {
   serial_number?: string;
   install_date?: string;
   warranty_expires?: string;
+  location?: string;
+  purchased_on?: string;
+  purchase_price_cents?: number;
+  expected_life_years?: number;
+  warranty_provider?: string;
+  warranty_notes?: string;
   notes?: string;
   status?: "active" | "retired";
 }

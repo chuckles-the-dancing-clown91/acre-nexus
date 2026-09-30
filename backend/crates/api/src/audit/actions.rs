@@ -382,6 +382,9 @@ pub const TICKET_FINDING: &str = "ticket.finding";
 pub const TICKET_PARTS_LIST: &str = "ticket.parts_list";
 pub const PART_DECIDE: &str = "ticket_part.decide";
 pub const STOCK_RECEIVE: &str = "inventory.receive";
+pub const PARTNER_LINK: &str = "partner.link";
+pub const PARTNER_UNLINK: &str = "partner.unlink";
+pub const TICKET_DISPATCH: &str = "ticket.dispatch";
 
 // ---- SaaS platform billing (Phase 8) ----
 pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";

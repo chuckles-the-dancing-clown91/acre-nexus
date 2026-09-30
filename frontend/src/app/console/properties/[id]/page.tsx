@@ -1059,7 +1059,7 @@ function MaintenanceTab({ data }: { data: PropertyMaintenance | null }) {
     );
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile label="Open" value={`${data.open_count}`} />
         <StatTile label="Total" value={`${data.total_count}`} />
         <StatTile
@@ -1067,7 +1067,103 @@ function MaintenanceTab({ data }: { data: PropertyMaintenance | null }) {
           value={data.open_cost_label}
           icon="dollar"
         />
+        <StatTile
+          label="Spent, all time"
+          value={data.history_cost_label}
+          icon="dollar"
+        />
+        <StatTile
+          label="Last 12 months"
+          value={`$${(data.last_12mo_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+        />
       </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-5">
+          <h2 className="mb-3 font-display text-lg font-bold">
+            Where the money goes
+          </h2>
+          {data.by_category.length === 0 ? (
+            <p className="text-sm text-ink-3">No work recorded yet.</p>
+          ) : (
+            <div className="divide-y divide-line text-sm">
+              {data.by_category.map((c) => (
+                <div key={c.category} className="flex justify-between py-1.5">
+                  <span>
+                    {humanize(c.category)}
+                    <span className="ml-2 text-xs text-ink-3">
+                      {c.tickets} work order{c.tickets === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                  <span className="font-mono">{c.label}</span>
+                </div>
+              ))}
+              <div className="flex justify-between py-1.5 text-xs text-ink-3">
+                <span>
+                  Expenses booked to the property (parts, orders, mileage)
+                </span>
+                <span className="font-mono">
+                  ${(data.expenses_cents / 100).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <h2 className="mb-3 font-display text-lg font-bold">
+            Routine maintenance
+          </h2>
+          {data.plans.length === 0 ? (
+            <p className="text-sm text-ink-3">
+              Nothing on a schedule. Filters, HVAC service, chimney sweeps — set
+              them up under Maintenance → Preventive plans.
+            </p>
+          ) : (
+            <div className="divide-y divide-line text-sm">
+              {data.plans.map((p) => (
+                <div key={p.id} className="flex justify-between py-1.5">
+                  <span>
+                    {p.title}
+                    {p.asset_id && (
+                      <span className="ml-2 text-xs text-ink-3">
+                        {data.assets.find((a) => a.id === p.asset_id)?.name ??
+                          "appliance"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-ink-3">
+                    every {p.cadence_days}d · next {p.next_due_date}
+                    {!p.active ? " · paused" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+      {data.assets.length > 0 && (
+        <Card className="p-5">
+          <h2 className="mb-3 font-display text-lg font-bold">
+            Appliances & systems
+          </h2>
+          <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            {data.assets.map((a) => (
+              <Link
+                key={a.id}
+                href={`/console/maintenance/assets/${a.id}`}
+                className="rounded-xl border border-line px-3 py-2 hover:border-accent"
+              >
+                <div className="font-semibold">{a.name}</div>
+                <div className="text-xs text-ink-3">
+                  {[a.make, a.model].filter(Boolean).join(" ") ||
+                    humanize(a.kind)}
+                  {a.years_left != null ? ` · ${a.years_left} yr left` : ""}
+                  {a.warranty_state === "active" ? " · under warranty" : ""}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card className="p-5">
         <h2 className="mb-4 font-display text-lg font-bold">
           Open work orders

@@ -26,7 +26,7 @@ impl PlatformModule for MaintenanceModule {
                           assignable to members or contractors, with a comment timeline, \
                           SLA tracking, contractor quotes, and preventive plans.",
             permissions: &[Permission::MaintenanceRead, Permission::MaintenanceManage],
-            job_kinds: &[crate::helpdesk::SCAN_KIND],
+            job_kinds: &[crate::helpdesk::SCAN_KIND, crate::partner::DISPATCH_KIND],
             default_enabled: true,
             preview: false,
         }
@@ -89,6 +89,13 @@ impl PlatformModule for MaintenanceModule {
             maintenance::stock::count,
             maintenance::stock::movements,
             maintenance::stock::reorder,
+            // Alpha ↔ Vantedge: link a vendor, send them work
+            crate::routes::partner::get_link,
+            crate::routes::partner::link,
+            crate::routes::partner::unlink,
+            crate::routes::partner::rotate_secret,
+            crate::routes::partner::linked_vendors,
+            crate::routes::partner::dispatch,
         ]
     }
 
@@ -96,6 +103,9 @@ impl PlatformModule for MaintenanceModule {
         match ctx.job.kind.as_str() {
             k if k == crate::helpdesk::SCAN_KIND => {
                 Some(crate::helpdesk::handle_scan_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::partner::DISPATCH_KIND => {
+                Some(crate::partner::handle_dispatch_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }

@@ -106,6 +106,20 @@ export default function MaintenancePage() {
           </h1>
           <p className="text-ink-3">Work orders across the portfolio.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/console/maintenance/closeout"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Close-out
+          </Link>
+          <Link
+            href="/console/maintenance/stock"
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Stock
+          </Link>
+        </div>
         <label className="flex flex-col gap-1 text-xs font-semibold text-ink-3">
           Status
           <select

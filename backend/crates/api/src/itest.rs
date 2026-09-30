@@ -93,6 +93,7 @@ async fn integration_suite() {
     crm_owner_lead_to_owner(&c).await;
     property_autofill_and_photo(&c).await;
     parts_loop_and_closeout(&c).await;
+    alpha_vendor_link(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -2046,4 +2047,250 @@ async fn parts_loop_and_closeout(c: &Ctx) {
             "{pl}"
         );
     }
+}
+
+/// Phase 2C: Alpha ↔ Vantedge. A contractor is linked to their Alpha account
+/// (simulated ping), a work order is dispatched to them (the job posts it and
+/// records Alpha's job id), Alpha calls back — signed — as the job is
+/// scheduled and finished, and the ticket follows: status, timeline, and the
+/// vendor's price as a line on the work order. The vendor API sees the
+/// ticket too.
+async fn alpha_vendor_link(c: &Ctx) {
+    use crate::scheduler::run_due_jobs;
+    let nw = tenant_id(c, "northwind").await;
+    let office = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "property:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+
+    let (st, vendor) = post_json(
+        c,
+        "/entities",
+        &office,
+        serde_json::json!({ "kind": "contractor", "name": "Alpha Power Wash", "email": "office@alpha.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{vendor}");
+    let vid = vendor["id"].as_str().unwrap().to_string();
+    assert!(vendor["partner_kind"].is_null());
+
+    // Link: the key is stored, Alpha is pinged (simulated), the callback secret is shown once.
+    let (st, link) = post_json(
+        c,
+        &format!("/entities/{vid}/partner/link"),
+        &office,
+        serde_json::json!({ "base_url": "https://api.alpha.example", "api_key": "apw_live_test" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{link}");
+    assert_eq!(link["linked"], true);
+    assert_eq!(link["status"], "ok", "{link}");
+    assert!(
+        link["callback_url"]
+            .as_str()
+            .unwrap()
+            .ends_with("/webhooks/alpha?tenant=northwind"),
+        "{link}"
+    );
+    let secret = link["callback_secret"]
+        .as_str()
+        .expect("secret shown once")
+        .to_string();
+    let (_, again) = get_json(c, &format!("/entities/{vid}/partner"), &office).await;
+    assert_eq!(again["callback_secret_set"], true);
+    assert!(again.get("callback_secret").is_none());
+    let (_, vendors) = get_json(c, "/partner/vendors", &office).await;
+    assert!(
+        vendors
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["id"] == vid.as_str()),
+        "{vendors}"
+    );
+
+    // A work order, sent to them.
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &office,
+        serde_json::json!({ "title": "Pressure wash the walkways", "category": "general", "priority": "normal",
+            "description": "Front walk and the pool deck.", "access_notes": "Gate code 4411" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch"),
+        &office,
+        serde_json::json!({ "counterparty_id": vid, "requested_for": "2030-03-04T09:00:00", "service_key": "driveway", "note": "Owner wants it before the showing." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    assert_eq!(sent["partner_status"], "sending");
+    assert_eq!(sent["assignee_entity_id"], vid.as_str());
+    // Twice is refused.
+    let (st, twice) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch"),
+        &office,
+        serde_json::json!({ "counterparty_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{twice}");
+    for _ in 0..3 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    let (_, t) = get_json(c, &format!("/tickets/{tid}"), &office).await;
+    assert_eq!(t["partner_job_id"], "4242", "{t}");
+    assert_eq!(t["status"], "scheduled");
+    assert!(
+        t["comments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["body"].as_str().unwrap().contains("Alpha job #4242")),
+        "{t}"
+    );
+
+    // Alpha calls back, signed with the secret we gave the vendor.
+    let call = |event: &str, job: serde_json::Value| {
+        let body =
+            serde_json::json!({ "event": event, "sent_at": "2030-03-04T17:00:00Z", "job": job })
+                .to_string();
+        let sig = crate::providers::webhook::sign(&secret, body.as_bytes());
+        (body, sig)
+    };
+    let (body, sig) = call(
+        "job.scheduled",
+        serde_json::json!({ "id": 4242, "external_ref": tid, "status": "scheduled",
+        "scheduled_for": "2030-03-04T09:00:00-08:00", "crew": ["Carlos Crew"] }),
+    );
+    let resp = c
+        .client
+        .post("/webhooks/alpha?tenant=northwind")
+        .header(ContentType::JSON)
+        .header(Header::new("X-Acre-Signature", sig))
+        .body(body.clone())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    // A bad signature is refused.
+    let resp = c
+        .client
+        .post("/webhooks/alpha?tenant=northwind")
+        .header(ContentType::JSON)
+        .header(Header::new("X-Acre-Signature", "sha256=00"))
+        .body(body)
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Unauthorized);
+    let (body, sig) = call(
+        "job.completed",
+        serde_json::json!({ "id": 4242, "external_ref": tid, "status": "complete",
+        "service": "Driveways & Concrete", "price": "189.50", "report_note": "Rinsed twice; oil stain lifted.",
+        "photos": [{ "kind": "after", "url": "https://api.alpha.example/media/jobs/1.jpg" }] }),
+    );
+    let resp = c
+        .client
+        .post("/webhooks/alpha?tenant=northwind")
+        .header(ContentType::JSON)
+        .header(Header::new("X-Acre-Signature", sig))
+        .body(body)
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    for _ in 0..3 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    let (_, t) = get_json(c, &format!("/tickets/{tid}"), &office).await;
+    assert_eq!(t["status"], "resolved", "{t}");
+    assert_eq!(t["partner_status"], "complete");
+    assert_eq!(t["cost_cents"], 18950, "{t}");
+    assert!(t["resolved_at"].is_string());
+    let bodies: Vec<&str> = t["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|k| k["body"].as_str())
+        .collect();
+    assert!(
+        bodies.iter().any(|b| b.contains("Carlos Crew")),
+        "{bodies:?}"
+    );
+    assert!(
+        bodies
+            .iter()
+            .any(|b| b.contains("$189.50") && b.contains("1.jpg")),
+        "{bodies:?}"
+    );
+    assert_eq!(t["lines"].as_array().unwrap().len(), 1);
+
+    // The vendor API sees the ticket and can post progress on another one.
+    let token = insert_api_token(c, nw, &["maintenance:read", "maintenance:manage"]).await;
+    let (st, v) = get_json(c, &format!("/api/v1/tickets/{tid}"), &token).await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["status"], "resolved");
+    assert!(
+        v["property_address"]
+            .as_str()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
+        "{v}"
+    );
+    let (st, opened) = get_json(c, "/api/v1/tickets", &token).await;
+    assert_eq!(st, Status::Ok, "{opened}");
+    assert!(opened
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["status"] != "resolved"));
+    let other = opened[0]["id"].as_str().unwrap().to_string();
+    let (st, patched) = send_json(
+        c,
+        rocket::http::Method::Patch,
+        &format!("/api/v1/tickets/{other}"),
+        &token,
+        serde_json::json!({ "status": "in_progress", "note": "Crew on site." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{patched}");
+    assert_eq!(patched["status"], "in_progress");
+    assert!(patched["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|k| k["body"].as_str().unwrap().contains("Crew on site.")));
+    // Read-only tokens can't post.
+    let ro = insert_api_token(c, nw, &["maintenance:read"]).await;
+    let (st, _) = send_json(
+        c,
+        rocket::http::Method::Patch,
+        &format!("/api/v1/tickets/{other}"),
+        &ro,
+        serde_json::json!({ "status": "resolved" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Unlink clears the key and the flag.
+    let resp = c
+        .client
+        .delete(format!("/entities/{vid}/partner/link"))
+        .header(bearer(&office))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let (_, after) = get_json(c, &format!("/entities/{vid}/partner"), &office).await;
+    assert_eq!(after["linked"], false);
 }

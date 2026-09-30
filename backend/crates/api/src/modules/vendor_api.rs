@@ -39,6 +39,9 @@ impl PlatformModule for VendorApiModule {
             api_tokens::revoke::revoke,
             vendor::listings::listings,
             vendor::properties::properties,
+            vendor::tickets::tickets,
+            vendor::tickets::ticket,
+            vendor::tickets::update_ticket,
             // outbound webhooks: subscribe, don't poll (#68)
             vendor::webhooks::event_catalog,
             vendor::webhooks::list_subscriptions,

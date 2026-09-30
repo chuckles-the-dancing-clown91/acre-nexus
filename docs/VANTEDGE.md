@@ -199,7 +199,7 @@ money, they are **billed to the owner**.
 margin, mileage rate, maintenance markup, missed-punch hours, clock location +
 radius.
 
-## Phase 2C — Properties, maintenance and the parts loop ☐
+## Phase 2C — Properties, maintenance and the parts loop ◐
 
 The next slice: a property is set up in seconds and always has a picture; a
 work order carries what the technician found and what it needs; parts flow from
@@ -217,7 +217,7 @@ other as vendor and client.
  inventory: scan-in (camera or scanner gun), receive / use / count, weighted average cost, reorder list
 ```
 
-**Property autofill & photo** ☐
+**Property autofill & photo** ☑
 - Address suggestions as you type: known properties first, then Photon (free,
   no key) or Google Places when a key is in the vault (`google.maps_api_key`);
   picking one fills street, city, state, ZIP; saved properties geocode through
@@ -228,14 +228,14 @@ other as vendor and client.
   property without a photo (retrying failures after 7 days). Without a key,
   a placeholder is drawn and the job records why.
 
-**Appliances & parts** ☐
+**Appliances & parts** ☑
 - Assets already exist (HVAC, appliances…): add purchase date / price,
   expected life, **warranty** (expiry + provider + document), manuals, and a
   **parts catalog** per asset (inventory items that fit it, with quantity).
 - "Replace" / "repair" on an asset starts a work order pre-loaded with its
   parts as *potential parts*.
 
-**Findings, parts lists, shopping list, close-out** ☐
+**Findings, parts lists, shopping list, close-out** ☑
 - Work-order **findings** (note kind `finding`, with photos): "baseboards
   rotted behind the washer", each with the parts it needs.
 - **Potential parts** on a ticket (from its asset's catalog, or typed);
@@ -248,14 +248,14 @@ other as vendor and client.
   *pick up*, *from stock* (consumes inventory) or *skip*; ordered items become
   an expense (billable to the owner) and arrive as *received*.
 
-**Inventory** ☐
+**Inventory** ☑
 - Barcode / UPC / SKU lookup (`GET /inventory/lookup?code=`); **scan-in** with
   the camera (BarcodeDetector, zxing fallback) or a scanner gun; receive /
   use / count movements with a landed, **weighted-average unit cost** spread
   across a receipt (tax + shipping); a Friday reorder list by vendor; use on a
   work order from the tech's phone.
 
-**Routine maintenance & the listing** ☐
+**Routine maintenance & the listing** ☑
 - Maintenance plans attach to an **asset** (filter change every 90 days, HVAC
   service every spring, chimney sweep every fall) and open the work order with
   the parts pre-listed; each asset shows its service history and spend.
@@ -264,7 +264,7 @@ other as vendor and client.
 - The public listing surfaces **appliances and upkeep** ("central air, 2023
   water heater, filters changed quarterly") from the asset register.
 
-**Alpha ↔ Vantedge** ☐
+**Alpha ↔ Vantedge** ☑
 - A vendor (counterparty) can be linked to an **Alpha account** (its base URL
   + API key). Dispatching a work order to that vendor sends a **work request**
   to Alpha (`POST /integrations/jobs`, new on the Alpha side); Alpha creates
@@ -273,6 +273,14 @@ other as vendor and client.
 - Vendor API on Vantedge: `GET /api/v1/tickets/{id}`, `PATCH` status /
   comments, and `maintenance_ticket.updated` / `.assigned` / `.resolved`
   webhook events — any vendor system can use them, not only Alpha.
+- Screens: *Findings & parts* and *Vendor (Alpha)* on the work order,
+  `/console/maintenance/closeout`, `/console/maintenance/stock` (camera
+  scanning through `BarcodeDetector`, scanner-gun input, receiving, counts,
+  the ledger, the reorder list), `/console/maintenance/assets/{id}`, the
+  property's Maintenance tab (spend by category, appliances, routines), and
+  the Alpha link card on a contractor. Still to do in this phase: the
+  camera-scan fallback for browsers without `BarcodeDetector` (zxing), and
+  ordering from Amazon / Home Depot directly from close-out.
 
 ## Phase 3 — Reminders that run themselves ☐
 
