@@ -378,6 +378,10 @@ pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
 pub const INVENTORY_CREATE: &str = "inventory_item.create";
 pub const INVENTORY_UPDATE: &str = "inventory_item.update";
 pub const TICKET_REVIEW: &str = "ticket.review";
+pub const TICKET_FINDING: &str = "ticket.finding";
+pub const TICKET_PARTS_LIST: &str = "ticket.parts_list";
+pub const PART_DECIDE: &str = "ticket_part.decide";
+pub const STOCK_RECEIVE: &str = "inventory.receive";
 
 // ---- SaaS platform billing (Phase 8) ----
 pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";

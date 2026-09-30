@@ -16,6 +16,10 @@ pub struct Model {
     pub property_id: Option<Uuid>,
     pub name: String,
     pub sku: Option<String>,
+    /// UPC / EAN or the workspace's own code; unique per workspace.
+    pub barcode: Option<String>,
+    pub unit: String,
+    pub vendor: Option<String>,
     /// `part` | `material` | `tool` | `supply` | `other`.
     pub category: String,
     pub quantity: i32,

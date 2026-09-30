@@ -65,6 +65,30 @@ impl PlatformModule for MaintenanceModule {
             maintenance::plans::list_plans,
             maintenance::plans::create_plan,
             maintenance::plans::update_plan,
+            // phase 2C: appliances, findings, the parts loop and close-out
+            maintenance::parts::asset_parts,
+            maintenance::parts::asset_history,
+            maintenance::parts::put_asset_part,
+            maintenance::parts::delete_asset_part,
+            maintenance::parts::asset_work_order,
+            maintenance::parts::add_finding,
+            maintenance::parts::list_findings,
+            maintenance::parts::list_parts,
+            maintenance::parts::create_part,
+            maintenance::parts::update_part,
+            maintenance::parts::delete_part,
+            maintenance::parts::generate_list,
+            maintenance::parts::parts_list_pdf,
+            maintenance::parts::closeout,
+            maintenance::parts::decide,
+            maintenance::parts::receive,
+            maintenance::parts::use_part,
+            // stock: scan-in, receiving, counts, the ledger, reorder
+            maintenance::stock::lookup,
+            maintenance::stock::receive,
+            maintenance::stock::count,
+            maintenance::stock::movements,
+            maintenance::stock::reorder,
         ]
     }
 

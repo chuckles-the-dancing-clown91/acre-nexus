@@ -1,6 +1,7 @@
 //! Request/response shapes for the maintenance (work order) endpoints.
 
 use crate::dto::usd;
+use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -152,6 +153,8 @@ pub struct TicketDetailDto {
     /// The reply-to address that threads email back into this ticket's
     /// timeline (issue #62).
     pub inbound_email_address: Option<String>,
+    /// The parts loop: potential → needed → from stock / to order → used.
+    pub parts: Vec<super::parts::TicketPartDto>,
 }
 
 /// A contractor's quote on a work order.
@@ -202,6 +205,8 @@ pub struct MaintenancePlanDto {
     pub id: Uuid,
     pub property_id: Uuid,
     pub unit_id: Option<Uuid>,
+    /// The appliance this routine is for (its parts pre-list on each ticket).
+    pub asset_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
     pub category: String,
@@ -219,6 +224,7 @@ impl From<entity::maintenance_plan::Model> for MaintenancePlanDto {
             id: p.id,
             property_id: p.property_id,
             unit_id: p.unit_id,
+            asset_id: p.asset_id,
             title: p.title,
             description: p.description,
             category: p.category,
@@ -236,6 +242,7 @@ impl From<entity::maintenance_plan::Model> for MaintenancePlanDto {
 pub struct CreatePlanReq {
     pub property_id: Uuid,
     pub unit_id: Option<Uuid>,
+    pub asset_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
     pub category: Option<String>,
@@ -247,6 +254,7 @@ pub struct CreatePlanReq {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct UpdatePlanReq {
+    pub asset_id: Option<Uuid>,
     pub title: Option<String>,
     pub description: Option<String>,
     pub category: Option<String>,
@@ -325,6 +333,27 @@ pub struct PropertyMaintenanceResp {
     pub open: Vec<TicketDto>,
     /// Resolved/closed tickets — the maintenance history, newest first.
     pub history: Vec<TicketDto>,
+    /// Recorded cost of resolved work, all time.
+    pub history_cost_cents: i64,
+    pub history_cost_label: String,
+    /// Recorded cost of resolved work in the last 12 months.
+    pub last_12mo_cents: i64,
+    /// Where the money went: cost by ticket category, all time.
+    pub by_category: Vec<CategorySpend>,
+    /// Expenses booked against this property (parts, orders, mileage), all time.
+    pub expenses_cents: i64,
+    /// The appliances and systems at this property.
+    pub assets: Vec<AssetDto>,
+    /// Routine maintenance on the calendar (filters, sweeps, servicing).
+    pub plans: Vec<MaintenancePlanDto>,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct CategorySpend {
+    pub category: String,
+    pub tickets: i64,
+    pub cents: i64,
+    pub label: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -348,10 +377,35 @@ pub struct AssetDto {
     pub warranty_expires: Option<String>,
     /// `none` | `active` | `expired`, derived at read time.
     pub warranty_state: String,
+    /// Where in the home (e.g. "Garage").
+    pub location: Option<String>,
+    pub purchased_on: Option<String>,
+    pub purchase_price_cents: Option<i64>,
+    pub expected_life_years: Option<i32>,
+    /// Years left before it's due for replacement (from purchase or install
+    /// date + expected life); negative = past due.
+    pub years_left: Option<i32>,
+    pub warranty_provider: Option<String>,
+    pub warranty_notes: Option<String>,
     pub notes: Option<String>,
     /// `active` | `retired`.
     pub status: String,
     pub created_at: String,
+}
+
+/// Years of expected life left, from the purchase (or install) date (pure).
+pub fn years_left(
+    purchased: Option<&str>,
+    installed: Option<&str>,
+    life: Option<i32>,
+    today: chrono::NaiveDate,
+) -> Option<i32> {
+    let start = purchased
+        .or(installed)
+        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())?;
+    let life = life?;
+    let end = start.with_year(start.year() + life).unwrap_or(start);
+    Some(((end - today).num_days() as f64 / 365.25).round() as i32)
 }
 
 /// Whether a warranty date is still live (pure).
@@ -368,6 +422,12 @@ impl From<entity::asset::Model> for AssetDto {
         let today = chrono::Utc::now().date_naive();
         AssetDto {
             warranty_state: warranty_state(a.warranty_expires.as_deref(), today).to_string(),
+            years_left: years_left(
+                a.purchased_on.as_deref(),
+                a.install_date.as_deref(),
+                a.expected_life_years,
+                today,
+            ),
             id: a.id,
             property_id: a.property_id,
             unit_id: a.unit_id,
@@ -378,6 +438,12 @@ impl From<entity::asset::Model> for AssetDto {
             serial_number: a.serial_number,
             install_date: a.install_date,
             warranty_expires: a.warranty_expires,
+            location: a.location,
+            purchased_on: a.purchased_on,
+            purchase_price_cents: a.purchase_price_cents,
+            expected_life_years: a.expected_life_years,
+            warranty_provider: a.warranty_provider,
+            warranty_notes: a.warranty_notes,
             notes: a.notes,
             status: a.status,
             created_at: a.created_at.to_rfc3339(),
@@ -396,6 +462,12 @@ pub struct CreateAssetReq {
     pub serial_number: Option<String>,
     pub install_date: Option<String>,
     pub warranty_expires: Option<String>,
+    pub location: Option<String>,
+    pub purchased_on: Option<String>,
+    pub purchase_price_cents: Option<i64>,
+    pub expected_life_years: Option<i32>,
+    pub warranty_provider: Option<String>,
+    pub warranty_notes: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -408,6 +480,12 @@ pub struct UpdateAssetReq {
     pub serial_number: Option<String>,
     pub install_date: Option<String>,
     pub warranty_expires: Option<String>,
+    pub location: Option<String>,
+    pub purchased_on: Option<String>,
+    pub purchase_price_cents: Option<i64>,
+    pub expected_life_years: Option<i32>,
+    pub warranty_provider: Option<String>,
+    pub warranty_notes: Option<String>,
     pub notes: Option<String>,
     /// `active` | `retired`.
     pub status: Option<String>,
@@ -489,11 +567,18 @@ pub struct InventoryItemDto {
     pub property_id: Option<Uuid>,
     pub name: String,
     pub sku: Option<String>,
+    /// UPC / EAN or the workspace's own code — what the scanner reads.
+    pub barcode: Option<String>,
+    /// `ea`, `box`, `ft`…
+    pub unit: String,
+    pub vendor: Option<String>,
     /// `part` | `material` | `tool` | `supply` | `other`.
     pub category: String,
     pub quantity: i32,
     pub unit_cost_cents: Option<i64>,
     pub unit_cost_label: Option<String>,
+    /// Quantity × unit cost.
+    pub value_cents: i64,
     pub reorder_level: i32,
     /// Quantity is at/below the reorder level (and one is set).
     pub low_stock: bool,
@@ -529,9 +614,13 @@ impl From<entity::inventory_item::Model> for InventoryItemDto {
             property_id: i.property_id,
             unit_cost_label: i.unit_cost_cents.map(usd),
             low_stock: i.reorder_level > 0 && i.quantity <= i.reorder_level,
+            value_cents: i.quantity.max(0) as i64 * i.unit_cost_cents.unwrap_or(0),
             serial_numbers: serials_from_json(&i.serial_numbers),
             name: i.name,
             sku: i.sku,
+            barcode: i.barcode,
+            unit: i.unit,
+            vendor: i.vendor,
             category: i.category,
             quantity: i.quantity,
             unit_cost_cents: i.unit_cost_cents,
@@ -550,6 +639,9 @@ pub struct CreateInventoryReq {
     pub property_id: Option<Uuid>,
     pub name: String,
     pub sku: Option<String>,
+    pub barcode: Option<String>,
+    pub unit: Option<String>,
+    pub vendor: Option<String>,
     pub category: Option<String>,
     pub quantity: Option<i32>,
     pub unit_cost_cents: Option<i64>,
@@ -564,6 +656,9 @@ pub struct CreateInventoryReq {
 pub struct UpdateInventoryReq {
     pub name: Option<String>,
     pub sku: Option<String>,
+    pub barcode: Option<String>,
+    pub unit: Option<String>,
+    pub vendor: Option<String>,
     pub category: Option<String>,
     /// Absolute restock/correction (not a delta).
     pub quantity: Option<i32>,

@@ -33,6 +33,9 @@ pub const OWNER_TYPES: &[&str] = &[
 /// nullable text), but the upload/patch paths normalise to this catalog.
 pub const CATEGORIES: &[&str] = &[
     "insurance",
+    "warranty",
+    "manual",
+    "receipt",
     "loan",
     "title",
     "tax",

@@ -41,6 +41,7 @@ pub async fn get_ticket(
         .map(|t| crate::mail::ticket_address(&t.slug, ticket.id));
     let quotes = super::quotes::quotes_for_ticket(&db, scope.tenant_id, ticket.id).await?;
     let lines = super::lines::lines_for_ticket(&db, scope.tenant_id, ticket.id).await?;
+    let parts = super::parts::parts_for_ticket(&db, scope.tenant_id, ticket.id).await?;
     let asset_name = match ticket.asset_id {
         Some(aid) => entity::prelude::Asset::find_by_id(aid)
             .filter(entity::asset::Column::TenantId.eq(scope.tenant_id))
@@ -56,5 +57,6 @@ pub async fn get_ticket(
         asset_name,
         quotes,
         inbound_email_address,
+        parts,
     }))
 }

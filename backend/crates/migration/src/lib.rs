@@ -52,6 +52,7 @@ mod m20240101_000044_sms_threads;
 mod m20240101_000045_workforce;
 mod m20240101_000046_crm;
 mod m20240101_000047_property_geo;
+mod m20240101_000048_parts;
 
 pub struct Migrator;
 
@@ -106,6 +107,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000045_workforce::Migration),
             Box::new(m20240101_000046_crm::Migration),
             Box::new(m20240101_000047_property_geo::Migration),
+            Box::new(m20240101_000048_parts::Migration),
         ]
     }
 }

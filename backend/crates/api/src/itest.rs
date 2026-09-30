@@ -92,6 +92,7 @@ async fn integration_suite() {
     back_office_hours_to_owner_bill(&c).await;
     crm_owner_lead_to_owner(&c).await;
     property_autofill_and_photo(&c).await;
+    parts_loop_and_closeout(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -1723,4 +1724,326 @@ async fn property_autofill_and_photo(c: &Ctx) {
     // The scan touches none|failed; a placeholder waits for a key.
     let summary = crate::geo::scan(&c.db, nw).await.unwrap();
     assert_eq!(summary["live"], false);
+}
+
+/// Phase 2C: the parts loop. A dryer with a parts catalog, a repair work
+/// order that pre-lists them, a finding that adds baseboards, the generated
+/// parts list, the night-before close-out (from stock / order), receiving and
+/// using — with every used part landing on the work order's cost. Plus the
+/// scan-in: a delivery with tax spread across lines and a weighted unit cost,
+/// and the appliances showing up on the public listing.
+async fn parts_loop_and_closeout(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let tech = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    let pid = property_ids(c, nw).await[0];
+
+    // Stock: a belt on the shelf, a filter that isn't.
+    let (st, belt) = post_json(
+        c,
+        "/inventory",
+        &tech,
+        serde_json::json!({ "name": "Dryer belt 341241", "sku": "341241", "barcode": "0123456789012",
+            "category": "part", "quantity": 4, "unit_cost_cents": 1200, "reorder_level": 2, "vendor": "Repair Clinic" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{belt}");
+    assert_eq!(belt["barcode"], "0123456789012");
+    let belt_id = belt["id"].as_str().unwrap().to_string();
+    let (st, filter) = post_json(
+        c,
+        "/inventory",
+        &tech,
+        serde_json::json!({ "name": "Lint filter", "category": "part", "quantity": 0, "unit_cost_cents": 2500 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{filter}");
+    let filter_id = filter["id"].as_str().unwrap().to_string();
+
+    // Scan-in finds the belt by barcode; a bad code is a clean 404.
+    let (st, found) = get_json(c, "/inventory/lookup?code=0123456789012", &tech).await;
+    assert_eq!(st, Status::Ok, "{found}");
+    assert_eq!(found["id"], belt["id"]);
+    let (st, _) = get_json(c, "/inventory/lookup?code=nope", &tech).await;
+    assert_eq!(st, Status::NotFound);
+
+    // The dryer, with its parts.
+    let (st, dryer) = post_json(
+        c,
+        "/assets",
+        &tech,
+        serde_json::json!({ "property_id": pid, "kind": "appliance", "name": "Dryer", "make": "Whirlpool",
+            "model": "WED4815EW", "purchased_on": "2022-03-01", "purchase_price_cents": 64900,
+            "expected_life_years": 12, "warranty_expires": "2099-01-01", "warranty_provider": "Whirlpool", "location": "Laundry" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{dryer}");
+    assert_eq!(dryer["warranty_state"], "active");
+    assert!(dryer["years_left"].as_i64().unwrap() > 5, "{dryer}");
+    let dryer_id = dryer["id"].as_str().unwrap().to_string();
+    for (item, role) in [(&belt_id, "drive belt"), (&filter_id, "lint filter")] {
+        let (st, cat) = send_json(
+            c,
+            Method::Put,
+            &format!("/assets/{dryer_id}/parts"),
+            &tech,
+            serde_json::json!({ "inventory_item_id": item, "quantity": 1, "role": role }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{cat}");
+    }
+    let (_, cat) = get_json(c, &format!("/assets/{dryer_id}/parts"), &tech).await;
+    assert_eq!(cat.as_array().unwrap().len(), 2, "{cat}");
+
+    // Repair it: the work order pre-lists both parts as potential.
+    let (st, wo) = post_json(
+        c,
+        &format!("/assets/{dryer_id}/work-order"),
+        &tech,
+        serde_json::json!({ "kind": "repair", "priority": "high", "due_date": "2030-01-02" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{wo}");
+    assert_eq!(wo["potential_parts"], 2);
+    assert_eq!(wo["title"], "Repair Dryer");
+    let tid = wo["ticket_id"].as_str().unwrap().to_string();
+
+    // On site: the tech adds a finding with a part that isn't stock at all.
+    let (st, finding) = post_json(
+        c,
+        &format!("/tickets/{tid}/findings"),
+        &tech,
+        serde_json::json!({ "body": "Belt is shredded; baseboard behind the dryer is water damaged.",
+            "parts": [ { "inventory_item_id": belt_id, "quantity": 1 },
+                       { "name": "Baseboard 8ft primed MDF", "quantity": 2, "note": "match existing 3.25in" } ] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{finding}");
+    assert_eq!(finding["kind"], "finding");
+    assert_eq!(finding["parts"].as_array().unwrap().len(), 2);
+
+    // Generate the parts list: belt from stock (4 on the shelf), baseboards to buy,
+    // the filter stays "maybe".
+    let (st, list) = post_json(
+        c,
+        &format!("/tickets/{tid}/parts/generate"),
+        &tech,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{list}");
+    assert_eq!(list["from_stock"].as_array().unwrap().len(), 1, "{list}");
+    assert_eq!(list["from_stock"][0]["name"], "Dryer belt 341241");
+    assert_eq!(list["to_buy"].as_array().unwrap().len(), 1, "{list}");
+    assert_eq!(list["maybe"].as_array().unwrap().len(), 2, "{list}");
+    let belt_part = list["from_stock"][0]["id"].as_str().unwrap().to_string();
+    let board_part = list["to_buy"][0]["id"].as_str().unwrap().to_string();
+    // …and printable.
+    let resp = c
+        .client
+        .get(format!("/tickets/{tid}/parts/list.pdf"))
+        .header(bearer(&tech))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let pdf = resp.into_bytes().await.unwrap();
+    assert!(pdf.starts_with(b"%PDF"), "not a pdf");
+
+    // The night before: close-out shows the work order and its parts.
+    let (st, co) = get_json(c, "/closeout?date=2030-01-02", &tech).await;
+    assert_eq!(st, Status::Ok, "{co}");
+    let mine = co["tickets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["ticket_id"] == tid.as_str())
+        .unwrap_or_else(|| panic!("{co}"));
+    assert_eq!(mine["parts"].as_array().unwrap().len(), 4, "{mine}");
+    assert!(co["to_decide"].as_u64().unwrap() >= 1);
+
+    // Decide: the belt comes from stock (consumed now, on the ticket), the
+    // baseboards are ordered from Home Depot to the property — an owner-billable expense.
+    let (st, used) = post_json(
+        c,
+        &format!("/parts/{belt_part}/decide"),
+        &tech,
+        serde_json::json!({ "action": "from_stock" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{used}");
+    assert_eq!(used["status"], "used");
+    let (st, ordered) = post_json(
+        c,
+        &format!("/parts/{board_part}/decide"),
+        &tech,
+        serde_json::json!({ "action": "order", "vendor": "Home Depot", "ship_to": "property", "unit_cost_cents": 1899, "tracking": "HD-1" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{ordered}");
+    assert_eq!(ordered["status"], "ordered");
+    assert_eq!(ordered["ship_to"], "property");
+    // Deciding it twice is refused.
+    let (st, _) = post_json(
+        c,
+        &format!("/parts/{board_part}/decide"),
+        &tech,
+        serde_json::json!({ "action": "skip" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // The shelf went down by one, with a movement behind it.
+    let (_, belt_now) = get_json(c, "/inventory/lookup?code=341241", &tech).await;
+    assert_eq!(belt_now["quantity"], 3, "{belt_now}");
+    let (st, moves) = get_json(c, &format!("/inventory/movements?item_id={belt_id}"), &tech).await;
+    assert_eq!(st, Status::Ok, "{moves}");
+    assert_eq!(moves[0]["kind"], "use");
+    assert_eq!(moves[0]["quantity"], -1);
+
+    // Next day: the boards arrive and go in.
+    let (st, rec) = post_json(
+        c,
+        &format!("/parts/{board_part}/receive"),
+        &tech,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{rec}");
+    assert_eq!(rec["status"], "received");
+    let (st, line) = post_json(
+        c,
+        &format!("/parts/{board_part}/use"),
+        &tech,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{line}");
+    assert_eq!(line["total_cents"], 2 * 1899);
+
+    // The work order carries both parts at cost: belt $12 + boards 2 × $18.99.
+    let (st, detail) = get_json(c, &format!("/tickets/{tid}"), &tech).await;
+    assert_eq!(st, Status::Ok, "{detail}");
+    assert_eq!(detail["cost_cents"], 1200 + 3798, "{detail}");
+    assert_eq!(detail["parts"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        detail["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["status"] == "used")
+            .count(),
+        2
+    );
+    let (_, hist) = get_json(c, &format!("/assets/{dryer_id}/history"), &tech).await;
+    assert_eq!(hist["tickets"].as_array().unwrap().len(), 1, "{hist}");
+    assert_eq!(hist["parts"].as_array().unwrap().len(), 2);
+
+    // A delivery: 10 filters at $20 + 5 belts at $10 with $15 tax spread by
+    // value ($12 / $3) → landed $21.20 / $10.60; the belts' unit cost becomes
+    // the weighted average of the 3 on the shelf at $12 and 5 arriving at
+    // $10.60 → $11.125 ≈ $11.13.
+    let (st, rcv) = post_json(
+        c,
+        "/inventory/receive",
+        &tech,
+        serde_json::json!({ "vendor": "Repair Clinic", "total_cents": 26500,
+            "lines": [ { "inventory_item_id": filter_id, "quantity": 10, "unit_cost_cents": 2000 },
+                       { "inventory_item_id": belt_id, "quantity": 5, "unit_cost_cents": 1000 } ] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{rcv}");
+    assert_eq!(rcv["items"][0]["quantity"], 10);
+    assert_eq!(rcv["items"][0]["unit_cost_cents"], 2120);
+    assert_eq!(rcv["items"][1]["quantity"], 8);
+    assert_eq!(rcv["items"][1]["unit_cost_cents"], 1113);
+    // A count fixes the shelf and leaves a trail.
+    let (st, counted) = post_json(
+        c,
+        &format!("/inventory/{belt_id}/count"),
+        &tech,
+        serde_json::json!({ "counted": 7, "note": "one damaged" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{counted}");
+    assert_eq!(counted["quantity"], 7);
+
+    // A routine on the dryer: the plan runner opens a ticket with its parts pre-listed.
+    let (st, plan) = post_json(
+        c,
+        "/maintenance-plans",
+        &tech,
+        serde_json::json!({ "property_id": pid, "asset_id": dryer_id, "title": "Clean dryer vent", "cadence_days": 180, "next_due_date": "2020-01-01" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{plan}");
+    assert_eq!(plan["asset_id"], dryer_id.as_str());
+    crate::helpdesk::run_due_plans(&c.db, nw).await.unwrap();
+    let (_, plan_now) = get_json(c, &format!("/maintenance-plans?property_id={pid}"), &tech).await;
+    let routine = plan_now
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == plan["id"])
+        .unwrap();
+    let routine_ticket = routine["last_ticket_id"]
+        .as_str()
+        .expect("the routine opened a ticket");
+    let (_, rt) = get_json(c, &format!("/tickets/{routine_ticket}"), &tech).await;
+    assert_eq!(rt["asset_id"], dryer_id.as_str(), "{rt}");
+    assert_eq!(rt["parts"].as_array().unwrap().len(), 2, "{rt}");
+
+    // The property's maintenance tab sees the money and the appliance.
+    let (st, pm) = get_json(c, &format!("/properties/{pid}/maintenance"), &tech).await;
+    assert_eq!(st, Status::Ok, "{pm}");
+    assert!(pm["assets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["id"] == dryer_id.as_str()));
+    assert!(pm["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["id"] == plan["id"]));
+    assert!(pm["expenses_cents"].as_i64().unwrap() >= 3798, "{pm}");
+
+    // Marketing: the public listing for the property shows the dryer and the routine.
+    let listing = entity::prelude::Listing::find()
+        .filter(entity::listing::Column::TenantId.eq(nw))
+        .filter(entity::listing::Column::PropertyId.eq(pid))
+        .filter(entity::listing::Column::IsPublic.eq(true))
+        .one(&c.db)
+        .await
+        .unwrap();
+    if let Some(l) = listing {
+        let resp = c
+            .client
+            .get(format!("/public/listings/{}", l.id))
+            .header(Header::new("X-Tenant", "northwind"))
+            .dispatch()
+            .await;
+        assert_eq!(resp.status(), Status::Ok);
+        let pl = resp.into_json::<serde_json::Value>().await.unwrap();
+        assert!(
+            pl["appliances"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| a["name"] == "Dryer"),
+            "{pl}"
+        );
+        assert!(
+            pl["upkeep"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["cadence"] == "Every 6 months"),
+            "{pl}"
+        );
+    }
 }

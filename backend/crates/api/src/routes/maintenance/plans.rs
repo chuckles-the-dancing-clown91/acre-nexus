@@ -81,6 +81,7 @@ pub async fn create_plan(
         tenant_id: Set(scope.tenant_id),
         property_id: Set(b.property_id),
         unit_id: Set(b.unit_id),
+        asset_id: Set(b.asset_id),
         title: Set(title),
         description: Set(b.description.filter(|d| !d.trim().is_empty())),
         category: Set(b
@@ -166,6 +167,9 @@ pub async fn update_plan(
     }
     if let Some(v) = b.active {
         am.active = Set(v);
+    }
+    if let Some(v) = b.asset_id {
+        am.asset_id = Set(Some(v));
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
