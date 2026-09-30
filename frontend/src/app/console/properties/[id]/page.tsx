@@ -9,6 +9,7 @@ import {
   type PropertyDocuments,
   type PropertyMedia,
   type PropertyMediaItem,
+  request,
 } from "@/lib/api";
 import type {
   EnrichmentRun,
@@ -220,19 +221,24 @@ export default function PropertyProfilePage() {
 
       {/* Header dossier: photo (upper-left) + home / address / rental breakdown */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_1fr]">
-        <div
-          role="img"
-          aria-label={`${p.name} photo`}
-          className="aspect-[4/3] w-full overflow-hidden rounded-2xl border border-line bg-surface-2 bg-cover bg-center"
-          style={
-            p.image_url ? { backgroundImage: `url(${p.image_url})` } : undefined
-          }
-        >
-          {!p.image_url && (
-            <div className="flex h-full items-center justify-center text-sm text-ink-3">
-              No photo
-            </div>
-          )}
+        <div className="space-y-2">
+          <div
+            role="img"
+            aria-label={`${p.name} photo`}
+            className="aspect-[4/3] w-full overflow-hidden rounded-2xl border border-line bg-surface-2 bg-cover bg-center"
+            style={
+              p.image_url
+                ? { backgroundImage: `url(${p.image_url})` }
+                : undefined
+            }
+          >
+            {!p.image_url && (
+              <div className="flex h-full items-center justify-center text-sm text-ink-3">
+                No photo
+              </div>
+            )}
+          </div>
+          <PhotoStatus p={p} onChanged={() => api.property(id).then(setP)} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1451,4 +1457,48 @@ function formatTimestamp(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Where the street photo came from, and a way to fetch it again. */
+function PhotoStatus({
+  p,
+  onChanged,
+}: {
+  p: PropertyProfile;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const note =
+    p.photo_status === "stored"
+      ? "Street photo from the map."
+      : p.photo_status === "placeholder"
+        ? "No map key yet — showing an address card. Add google.maps_api_key under Integrations and it fills in overnight."
+        : p.photo_status === "failed"
+          ? `Couldn't fetch a photo${p.photo_error ? `: ${p.photo_error}` : ""}. It's retried in a week.`
+          : "A street photo is on its way.";
+  async function fetchNow() {
+    setBusy(true);
+    try {
+      await request<unknown>(`/properties/${p.id}/photo`, {
+        method: "POST",
+        auth: true,
+      });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs text-ink-3">
+      <span>{note}</span>
+      <button
+        type="button"
+        onClick={fetchNow}
+        disabled={busy}
+        className="shrink-0 rounded-lg border border-line px-2 py-1 font-semibold text-ink-2 hover:border-accent disabled:opacity-50"
+      >
+        {busy ? "Fetching…" : "Fetch photo"}
+      </button>
+    </div>
+  );
 }

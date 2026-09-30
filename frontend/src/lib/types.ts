@@ -74,6 +74,11 @@ export interface Property {
   name: string;
   address: string;
   city: string;
+  state: string;
+  postal_code: string;
+  /** `none` | `stored` | `placeholder` | `failed` — the fetched street photo. */
+  photo_status: string;
+  photo_error: string | null;
   llc_id: string | null;
   units: number;
   occupied_units: number;
@@ -483,6 +488,8 @@ export interface OnboardInput {
   name: string;
   address: string;
   city: string;
+  state?: string;
+  postal_code?: string;
   llc_id?: string;
   units?: number;
   occupied_units?: number;

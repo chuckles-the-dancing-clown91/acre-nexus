@@ -394,17 +394,37 @@ pub async fn suggest(
             }
         }
     } else {
-        match http
-            .get(PHOTON_URL)
-            .query(&[
-                ("q", q),
-                ("limit", &(limit * 2).to_string()),
-                ("lang", "en"),
-                ("layer", "house"),
-            ])
-            .send()
-            .await
-        {
+        // Bias toward where the workspace already is: any property with
+        // coordinates (Alpha biases toward the shop the same way).
+        let near = entity::prelude::PropertyDetail::find()
+            .filter(entity::property_detail::Column::Latitude.is_not_null())
+            .filter(
+                entity::property_detail::Column::PropertyId.is_in(
+                    Property::find()
+                        .filter(entity::property::Column::TenantId.eq(tenant_id))
+                        .limit(50)
+                        .all(db)
+                        .await?
+                        .into_iter()
+                        .map(|p| p.id)
+                        .collect::<Vec<_>>(),
+                ),
+            )
+            .one(db)
+            .await?
+            .and_then(|d| Some((d.latitude?, d.longitude?)));
+        let mut params: Vec<(&str, String)> = vec![
+            ("q", q.to_string()),
+            ("limit", (limit * 2).to_string()),
+            ("lang", "en".into()),
+            ("layer", "house".into()),
+            ("layer", "street".into()),
+        ];
+        if let Some((lat, lon)) = near {
+            params.push(("lat", lat.to_string()));
+            params.push(("lon", lon.to_string()));
+        }
+        match http.get(PHOTON_URL).query(&params).send().await {
             Ok(r) if r.status().is_success() => r
                 .json::<serde_json::Value>()
                 .await
