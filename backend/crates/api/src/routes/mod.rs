@@ -57,6 +57,7 @@ pub mod search;
 pub mod settings;
 pub mod syndication;
 pub mod tenant_history;
+pub mod texts;
 pub mod theme;
 pub mod title;
 pub mod vehicles;

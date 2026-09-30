@@ -71,6 +71,7 @@ mod state;
 mod storage;
 mod syndication;
 mod tenancy;
+mod texts;
 mod tokens;
 mod totp;
 mod underwriting;

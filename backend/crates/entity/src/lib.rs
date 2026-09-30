@@ -108,6 +108,8 @@ pub mod role_permission;
 pub mod screening_report;
 pub mod secret;
 pub mod setting;
+pub mod sms_message;
+pub mod sms_thread;
 pub mod tenant;
 pub mod tenant_module;
 pub mod theme;

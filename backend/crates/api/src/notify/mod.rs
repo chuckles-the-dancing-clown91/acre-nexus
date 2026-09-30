@@ -130,6 +130,20 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    // ---- Two-way texts ----
+    DefaultTemplate {
+        key: "direct_text",
+        subject: "Message from {company}",
+        body: "{text}",
+        sms: "{text}",
+    },
+    DefaultTemplate {
+        key: "text_received",
+        subject: "New text from {sender}",
+        body: "Hi {recipient},\n\n{sender} texted: \"{preview}\"\n\nReply from the Texts inbox \
+               in the console.\n\n— {company}",
+        sms: "Text from {sender}: {preview}",
+    },
     // ---- Password links (set your password / forgot password) ----
     DefaultTemplate {
         key: "account_invite",
@@ -604,6 +618,31 @@ pub async fn handle_job(
         },
     };
 
+    // STOP always wins: a number that texted STOP gets nothing until START.
+    let sms_message_id = job
+        .payload
+        .get("sms_message_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    if channel == "sms" && crate::texts::is_opted_out(db, job.tenant_id, &to).await {
+        if let Some(mid) = sms_message_id {
+            let _ = crate::texts::set_message_status(
+                db,
+                mid,
+                "blocked",
+                None,
+                Some("this number texted STOP".into()),
+            )
+            .await;
+        }
+        return JobOutcome::completed(json!({
+            "skipped": true,
+            "reason": "opted_out",
+            "channel": "sms",
+            "template": template,
+        }));
+    }
+
     // Idempotency: has this natural trigger already sent (or is it in flight on
     // another job)?
     let idem = idempotency_key(&job.payload, template, channel);
@@ -675,6 +714,49 @@ pub async fn handle_job(
             None => providers::run(&SimulatedEmail, &ctx, job, &req).await,
         },
     };
+
+    // File every text in its conversation so the office sees the whole thread.
+    if channel == "sms" {
+        let (status, provider_id, error) = match &outcome {
+            Ok(resp) => ("sent", Some(resp.provider_message_id.clone()), None),
+            Err(o) if o.status == "failed" => ("failed", None, o.error.clone()),
+            // A retry is still in flight — record it once it settles.
+            Err(_) => ("", None, None),
+        };
+        if !status.is_empty() {
+            let filed = match sms_message_id {
+                Some(mid) => crate::texts::set_message_status(db, mid, status, provider_id, error)
+                    .await
+                    .map(|_| ()),
+                None => {
+                    // Sign-in links never sit in the shared inbox.
+                    let body = if template == "account_invite" || template == "password_reset" {
+                        "(sign-in link sent — hidden)".to_string()
+                    } else {
+                        rendered.body.clone()
+                    };
+                    crate::texts::record_outbound(
+                        db,
+                        job.tenant_id,
+                        crate::texts::Outbound {
+                            to: &to,
+                            body: &body,
+                            status,
+                            provider_message_id: provider_id,
+                            template_key: Some(template.to_string()),
+                            sent_by_user_id: None,
+                            error,
+                        },
+                    )
+                    .await
+                    .map(|_| ())
+                }
+            };
+            if let Err(e) = filed {
+                tracing::warn!("couldn't file the text in its thread: {e}");
+            }
+        }
+    }
 
     match outcome {
         Ok(resp) => {

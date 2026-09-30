@@ -88,6 +88,7 @@ async fn integration_suite() {
     login_refresh_logout_happy_path(&c).await;
     login_with_wrong_password_is_unauthorized(&c).await;
     invite_then_set_password_then_reset(&c).await;
+    two_way_texts_and_stop(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -1045,4 +1046,125 @@ async fn invite_then_set_password_then_reset(c: &Ctx) {
         "the old password stops working"
     );
     assert_eq!(login_status(c, email, "a new quiet lake").await, Status::Ok);
+}
+
+/// Phase 2 of the Vantedge roadmap: an inbound text opens a thread, a console
+/// reply goes out through the queue and is filed as sent, STOP blocks both
+/// console replies and automatic notification texts, START lifts it, and the
+/// Twilio webhook refuses an unsigned request.
+async fn two_way_texts_and_stop(c: &Ctx) {
+    use crate::scheduler::run_due_jobs;
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["message:read", "message:manage"]);
+    let phone = format!("+1760555{:04}", Uuid::new_v4().as_u128() % 10_000);
+
+    // A resident texts in (test mode).
+    let (st, t) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": phone, "body": "The kitchen sink is leaking" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "simulate inbound: {t}");
+    assert_eq!(t["thread"]["unread_count"], 1);
+    let thread_id = t["thread"]["id"].as_str().unwrap().to_string();
+
+    // Reply from the console; the queue sends it and marks it sent.
+    let (st, t) = post_json(
+        c,
+        &format!("/texts/{thread_id}/reply"),
+        &staff,
+        serde_json::json!({ "body": "Sorry! A tech will be there by 3." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "reply: {t}");
+    for _ in 0..4 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    let resp = c
+        .client
+        .get(format!("/texts/{thread_id}"))
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let t: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(t["thread"]["unread_count"], 0, "reading marks it read");
+    let out = t["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["direction"] == "out")
+        .expect("the reply is in the thread");
+    assert_eq!(out["status"], "sent");
+
+    // STOP (in Spanish): replies are refused, notification texts are skipped.
+    let (st, t) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": phone, "body": "ALTO" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(t["thread"]["opted_out"], true);
+    let (st, _) = post_json(
+        c,
+        &format!("/texts/{thread_id}/reply"),
+        &staff,
+        serde_json::json!({ "body": "Are you sure?" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "no texts to a number that said STOP");
+    let job_id = crate::scheduler::enqueue(
+        &c.db,
+        nw,
+        "auto_sms",
+        serde_json::json!({ "template": "test_notification", "to": phone }),
+        0,
+    )
+    .await
+    .unwrap();
+    for _ in 0..4 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    let job = entity::prelude::BackgroundJob::find_by_id(job_id)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(job.status, "completed");
+    assert_eq!(
+        job.result.as_ref().and_then(|r| r["reason"].as_str()),
+        Some("opted_out")
+    );
+
+    // START lifts it.
+    let (_, t) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": phone, "body": "start" }),
+    )
+    .await;
+    assert_eq!(t["thread"]["opted_out"], false);
+
+    // Reading needs message:read; the webhook needs a real Twilio signature.
+    let nobody = mint(c, Some(nw), false, &[]);
+    let resp = c
+        .client
+        .get("/texts")
+        .header(bearer(&nobody))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Forbidden);
+    let resp = c
+        .client
+        .post("/webhooks/twilio/sms?tenant=northwind")
+        .header(ContentType::Form)
+        .body(format!("From={}&Body=hi", phone.replace('+', "%2B")))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Forbidden);
 }

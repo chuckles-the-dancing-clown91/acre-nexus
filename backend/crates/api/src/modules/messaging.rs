@@ -5,7 +5,7 @@
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::messages;
+use crate::routes::{messages, texts};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -29,6 +29,14 @@ impl PlatformModule for MessagingModule {
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
             // staff console
+            // two-way texts inbox (Vantedge phase 2)
+            texts::console::status,
+            texts::console::list,
+            texts::console::get,
+            texts::console::reply,
+            texts::console::start,
+            texts::console::update,
+            texts::console::simulate,
             messages::console::list_threads,
             messages::console::get_thread,
             messages::console::reply_thread,

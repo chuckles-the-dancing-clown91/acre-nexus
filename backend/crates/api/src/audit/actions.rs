@@ -180,6 +180,18 @@ pub const DOCUMENT_DOWNLOAD: &str = "document.download";
 pub const DOCUMENT_UPDATE: &str = "document.update";
 pub const DOCUMENT_DELETE: &str = "document.delete";
 pub const NOTIFICATION_SEND: &str = "notification.send";
+
+// ---- Two-way texts ----
+/// A text arrived from a resident (or anyone) at the workspace's number.
+pub const SMS_RECEIVE: &str = "sms.receive";
+/// A staff member sent a text from the console.
+pub const SMS_SEND: &str = "sms.send";
+/// A number texted STOP — no more texts go to it.
+pub const SMS_OPT_OUT: &str = "sms.opt_out";
+/// A stopped number texted START — texts may go to it again.
+pub const SMS_OPT_IN: &str = "sms.opt_in";
+/// A thread was marked done / reopened.
+pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 /// Staff triggered a test delivery (provider test or own-device push test).
 pub const NOTIFICATION_TEST: &str = "notification.test";
 /// Inbox entries marked read (self-service; count in metadata).

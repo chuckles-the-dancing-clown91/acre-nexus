@@ -48,6 +48,7 @@ mod m20240101_000040_hoa;
 mod m20240101_000041_leasing_crm_renewals;
 mod m20240101_000042_federated_auth;
 mod m20240101_000043_password_tokens;
+mod m20240101_000044_sms_threads;
 
 pub struct Migrator;
 
@@ -98,6 +99,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000041_leasing_crm_renewals::Migration),
             Box::new(m20240101_000042_federated_auth::Migration),
             Box::new(m20240101_000043_password_tokens::Migration),
+            Box::new(m20240101_000044_sms_threads::Migration),
         ]
     }
 }
