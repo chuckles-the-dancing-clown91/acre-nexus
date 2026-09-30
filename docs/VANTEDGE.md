@@ -101,6 +101,102 @@ the office texts back from one shared inbox.
 - ☐ Missed-call text-back (Twilio voice) as in Alpha.
 - ☐ Quiet hours for non-urgent texts (8 AM–9 PM local) and marketing consent.
 
+## Phase 2B — The back office: one set of hours, everything adds up ☐
+
+Alpha's back office works because every number comes from the same records: a
+time entry is logged *against a job*, and that one row is payroll, overtime,
+labor cost, job profit and the crew report at once. Vantedge gets the same
+spine, translated to property management — the "job" is a **work order**, a
+**rehab project**, or a **property**, and the in-house hours don't just cost
+money, they are **billed to the owner**.
+
+```
+ clock in on a work order ─┐
+ miles / receipts / parts ─┼─► approved time + costs ─┬─► payroll week (CA daily OT) ─► Gusto / CSV / PDF
+                           │                           ├─► work-order cost: pay + OT share + burden
+                           │                           │     + parts + mileage + expenses + vendor bills
+                           │                           ├─► bill to owner: hours × bill rate + parts
+                           │                           │     + markup → AP bill on the owner's LLC
+                           │                           │     → ledger → owner statement → payout
+                           │                           └─► reports: profit by work order / property /
+                           │                                 technician / category / month, tax package
+```
+
+**People (user management → HR)** ☐
+- Employee profile on any staff member: title, employment type (full-time /
+  part-time / seasonal / 1099 contractor), pay rate, **bill rate** (what an hour
+  of their work is charged to owners), hire / end date, weekly target, default
+  vehicle, mileage reimbursed, emergency contact, notes. Pay rates are behind
+  `payroll:read`.
+- Shifts (work / on call / training) and time off (vacation / sick / personal /
+  unpaid → approve / deny; approved time off blocks the schedule).
+
+**Time clock** ☐
+- Clock in on a work order, rehab project, property, or travel / shop / office
+  time; one open entry per person; overlapping entries refused; breaks.
+- Pay rate and bill rate **frozen when the entry closes** — a raise never
+  rewrites last month.
+- Missed punches: an entry open past N hours (setting, default 12) is closed at
+  the best evidence (the work order's resolved time, else start + 8h), flagged,
+  and held from payroll until the office resolves it; the technician can say
+  when they really finished.
+- Approval by the office; approved entries are locked for the technician.
+- Optional location stamp at clock-in/out only, flagged if farther than the
+  radius from the property (never blocks).
+
+**Overtime & payroll** ☐
+- Alpha's engine, ported exactly: weekly FLSA (1.5× over 40) or **California
+  daily** (1.5× over 8, 2× over 12, seventh consecutive day 1.5× first 8 / 2×
+  after, daily OT not double-counted toward 40); contractors straight time.
+- Payroll report by Monday–Sunday week: days, entries, hours, regular, OT 1.5×,
+  DT 2×, rate, gross, mileage paid back. Approved-only option. CSV + PDF.
+- Gusto: match people, push approved hours (Regular / Overtime / Double
+  overtime) into an unprocessed payroll; excluded hours listed. Sandbox-first
+  like every other provider.
+
+**Expenses & mileage** ☐
+- Expense: date, category (fuel, mileage, materials, equipment, repairs,
+  vehicle, insurance, payroll, marketing, software, licenses, other), vendor,
+  amount, deductible, company / own vehicle, reimbursable, **billable to owner**,
+  tied to a work order / rehab / property / employee; receipts ride the
+  document service.
+- Mileage: miles × the mileage rate setting (IRS standard, default $0.70), with
+  odometer start/end and round trip; own-vehicle miles reimbursed.
+
+**Costing** ☐
+- Per work order: labor pay + share of the week's OT premium (spread by hours)
+  + labor burden % (not on contractors) + parts from inventory at cost +
+  mileage + expenses + outside vendor bills → total cost; billed-to-owner is the
+  revenue; gross and gross %; optional overhead per labor hour for net.
+- **Bill to owner**: approved hours × frozen bill rate, parts, billable
+  expenses and a markup % → one AP bill from "In-house maintenance" on the
+  property's LLC, through the existing approve → post → pay flow, so it lands
+  on the owner statement and comes out of the payout. Printable as a PDF.
+- Rollups by property, technician (split by hours), category, month, plus the
+  bill rate that would hit the target margin.
+
+**Taxes** ☐
+- Year / quarter tax package: mileage log, expense ledger by category, missing
+  receipts, pay by person (W-2 vs 1099-NEC with hours / OT / gross / mileage
+  paid back), key dates (federal + California estimates, W-2 / 1099-NEC, return
+  due dates), plus the existing 1099 export. CSV + PDF.
+
+**CRM** ☐
+- Owners are the property manager's clients: a timeline of notes / calls /
+  emails / meetings / issues with pins and **follow-ups** (due follow-ups on the
+  dashboard), and an **owner-lead pipeline** (new → contacted → proposal → won /
+  lost, by source) for winning new management contracts.
+
+**Print to PDF** ☐
+- A real document PDF writer (Helvetica, table layout with column widths,
+  right-aligned money, totals, page numbers, the workspace's name on every
+  page) replacing the monospace dump — every report, the payroll week, a work
+  order's cost sheet and the owner bill.
+
+**Settings** ☐ — overtime rule, labor burden %, overhead per hour, target
+margin, mileage rate, maintenance markup, missed-punch hours, clock location +
+radius.
+
 ## Phase 3 — Reminders that run themselves ☐
 
 Everything Alpha's scheduler does, translated to rentals. All on the existing
