@@ -226,6 +226,44 @@ export interface TotpSetupResult {
   otpauth_uri: string;
 }
 
+export interface TextThread {
+  id: string;
+  phone: string;
+  display_name: string | null;
+  lease_id: string | null;
+  status: "open" | "done";
+  unread_count: number;
+  last_preview: string | null;
+  last_message_at: string | null;
+  /** The number texted STOP (until it texts START). */
+  opted_out: boolean;
+}
+
+export interface TextMessage {
+  id: string;
+  direction: "in" | "out";
+  body: string;
+  status: "received" | "queued" | "sent" | "failed" | "blocked";
+  template_key: string | null;
+  sent_by: string | null;
+  media_count: number;
+  error: string | null;
+  created_at: string;
+}
+
+export interface TextThreadDetail {
+  thread: TextThread;
+  messages: TextMessage[];
+}
+
+export interface TextsStatus {
+  live: boolean;
+  provider_configured: boolean;
+  inbound_webhook_url: string;
+  status_webhook_url: string;
+  unread_threads: number;
+}
+
 export interface PasswordLinkInfo {
   purpose: "invite" | "reset";
   email: string;
@@ -264,6 +302,42 @@ export const api = {
       body: { mfa_token: mfaToken, code },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
+
+  // ---- two-way texts (console inbox) ----
+  textsStatus: () => request<TextsStatus>("/texts/status", { auth: true }),
+  textThreads: (status?: string) =>
+    request<TextThread[]>(
+      `/texts${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+      { auth: true }
+    ),
+  /** One conversation, oldest text first. Marks it read. */
+  textThread: (id: string) =>
+    request<TextThreadDetail>(`/texts/${id}`, { auth: true }),
+  replyText: (id: string, body: string) =>
+    request<TextThreadDetail>(`/texts/${id}/reply`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  startText: (phone: string, body: string) =>
+    request<TextThreadDetail>("/texts", {
+      method: "POST",
+      auth: true,
+      body: { phone, body },
+    }),
+  updateTextThread: (id: string, status: "open" | "done") =>
+    request<TextThread>(`/texts/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+  /** Test mode only: act as if `phone` texted `body` in. */
+  simulateText: (phone: string, body: string) =>
+    request<TextThreadDetail>("/texts/simulate", {
+      method: "POST",
+      auth: true,
+      body: { phone, body },
+    }),
 
   // ---- passwords (invite / forgot / reset / change) ----
   /** Email a reset link. Same answer whether or not the address has an account. */

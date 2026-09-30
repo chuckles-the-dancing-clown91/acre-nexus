@@ -196,6 +196,12 @@ export const MODULES: ModuleDef[] = [
         icon: "mail",
         permission: "message:read",
       },
+      {
+        href: "/console/texts",
+        label: "Texts",
+        icon: "chat",
+        permission: "message:read",
+      },
     ],
   },
   {

@@ -77,21 +77,22 @@ staff who are invited cannot sign in.
 - ☐ **Recovery codes** for TOTP (Alpha has them; Vantedge doesn't).
 - ☐ **Office MFA policy** — require two-step for staff roles.
 
-## Phase 2 — Two-way texts ☐
+## Phase 2 — Two-way texts ◐
 
 Property management runs on texts. Residents text the office about a leak;
 the office texts back from one shared inbox.
 
-- ☐ **Inbound webhook** `POST /webhooks/twilio/sms` verifying Twilio's
-  `X-Twilio-Signature` (HMAC-SHA1 over URL + sorted params). Status callback
-  records delivered/failed.
-- ☐ **Conversations**: one thread per phone number per workspace, matched to
+- ☑ **Inbound webhook** `POST /webhooks/twilio/sms` verifying Twilio's
+  `X-Twilio-Signature` (HMAC-SHA1 over URL + sorted params, tested against
+  Twilio's documented example); `POST /webhooks/twilio/status` records
+  sent/failed. See [`TEXTS.md`](TEXTS.md).
+- ☑ **Conversations**: one thread per phone number per workspace, matched to
   a resident (lease tenant phone) or member; unread counts; open / done.
-- ☐ **STOP / START**: STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT and the
+- ☑ **STOP / START**: STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT and the
   Spanish ALTO, PARAR, BAJA opt out; START, UNSTOP (and YES only from a
   stopped number) opt back in. STOP always wins: every outbound text checks the
   opt-out list first, including the notification templates.
-- ☐ **Console inbox** (`/console/texts`): threads, reply, mark done, test-mode
+- ☑ **Console inbox** (`/console/texts`): threads, reply, mark done, test-mode
   "pretend they texted back".
 - ☐ Saved replies, assign a thread to a teammate, link an unknown number to a
   resident, MMS photos filed to the resident / work order.
