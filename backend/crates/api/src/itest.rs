@@ -90,6 +90,7 @@ async fn integration_suite() {
     invite_then_set_password_then_reset(&c).await;
     two_way_texts_and_stop(&c).await;
     back_office_hours_to_owner_bill(&c).await;
+    crm_owner_lead_to_owner(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -1504,8 +1505,156 @@ async fn back_office_hours_to_owner_bill(c: &Ctx) {
     assert_eq!(st, Status::Ok, "dashboard: {dash}");
     assert!(dash["billed_to_owners_this_month_cents"].is_number());
 
+    // The same week goes to Gusto as 8 / 4 / 1 hours (simulated here).
+    let (st, g) = get_json(
+        c,
+        "/payroll/gusto/hours?from=2026-09-14&to=2026-09-20",
+        &office,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "gusto hours: {g}");
+    let line = g["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["email"] == "morgan@northwind.com")
+        .expect("morgan's hours");
+    assert_eq!(line["regular_hours"], "8.000");
+    assert_eq!(line["overtime_hours"], "4.000");
+    assert_eq!(line["double_overtime_hours"], "1.000");
+    let (st, pushed) = post_json(
+        c,
+        "/payroll/gusto/push",
+        &office,
+        serde_json::json!({ "payroll_id": "demo-payroll", "from": "2026-09-14", "to": "2026-09-20" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "gusto push: {pushed}");
+    assert_eq!(pushed["simulated"], true);
+
     // Without payroll:read, no margins.
     let viewer = mint(c, Some(nw), false, &["team:read"]);
     let (st, _) = get_json(c, &format!("/costs/work-orders/{}", ticket.id), &viewer).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// CRM: an owner lead gets a follow-up, moves to proposal (logged on its
+/// timeline), prints a management proposal, and converts into an owner who
+/// keeps the history.
+async fn crm_owner_lead_to_owner(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let crm = mint(c, Some(nw), false, &["entity:read", "entity:manage"]);
+    let (st, lead) = post_json(
+        c,
+        "/crm/owner-leads",
+        &crm,
+        serde_json::json!({
+            "name": "Dana Ortiz", "company": "Ortiz Family Trust", "doors": 12,
+            "properties_count": 3, "monthly_rent_cents": 2_400_000, "fee_bps": 800,
+            "source": "referral",
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "lead: {lead}");
+    assert_eq!(lead["monthly_fee_cents"], 192_000, "8% of $24,000");
+    let id = lead["id"].as_str().unwrap().to_string();
+
+    let (st, note) = post_json(
+        c,
+        "/crm/notes",
+        &crm,
+        serde_json::json!({
+            "subject_type": "owner_lead", "subject_id": id, "kind": "call",
+            "body": "Wants a quote for the three Hesperia duplexes.", "follow_up_on": "2026-01-01",
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "note: {note}");
+    assert_eq!(note["follow_up_due"], true);
+    let (_, due) = get_json(c, "/crm/follow-ups", &crm).await;
+    assert!(due
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|n| n["id"] == note["id"]));
+
+    let (st, moved) = send_json(
+        c,
+        Method::Patch,
+        &format!("/crm/owner-leads/{id}"),
+        &crm,
+        serde_json::json!({ "status": "proposal" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(moved["status"], "proposal");
+    let resp = c
+        .client
+        .get(format!("/crm/owner-leads/{id}/proposal.pdf"))
+        .header(bearer(&crm))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert!(resp.into_bytes().await.unwrap().starts_with(b"%PDF"));
+    let (_, summary) = get_json(c, "/crm/owner-leads/summary", &crm).await;
+    assert!(
+        summary["weighted_monthly_fee_cents"].as_i64().unwrap() >= 96_000,
+        "{summary}"
+    );
+
+    let (st, won) = post_json(
+        c,
+        &format!("/crm/owner-leads/{id}/convert"),
+        &crm,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "convert: {won}");
+    assert_eq!(won["status"], "won");
+    let owner_id = won["owner_id"].as_str().unwrap().to_string();
+    let (_, owners) = get_json(c, "/crm/owners", &crm).await;
+    assert!(owners
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|o| o["id"] == owner_id && o["name"] == "Ortiz Family Trust"));
+    let (_, timeline) = get_json(
+        c,
+        &format!("/crm/notes?subject_type=owner&subject_id={owner_id}"),
+        &crm,
+    )
+    .await;
+    let bodies: Vec<&str> = timeline
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["body"].as_str())
+        .collect();
+    assert!(
+        bodies.iter().any(|b| b.contains("Hesperia duplexes")),
+        "{bodies:?}"
+    );
+    assert!(
+        bodies.iter().any(|b| b.contains("to proposal")),
+        "{bodies:?}"
+    );
+    // A second convert is refused; without entity:manage nothing changes.
+    let (st, _) = post_json(
+        c,
+        &format!("/crm/owner-leads/{id}/convert"),
+        &crm,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let reader = mint(c, Some(nw), false, &["entity:read"]);
+    let (st, _) = post_json(
+        c,
+        "/crm/owner-leads",
+        &reader,
+        serde_json::json!({ "name": "X" }),
+    )
+    .await;
     assert_eq!(st, Status::Forbidden);
 }

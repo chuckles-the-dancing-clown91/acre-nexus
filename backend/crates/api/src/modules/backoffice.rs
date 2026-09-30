@@ -56,6 +56,10 @@ impl PlatformModule for BackOfficeModule {
             backoffice::reports::taxes_export,
             backoffice::reports::dashboard,
             backoffice::reports::cost_sheet,
+            backoffice::gusto::gusto_status,
+            backoffice::gusto::gusto_hours,
+            backoffice::gusto::gusto_hours_csv,
+            backoffice::gusto::gusto_push,
         ]
     }
 }

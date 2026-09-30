@@ -103,6 +103,8 @@ pub const WORKFORCE_MAINTENANCE_MARKUP_BPS: &str = "workforce.maintenance_markup
 pub const WORKFORCE_MISSED_PUNCH_HOURS: &str = "workforce.missed_punch_hours";
 /// Record where the phone is at clock-in / clock-out (never in between).
 pub const WORKFORCE_CLOCK_LOCATION: &str = "workforce.clock_location";
+/// The Gusto company payroll hours are pushed to.
+pub const PAYROLL_GUSTO_COMPANY_UUID: &str = "payroll.gusto_company_uuid";
 /// How far from the property counts as "away", in metres.
 pub const WORKFORCE_CLOCK_RADIUS_M: &str = "workforce.clock_location_radius_m";
 
@@ -536,6 +538,15 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Team & payroll",
         kind: SettingKind::Int,
         default: || json!(400),
+    },
+    SettingDef {
+        key: PAYROLL_GUSTO_COMPANY_UUID,
+        label: "Gusto company ID",
+        description: "Where approved hours are pushed for payroll. The access token \
+                      goes in Integrations → credentials as gusto.access_token.",
+        group: "Team & payroll",
+        kind: SettingKind::Text,
+        default: || json!(""),
     },
 ];
 

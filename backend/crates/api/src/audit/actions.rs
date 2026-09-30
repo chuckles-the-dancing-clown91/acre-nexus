@@ -212,6 +212,12 @@ pub const EXPENSE_CREATE: &str = "expense.create";
 pub const EXPENSE_UPDATE: &str = "expense.update";
 pub const EXPENSE_DELETE: &str = "expense.delete";
 pub const EXPENSE_REIMBURSE: &str = "expense.reimburse";
+pub const CRM_NOTE_ADD: &str = "crm.note_add";
+/// Approved hours pushed into a Gusto payroll.
+pub const PAYROLL_GUSTO_PUSH: &str = "payroll.gusto_push";
+pub const OWNER_LEAD_CREATE: &str = "owner_lead.create";
+/// A won owner lead became an owner.
+pub const OWNER_LEAD_CONVERT: &str = "owner_lead.convert";
 /// In-house work (hours, parts, expenses) billed to the owner as an AP bill.
 pub const OWNER_BILL_CREATE: &str = "owner_bill.create";
 /// A thread was marked done / reopened.

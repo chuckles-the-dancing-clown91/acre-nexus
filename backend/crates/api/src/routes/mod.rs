@@ -19,6 +19,7 @@ pub mod backoffice;
 pub mod banking;
 pub mod billing;
 pub mod cap_table;
+pub mod crm;
 pub mod deals;
 pub mod documents;
 pub mod domains;
