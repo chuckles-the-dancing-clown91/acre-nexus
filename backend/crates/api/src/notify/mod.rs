@@ -130,6 +130,24 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    // ---- Password links (set your password / forgot password) ----
+    DefaultTemplate {
+        key: "account_invite",
+        subject: "{company} set up an account for you",
+        body: "Hi {name},\n\n{company} has set up an account for you. Choose your password \
+               here to sign in:\n\n{link}\n\nThe link works once and expires in 7 days.\n\n\
+               — {company}",
+        sms: "{company} set up an account for you. Choose your password: {link}",
+    },
+    DefaultTemplate {
+        key: "password_reset",
+        subject: "Reset your {company} password",
+        body: "Hi {name},\n\nSomeone asked to reset the password for this account. If it was \
+               you, choose a new one here:\n\n{link}\n\nThe link works once and expires in \
+               24 hours. If it wasn't you, ignore this email — your password hasn't changed.\
+               \n\n— {company}",
+        sms: "{company}: reset your password here (expires in 24 hours): {link}",
+    },
     DefaultTemplate {
         key: "test_notification",
         subject: "Test notification from {company}",
@@ -432,7 +450,7 @@ async fn tenant_context(db: &impl ConnectionTrait, tenant_id: Uuid) -> (String, 
     let company = theme
         .as_ref()
         .map(|t| t.company_name.clone())
-        .unwrap_or_else(|| "Acre Nexus".to_string());
+        .unwrap_or_else(|| "Vantedge".to_string());
     let overrides = theme
         .map(|t| t.notification_templates)
         .unwrap_or_else(|| json!({}));

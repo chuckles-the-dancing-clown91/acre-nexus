@@ -23,6 +23,16 @@ pub const AUTH_MFA_ENABLE: &str = "auth.mfa_enable";
 pub const AUTH_MFA_DISABLE: &str = "auth.mfa_disable";
 /// A login step-up (TOTP second factor) was completed.
 pub const AUTH_MFA_VERIFY: &str = "auth.mfa_verify";
+/// "Forgot your password?" — a reset (or fresh invite) link was requested.
+pub const AUTH_PASSWORD_RESET_REQUEST: &str = "auth.password_reset_request";
+/// A password was chosen from a reset link.
+pub const AUTH_PASSWORD_RESET: &str = "auth.password_reset";
+/// An invited person chose their password (the account became active).
+pub const AUTH_INVITE_ACCEPT: &str = "auth.invite_accept";
+/// A signed-in user changed their password.
+pub const AUTH_PASSWORD_CHANGE: &str = "auth.password_change";
+/// The office sent a member a fresh login link.
+pub const AUTH_LOGIN_LINK_SEND: &str = "auth.login_link_send";
 
 // ---- Properties / portfolio ----
 pub const PROPERTY_CREATE: &str = "property.create";

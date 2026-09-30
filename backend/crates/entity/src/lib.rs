@@ -81,6 +81,7 @@ pub mod onboarding_workflow;
 pub mod owner;
 pub mod owner_payout;
 pub mod ownership;
+pub mod password_token;
 pub mod payment_method;
 pub mod permission;
 pub mod platform_invoice;

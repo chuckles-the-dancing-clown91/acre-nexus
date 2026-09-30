@@ -283,6 +283,8 @@ pub struct MemberDto {
     pub profile_type: String,
     pub title: Option<String>,
     pub status: String,
+    /// The login's own state: `invited` until they choose a password.
+    pub account_status: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

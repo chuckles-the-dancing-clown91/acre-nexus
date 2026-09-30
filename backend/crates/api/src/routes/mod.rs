@@ -83,6 +83,10 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // auth
         auth::login::login,
         auth::refresh::refresh,
+        auth::password::forgot,
+        auth::password::link_info,
+        auth::password::set_password,
+        auth::password::change_password,
         auth::me::me,
         auth::logout::logout,
         auth::workspaces::workspaces,
@@ -146,6 +150,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // IAM — tenant member management (client admins)
         iam::list_members::list_members,
         iam::invite_member::invite_member,
+        iam::list_members::send_login_link,
         // Self-service profile (renter portal / any signed-in user)
         iam::self_profile::my_profile,
         iam::self_profile::update_my_profile,

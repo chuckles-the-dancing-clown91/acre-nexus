@@ -124,7 +124,11 @@ fn is_exempt(path: &str) -> bool {
 
 /// Whether a path is an authentication endpoint (the tight bucket).
 fn is_auth(path: &str) -> bool {
-    path == "/auth/login" || path == "/auth/refresh"
+    path == "/auth/login"
+        || path == "/auth/refresh"
+        || path == "/auth/password/forgot"
+        || path == "/auth/password/set"
+        || path.starts_with("/auth/password/link/")
 }
 
 /// Attribute a request to a caller: its API key if present, else its client IP,
@@ -301,6 +305,9 @@ mod tests {
         assert!(!is_exempt("/properties"));
         assert!(is_auth("/auth/login"));
         assert!(is_auth("/auth/refresh"));
+        assert!(is_auth("/auth/password/forgot"));
+        assert!(is_auth("/auth/password/set"));
+        assert!(is_auth("/auth/password/link/abc"));
         assert!(!is_auth("/auth/me"));
     }
 }

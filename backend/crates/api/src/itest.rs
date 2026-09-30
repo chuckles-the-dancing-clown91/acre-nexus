@@ -87,6 +87,7 @@ async fn integration_suite() {
     // #26 — auth + RBAC.
     login_refresh_logout_happy_path(&c).await;
     login_with_wrong_password_is_unauthorized(&c).await;
+    invite_then_set_password_then_reset(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -928,4 +929,120 @@ async fn hoa_end_to_end(c: &Ctx) {
     .await;
     assert_eq!(st, Status::Ok, "decide ARC request");
     assert_eq!(decided["status"].as_str().unwrap(), "approved");
+}
+
+/// The link token inside the most recent queued email for `to` + `template`.
+async fn queued_link_token(c: &Ctx, to: &str, template: &str) -> Option<String> {
+    use sea_orm::QueryOrder;
+    let jobs = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .order_by_desc(entity::background_job::Column::CreatedAt)
+        .all(&c.db)
+        .await
+        .unwrap();
+    jobs.into_iter()
+        .find(|j| {
+            j.payload["to"].as_str() == Some(to) && j.payload["template"].as_str() == Some(template)
+        })
+        .and_then(|j| j.payload["vars"]["link"].as_str().map(str::to_string))
+        .and_then(|link| link.split("token=").nth(1).map(str::to_string))
+}
+
+async fn login_status(c: &Ctx, email: &str, password: &str) -> Status {
+    c.client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "email": email, "password": password }).to_string())
+        .dispatch()
+        .await
+        .status()
+}
+
+/// Phase 1 of the Vantedge roadmap: an invited member receives a link, chooses a
+/// password (activating the account), can sign in, can't reuse the link, and
+/// "forgot password" issues a reset that works once — without ever revealing
+/// whether an address has an account.
+async fn invite_then_set_password_then_reset(c: &Ctx) {
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(c, Some(nw), false, &["member:manage", "member:read"]);
+    // Unique per run so a reused test database doesn't already hold the account.
+    let email: &'static str =
+        Box::leak(format!("resident.{}@example.com", Uuid::new_v4().simple()).into_boxed_str());
+
+    let (st, member) = post_json(
+        c,
+        "/members",
+        &admin,
+        serde_json::json!({ "email": email, "name": "Riley Resident", "profile_type": "renter" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "invite should succeed: {member}");
+    assert_eq!(member["account_status"], "invited");
+    assert_eq!(
+        login_status(c, email, "anything at all").await,
+        Status::Unauthorized,
+        "an invited account has no usable password yet"
+    );
+
+    let token = queued_link_token(c, email, "account_invite")
+        .await
+        .expect("an invite email with a link is queued");
+    let resp = c
+        .client
+        .get(format!("/auth/password/link/{token}"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let info: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(info["purpose"], "invite");
+    assert_eq!(info["email"], email);
+
+    let set = |token: String, password: &'static str| async move {
+        c.client
+            .post("/auth/password/set")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({ "token": token, "password": password }).to_string())
+            .dispatch()
+            .await
+            .status()
+    };
+    assert_eq!(set(token.clone(), "short").await, Status::BadRequest);
+    assert_eq!(set(token.clone(), "a quiet lake at dawn").await, Status::Ok);
+    assert_eq!(
+        set(token.clone(), "another good phrase").await,
+        Status::NotFound,
+        "a link works once"
+    );
+    assert_eq!(
+        login_status(c, email, "a quiet lake at dawn").await,
+        Status::Ok
+    );
+
+    // Forgot password: unknown addresses get the same answer and no email.
+    let forgot = |email: &'static str| async move {
+        c.client
+            .post("/auth/password/forgot")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({ "email": email }).to_string())
+            .dispatch()
+            .await
+            .status()
+    };
+    assert_eq!(forgot("nobody@nowhere.example").await, Status::Ok);
+    assert!(
+        queued_link_token(c, "nobody@nowhere.example", "password_reset")
+            .await
+            .is_none()
+    );
+    assert_eq!(forgot(email).await, Status::Ok);
+    let reset = queued_link_token(c, email, "password_reset")
+        .await
+        .expect("a reset email is queued");
+    assert_eq!(set(reset, "a new quiet lake").await, Status::Ok);
+    assert_eq!(
+        login_status(c, email, "a quiet lake at dawn").await,
+        Status::Unauthorized,
+        "the old password stops working"
+    );
+    assert_eq!(login_status(c, email, "a new quiet lake").await, Status::Ok);
 }

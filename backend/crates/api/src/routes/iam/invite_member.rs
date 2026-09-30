@@ -34,6 +34,7 @@ pub async fn invite_member(
         .one(&db)
         .await?;
     // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
+    let still_invited = existing.as_ref().is_some_and(|u| u.status == "invited");
     let (uid, created_user) = match existing {
         Some(u) => (u.id, false),
         None => {
@@ -92,6 +93,20 @@ pub async fn invite_member(
     )
     .await;
 
+    // A new login (or one that never finished setting up) gets a link to choose
+    // its password — the account can't be signed into until then.
+    let mut account_status = "active".to_string();
+    if created_user || still_invited {
+        account_status = "invited".into();
+        if let Some(account) = User::find_by_id(uid).one(&db).await? {
+            let (token, row) =
+                crate::password_links::issue(&db, uid, crate::password_links::PURPOSE_INVITE)
+                    .await?;
+            crate::password_links::deliver(&db, Some(scope.tenant_id), &account, &token, &row)
+                .await;
+        }
+    }
+
     Ok(Json(MemberDto {
         membership_id: membership.id,
         user_id: uid,
@@ -100,5 +115,6 @@ pub async fn invite_member(
         profile_type: body.profile_type,
         title: body.title,
         status: membership.status,
+        account_status,
     }))
 }

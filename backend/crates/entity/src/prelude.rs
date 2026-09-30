@@ -64,6 +64,7 @@ pub use super::onboarding_workflow::Entity as OnboardingWorkflow;
 pub use super::owner::Entity as Owner;
 pub use super::owner_payout::Entity as OwnerPayout;
 pub use super::ownership::Entity as Ownership;
+pub use super::password_token::Entity as PasswordToken;
 pub use super::payment_method::Entity as PaymentMethod;
 pub use super::permission::Entity as Permission;
 pub use super::platform_invoice::Entity as PlatformInvoice;
