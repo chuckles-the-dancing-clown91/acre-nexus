@@ -77,6 +77,7 @@ mod totp;
 mod underwriting;
 mod webhooks_out;
 mod workflow;
+mod workforce;
 
 #[cfg(test)]
 mod itest;

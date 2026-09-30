@@ -38,6 +38,14 @@ pub enum Permission {
     /// Maintenance work orders / tickets.
     MaintenanceRead,
     MaintenanceManage,
+    /// The back office: staff profiles, shifts, time off, timesheets.
+    TeamRead,
+    TeamManage,
+    /// Pay rates, payroll weeks, pay by person.
+    PayrollRead,
+    /// Expenses and mileage.
+    ExpenseRead,
+    ExpenseManage,
     /// Resident ↔ manager messaging threads.
     MessageRead,
     MessageManage,
@@ -132,6 +140,11 @@ impl Permission {
             Permission::VehicleManage => "vehicle:manage",
             Permission::MaintenanceRead => "maintenance:read",
             Permission::MaintenanceManage => "maintenance:manage",
+            Permission::TeamRead => "team:read",
+            Permission::TeamManage => "team:manage",
+            Permission::PayrollRead => "payroll:read",
+            Permission::ExpenseRead => "expense:read",
+            Permission::ExpenseManage => "expense:manage",
             Permission::MessageRead => "message:read",
             Permission::MessageManage => "message:manage",
             Permission::TitleRead => "title:read",
@@ -203,6 +216,11 @@ pub const ALL_PERMS: &[Permission] = &[
     VehicleManage,
     MaintenanceRead,
     MaintenanceManage,
+    TeamRead,
+    TeamManage,
+    PayrollRead,
+    ExpenseRead,
+    ExpenseManage,
     MessageRead,
     MessageManage,
     TitleRead,

@@ -190,6 +190,30 @@ pub const SMS_SEND: &str = "sms.send";
 pub const SMS_OPT_OUT: &str = "sms.opt_out";
 /// A stopped number texted START — texts may go to it again.
 pub const SMS_OPT_IN: &str = "sms.opt_in";
+// ---- The back office ----
+pub const TIME_CLOCK_IN: &str = "time.clock_in";
+pub const TIME_CLOCK_OUT: &str = "time.clock_out";
+pub const TIME_ENTRY_CREATE: &str = "time.entry_create";
+pub const TIME_ENTRY_UPDATE: &str = "time.entry_update";
+pub const TIME_ENTRY_DELETE: &str = "time.entry_delete";
+pub const TIME_APPROVE: &str = "time.approve";
+/// A clock-in left running was closed automatically and held for review.
+pub const TIME_MISSED_PUNCH: &str = "time.missed_punch";
+/// The office settled a missed punch (confirmed or corrected the finish).
+pub const TIME_RESOLVE: &str = "time.resolve";
+pub const EMPLOYEE_UPSERT: &str = "employee.upsert";
+pub const SHIFT_CREATE: &str = "shift.create";
+pub const SHIFT_UPDATE: &str = "shift.update";
+pub const SHIFT_DELETE: &str = "shift.delete";
+pub const TIME_OFF_REQUEST: &str = "time_off.request";
+pub const TIME_OFF_REVIEW: &str = "time_off.review";
+pub const TIME_OFF_CANCEL: &str = "time_off.cancel";
+pub const EXPENSE_CREATE: &str = "expense.create";
+pub const EXPENSE_UPDATE: &str = "expense.update";
+pub const EXPENSE_DELETE: &str = "expense.delete";
+pub const EXPENSE_REIMBURSE: &str = "expense.reimburse";
+/// In-house work (hours, parts, expenses) billed to the owner as an AP bill.
+pub const OWNER_BILL_CREATE: &str = "owner_bill.create";
 /// A thread was marked done / reopened.
 pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 /// Staff triggered a test delivery (provider test or own-device push test).

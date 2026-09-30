@@ -130,6 +130,29 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    // ---- The back office ----
+    DefaultTemplate {
+        key: "missed_punch",
+        subject: "You didn't clock out on {when}",
+        body: "Hi {recipient},\n\nYour time from {when} was still running, so it was closed \
+               at our best guess and held for the office. Open your hours and tell us when \
+               you really finished.\n\n— {company}",
+        sms: "{company}: you didn't clock out on {when} — tell us when you finished in your hours.",
+    },
+    DefaultTemplate {
+        key: "time_off_submitted",
+        subject: "Time off request from {employee}",
+        body: "Hi {recipient},\n\n{employee} asked for {kind} from {starts_on} to {ends_on}. \
+               Review it on the team schedule.\n\n— {company}",
+        sms: "{employee} asked for {kind} {starts_on}–{ends_on}.",
+    },
+    DefaultTemplate {
+        key: "time_off_reviewed",
+        subject: "Your time off was {decision}",
+        body: "Hi {recipient},\n\nYour {kind} from {starts_on} to {ends_on} was {decision}.\
+               {note}\n\n— {company}",
+        sms: "{company}: your {kind} {starts_on}–{ends_on} was {decision}.",
+    },
     // ---- Two-way texts ----
     DefaultTemplate {
         key: "direct_text",

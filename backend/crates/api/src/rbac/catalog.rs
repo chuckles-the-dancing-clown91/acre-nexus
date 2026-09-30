@@ -184,6 +184,44 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "team:read",
+        category: "Back office",
+        label: "View the team",
+        description: "View staff, schedules, time off, timesheets and work-order \
+                      costs (without pay rates).",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "team:manage",
+        category: "Back office",
+        label: "Manage the team",
+        description: "Edit staff profiles, plan shifts, review time off, correct and \
+                      approve time, resolve missed punches, and bill work to owners.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "payroll:read",
+        category: "Back office",
+        label: "View payroll",
+        description: "See pay rates, payroll weeks, pay by person and the tax \
+                      package; push hours to Gusto.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "expense:read",
+        category: "Back office",
+        label: "View expenses",
+        description: "View every expense, receipt and mileage trip.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "expense:manage",
+        category: "Back office",
+        label: "Manage expenses",
+        description: "Record, edit and reimburse anyone's expenses and mileage.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "message:read",
         category: "Rentals",
         label: "View resident messages",
