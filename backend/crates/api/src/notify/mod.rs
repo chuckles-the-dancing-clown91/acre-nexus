@@ -140,6 +140,14 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{company}: you didn't clock out on {when} — tell us when you finished in your hours.",
     },
     DefaultTemplate {
+        key: "time_unapproved",
+        subject: "{count} time entries are waiting for approval",
+        body: "Hi {recipient},\n\n{count} time entries from before this week still need \
+               approving ({missed} missed punches among them): {people}. Approve them on the \
+               timesheets page so payroll and owner billing can use them.\n\n— {company}",
+        sms: "{count} time entries from before this week need approving ({missed} missed punches).",
+    },
+    DefaultTemplate {
         key: "time_off_submitted",
         subject: "Time off request from {employee}",
         body: "Hi {recipient},\n\n{employee} asked for {kind} from {starts_on} to {ends_on}. \

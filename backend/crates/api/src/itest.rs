@@ -89,6 +89,7 @@ async fn integration_suite() {
     login_with_wrong_password_is_unauthorized(&c).await;
     invite_then_set_password_then_reset(&c).await;
     two_way_texts_and_stop(&c).await;
+    back_office_hours_to_owner_bill(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -1167,4 +1168,277 @@ async fn two_way_texts_and_stop(c: &Ctx) {
         .dispatch()
         .await;
     assert_eq!(resp.status(), Status::Forbidden);
+}
+
+async fn get_json(c: &Ctx, path: &str, token: &str) -> (Status, serde_json::Value) {
+    let resp = c.client.get(path).header(bearer(token)).dispatch().await;
+    let status = resp.status();
+    let val = resp
+        .into_json::<serde_json::Value>()
+        .await
+        .unwrap_or(serde_json::Value::Null);
+    (status, val)
+}
+
+async fn send_json(
+    c: &Ctx,
+    method: rocket::http::Method,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> (Status, serde_json::Value) {
+    let resp = c
+        .client
+        .req(method, path)
+        .header(bearer(token))
+        .header(ContentType::JSON)
+        .body(body.to_string())
+        .dispatch()
+        .await;
+    let status = resp.status();
+    let val = resp
+        .into_json::<serde_json::Value>()
+        .await
+        .unwrap_or(serde_json::Value::Null);
+    (status, val)
+}
+
+/// Phase 2B: one set of hours drives everything. A technician's 13-hour day on a
+/// work order (California rules: 8 regular, 4 at 1.5×, 1 at 2×) is approved,
+/// billed to the owner at their bill rate with a marked-up receipt, and costed
+/// with its overtime premium and burden — and once billed, the time is locked.
+async fn back_office_hours_to_owner_bill(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    for (k, v) in [
+        (
+            crate::settings::WORKFORCE_OVERTIME_RULE,
+            serde_json::json!("california"),
+        ),
+        (
+            crate::settings::WORKFORCE_LABOR_BURDEN_BPS,
+            serde_json::json!(1000),
+        ),
+        (
+            crate::settings::WORKFORCE_MAINTENANCE_MARKUP_BPS,
+            serde_json::json!(1000),
+        ),
+    ] {
+        crate::settings::set_value(&c.db, nw, k, v).await.unwrap();
+    }
+    let office = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "team:read",
+            "team:manage",
+            "payroll:read",
+            "expense:read",
+            "expense:manage",
+            "payable:manage",
+        ],
+    );
+    let morgan = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("morgan@northwind.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("seeded back-office user");
+    let tech = crate::auth::issue_access_token(&c.config, morgan.id, Some(nw), false, vec![])
+        .expect("mint");
+
+    // Not on the team yet → no clock.
+    let (st, _) = get_json(c, "/me/clock", &tech).await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, p) = send_json(
+        c,
+        Method::Put,
+        &format!("/team/{}", morgan.id),
+        &office,
+        serde_json::json!({ "title": "Maintenance tech", "pay_rate_cents": 2500, "bill_rate_cents": 7500 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "profile: {p}");
+    assert_eq!(p["overtime_eligible"], true);
+
+    let ticket = entity::prelude::MaintenanceTicket::find()
+        .filter(entity::maintenance_ticket::Column::TenantId.eq(nw))
+        .filter(entity::maintenance_ticket::Column::Title.eq("Kitchen faucet leaking"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("seeded work order");
+
+    // Clock in and out on the work order; the stub entry is then deleted.
+    let target = serde_json::json!({ "kind": "work_order", "maintenance_ticket_id": ticket.id });
+    let (st, clock) = post_json(c, "/me/clock/in", &tech, target.clone()).await;
+    assert_eq!(st, Status::Ok, "clock in: {clock}");
+    assert!(clock["open"].is_object());
+    let stub = clock["open"]["id"].as_str().unwrap().to_string();
+    let (st, clock) = post_json(c, "/me/clock/out", &tech, serde_json::json!({})).await;
+    assert_eq!(st, Status::Ok);
+    assert!(clock["open"].is_null());
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/me/time/{stub}"),
+        &tech,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // A 13-hour day, logged by hand; an overlapping one is refused.
+    let mut day = target.clone();
+    day["started_at"] = serde_json::json!("2026-09-15T07:00:00-07:00");
+    day["ended_at"] = serde_json::json!("2026-09-15T20:00:00-07:00");
+    let (st, e) = post_json(c, "/me/time", &tech, day.clone()).await;
+    assert_eq!(st, Status::Ok, "manual entry: {e}");
+    assert_eq!(e["minutes"], 780);
+    assert!(
+        e["pay_rate_cents"].is_null(),
+        "no pay figures on self-service"
+    );
+    let entry_id = e["id"].as_str().unwrap().to_string();
+    let mut clash = target.clone();
+    clash["started_at"] = serde_json::json!("2026-09-15T19:00:00-07:00");
+    clash["ended_at"] = serde_json::json!("2026-09-15T21:00:00-07:00");
+    let (st, _) = post_json(c, "/me/time", &tech, clash).await;
+    assert_eq!(st, Status::Conflict, "overlapping time is refused");
+
+    // The office approves; the technician can no longer change it.
+    let (st, r) = post_json(
+        c,
+        "/team/time/approve",
+        &office,
+        serde_json::json!({ "ids": [entry_id] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(r["approved"], 1);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/me/time/{entry_id}"),
+        &tech,
+        day.clone(),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // A receipt billable to the owner, and a mileage trip that isn't.
+    let (st, x) = post_json(
+        c,
+        "/me/expenses",
+        &tech,
+        serde_json::json!({
+            "incurred_on": "2026-09-15", "category": "materials", "vendor": "Home Depot",
+            "amount_cents": 4000, "billable_to_owner": true,
+            "maintenance_ticket_id": ticket.id,
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "expense: {x}");
+    let (st, trip) = post_json(
+        c,
+        "/me/expenses",
+        &tech,
+        serde_json::json!({
+            "incurred_on": "2026-09-15", "category": "mileage", "miles": 10,
+            "vehicle": "personal", "maintenance_ticket_id": ticket.id,
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "trip: {trip}");
+    assert_eq!(trip["amount_cents"], 700, "10 miles at $0.70");
+
+    // The bill preview: 13h at $75, the receipt with 10% markup.
+    let (st, pv) = get_json(
+        c,
+        &format!("/costs/work-orders/{}/bill-preview", ticket.id),
+        &office,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "preview: {pv}");
+    let lines = pv["lines"].as_array().unwrap();
+    let labor = lines
+        .iter()
+        .find(|l| l["description"].as_str().unwrap().starts_with("Labor"))
+        .expect("a labor line");
+    assert_eq!(labor["amount_cents"], 97_500);
+    assert!(
+        lines.iter().any(|l| l["amount_cents"] == 4_400),
+        "receipt + markup: {pv}"
+    );
+
+    let (st, bill) = post_json(
+        c,
+        &format!("/costs/work-orders/{}/bill-owner", ticket.id),
+        &office,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "bill: {bill}");
+    assert_eq!(bill["amount_cents"], pv["total_cents"]);
+    assert_eq!(bill["status"], "draft");
+
+    // Billed time is locked, and there's nothing left to bill.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/team/time/{entry_id}"),
+        &office,
+        day,
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = post_json(
+        c,
+        &format!("/costs/work-orders/{}/bill-owner", ticket.id),
+        &office,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // Costing: $25 × 13h, premium 4h × $12.50 + 1h × $25 = $75, burden 10%.
+    let (st, cost) = get_json(c, &format!("/costs/work-orders/{}", ticket.id), &office).await;
+    assert_eq!(st, Status::Ok, "costs: {cost}");
+    assert_eq!(cost["minutes"], 780);
+    assert_eq!(cost["labor_pay_cents"], 32_500);
+    assert_eq!(cost["overtime_premium_cents"], 7_500);
+    assert_eq!(cost["burden_cents"], 4_000);
+    assert_eq!(cost["mileage_cents"], 700);
+    assert_eq!(cost["billed_cents"], bill["amount_cents"]);
+    assert_eq!(cost["unbilled_cents"], 0);
+    // The owner bill rides normal AP: approving it posts to the LLC's books.
+    let bill_id = bill["bill_id"].as_str().unwrap().to_string();
+    let approver = mint(
+        c,
+        Some(nw),
+        false,
+        &["payable:manage", "payable:approve", "payable:read"],
+    );
+    assert_eq!(
+        post_empty(c, &format!("/payables/{bill_id}/submit"), &approver).await,
+        Status::Ok
+    );
+    assert_eq!(
+        post_empty(c, &format!("/payables/{bill_id}/approve"), &approver).await,
+        Status::Ok
+    );
+    let (st, ap) = get_json(c, &format!("/payables/{bill_id}"), &approver).await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(ap["status"], "approved");
+    assert_eq!(ap["vendor_name"], "In-house maintenance");
+    assert!(
+        ap["accrual_txn_id"].is_string(),
+        "the bill posted to the owner's ledger"
+    );
+
+    // Without payroll:read, no margins.
+    let viewer = mint(c, Some(nw), false, &["team:read"]);
+    let (st, _) = get_json(c, &format!("/costs/work-orders/{}", ticket.id), &viewer).await;
+    assert_eq!(st, Status::Forbidden);
 }

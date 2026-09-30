@@ -325,10 +325,12 @@ pub async fn cost_work(
         }
     }
 
+    // A bill can be reached both from its work order and from billed rows.
+    let mut seen_bills = HashSet::new();
     for b in bills
         .iter()
         .chain(extra_bills.iter())
-        .filter(|b| bill_counts(b))
+        .filter(|b| bill_counts(b) && seen_bills.insert(b.id))
     {
         let key = match b.maintenance_ticket_id {
             Some(t) => Work::Ticket(t),
@@ -381,7 +383,9 @@ fn bill_has_parts(b: &entity::vendor_bill::Model) -> bool {
             items.iter().any(|i| {
                 i.get("description")
                     .and_then(|d| d.as_str())
-                    .is_some_and(|d| d.starts_with(PARTS_LINE_PREFIX))
+                    .is_some_and(|d| {
+                        d.starts_with(PARTS_LINE_PREFIX) || d.starts_with("Line item — ")
+                    })
             })
         })
         .unwrap_or(false)

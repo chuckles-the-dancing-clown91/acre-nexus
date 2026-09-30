@@ -144,6 +144,7 @@ async fn rocket() -> _ {
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
+    workforce::ensure_recurring_jobs(&db).await;
     saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };

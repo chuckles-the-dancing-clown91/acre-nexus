@@ -506,6 +506,121 @@ pub async fn sweep_missed_punches(
     Ok(closed)
 }
 
+/// The per-tenant back-office scan: closes missed punches every run, and on
+/// Mondays tells the office about unapproved time from before this week.
+pub const SCAN_KIND: &str = "workforce_scan";
+
+/// How often the scan runs.
+const SCAN_EVERY_SECS: i64 = 15 * 60;
+
+/// Ensure every tenant has one live `workforce_scan` job (boot + provisioning).
+pub async fn ensure_recurring_jobs(db: &sea_orm::DatabaseConnection) {
+    let tenants = match entity::prelude::Tenant::find().all(db).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("workforce: tenant scan failed: {e}");
+            return;
+        }
+    };
+    for t in tenants {
+        let live = entity::prelude::BackgroundJob::find()
+            .filter(entity::background_job::Column::TenantId.eq(t.id))
+            .filter(entity::background_job::Column::Kind.eq(SCAN_KIND))
+            .filter(entity::background_job::Column::Status.is_in([
+                "pending",
+                "running",
+                "awaiting_callback",
+            ]))
+            .one(db)
+            .await;
+        if matches!(live, Ok(None)) {
+            if let Err(e) =
+                crate::scheduler::enqueue(db, t.id, SCAN_KIND, serde_json::json!({}), 30).await
+            {
+                tracing::error!("workforce: scheduling the scan for {} failed: {e}", t.id);
+            }
+        }
+    }
+}
+
+/// Run one scan, then go back to sleep.
+pub async fn handle_scan_job(
+    db: &sea_orm::DatabaseConnection,
+    job: &entity::background_job::Model,
+) -> crate::modules::JobOutcome {
+    let tenant_id = job.tenant_id;
+    let now = Utc::now();
+    let mut summary = serde_json::json!({});
+    match sweep_missed_punches(db, tenant_id, now).await {
+        Ok(n) => summary["missed_punches_closed"] = serde_json::json!(n),
+        Err(e) => tracing::error!("workforce: missed-punch sweep failed: {e:?}"),
+    }
+    match remind_unapproved(db, tenant_id, now).await {
+        Ok(n) => summary["unapproved_reminded"] = serde_json::json!(n),
+        Err(e) => tracing::error!("workforce: unapproved reminder failed: {e}"),
+    }
+    let mut out = crate::modules::JobOutcome::reschedule("pending", SCAN_EVERY_SECS);
+    out.result = Some(summary);
+    out
+}
+
+/// Monday from 7 AM local: one note to `team:manage` holders listing unapproved
+/// time from before this week (deduplicated per week by the inbox key).
+async fn remind_unapproved(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<usize, DbErr> {
+    use chrono::{Datelike, Timelike, Weekday};
+    let rules = Rules::load(db, tenant_id).await;
+    let local = now.with_timezone(&rules.tz);
+    if local.weekday() != Weekday::Mon || local.hour() < 7 {
+        return Ok(0);
+    }
+    let monday = local.date_naive();
+    let waiting = TimeEntry::find()
+        .filter(entity::time_entry::Column::TenantId.eq(tenant_id))
+        .filter(entity::time_entry::Column::EndedAt.is_not_null())
+        .filter(entity::time_entry::Column::ApprovedAt.is_null())
+        .filter(entity::time_entry::Column::StartedAt.lt(rules.day_start(monday)))
+        .all(db)
+        .await?;
+    if waiting.is_empty() {
+        return Ok(0);
+    }
+    let missed = waiting.iter().filter(|e| needs_review(e)).count();
+    let mut people: BTreeMap<Uuid, usize> = BTreeMap::new();
+    for e in &waiting {
+        *people.entry(e.user_id).or_default() += 1;
+    }
+    let names: HashMap<Uuid, String> = entity::prelude::User::find()
+        .filter(entity::user::Column::Id.is_in(people.keys().copied().collect::<Vec<_>>()))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|u| (u.id, u.name))
+        .collect();
+    let list = people
+        .iter()
+        .map(|(u, n)| format!("{} ({n})", names.get(u).cloned().unwrap_or_default()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    // A stable id per week keeps the reminder to once a week.
+    let week_key = Uuid::from_u128(monday.num_days_from_ce() as u128);
+    crate::notify::notify_staff(
+        db,
+        tenant_id,
+        "team:manage",
+        "time_unapproved",
+        serde_json::json!({ "count": waiting.len(), "missed": missed, "people": list }),
+        Some(("team_week", week_key)),
+        "unapproved",
+        None,
+    )
+    .await;
+    Ok(waiting.len())
+}
+
 /// One person-week, split by the overtime rule.
 #[derive(Debug, Clone)]
 pub struct PersonWeek {
