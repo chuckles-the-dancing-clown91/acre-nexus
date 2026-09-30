@@ -1437,6 +1437,73 @@ async fn back_office_hours_to_owner_bill(c: &Ctx) {
         "the bill posted to the owner's ledger"
     );
 
+    // Payroll for that week: 8 regular, 4 at 1.5×, 1 at 2× → $400 at $25/h.
+    let (st, pr) = get_json(
+        c,
+        "/reports/payroll?from=2026-09-14&to=2026-09-20&approved_only=true",
+        &office,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "payroll: {pr}");
+    let row = pr["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["user_id"] == serde_json::json!(morgan.id))
+        .expect("morgan's week");
+    assert_eq!(row["regular_minutes"], 480);
+    assert_eq!(row["overtime_minutes"], 240);
+    assert_eq!(row["double_minutes"], 60);
+    assert_eq!(row["gross_cents"], 40_000);
+    // Everything prints, and exports to CSV.
+    for path in [
+        "/reports/payroll/export?from=2026-09-14&to=2026-09-20&format=pdf".to_string(),
+        "/reports/profit/export?from=2026-09-01&to=2026-09-30&format=pdf".to_string(),
+        "/reports/taxes/export?year=2026&format=pdf".to_string(),
+        "/reports/timesheets/export?from=2026-09-14&to=2026-09-20&format=pdf".to_string(),
+        format!("/costs/work-orders/{}/sheet.pdf", ticket.id),
+    ] {
+        let resp = c
+            .client
+            .get(path.clone())
+            .header(bearer(&office))
+            .dispatch()
+            .await;
+        assert_eq!(resp.status(), Status::Ok, "{path}");
+        let bytes = resp.into_bytes().await.unwrap();
+        assert!(bytes.starts_with(b"%PDF-1.4"), "{path} is a PDF");
+    }
+    let resp = c
+        .client
+        .get("/reports/taxes/export?year=2026&format=csv&section=mileage-log")
+        .header(bearer(&office))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let csv = resp.into_string().await.unwrap();
+    assert!(csv.starts_with("Date,Driver"), "{csv}");
+    assert!(csv.contains("$7.00"));
+    // Profit and taxes see the same work and the same receipt.
+    let (_, pf) = get_json(c, "/reports/profit?from=2026-09-01&to=2026-09-30", &office).await;
+    assert!(pf["work"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w["id"] == serde_json::json!(ticket.id)));
+    let (_, tx) = get_json(c, "/reports/taxes?year=2026", &office).await;
+    assert!(
+        tx["missing_receipts"].as_u64().unwrap() >= 1,
+        "the Home Depot receipt was never attached"
+    );
+    assert!(tx["pay_by_person"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["form"] == "W-2"));
+    let (st, dash) = get_json(c, "/backoffice/dashboard", &office).await;
+    assert_eq!(st, Status::Ok, "dashboard: {dash}");
+    assert!(dash["billed_to_owners_this_month_cents"].is_number());
+
     // Without payroll:read, no margins.
     let viewer = mint(c, Some(nw), false, &["team:read"]);
     let (st, _) = get_json(c, &format!("/costs/work-orders/{}", ticket.id), &viewer).await;

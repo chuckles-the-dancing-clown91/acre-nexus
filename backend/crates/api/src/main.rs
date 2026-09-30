@@ -53,6 +53,7 @@ mod payables;
 mod payments;
 mod payouts;
 mod pdf;
+mod pdfdoc;
 mod pii;
 mod providers;
 mod ratelimit;

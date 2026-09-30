@@ -30,6 +30,17 @@ pub struct ReportFile {
     filename: String,
 }
 
+impl ReportFile {
+    /// A file to hand back as a download.
+    pub fn new(bytes: Vec<u8>, content_type: &str, filename: String) -> ReportFile {
+        ReportFile {
+            bytes,
+            content_type: content_type.into(),
+            filename,
+        }
+    }
+}
+
 impl<'r> Responder<'r, 'static> for ReportFile {
     fn respond_to(self, _req: &'r Request<'_>) -> response::Result<'static> {
         let ct = self
@@ -93,27 +104,14 @@ fn to_csv(table: &ReportTable) -> String {
 }
 
 fn to_pdf(table: &ReportTable) -> Vec<u8> {
-    let mut text = format!("{}\n", table.title);
-    if let Some(sub) = &table.subtitle {
-        text.push_str(sub);
-        text.push('\n');
-    }
-    text.push('\n');
-    text.push_str(&table.headers.join(" | "));
-    text.push('\n');
-    text.push_str(&"-".repeat(60));
-    text.push('\n');
-    for row in &table.rows {
-        text.push_str(&row.join(" | "));
-        text.push('\n');
-    }
-    if let Some(totals) = &table.totals {
-        text.push_str(&"-".repeat(60));
-        text.push('\n');
-        text.push_str(&totals.join(" | "));
-        text.push('\n');
-    }
-    crate::pdf::text_to_pdf(&text)
+    let t = crate::pdfdoc::Table::auto(&table.headers, table.rows.clone(), table.totals.clone());
+    crate::pdfdoc::render(&crate::pdfdoc::Document {
+        title: table.title.clone(),
+        subtitle: table.subtitle.clone(),
+        organization: String::new(),
+        landscape: table.headers.len() > 6,
+        blocks: vec![crate::pdfdoc::Block::Table(t)],
+    })
 }
 
 /// Render a report table to a downloadable file in the requested `format`

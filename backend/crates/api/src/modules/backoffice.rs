@@ -47,6 +47,15 @@ impl PlatformModule for BackOfficeModule {
             backoffice::costing::costs,
             backoffice::costing::bill_preview,
             backoffice::costing::bill_owner,
+            backoffice::reports::payroll,
+            backoffice::reports::payroll_export,
+            backoffice::reports::timesheets_export,
+            backoffice::reports::profit,
+            backoffice::reports::profit_export,
+            backoffice::reports::taxes,
+            backoffice::reports::taxes_export,
+            backoffice::reports::dashboard,
+            backoffice::reports::cost_sheet,
         ]
     }
 }
