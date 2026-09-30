@@ -505,11 +505,16 @@ export default function TimesheetsPage() {
                 <td className="px-3 py-3">
                   <div>{workLabel(e)}</div>
                   <div className="text-xs text-ink-3">
-                    {ENTRY_KIND_LABELS[e.kind]}
-                    {e.property_name && e.kind !== "property" && (
-                      <> · {e.property_name}</>
-                    )}
-                    {e.notes && <> · {e.notes}</>}
+                    {[
+                      // The kind, unless the title above already says it.
+                      workLabel(e) !== ENTRY_KIND_LABELS[e.kind]
+                        ? ENTRY_KIND_LABELS[e.kind]
+                        : null,
+                      e.kind !== "property" ? e.property_name : null,
+                      e.notes,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-3">

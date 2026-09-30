@@ -1330,7 +1330,9 @@ pub(crate) async fn tax_data(
         }
     }
     // Pay by person, over the whole weeks that start in the period.
-    let entries = workforce::entries_for_weeks(db, tenant_id, from, to, None, rules).await?;
+    // Wages count once approved (settled missed punches included).
+    let mut entries = workforce::entries_for_weeks(db, tenant_id, from, to, None, rules).await?;
+    entries.retain(|e| e.approved_at.is_some() && !needs_review(e));
     let profiles = workforce::profiles_by_user(db, tenant_id).await?;
     let (weeks, _) = workforce::week_splits(&entries, &profiles, rules);
     let mut pay: BTreeMap<Uuid, PayByPerson> = BTreeMap::new();
