@@ -1,4 +1,9 @@
-# Acre Nexus
+# Vantedge
+
+*See every angle. Stay a step ahead.*
+
+> Formerly **Acre Nexus**. The rebrand and build-out plan is in
+> [`docs/VANTEDGE.md`](docs/VANTEDGE.md).
 
 [![CI](https://github.com/chuckles-the-dancing-clown91/acre-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/chuckles-the-dancing-clown91/acre-nexus/actions/workflows/ci.yml)
 ![Rust](https://img.shields.io/badge/backend-Rust%20%2B%20Rocket-orange)
@@ -7,7 +12,7 @@
 ![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
 
 A multi-tenant **property-management and real-estate investment platform**.
-Acre Nexus gives property-management firms a white-label back office and public
+Vantedge gives property-management firms a white-label back office and public
 leasing site, and gives investor-operators the acquisition, financing, and
 portfolio tooling that incumbent PM software treats as an afterthought.
 

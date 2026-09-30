@@ -196,7 +196,7 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
 
     // Top-level API metadata (set after merging so module fragments don't clobber it).
     spec.info = Info {
-        title: "Acre Nexus API".to_owned(),
+        title: "Vantedge API".to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         description: Some(
             "Multi-tenant property-management & investment platform API.\n\n\

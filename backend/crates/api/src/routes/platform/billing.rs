@@ -1,4 +1,4 @@
-//! **SaaS billing — platform plane** (roadmap Phase 8). Acre HQ's billing
+//! **SaaS billing — platform plane** (roadmap Phase 8). Vantedge HQ's billing
 //! console: an overview of every workspace's plan, usage, and outstanding
 //! balance; the full invoice ledger; and the operations that generate and
 //! settle invoices. All gated by `platform:admin` (cross-tenant, staff-only),

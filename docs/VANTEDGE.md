@@ -35,15 +35,16 @@ e-sign, deals and rehab. The build-out is about the **people-facing layer**.
 
 ---
 
-## Phase 0 — Rebrand ☐
+## Phase 0 — Rebrand ◐
 
-- ☐ User-facing name, page titles, login and landing copy, console chrome,
+- ☑ User-facing name, page titles, login and landing copy, console chrome,
   notification fallback company name, README and docs headers → **Vantedge**.
-- ☐ Slogan on the landing page and login.
-- ☐ New mark/logo and favicon (a chevron/horizon mark — vantage point meets edge);
-  palette refresh: keep the warm neutrals, move the accent from orange
-  `#f5451f` to a deep teal/"high-ground" blue so it no longer reads like Alpha.
-  Tenants still override the accent with white-label branding.
+- ☑ Slogan on the login and set-password pages, and a "Powered by Vantedge"
+  footer on each tenant's public listings site (which stays white-label).
+- ☑ New mark and favicon (a rising chevron over a horizon — vantage point
+  meets edge, `components/Brand.tsx`, `app/icon.svg`); accent moved from orange
+  `#f5451f` to the Vantedge teal `#0e7c86` (dark `#3cc3c9`), warm neutrals
+  kept. Tenants still override the accent with white-label branding.
 - ☐ Internal identifiers (personas `acre_*`, DB roles `acre_app`, token prefix
   `acre_live_`, `X-Acre-Signature`, `acrenexus.example` seed domains). These are
   data and API contracts — rename behind a migration that accepts both old and
@@ -52,20 +53,23 @@ e-sign, deals and rehab. The build-out is about the **people-facing layer**.
 - ☐ Domain, email sender (`hello@vantedge…`), Twilio sender name, OAuth app
   names at Google/Microsoft/Apple — outside the code, needs Charles/Bree.
 
-## Phase 1 — Real logins for everyone (client passwords) ☐
+## Phase 1 — Real logins for everyone (client passwords) ◐
 
 The single biggest blocker to Bree's company going live: residents, owners and
 staff who are invited cannot sign in.
 
-- ☐ **Set-your-password invite.** Inviting a member (or a resident from a
-  lease) sends an email/text with a one-time link (7 days). Opening it sets the
+- ☑ **Set-your-password invite.** Inviting a member sends an email/text with a one-time link (7 days). Opening it sets the
   password and activates the account.
-- ☐ **Forgot password / reset.** "Forgot your password?" on the login page →
+- ☑ **Forgot password / reset.** "Forgot your password?" on the login page →
   24-hour link by email (and text when the account has a phone). Reset
   invalidates old sessions. Never reveals whether an email exists.
-- ☐ Links are single-use, stored only as a SHA-256 hash, and audited
-  (`auth.password.reset_requested`, `auth.password.reset`, `auth.invite.accepted`).
-- ☐ **Resend login link** button on members and on a lease's tenant.
+- ☑ Links are single-use, stored only as a SHA-256 hash, a new link retires
+  the old one, and every step is audited (`auth.password_reset_request`,
+  `auth.password_reset`, `auth.invite_accept`, `auth.password_change`,
+  `auth.login_link_send`). The endpoints share the tight auth rate-limit bucket.
+- ☑ **Resend login link** button on Members (`POST /members/<id>/login-link`).
+  ☐ the same on a lease's tenant.
+- ☑ **Change password** on My profile (`POST /auth/password/change`).
 - ☐ **Login throttling** — lock an email/IP pair for 15 min after 10 failures
   (the rate limiter already exists; add a failure counter).
 - ☐ **Passkeys** (WebAuthn) as in Alpha — face/fingerprint sign-in on phones,

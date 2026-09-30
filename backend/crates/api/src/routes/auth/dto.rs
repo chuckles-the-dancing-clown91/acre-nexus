@@ -23,7 +23,7 @@ pub struct UserResp {
     pub name: String,
     /// Primary tenant of the account (back-compat).
     pub tenant_id: Option<Uuid>,
-    /// The workspace the current token is scoped to (`None` = Acre HQ / platform).
+    /// The workspace the current token is scoped to (`None` = Vantedge HQ / platform).
     pub active_tenant_id: Option<Uuid>,
     pub is_platform_staff: bool,
     pub permissions: Vec<String>,
@@ -49,7 +49,7 @@ pub struct MembershipSummary {
 /// A workspace the user can operate in.
 #[derive(Serialize, schemars::JsonSchema, Clone)]
 pub struct WorkspaceSummary {
-    /// `platform` (Acre HQ) or `tenant` (a client workspace).
+    /// `platform` (Vantedge HQ) or `tenant` (a client workspace).
     pub kind: String,
     pub tenant_id: Option<Uuid>,
     pub slug: Option<String>,
@@ -63,7 +63,7 @@ pub struct RefreshReq {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct SwitchReq {
-    /// Target workspace; `null` selects the platform (Acre HQ) context.
+    /// Target workspace; `null` selects the platform (Vantedge HQ) context.
     pub tenant_id: Option<Uuid>,
 }
 

@@ -6,6 +6,7 @@ import type { Listing } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ListingCard } from "@/components/ListingCard";
 import { Icon } from "@/components/Icon";
+import { BrandMark, BRAND_NAME, BRAND_SLOGAN } from "@/components/Brand";
 
 export default function HomePage() {
   const [listings, setListings] = useState<Listing[] | null>(null);
@@ -54,7 +55,7 @@ export default function HomePage() {
           <div
             className="relative hidden aspect-[4/3.4] overflow-hidden rounded-[22px] shadow-acre-lg md:block"
             style={{
-              background: "linear-gradient(150deg,#E9764D,#C5392B 60%,#7c2a1f)",
+              background: "linear-gradient(150deg,#3cc3c9,#0e7c86 55%,#0b3a44)",
             }}
           >
             <div className="absolute left-4 top-4 rounded-2xl bg-black/40 px-3.5 py-2.5 text-white backdrop-blur">
@@ -106,6 +107,15 @@ export default function HomePage() {
           )}
         </section>
       </main>
+      <footer className="border-t border-line py-6">
+        <div className="mx-auto flex max-w-[1240px] items-center gap-2 px-6 text-xs text-ink-3">
+          <BrandMark size={18} />
+          <span>
+            Powered by <strong className="text-ink-2">{BRAND_NAME}</strong> —{" "}
+            {BRAND_SLOGAN}
+          </span>
+        </div>
+      </footer>
     </>
   );
 }

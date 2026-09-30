@@ -18,8 +18,8 @@ pub const PROFILE_TYPES: &[ProfileTypeMeta] = &[
     ProfileTypeMeta {
         key: "acre_admin",
         scope: "platform",
-        label: "Acre Admin",
-        description: "Acre HQ administrator with full platform access.",
+        label: "Vantedge Admin",
+        description: "Vantedge HQ administrator with full platform access.",
         default_role: "acre_admin",
     },
     ProfileTypeMeta {
@@ -46,7 +46,7 @@ pub const PROFILE_TYPES: &[ProfileTypeMeta] = &[
     ProfileTypeMeta {
         key: "acre_read_only",
         scope: "platform",
-        label: "Acre Read-only",
+        label: "Vantedge Read-only",
         description: "Read-only platform access (audit / analyst).",
         default_role: "acre_read_only",
     },

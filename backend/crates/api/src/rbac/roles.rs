@@ -79,11 +79,11 @@ const TENANT_FULL: &[Permission] = &[
 /// The seeded system roles. Acre personas are platform-scoped; client personas
 /// are tenant-scoped. The dashboard can clone or extend these.
 pub const SYSTEM_ROLES: &[SystemRole] = &[
-    // ---- Platform (Acre HQ) ----
+    // ---- Platform (Vantedge HQ) ----
     SystemRole {
         key: "acre_admin",
         scope: SCOPE_PLATFORM,
-        name: "Acre Admin",
+        name: "Vantedge Admin",
         description: "Full cross-tenant platform administration.",
         permissions: ALL_PERMS,
     },
@@ -134,7 +134,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
     SystemRole {
         key: "acre_read_only",
         scope: SCOPE_PLATFORM,
-        name: "Acre Read-only",
+        name: "Vantedge Read-only",
         description: "Read-only platform access for audit / analytics.",
         permissions: &[
             UserRead,

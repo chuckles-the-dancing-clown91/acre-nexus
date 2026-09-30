@@ -9,7 +9,7 @@
 //! row-level-security policies (in the migration crate) provide defence in depth.
 //!
 //! Platform-level concepts (the `tenant` table itself, platform-staff `user`s)
-//! are not tenant-scoped — they belong to "Acre HQ".
+//! are not tenant-scoped — they belong to "Vantedge HQ".
 //!
 //! ## Money
 //! All monetary amounts are stored as **integer cents** (`i64`) to avoid

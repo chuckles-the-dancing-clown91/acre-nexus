@@ -68,7 +68,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // ---- users, profiles, memberships ----
     let pw = hash_password(DEMO_PASSWORD)?;
 
-    // Acre HQ (platform staff).
+    // Vantedge HQ (platform staff).
     let avery = seed_user(db, None, "avery@acrehq.com", "Avery Stone", &pw, true).await?;
     seed_membership(
         db,
@@ -183,7 +183,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
 
     // ---- themes ----
-    seed_theme(db, northwind, "Northwind Property Group", "#F5451F").await?;
+    seed_theme(db, northwind, "Northwind Property Group", "#0E7C86").await?;
     seed_theme(db, cascade, "Cascade Living LLC", "#1C7C53").await?;
 
     // ---- white-label domains (subdomain + a verified custom domain for Northwind) ----

@@ -14,6 +14,7 @@ import {
   type VehicleProfile,
 } from "@/lib/api";
 import { SiteHeader } from "@/components/SiteHeader";
+import { ChangePasswordCard } from "@/components/ChangePasswordCard";
 import { Badge, Card } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 
@@ -363,6 +364,8 @@ export default function MyProfilePage() {
         {user && view && (
           <VehiclesCard vehicles={view.vehicles} onChanged={load} />
         )}
+
+        {user && <ChangePasswordCard className="mt-6 p-5" />}
       </main>
     </>
   );

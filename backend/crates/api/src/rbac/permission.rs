@@ -102,7 +102,7 @@ pub enum Permission {
     DomainManage,
     /// Begin an audited, time-boxed impersonation session into a tenant (staff).
     ImpersonateTenant,
-    /// Cross-tenant platform administration (Acre HQ staff only) — implies all.
+    /// Cross-tenant platform administration (Vantedge HQ staff only) — implies all.
     PlatformAdmin,
 }
 

@@ -99,7 +99,7 @@ pub(crate) fn workspaces_from(
             kind: "platform".into(),
             tenant_id: None,
             slug: None,
-            name: "Acre HQ".into(),
+            name: "Vantedge HQ".into(),
         });
     }
     let mut seen = HashSet::new();

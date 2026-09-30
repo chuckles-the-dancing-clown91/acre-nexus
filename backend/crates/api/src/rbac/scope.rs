@@ -17,7 +17,7 @@
 
 use uuid::Uuid;
 
-/// Whole-platform admin surface (Acre HQ).
+/// Whole-platform admin surface (Vantedge HQ).
 pub const SCOPE_PLATFORM: &str = "platform";
 /// Everything inside one tenant (firm).
 pub const SCOPE_TENANT: &str = "tenant";

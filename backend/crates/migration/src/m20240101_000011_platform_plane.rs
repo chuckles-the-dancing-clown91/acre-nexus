@@ -11,7 +11,7 @@
 //!   The audit fairing tags impersonated requests with the platform actor.
 //!
 //! Neither table is tenant-scoped, so no RLS policy applies (they belong to
-//! "Acre HQ"); `impersonation_session.tenant_id` records *which* tenant was
+//! "Vantedge HQ"); `impersonation_session.tenant_id` records *which* tenant was
 //! entered, for the audit trail.
 
 use sea_orm_migration::prelude::*;

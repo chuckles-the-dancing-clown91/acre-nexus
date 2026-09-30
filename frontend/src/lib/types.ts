@@ -38,7 +38,7 @@ export interface Membership {
   is_primary: boolean;
 }
 
-/** A workspace the current user can switch into (Acre HQ or a client tenant). */
+/** A workspace the current user can switch into (Vantedge HQ or a client tenant). */
 export interface Workspace {
   kind: "platform" | "tenant";
   tenant_id: string | null;
@@ -53,7 +53,7 @@ export interface User {
   tenant_id: string | null;
   is_platform_staff: boolean;
   permissions: string[];
-  /** The tenant the session is currently acting in; null = Acre HQ / platform. */
+  /** The tenant the session is currently acting in; null = Vantedge HQ / platform. */
   active_tenant_id: string | null;
   /** Every membership the user holds across platform + tenants. */
   memberships: Membership[];

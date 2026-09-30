@@ -1,5 +1,5 @@
 //! **SaaS platform billing** (roadmap Phase 8) — the revenue side of the
-//! platform: Acre HQ metering and billing each client workspace for its
+//! platform: Vantedge HQ metering and billing each client workspace for its
 //! subscription. This is deliberately *not* a pluggable module (a tenant can't
 //! switch off being billed) — it is core infrastructure wired directly into the
 //! boot sequence and the scheduler, alongside [`crate::billing`] (which is the

@@ -20,10 +20,10 @@ interface ThemeCtx {
 }
 
 const DEFAULT_BRAND: PublicTheme = {
-  company_name: "Acre",
+  company_name: "Vantedge",
   logo_url: null,
-  primary_color: "#F5451F",
-  accent_color: "#F5451F",
+  primary_color: "#0E7C86",
+  accent_color: "#0E7C86",
   default_mode: "light",
 };
 

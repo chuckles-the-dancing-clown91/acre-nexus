@@ -1,4 +1,4 @@
-// Typed API client for the Acre Rust backend.
+// Typed API client for the Vantedge Rust backend.
 //
 // Multi-tenancy: public requests carry the tenant via the `X-Tenant` header
 // (slug). Authenticated requests carry a JWT `Authorization: Bearer` token;
@@ -226,6 +226,12 @@ export interface TotpSetupResult {
   otpauth_uri: string;
 }
 
+export interface PasswordLinkInfo {
+  purpose: "invite" | "reset";
+  email: string;
+  name: string;
+}
+
 export interface MfaStatus {
   enabled: boolean;
 }
@@ -258,10 +264,36 @@ export const api = {
       body: { mfa_token: mfaToken, code },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
-  /** Workspaces the current user can switch between (Acre HQ + tenants). */
+
+  // ---- passwords (invite / forgot / reset / change) ----
+  /** Email a reset link. Same answer whether or not the address has an account. */
+  passwordForgot: (email: string) =>
+    request<{ ok: boolean }>("/auth/password/forgot", {
+      method: "POST",
+      body: { email },
+    }),
+  /** Who a set-password link is for (404 once used or expired). */
+  passwordLink: (token: string) =>
+    request<PasswordLinkInfo>(
+      `/auth/password/link/${encodeURIComponent(token)}`
+    ),
+  /** Choose a password from an invite or reset link. */
+  passwordSet: (token: string, password: string) =>
+    request<{ ok: boolean; email: string }>("/auth/password/set", {
+      method: "POST",
+      body: { token, password },
+    }),
+  /** Change the signed-in user's password (signs out other devices). */
+  passwordChange: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/auth/password/change", {
+      method: "POST",
+      auth: true,
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
+  /** Workspaces the current user can switch between (Vantedge HQ + tenants). */
   workspaces: () => request<Workspace[]>("/auth/workspaces", { auth: true }),
   /**
-   * Switch the active workspace. `null` selects Acre HQ / platform. Returns a
+   * Switch the active workspace. `null` selects Vantedge HQ / platform. Returns a
    * fresh access token (refresh token unchanged) plus the updated user.
    */
   switchWorkspace: (tenantId: string | null) =>
@@ -1905,6 +1937,12 @@ export const iam = {
   members: () => request<Member[]>("/members", { auth: true }),
   inviteMember: (body: InviteMemberInput) =>
     request<Member>("/members", { method: "POST", auth: true, body }),
+  /** Send a member a fresh link to choose (or reset) their password. */
+  sendLoginLink: (membershipId: string) =>
+    request<{ ok: boolean; purpose: "invite" | "reset" }>(
+      `/members/${membershipId}/login-link`,
+      { method: "POST", auth: true }
+    ),
 };
 
 /**
@@ -2134,6 +2172,8 @@ export interface Member {
   profile_type: string;
   title: string | null;
   status: string;
+  /** The login itself: `invited` until they choose a password. */
+  account_status?: string;
 }
 
 export interface InviteMemberInput {

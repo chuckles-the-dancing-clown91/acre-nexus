@@ -1,4 +1,4 @@
-//! Database migrations for the Acre platform.
+//! Database migrations for the Vantedge platform.
 //!
 //! Run with the `migration` binary (`cargo run -p migration -- up`) or
 //! programmatically via [`Migrator`] at server boot.

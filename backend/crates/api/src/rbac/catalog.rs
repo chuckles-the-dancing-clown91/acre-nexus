@@ -467,7 +467,7 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         key: "platform:admin",
         category: "Platform",
         label: "Platform administrator",
-        description: "Full cross-tenant administration (Acre HQ). Implies every permission.",
+        description: "Full cross-tenant administration (Vantedge HQ). Implies every permission.",
         scope: "platform",
     },
 ];

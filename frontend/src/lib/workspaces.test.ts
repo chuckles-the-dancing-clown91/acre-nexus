@@ -6,7 +6,7 @@ const hq: Workspace = {
   kind: "platform",
   tenant_id: null,
   slug: null,
-  name: "Acre HQ",
+  name: "Vantedge HQ",
 };
 const northwind: Workspace = {
   kind: "tenant",

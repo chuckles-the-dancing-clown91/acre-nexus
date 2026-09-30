@@ -123,14 +123,14 @@ async fn ensure_theme(
         .one(db)
         .await?
         .map(|t| t.name)
-        .unwrap_or_else(|| "Acre Nexus".into());
+        .unwrap_or_else(|| "Vantedge".into());
     Ok(entity::theme::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         company_name: Set(company),
         logo_url: Set(None),
-        primary_color: Set("#F5451F".into()),
-        accent_color: Set("#F5451F".into()),
+        primary_color: Set("#0E7C86".into()),
+        accent_color: Set("#0E7C86".into()),
         default_mode: Set("light".into()),
         legal_templates: Set(json!({})),
         notification_templates: Set(json!({})),
