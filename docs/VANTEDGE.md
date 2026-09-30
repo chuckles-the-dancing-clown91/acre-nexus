@@ -199,6 +199,81 @@ money, they are **billed to the owner**.
 margin, mileage rate, maintenance markup, missed-punch hours, clock location +
 radius.
 
+## Phase 2C — Properties, maintenance and the parts loop ☐
+
+The next slice: a property is set up in seconds and always has a picture; a
+work order carries what the technician found and what it needs; parts flow from
+the shopping list to the truck to the unit; and Alpha and Vantedge talk to each
+other as vendor and client.
+
+```
+ type an address ─► autofill (Photon / Google Places) ─► geocode ─► Street View photo
+                                                                     └► nightly job: any property without a photo gets one
+ work order ─► findings (+ photos) ─► parts on the finding ─► "generate a parts list"
+        │                                                        └► shopping list ─► close-out (night before):
+        │                                                             order / pick up / from stock, ship to property or office
+        ├─► appliance (asset) ─► its parts catalog + warranty + manuals + service history
+        └─► vendor = an Alpha account ─► work request ─► status / photos / bill come back
+ inventory: scan-in (camera or scanner gun), receive / use / count, weighted average cost, reorder list
+```
+
+**Property autofill & photo** ☐
+- Address suggestions as you type: known properties first, then Photon (free,
+  no key) or Google Places when a key is in the vault (`google.maps_api_key`);
+  picking one fills street, city, state, ZIP; saved properties geocode through
+  the existing Census enrichment.
+- **Photo**: Street View Static (or the satellite Static Map when no street
+  view exists) fetched once, stored as a property document and set as the
+  hero; a `property_photo` job runs nightly per workspace and fills in any
+  property without a photo (retrying failures after 7 days). Without a key,
+  a placeholder is drawn and the job records why.
+
+**Appliances & parts** ☐
+- Assets already exist (HVAC, appliances…): add purchase date / price,
+  expected life, **warranty** (expiry + provider + document), manuals, and a
+  **parts catalog** per asset (inventory items that fit it, with quantity).
+- "Replace" / "repair" on an asset starts a work order pre-loaded with its
+  parts as *potential parts*.
+
+**Findings, parts lists, shopping list, close-out** ☐
+- Work-order **findings** (note kind `finding`, with photos): "baseboards
+  rotted behind the washer", each with the parts it needs.
+- **Potential parts** on a ticket (from its asset's catalog, or typed);
+  **Generate a parts list** merges the ticket's potential parts, findings'
+  parts and any in stock → a printable pick list for the truck / Home Depot.
+- **Shopping list**: what isn't in stock, per ticket, with a ship-to
+  (property / office / other) and a need-by date.
+- **Close-out** (the office, the night before): every ticket scheduled
+  tomorrow with its shopping list; mark each item *order* (vendor + tracking),
+  *pick up*, *from stock* (consumes inventory) or *skip*; ordered items become
+  an expense (billable to the owner) and arrive as *received*.
+
+**Inventory** ☐
+- Barcode / UPC / SKU lookup (`GET /inventory/lookup?code=`); **scan-in** with
+  the camera (BarcodeDetector, zxing fallback) or a scanner gun; receive /
+  use / count movements with a landed, **weighted-average unit cost** spread
+  across a receipt (tax + shipping); a Friday reorder list by vendor; use on a
+  work order from the tech's phone.
+
+**Routine maintenance & the listing** ☐
+- Maintenance plans attach to an **asset** (filter change every 90 days, HVAC
+  service every spring, chimney sweep every fall) and open the work order with
+  the parts pre-listed; each asset shows its service history and spend.
+- Property → *Maintenance history*: spend by category and month, per
+  appliance, the routine work done and due.
+- The public listing surfaces **appliances and upkeep** ("central air, 2023
+  water heater, filters changed quarterly") from the asset register.
+
+**Alpha ↔ Vantedge** ☐
+- A vendor (counterparty) can be linked to an **Alpha account** (its base URL
+  + API key). Dispatching a work order to that vendor sends a **work request**
+  to Alpha (`POST /integrations/jobs`, new on the Alpha side); Alpha creates
+  the job and posts **status, photos and the bill** back through Vantedge's
+  signed inbound webhook (`POST /webhooks/alpha`).
+- Vendor API on Vantedge: `GET /api/v1/tickets/{id}`, `PATCH` status /
+  comments, and `maintenance_ticket.updated` / `.assigned` / `.resolved`
+  webhook events — any vendor system can use them, not only Alpha.
+
 ## Phase 3 — Reminders that run themselves ☐
 
 Everything Alpha's scheduler does, translated to rentals. All on the existing
