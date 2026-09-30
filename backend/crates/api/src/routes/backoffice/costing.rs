@@ -113,7 +113,7 @@ pub async fn costs(
             billable_cents: cost.labor_by.get(u).copied().unwrap_or(0),
         })
         .collect();
-    by_person.sort_by(|a, b| b.minutes.cmp(&a.minutes));
+    by_person.sort_by_key(|a| std::cmp::Reverse(a.minutes));
     Ok(Json(CostsDto {
         title,
         under_target: cost.revenue_cents > 0 && cost.gross_bps < rules.target_margin_bps,

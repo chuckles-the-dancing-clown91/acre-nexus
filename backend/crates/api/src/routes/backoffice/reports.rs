@@ -708,7 +708,7 @@ fn finish(bucket: BTreeMap<String, Rollup>) -> Vec<Rollup> {
             r
         })
         .collect();
-    v.sort_by(|a, b| b.revenue_cents.cmp(&a.revenue_cents));
+    v.sort_by_key(|a| std::cmp::Reverse(a.revenue_cents));
     v
 }
 
@@ -870,7 +870,7 @@ pub(crate) async fn profit_data(
             cost: c,
         });
     }
-    rows.sort_by(|a, b| b.cost.revenue_cents.cmp(&a.cost.revenue_cents));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.cost.revenue_cents));
     let sum = |f: fn(&Cost) -> i64| rows.iter().map(|r| f(&r.cost)).sum::<i64>();
     let revenue = sum(|c| c.revenue_cents);
     let gross = sum(|c| c.gross_cents);

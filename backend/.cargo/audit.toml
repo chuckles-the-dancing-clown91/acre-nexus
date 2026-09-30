@@ -13,4 +13,12 @@ ignore = [
     # vulnerability). Build-time-only proc-macro dependency pulled transitively;
     # no runtime exposure. Tracked; will drop when upstreams migrate off it.
     "RUSTSEC-2026-0173",
+    # h2 0.3: unbounded empty DATA frames (HTTP/2 DoS). The fix ships only in
+    # the h2 0.4 line; h2 0.3 is pinned by Rocket 0.5 through hyper 0.14, so no
+    # compatible upgrade exists. Re-evaluate on Rocket 0.6 / hyper 1.x.
+    "RUSTSEC-2026-0258",
+    # rkyv 0.7: archive validation. An orphaned Cargo.lock entry — no crate in
+    # the dependency graph depends on it (`cargo tree -e all -i rkyv` is empty),
+    # so it is never compiled. Drops out on the next full lockfile refresh.
+    "RUSTSEC-2026-0235",
 ]
