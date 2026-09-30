@@ -84,6 +84,12 @@ export const MODULES: ModuleDef[] = [
         icon: "globe",
         permission: "entity:read",
       },
+      {
+        href: "/console/crm",
+        label: "Owners & CRM",
+        icon: "handshake",
+        permission: "entity:read",
+      },
     ],
   },
   {
@@ -130,6 +136,53 @@ export const MODULES: ModuleDef[] = [
         label: "Payables",
         icon: "bill",
         permission: "payable:read",
+      },
+    ],
+  },
+  {
+    key: "team",
+    label: "Team & Time",
+    description:
+      "Staff profiles, the time clock against work orders and projects, timesheets with approval and missed punches, shifts, and time off.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/my-time",
+        label: "My time",
+        icon: "clock",
+      },
+      {
+        href: "/console/team",
+        label: "Team",
+        icon: "users",
+        permission: "team:read",
+      },
+      {
+        href: "/console/timesheets",
+        label: "Timesheets",
+        icon: "calendar",
+        permission: "team:read",
+      },
+    ],
+  },
+  {
+    key: "backoffice",
+    label: "Back Office",
+    description:
+      "Expenses and mileage with receipts, work-order costing, billing in-house maintenance to owners, and payroll, profit and tax reports.",
+    defaultEnabled: true,
+    nav: [
+      {
+        href: "/console/back-office",
+        label: "Back office",
+        icon: "chart",
+        permission: "team:read",
+      },
+      {
+        href: "/console/expenses",
+        label: "Expenses",
+        icon: "receipt",
+        permission: "expense:read",
       },
     ],
   },

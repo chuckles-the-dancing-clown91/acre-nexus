@@ -143,7 +143,10 @@ interface RequestOpts {
   auth?: boolean;
 }
 
-async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
+export async function request<T>(
+  path: string,
+  opts: RequestOpts = {}
+): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
