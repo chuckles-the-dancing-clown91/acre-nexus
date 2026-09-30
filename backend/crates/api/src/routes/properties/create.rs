@@ -42,9 +42,15 @@ pub async fn create(
         purchase_price_cents: Set(None),
         acquired_on: Set(None),
         image_url: Set(b.image_url),
+        state: Set(crate::geo::state_code(b.state.as_deref().unwrap_or(""))),
+        postal_code: Set(b.postal_code.clone().unwrap_or_default().trim().to_string()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&db).await?;
+    crate::geo::queue_fetch(&db, scope.tenant_id, saved.id).await;
     crate::audit::record(
         &db,
         Some(user.user_id),

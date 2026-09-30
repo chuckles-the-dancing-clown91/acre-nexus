@@ -2728,6 +2728,11 @@ async fn seed_property(
         purchase_price_cents: Set(None),
         acquired_on: Set(None),
         image_url: Set(None),
+        state: Set(String::new()),
+        postal_code: Set(String::new()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
@@ -2744,6 +2749,11 @@ async fn seed_property_image(
     entity::property::ActiveModel {
         id: Set(property_id),
         image_url: Set(Some(url.into())),
+        state: Set(String::new()),
+        postal_code: Set(String::new()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         ..Default::default()
     }
     .update(db)

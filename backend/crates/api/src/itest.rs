@@ -91,6 +91,7 @@ async fn integration_suite() {
     two_way_texts_and_stop(&c).await;
     back_office_hours_to_owner_bill(&c).await;
     crm_owner_lead_to_owner(&c).await;
+    property_autofill_and_photo(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -1657,4 +1658,69 @@ async fn crm_owner_lead_to_owner(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Forbidden);
+}
+
+/// Phase 2C: a property saved with a full address gets a photo (a placeholder
+/// card here — no live maps key), which becomes its hero; the fetch is queued
+/// on create and the nightly scan finds properties still without one.
+async fn property_autofill_and_photo(c: &Ctx) {
+    use crate::scheduler::run_due_jobs;
+    let nw = tenant_id(c, "northwind").await;
+    let office = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let (st, geo) = get_json(c, "/geo/status", &office).await;
+    assert_eq!(st, Status::Ok, "{geo}");
+    assert_eq!(geo["photos"], "placeholder");
+    // Known-property suggestions come from our own rows (no network needed).
+    let (st, sugg) = get_json(c, "/geo/suggest?q=123%20Map&limit=3", &office).await;
+    assert_eq!(st, Status::Ok, "{sugg}");
+    assert!(
+        sugg.as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["source"] == "known"),
+        "{sugg}"
+    );
+
+    let (st, p) = post_json(
+        c,
+        "/properties",
+        &office,
+        serde_json::json!({
+            "name": "Glendale barn", "address": "8929 Glendale Ave", "city": "Hesperia",
+            "state": "California", "postal_code": "92345", "units": 1, "occupied_units": 0,
+            "monthly_rent_cents": 0,
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "create: {p}");
+    assert_eq!(p["state"], "CA");
+    assert_eq!(p["photo_status"], "none");
+    let pid = p["id"].as_str().unwrap().to_string();
+    for _ in 0..3 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    let (st, prof) = get_json(c, &format!("/properties/{pid}"), &office).await;
+    assert_eq!(st, Status::Ok);
+    // The property's own fields are flattened into the profile.
+    assert_eq!(prof["photo_status"], "placeholder", "{prof}");
+    let hero = prof["image_url"]
+        .as_str()
+        .expect("the card became the hero");
+    assert!(
+        hero.contains("/storage/") || hero.starts_with("http"),
+        "{hero}"
+    );
+    // Fetching again by hand keeps the placeholder (still no key) and doesn't error.
+    let (st, again) = post_json(
+        c,
+        &format!("/properties/{pid}/photo"),
+        &office,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{again}");
+    assert_eq!(again["status"], "placeholder");
+    // The scan touches none|failed; a placeholder waits for a key.
+    let summary = crate::geo::scan(&c.db, nw).await.unwrap();
+    assert_eq!(summary["live"], false);
 }

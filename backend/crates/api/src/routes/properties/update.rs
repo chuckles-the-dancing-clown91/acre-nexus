@@ -38,6 +38,36 @@ pub async fn update(
     if let Some(v) = b.name {
         am.name = Set(v);
     }
+    let mut address_changed = false;
+    if let Some(v) = b
+        .address
+        .clone()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        address_changed = true;
+        am.address = Set(v);
+    }
+    if let Some(v) = b
+        .city
+        .clone()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        address_changed = true;
+        am.city = Set(v);
+    }
+    if let Some(v) = b.state.clone() {
+        am.state = Set(crate::geo::state_code(&v));
+    }
+    if let Some(v) = b.postal_code.clone() {
+        am.postal_code = Set(v.trim().to_string());
+    }
+    if address_changed {
+        // A new address means a new photo.
+        am.photo_status = Set("none".into());
+        am.photo_error = Set(None);
+    }
     if let Some(v) = b.status {
         am.status = Set(v);
     }
@@ -55,6 +85,9 @@ pub async fn update(
         am.image_url = Set(if v.trim().is_empty() { None } else { Some(v) });
     }
     let saved = am.update(&db).await?;
+    if address_changed {
+        crate::geo::queue_fetch(&db, scope.tenant_id, saved.id).await;
+    }
     crate::audit::record(
         &db,
         Some(user.user_id),

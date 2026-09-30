@@ -70,6 +70,11 @@ pub async fn convert(
         purchase_price_cents: Set(purchase_price),
         acquired_on: Set(Some(now.date_naive().format("%Y-%m-%d").to_string())),
         image_url: Set(None),
+        state: Set(String::new()),
+        postal_code: Set(String::new()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         created_at: Set(now.into()),
     }
     .insert(&db)

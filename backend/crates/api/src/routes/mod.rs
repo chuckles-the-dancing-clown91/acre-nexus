@@ -26,6 +26,7 @@ pub mod domains;
 pub mod entities;
 pub mod esign;
 pub mod fees;
+pub mod geo;
 pub mod hoa;
 pub mod iam;
 pub mod integrations;

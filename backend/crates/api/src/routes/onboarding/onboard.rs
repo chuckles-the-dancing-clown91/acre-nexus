@@ -59,6 +59,11 @@ pub async fn onboard(
         purchase_price_cents: Set(b.purchase_price_cents),
         acquired_on: Set(b.acquired_on.clone()),
         image_url: Set(b.image_url.clone()),
+        state: Set(crate::geo::state_code(b.state.as_deref().unwrap_or(""))),
+        postal_code: Set(b.postal_code.clone().unwrap_or_default().trim().to_string()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         created_at: Set(now.into()),
     }
     .insert(&db)
@@ -151,6 +156,9 @@ pub async fn onboard(
         .await?;
         assignments_created += 1;
     }
+
+    // A street photo for the new property, in the background.
+    crate::geo::queue_fetch(&db, scope.tenant_id, pid).await;
 
     // ---- kick off enrichment (best-effort, off the critical path) ----
     let enrich_job_id = if b.enrich {

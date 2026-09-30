@@ -30,6 +30,8 @@ pub struct OnboardReq {
     pub name: String,
     pub address: String,
     pub city: String,
+    pub state: Option<String>,
+    pub postal_code: Option<String>,
     pub llc_id: Option<Uuid>,
     pub portfolio_id: Option<Uuid>,
     pub units: Option<i32>,

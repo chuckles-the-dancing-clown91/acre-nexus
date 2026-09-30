@@ -37,6 +37,7 @@ mod enrichment;
 mod error;
 mod esign;
 mod finance;
+mod geo;
 mod guards;
 mod helpdesk;
 mod leasedoc;
@@ -146,6 +147,7 @@ async fn rocket() -> _ {
     reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
     workforce::ensure_recurring_jobs(&db).await;
+    geo::ensure_recurring_jobs(&db).await;
     saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };

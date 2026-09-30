@@ -43,6 +43,8 @@ pub const PROPERTY_ENRICH: &str = "property.enrich";
 /// that *enqueued* the job — this is the actual data mutation.
 pub const PROPERTY_ENRICHMENT_RUN: &str = "property.enrichment_run";
 pub const PROPERTY_ONBOARD: &str = "property.onboard";
+/// A street photo was fetched (or a placeholder drawn) for a property.
+pub const PROPERTY_PHOTO: &str = "property.photo";
 pub const LLC_CREATE: &str = "llc.create";
 
 // ---- Investing: entities, financing, workflow ----
