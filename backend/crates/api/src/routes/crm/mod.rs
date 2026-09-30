@@ -314,6 +314,7 @@ pub async fn add_note(
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct NotePatch {
     pub body: Option<String>,
+    pub kind: Option<String>,
     pub pinned: Option<bool>,
     /// A date, or an empty string to clear it.
     pub follow_up_on: Option<String>,
@@ -355,6 +356,15 @@ pub async fn update_note(
     }
     if let Some(p) = body.pinned {
         am.pinned = Set(p);
+    }
+    if let Some(k) = body.kind.clone() {
+        if !NOTE_KINDS.contains(&k.as_str()) {
+            return Err(ApiError::BadRequest(format!(
+                "kind must be one of {}",
+                NOTE_KINDS.join(", ")
+            )));
+        }
+        am.kind = Set(k);
     }
     if let Some(d) = body.follow_up_on.clone() {
         let d = clean(Some(d));

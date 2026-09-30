@@ -21,6 +21,7 @@ import { logError } from "@/lib/log";
 import { toast } from "sonner";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 import { DocumentsCard } from "@/components/DocumentsCard";
+import { CostingCard } from "@/components/CostingCard";
 
 const STATUSES = [
   "open",
@@ -498,6 +499,9 @@ export default function TicketDetailPage() {
 
       {/* Parts, labor & fees — totals drive the ticket cost */}
       <LinesCard ticket={ticket} manage={manage} busy={busy} run={run} />
+
+      {/* Job costing: bill the owner, profit vs. target */}
+      <CostingCard kind="work-orders" id={ticket.id} />
 
       {/* Contractor quotes */}
       <QuotesCard

@@ -992,6 +992,7 @@ export const crm = {
     id: string,
     body: {
       body?: string;
+      kind?: NoteKind;
       pinned?: boolean;
       follow_up_on?: string;
       follow_up_done?: boolean;

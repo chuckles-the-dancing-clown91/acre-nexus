@@ -101,7 +101,9 @@ the office texts back from one shared inbox.
 - ☐ Missed-call text-back (Twilio voice) as in Alpha.
 - ☐ Quiet hours for non-urgent texts (8 AM–9 PM local) and marketing consent.
 
-## Phase 2B — The back office: one set of hours, everything adds up ☐
+## Phase 2B — The back office: one set of hours, everything adds up ◐
+
+Built — see [`BACKOFFICE.md`](BACKOFFICE.md) for how it works.
 
 Alpha's back office works because every number comes from the same records: a
 time entry is logged *against a job*, and that one row is payroll, overtime,
@@ -122,7 +124,7 @@ money, they are **billed to the owner**.
                            │                                 technician / category / month, tax package
 ```
 
-**People (user management → HR)** ☐
+**People (user management → HR)** ☑
 - Employee profile on any staff member: title, employment type (full-time /
   part-time / seasonal / 1099 contractor), pay rate, **bill rate** (what an hour
   of their work is charged to owners), hire / end date, weekly target, default
@@ -131,7 +133,7 @@ money, they are **billed to the owner**.
 - Shifts (work / on call / training) and time off (vacation / sick / personal /
   unpaid → approve / deny; approved time off blocks the schedule).
 
-**Time clock** ☐
+**Time clock** ☑
 - Clock in on a work order, rehab project, property, or travel / shop / office
   time; one open entry per person; overlapping entries refused; breaks.
 - Pay rate and bill rate **frozen when the entry closes** — a raise never
@@ -144,7 +146,7 @@ money, they are **billed to the owner**.
 - Optional location stamp at clock-in/out only, flagged if farther than the
   radius from the property (never blocks).
 
-**Overtime & payroll** ☐
+**Overtime & payroll** ☑
 - Alpha's engine, ported exactly: weekly FLSA (1.5× over 40) or **California
   daily** (1.5× over 8, 2× over 12, seventh consecutive day 1.5× first 8 / 2×
   after, daily OT not double-counted toward 40); contractors straight time.
@@ -154,7 +156,7 @@ money, they are **billed to the owner**.
   overtime) into an unprocessed payroll; excluded hours listed. Sandbox-first
   like every other provider.
 
-**Expenses & mileage** ☐
+**Expenses & mileage** ☑
 - Expense: date, category (fuel, mileage, materials, equipment, repairs,
   vehicle, insurance, payroll, marketing, software, licenses, other), vendor,
   amount, deductible, company / own vehicle, reimbursable, **billable to owner**,
@@ -163,7 +165,7 @@ money, they are **billed to the owner**.
 - Mileage: miles × the mileage rate setting (IRS standard, default $0.70), with
   odometer start/end and round trip; own-vehicle miles reimbursed.
 
-**Costing** ☐
+**Costing** ☑
 - Per work order: labor pay + share of the week's OT premium (spread by hours)
   + labor burden % (not on contractors) + parts from inventory at cost +
   mileage + expenses + outside vendor bills → total cost; billed-to-owner is the
@@ -175,25 +177,25 @@ money, they are **billed to the owner**.
 - Rollups by property, technician (split by hours), category, month, plus the
   bill rate that would hit the target margin.
 
-**Taxes** ☐
+**Taxes** ☑
 - Year / quarter tax package: mileage log, expense ledger by category, missing
   receipts, pay by person (W-2 vs 1099-NEC with hours / OT / gross / mileage
   paid back), key dates (federal + California estimates, W-2 / 1099-NEC, return
   due dates), plus the existing 1099 export. CSV + PDF.
 
-**CRM** ☐
+**CRM** ☑
 - Owners are the property manager's clients: a timeline of notes / calls /
   emails / meetings / issues with pins and **follow-ups** (due follow-ups on the
   dashboard), and an **owner-lead pipeline** (new → contacted → proposal → won /
   lost, by source) for winning new management contracts.
 
-**Print to PDF** ☐
+**Print to PDF** ☑
 - A real document PDF writer (Helvetica, table layout with column widths,
   right-aligned money, totals, page numbers, the workspace's name on every
   page) replacing the monospace dump — every report, the payroll week, a work
   order's cost sheet and the owner bill.
 
-**Settings** ☐ — overtime rule, labor burden %, overhead per hour, target
+**Settings** ☑ — overtime rule, labor burden %, overhead per hour, target
 margin, mileage rate, maintenance markup, missed-punch hours, clock location +
 radius.
 
@@ -265,6 +267,11 @@ These are gates, not features. Nothing moves forward until the last one is done.
   "new property in a new LLC" onboarding.
 
 ---
+
+**Still to port from Alpha** ☐ — QuickBooks Online export, equipment meters and
+service schedules, inventory movements with weighted-average cost, compliance
+documents (insurance, licenses, vendor COIs / W-9s) with expiry reminders, and
+offline punches from an installable app.
 
 ## Order of work
 
