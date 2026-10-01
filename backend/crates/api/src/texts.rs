@@ -219,6 +219,8 @@ pub async fn ensure_thread(
         last_preview: Set(None),
         last_message_at: Set(None),
         opted_out_at: Set(None),
+        assigned_user_id: Set(None),
+        marketing_opt_in_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -227,15 +229,17 @@ pub async fn ensure_thread(
 }
 
 /// Record a text from `from` (any format): file it in the thread, apply
-/// STOP/START, mark the thread unread and open, and let staff know. Returns the
-/// updated thread (`None` for a number that can't be read).
+/// STOP/START, mark the thread unread and open, and let staff know. Photos
+/// (`media`: url and content type) are fetched and filed by a job. Then the
+/// automatic answers in [`crate::text_auto`] run. Returns the updated thread
+/// (`None` for a number that can't be read).
 pub async fn record_inbound(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     from: &str,
     body: &str,
     provider_message_id: Option<String>,
-    media_count: i32,
+    media: &[(String, String)],
 ) -> Result<Option<entity::sms_thread::Model>, DbErr> {
     let Some(phone) = normalize_phone(from) else {
         return Ok(None);
@@ -254,7 +258,8 @@ pub async fn record_inbound(
         provider_message_id: Set(provider_message_id),
         template_key: Set(None),
         sent_by_user_id: Set(None),
-        media_count: Set(media_count),
+        media_count: Set(media.len() as i32),
+        media: Set(serde_json::json!([])),
         error: Set(None),
         created_at: Set(now.into()),
     }
@@ -307,6 +312,27 @@ pub async fn record_inbound(
     )
     .await;
 
+    if !media.is_empty() {
+        let items: Vec<serde_json::Value> = media
+            .iter()
+            .map(|(url, ct)| serde_json::json!({ "url": url, "content_type": ct }))
+            .collect();
+        if let Err(e) = crate::scheduler::enqueue(
+            db,
+            tenant_id,
+            "sms_media",
+            serde_json::json!({ "message_id": message.id, "media": items }),
+            0,
+        )
+        .await
+        {
+            tracing::error!("failed to queue text photos: {e}");
+        }
+    }
+    if keyword == Keyword::None {
+        crate::text_auto::after_inbound(db, tenant_id, &thread, body).await;
+    }
+
     Ok(Some(thread))
 }
 
@@ -344,6 +370,7 @@ pub async fn record_outbound(
         template_key: Set(out.template_key),
         sent_by_user_id: Set(out.sent_by_user_id),
         media_count: Set(0),
+        media: Set(serde_json::json!([])),
         error: Set(out.error),
         created_at: Set(now.into()),
     }

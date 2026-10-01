@@ -84,6 +84,20 @@ async fn integration_suite() {
         return;
     };
 
+    // Quiet hours follow the wall clock; scenarios that send texts shouldn't.
+    // `batch_c_texts` turns them on with a window it controls.
+    for slug in ["northwind", "cascade"] {
+        let t = tenant_id(&c, slug).await;
+        crate::settings::set_value(
+            &c.db,
+            t,
+            crate::settings::TEXTS_QUIET_HOURS,
+            serde_json::json!(false),
+        )
+        .await
+        .unwrap();
+    }
+
     // #26 — auth + RBAC.
     login_refresh_logout_happy_path(&c).await;
     login_with_wrong_password_is_unauthorized(&c).await;
@@ -105,6 +119,7 @@ async fn integration_suite() {
     seo_site_info(&c).await;
     batch_a_limits_jobs_and_reminders(&c).await;
     batch_b_vendor_compliance(&c).await;
+    batch_c_texts(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -4539,4 +4554,328 @@ async fn batch_b_vendor_compliance(c: &Ctx) {
         serde_json::json!({ "value": false }),
     )
     .await;
+}
+
+async fn batch_c_texts(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let admin = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "tenant:manage",
+            "property:read",
+            "property:write",
+            "lease:read",
+            "lease:manage",
+            "maintenance:manage",
+            "maintenance:read",
+            "message:read",
+            "message:manage",
+        ],
+    );
+    let phone = "+17605550142";
+    let sms_jobs = |template: &'static str| async move {
+        entity::prelude::BackgroundJob::find()
+            .filter(entity::background_job::Column::TenantId.eq(nw))
+            .filter(entity::background_job::Column::Kind.eq("auto_sms"))
+            .all(&c.db)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|j| j.payload["template"] == template && j.payload["to"] == phone)
+            .collect::<Vec<_>>()
+    };
+
+    // A resident with a number, and their repair.
+    let pid = property_ids(c, nw).await[0];
+    let today = chrono::Utc::now().date_naive();
+    let (st, lease) = post_json(
+        c,
+        &format!("/properties/{pid}/leases"),
+        &admin,
+        serde_json::json!({
+            "tenant_name": "Tess Texter",
+            "tenant_email": "tess.texter@example.com",
+            "tenant_phone": "(760) 555-0142",
+            "rent_cents": 120000,
+            "start_date": (today - chrono::Duration::days(30)).to_string(),
+            "end_date": (today + chrono::Duration::days(300)).to_string(),
+            "status": "active",
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    let lid = lease["id"].as_str().unwrap().to_string();
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &admin,
+        serde_json::json!({ "title": "Bedroom outlet dead", "lease_id": lid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+
+    // F14: resolving asks for a rating by text, once.
+    for status in ["resolved", "in_progress", "resolved"] {
+        let (st, _) = send_json(
+            c,
+            Method::Patch,
+            &format!("/tickets/{tid}"),
+            &admin,
+            serde_json::json!({ "status": status }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok);
+    }
+    assert_eq!(sms_jobs("ticket_rate_request").await.len(), 1);
+
+    // A stranger's "5" is just a text.
+    let (st, _) = post_json(
+        c,
+        "/texts/simulate",
+        &admin,
+        serde_json::json!({ "phone": "+17605550199", "body": "5" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    // The resident's "4 stars" becomes the review; a second digit doesn't.
+    let (st, th) = post_json(
+        c,
+        "/texts/simulate",
+        &admin,
+        serde_json::json!({ "phone": phone, "body": "4 stars" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{th}");
+    post_json(
+        c,
+        "/texts/simulate",
+        &admin,
+        serde_json::json!({ "phone": phone, "body": "1" }),
+    )
+    .await;
+    let (_, t) = get_json(c, &format!("/tickets/{tid}"), &admin).await;
+    assert_eq!(t["rating"], 4, "{t}");
+    assert_eq!(sms_jobs("ticket_rating_thanks").await.len(), 1);
+    let thread_id = th["thread"]["id"].as_str().unwrap().to_string();
+
+    // F15: a repair text gets a prefilled link, once a day.
+    post_json(
+        c,
+        "/texts/simulate",
+        &admin,
+        serde_json::json!({ "phone": phone, "body": "The kitchen faucet is leaking again" }),
+    )
+    .await;
+    post_json(
+        c,
+        "/texts/simulate",
+        &admin,
+        serde_json::json!({ "phone": phone, "body": "also the toilet is clogged" }),
+    )
+    .await;
+    let links = sms_jobs("repair_link").await;
+    assert_eq!(links.len(), 1);
+    let url = links[0].payload["vars"]["url"].as_str().unwrap();
+    assert!(
+        url.contains("/account/maintenance?new=1&title=Leaking%20faucet&category=plumbing"),
+        "{url}"
+    );
+
+    // F16: saved replies, isolated per workspace.
+    let (st, r) = post_json(
+        c,
+        "/texts/replies",
+        &admin,
+        serde_json::json!({ "title": "On our way", "body": "Our tech is on the way." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let rid = r["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        "/texts/replies",
+        &admin,
+        serde_json::json!({ "title": " ", "body": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, list) = get_json(c, "/texts/replies", &admin).await;
+    assert!(list.as_array().unwrap().iter().any(|x| x["id"] == rid));
+    let other = mint(c, Some(cascade), false, &["message:read", "message:manage"]);
+    let (_, theirs) = get_json(c, "/texts/replies", &other).await;
+    assert!(!theirs.as_array().unwrap().iter().any(|x| x["id"] == rid));
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/texts/replies/{rid}"),
+        &other,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/replies/{rid}"),
+        &admin,
+        serde_json::json!({ "title": "On our way", "body": "Our tech is about 20 minutes out." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // F16: assign the conversation to a teammate; "mine" finds it.
+    let jordan = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("jordan@northwind.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("seeded manager");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{thread_id}"),
+        &admin,
+        serde_json::json!({ "assignee": uuid::Uuid::new_v4().to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "only teammates");
+    let (st, upd) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{thread_id}"),
+        &admin,
+        serde_json::json!({ "assignee": jordan.id.to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{upd}");
+    assert_eq!(upd["assigned_user_id"], jordan.id.to_string());
+    let jt = crate::auth::issue_access_token(
+        &c.config,
+        jordan.id,
+        Some(nw),
+        false,
+        vec!["message:read".into()],
+    )
+    .unwrap();
+    let (_, mine) = get_json(c, "/texts?mine=true", &jt).await;
+    assert!(mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["id"] == thread_id));
+    let (_, mine) = get_json(c, "/texts?mine=true", &admin).await;
+    assert!(mine.as_array().unwrap().is_empty());
+
+    // F16: photos queue a filing job; without live Twilio it skips cleanly.
+    crate::texts::record_inbound(
+        &c.db,
+        nw,
+        phone,
+        "here is the leak",
+        None,
+        &[(
+            "https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME1".into(),
+            "image/jpeg".into(),
+        )],
+    )
+    .await
+    .unwrap();
+    let media_jobs = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("sms_media"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert_eq!(media_jobs.len(), 1);
+    let out = crate::text_auto::handle_media_job(&c.db, &media_jobs[0]).await;
+    assert_eq!(out.status, "completed");
+
+    // F17: marketing texts need consent.
+    let run_now = |id: uuid::Uuid| async move {
+        let job = entity::prelude::BackgroundJob::find_by_id(id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        crate::notify::handle_job(&c.db, &job).await
+    };
+    let marketing = crate::scheduler::enqueue(
+        &c.db,
+        nw,
+        "auto_sms",
+        serde_json::json!({ "template": "test_notification", "to": phone, "marketing": true }),
+        0,
+    )
+    .await
+    .unwrap();
+    let out = run_now(marketing).await;
+    assert_eq!(
+        out.result.as_ref().and_then(|r| r["reason"].as_str()),
+        Some("no_marketing_consent")
+    );
+    let (st, upd) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{thread_id}"),
+        &admin,
+        serde_json::json!({ "marketing_consent": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(upd["marketing_consent"], true);
+
+    // F17: quiet hours hold automatic texts but not typed replies.
+    use chrono::Timelike;
+    let hour = chrono::Utc::now().hour() as i64;
+    for (key, value) in [
+        (crate::settings::TEXTS_TIMEZONE, serde_json::json!("UTC")),
+        (crate::settings::TEXTS_QUIET_START, serde_json::json!(hour)),
+        (
+            crate::settings::TEXTS_QUIET_END,
+            serde_json::json!((hour + 2) % 24),
+        ),
+        (crate::settings::TEXTS_QUIET_HOURS, serde_json::json!(true)),
+    ] {
+        crate::settings::set_value(&c.db, nw, key, value)
+            .await
+            .unwrap();
+    }
+    let held = crate::scheduler::enqueue(
+        &c.db,
+        nw,
+        "auto_sms",
+        serde_json::json!({ "template": "rent_due", "to": phone, "vars": {} }),
+        0,
+    )
+    .await
+    .unwrap();
+    let out = run_now(held).await;
+    assert_eq!(out.status, "pending", "{:?}", out.result);
+    assert!(out.run_at.unwrap() > chrono::Utc::now() + chrono::Duration::minutes(30));
+    let typed = crate::scheduler::enqueue(
+        &c.db,
+        nw,
+        "auto_sms",
+        serde_json::json!({ "template": "direct_text", "to": phone,
+            "vars": { "text": "See you tomorrow" }, "sms_message_id": uuid::Uuid::new_v4().to_string() }),
+        0,
+    )
+    .await
+    .unwrap();
+    let out = run_now(typed).await;
+    assert_ne!(out.status, "pending", "typed replies ignore quiet hours");
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::TEXTS_QUIET_HOURS,
+        serde_json::json!(false),
+    )
+    .await
+    .unwrap();
 }

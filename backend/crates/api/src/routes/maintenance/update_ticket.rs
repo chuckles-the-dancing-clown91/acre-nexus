@@ -260,6 +260,9 @@ pub async fn update_ticket(
     if matches!(status_changed.as_deref(), Some("resolved" | "closed")) {
         crate::process::on_ticket_resolved(&db, scope.tenant_id, saved.id, Some(user.user_id))
             .await?;
+        if let Err(e) = crate::text_auto::ask_for_rating(&db, scope.tenant_id, &saved).await {
+            tracing::error!("rating ask failed: {e}");
+        }
     }
 
     // The waiting-on follow-up note lands as an internal comment.

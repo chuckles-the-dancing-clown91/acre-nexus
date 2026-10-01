@@ -21,6 +21,9 @@ pub struct Model {
     pub template_key: Option<String>,
     pub sent_by_user_id: Option<Uuid>,
     pub media_count: i32,
+    /// Photos that came with the text, once filed:
+    /// `[{ "document_id": …, "content_type": … }]`.
+    pub media: Json,
     pub error: Option<String>,
     pub created_at: DateTimeWithTimeZone,
 }

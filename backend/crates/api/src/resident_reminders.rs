@@ -130,7 +130,7 @@ pub fn ics_event(
     out
 }
 
-fn web_url() -> String {
+pub(crate) fn web_url() -> String {
     std::env::var("PUBLIC_WEB_URL")
         .ok()
         .map(|s| s.trim_end_matches('/').to_string())

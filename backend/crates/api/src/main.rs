@@ -83,6 +83,7 @@ mod state;
 mod storage;
 mod syndication;
 mod tenancy;
+mod text_auto;
 mod texts;
 mod tokens;
 mod totp;

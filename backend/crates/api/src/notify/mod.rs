@@ -328,6 +328,34 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "Warranty on {asset} at {place} ends {date}.",
     },
     DefaultTemplate {
+        key: "text_assigned",
+        subject: "Text conversation with {sender} is yours",
+        body: "Hi {recipient},\n\nThe text conversation with {sender} was assigned to \
+               you.\n\n— {company}",
+        sms: "Texts with {sender} are now yours.",
+    },
+    DefaultTemplate {
+        key: "ticket_rate_request",
+        subject: "How did we do on \"{title}\"?",
+        body: "Hi {recipient},\n\nYour request \"{title}\" is done. How did we do? \
+               Rate it here: {url}\n\n— {company}",
+        sms: "{company}: \"{title}\" is done. How did we do? Reply 1-5 (5 is best).",
+    },
+    DefaultTemplate {
+        key: "ticket_rating_thanks",
+        subject: "Thanks for your rating",
+        body: "Thanks for rating \"{title}\" {rating} out of 5.\n\n— {company}",
+        sms: "Thanks! We recorded {rating}/5 for \"{title}\".",
+    },
+    DefaultTemplate {
+        key: "repair_link",
+        subject: "Send us a repair request",
+        body: "Sounds like something needs fixing. Send the request here and we'll \
+               get on it: {url}\n\n— {company}",
+        sms: "{company}: sounds like a repair. Send it to maintenance here (already filled \
+              in): {url}",
+    },
+    DefaultTemplate {
         key: "coi_expiring",
         subject: "Your insurance certificate ends {date}",
         body: "Hi {recipient},\n\nOur records show your {kind} policy with {carrier} ends on \
@@ -747,6 +775,36 @@ pub async fn handle_job(
             "channel": "sms",
             "template": template,
         }));
+    }
+
+    if channel == "sms" {
+        // Marketing texts need their own consent on top of not having stopped.
+        if job.payload.get("marketing").and_then(|v| v.as_bool()) == Some(true) {
+            let consented = match crate::texts::normalize_phone(&to) {
+                Some(p) => matches!(
+                    crate::texts::find_thread(db, job.tenant_id, &p).await,
+                    Ok(Some(t)) if t.marketing_opt_in_at.is_some()
+                ),
+                None => false,
+            };
+            if !consented {
+                return JobOutcome::completed(json!({
+                    "skipped": true,
+                    "reason": "no_marketing_consent",
+                    "channel": "sms",
+                    "template": template,
+                }));
+            }
+        }
+        // Quiet hours: automatic texts wait for the morning. A text staff
+        // typed (it has a message row already) goes when they send it.
+        if sms_message_id.is_none() && !crate::text_auto::QUIET_EXEMPT.contains(&template) {
+            if let Some(wait) = crate::text_auto::quiet_wait(db, job.tenant_id).await {
+                let mut out = JobOutcome::reschedule("pending", wait);
+                out.result = Some(json!({ "deferred": "quiet hours", "seconds": wait }));
+                return out;
+            }
+        }
     }
 
     // Idempotency: has this natural trigger already sent (or is it in flight on

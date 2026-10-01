@@ -79,6 +79,18 @@ pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
 pub const REMINDERS_ENABLED: &str = "reminders.enabled";
 /// Only send a vendor out with current liability insurance (or a reason).
 pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
+/// Text (or email) the resident for a 1–5 rating when their repair resolves.
+pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
+/// Answer a resident's repair-sounding text with a prefilled request link.
+pub const TEXTS_REPAIR_LINKS: &str = "texts.repair_links";
+/// Hold automatic texts overnight.
+pub const TEXTS_QUIET_HOURS: &str = "texts.quiet_hours";
+/// Quiet hours start at this hour (0–23, local).
+pub const TEXTS_QUIET_START: &str = "texts.quiet_start_hour";
+/// Quiet hours end at this hour (0–23, local).
+pub const TEXTS_QUIET_END: &str = "texts.quiet_end_hour";
+/// The time zone quiet hours are kept in.
+pub const TEXTS_TIMEZONE: &str = "texts.timezone";
 /// Days before the rent day that residents hear rent is due (0 = off).
 pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
 /// Tell residents the day after rent was due and is still unpaid.
@@ -439,6 +451,61 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Vendors",
         kind: SettingKind::Bool,
         default: || json!(false),
+    },
+    SettingDef {
+        key: MAINTENANCE_ASK_RATING,
+        label: "Ask residents to rate repairs",
+        description: "When a resident's work order is resolved, text them \
+                      \"How did we do? Reply 1-5\" (or email a link when there's no \
+                      number). A reply of 1 to 5 within a week becomes the review.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_REPAIR_LINKS,
+        label: "Answer repair texts with a request link",
+        description: "When a resident texts about something broken, reply with a \
+                      link to a maintenance request already filled in. At most \
+                      once a day per conversation.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_HOURS,
+        label: "Quiet hours",
+        description: "Automatic texts (reminders, updates) wait until morning. \
+                      Replies you type, and answers to someone who just texted, \
+                      still go at once.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_START,
+        label: "Quiet hours start",
+        description: "Hour of the day (0-23) automatic texts stop.",
+        group: "Texts",
+        kind: SettingKind::Int,
+        default: || json!(21),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_END,
+        label: "Quiet hours end",
+        description: "Hour of the day (0-23) automatic texts start again.",
+        group: "Texts",
+        kind: SettingKind::Int,
+        default: || json!(8),
+    },
+    SettingDef {
+        key: TEXTS_TIMEZONE,
+        label: "Texting time zone",
+        description: "Quiet hours are kept in this time zone, e.g. \
+                      America/Los_Angeles.",
+        group: "Texts",
+        kind: SettingKind::Text,
+        default: || json!("America/Los_Angeles"),
     },
     SettingDef {
         key: REMINDERS_ENABLED,

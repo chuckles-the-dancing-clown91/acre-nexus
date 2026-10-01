@@ -93,10 +93,18 @@ pub async fn inbound(
     let from = field(&form, "From").unwrap_or_default();
     let text = field(&form, "Body").unwrap_or_default();
     let sid = field(&form, "MessageSid").map(|s| format!("twilio:{s}"));
-    let media = field(&form, "NumMedia")
-        .and_then(|n| n.parse::<i32>().ok())
-        .unwrap_or(0);
-    texts::record_inbound(&state.db, tenant.tenant_id, from, text, sid, media).await?;
+    let count = field(&form, "NumMedia")
+        .and_then(|n| n.parse::<usize>().ok())
+        .unwrap_or(0)
+        .min(10);
+    let media: Vec<(String, String)> = (0..count)
+        .filter_map(|i| {
+            let url = field(&form, &format!("MediaUrl{i}"))?;
+            let ct = field(&form, &format!("MediaContentType{i}")).unwrap_or("image/jpeg");
+            Some((url.to_string(), ct.to_string()))
+        })
+        .collect();
+    texts::record_inbound(&state.db, tenant.tenant_id, from, text, sid, &media).await?;
     Ok(RawXml(EMPTY_TWIML))
 }
 

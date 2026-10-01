@@ -10,6 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   api,
+  iam,
+  type Member,
+  type SavedReply,
   type TextThread,
   type TextThreadDetail,
   type TextsStatus,
@@ -46,6 +49,9 @@ export default function TextsPage() {
   const read = can("message:read");
   const manage = can("message:manage");
   const [status, setStatus] = useState<"open" | "done" | "">("open");
+  const [mine, setMine] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [replies, setReplies] = useState<SavedReply[]>([]);
   const [threads, setThreads] = useState<TextThread[]>([]);
   const [info, setInfo] = useState<TextsStatus | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -54,10 +60,26 @@ export default function TextsPage() {
 
   const reload = useCallback(() => {
     api
-      .textThreads(status || undefined)
+      .textThreads(status || undefined, mine)
       .then(setThreads)
       .catch((e) => setError(e.message));
-  }, [status]);
+  }, [status, mine]);
+
+  const loadReplies = useCallback(() => {
+    api
+      .savedReplies()
+      .then(setReplies)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!read) return;
+    loadReplies();
+    iam
+      .members()
+      .then((m) => setMembers(m.filter((x) => x.status === "active")))
+      .catch(() => undefined);
+  }, [read, loadReplies]);
 
   useEffect(() => {
     if (!read) return;
@@ -107,6 +129,16 @@ export default function TextsPage() {
               {s === "open" ? "Open" : s === "done" ? "Done" : "All"}
             </button>
           ))}
+          <button
+            onClick={() => setMine(!mine)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
+              mine
+                ? "bg-accent-soft text-accent-2"
+                : "text-ink-3 hover:bg-surface-2"
+            }`}
+          >
+            Mine
+          </button>
           {manage && (
             <Button onClick={() => setComposing(true)}>New text</Button>
           )}
@@ -193,6 +225,9 @@ export default function TextsPage() {
             manage={manage}
             testMode={!!info && !info.live}
             onChanged={reload}
+            members={members}
+            replies={replies}
+            onRepliesChanged={loadReplies}
           />
         ) : (
           <Card className="flex items-center justify-center p-10 text-ink-3">
@@ -209,11 +244,17 @@ function Conversation({
   manage,
   testMode,
   onChanged,
+  members,
+  replies,
+  onRepliesChanged,
 }: {
   id: string;
   manage: boolean;
   testMode: boolean;
   onChanged: () => void;
+  members: Member[];
+  replies: SavedReply[];
+  onRepliesChanged: () => void;
 }) {
   const [detail, setDetail] = useState<TextThreadDetail | null>(null);
   const [reply, setReply] = useState("");
@@ -278,17 +319,56 @@ function Conversation({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {t.opted_out && <Badge tone="bad">Texted STOP</Badge>}
+          {manage && (
+            <select
+              aria-label="Assigned to"
+              disabled={busy}
+              value={t.assigned_user_id ?? ""}
+              onChange={(e) =>
+                run(() =>
+                  api.updateTextThread(t.id, { assignee: e.target.value })
+                )
+              }
+              className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {manage && (
+            <label
+              className="flex items-center gap-1.5 text-xs text-ink-3"
+              title="They agreed to get promotional texts. STOP still wins."
+            >
+              <input
+                type="checkbox"
+                disabled={busy || t.opted_out}
+                checked={t.marketing_consent}
+                onChange={(e) =>
+                  run(() =>
+                    api.updateTextThread(t.id, {
+                      marketing_consent: e.target.checked,
+                    })
+                  )
+                }
+              />
+              Marketing OK
+            </label>
+          )}
           {manage && (
             <button
               disabled={busy}
               onClick={() =>
                 run(() =>
-                  api.updateTextThread(
-                    t.id,
-                    t.status === "open" ? "done" : "open"
-                  )
+                  api.updateTextThread(t.id, {
+                    status: t.status === "open" ? "done" : "open",
+                  })
                 )
               }
               className="rounded-lg border border-line px-3 py-1.5 text-sm font-semibold text-ink-2 hover:border-accent"
@@ -315,6 +395,26 @@ function Conversation({
               >
                 {m.body}
               </div>
+              {m.media.length > 0 && (
+                <div
+                  className={`mt-1 flex flex-wrap gap-1 ${m.direction === "out" ? "justify-end" : ""}`}
+                >
+                  {m.media.map((p, i) => (
+                    <button
+                      key={p.document_id}
+                      onClick={() =>
+                        api
+                          .documentDownloadUrl(p.document_id)
+                          .then((d) => window.open(d.url, "_blank", "noopener"))
+                          .catch((e) => toast.error(e.message))
+                      }
+                      className="rounded-lg border border-line px-2 py-1 text-xs font-semibold text-ink-2 hover:border-accent"
+                    >
+                      Photo {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div
                 className={`mt-0.5 text-[11px] text-ink-3 ${m.direction === "out" ? "text-right" : ""}`}
               >
@@ -331,7 +431,9 @@ function Conversation({
                 {m.status === "blocked" && (
                   <span className="text-bad"> · not sent (STOP)</span>
                 )}
-                {m.media_count > 0 && ` · ${m.media_count} photo(s)`}
+                {m.media_count > 0 &&
+                  m.media.length === 0 &&
+                  ` · ${m.media_count} photo(s), filing…`}
               </div>
             </div>
           </div>
@@ -347,33 +449,84 @@ function Conversation({
               START.
             </p>
           ) : (
-            <form
-              className="flex gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!reply.trim()) return;
-                if (await run(() => api.replyText(t.id, reply.trim())))
-                  setReply("");
-              }}
-            >
-              <textarea
-                className={`${field} min-h-[44px] flex-1 resize-y`}
-                rows={2}
-                placeholder="Write a text…"
-                value={reply}
-                maxLength={1600}
-                onChange={(e) => setReply(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="Saved replies"
+                  value=""
+                  onChange={(e) => {
+                    const r = replies.find((x) => x.id === e.target.value);
+                    if (r)
+                      setReply((cur) =>
+                        cur.trim() ? `${cur} ${r.body}` : r.body
+                      );
+                  }}
+                  className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
+                >
+                  <option value="">
+                    {replies.length ? "Saved replies…" : "No saved replies yet"}
+                  </option>
+                  {replies.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!reply.trim()}
+                  onClick={async () => {
+                    const title = window.prompt("Name this saved reply");
+                    if (!title?.trim()) return;
+                    try {
+                      await api.saveReply(title.trim(), reply.trim());
+                      toast.success("Saved");
+                      onRepliesChanged();
+                    } catch (e) {
+                      toast.error(
+                        e instanceof Error ? e.message : "Couldn't save"
+                      );
+                    }
+                  }}
+                  className="text-xs font-semibold text-ink-3 hover:text-ink disabled:opacity-40"
+                >
+                  Save as reply
+                </button>
+                {replies.length > 0 && (
+                  <ManageReplies
+                    replies={replies}
+                    onChanged={onRepliesChanged}
+                  />
+                )}
+              </div>
+              <form
+                className="flex gap-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!reply.trim()) return;
+                  if (await run(() => api.replyText(t.id, reply.trim())))
+                    setReply("");
                 }}
-              />
-              <Button type="submit" disabled={busy || !reply.trim()}>
-                Send
-              </Button>
-            </form>
+              >
+                <textarea
+                  className={`${field} min-h-[44px] flex-1 resize-y`}
+                  rows={2}
+                  placeholder="Write a text…"
+                  value={reply}
+                  maxLength={1600}
+                  onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                />
+                <Button type="submit" disabled={busy || !reply.trim()}>
+                  Send
+                </Button>
+              </form>
+            </>
           )}
           {testMode && (
             <form
@@ -410,6 +563,59 @@ function Conversation({
         </div>
       )}
     </Card>
+  );
+}
+
+function ManageReplies({
+  replies,
+  onChanged,
+}: {
+  replies: SavedReply[];
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="text-xs font-semibold text-ink-3 hover:text-ink"
+      >
+        Manage
+      </button>
+      {open && (
+        <div className="absolute bottom-7 left-0 z-10 w-72 rounded-xl border border-line bg-surface p-2 shadow-lg">
+          {replies.map((r) => (
+            <div
+              key={r.id}
+              className="flex items-start justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold">{r.title}</div>
+                <div className="truncate text-xs text-ink-3">{r.body}</div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!confirm(`Delete "${r.title}"?`)) return;
+                  try {
+                    await api.deleteReply(r.id);
+                    onChanged();
+                  } catch (e) {
+                    toast.error(
+                      e instanceof Error ? e.message : "Couldn't delete"
+                    );
+                  }
+                }}
+                className="shrink-0 text-xs font-semibold text-bad"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

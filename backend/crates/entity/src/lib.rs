@@ -128,6 +128,7 @@ pub mod sms_thread;
 pub mod sso_assertion;
 pub mod tenant;
 pub mod tenant_module;
+pub mod text_saved_reply;
 pub mod theme;
 pub mod ticket_comment;
 pub mod ticket_line;

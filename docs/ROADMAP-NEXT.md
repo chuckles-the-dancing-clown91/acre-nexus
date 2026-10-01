@@ -381,12 +381,12 @@ orders, documents. There is no approval threshold on spending.
   text reply, with an emergency override for staff (audited).
 - Monthly statement email with the PDF, from the existing report.
 
-## 13. Texts, round 2 ☐
+## 13. Texts, round 2 ◐
 
-**Today.** Two-way texts, STOP/START and a shared inbox are shipped. Missing:
-saved replies, assigning a thread, linking an unknown number, filing MMS photos
-(only the count is stored), text to work order, quiet hours and marketing consent,
-missed-call text-back.
+**Today.** Two-way texts, STOP/START and a shared inbox are shipped. Fix plan
+F14–F17 added rating by text, text to work order links, saved replies, assigning
+a thread, filing MMS photos, quiet hours and marketing consent. Still missing:
+linking an unknown number to a person by hand, and missed-call text-back.
 
 **Design.**
 - **Text to work order**: a message that reads like a repair ("sink is leaking")

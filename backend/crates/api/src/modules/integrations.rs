@@ -45,6 +45,7 @@ impl PlatformModule for IntegrationsModule {
                 "auto_chat",
                 "webhook_event",
                 "document_retention",
+                "sms_media",
             ],
             default_enabled: true,
             preview: false,
@@ -119,6 +120,7 @@ impl PlatformModule for IntegrationsModule {
                 Some(crate::notify::handle_job(ctx.db, ctx.job).await)
             }
             "document_retention" => Some(retention(ctx.db, ctx.job).await),
+            "sms_media" => Some(crate::text_auto::handle_media_job(ctx.db, ctx.job).await),
             // Verified inbound events dispatch on `payload.provider`: the
             // payments providers (stripe/plaid, Phase 3), the screening
             // provider (checkr, Phase 4), and inbound email (#62) consume

@@ -118,10 +118,10 @@ group, and Settings → Schedule in the console. Covered by
 
 | ID | Fix | Size | Status |
 |----|-----|------|--------|
-| F14 | Ask for a rating when a work order resolves; accept 1–5 by text | M | ☐ |
-| F15 | Text to work order link | M | ☐ |
-| F16 | Saved replies, assign a thread, file MMS photos | M | ☐ |
-| F17 | Quiet hours and marketing consent | S | ☐ |
+| F14 | Ask for a rating when a work order resolves; accept 1–5 by text | M | ☑ |
+| F15 | Text to work order link | M | ☑ |
+| F16 | Saved replies, assign a thread, file MMS photos | M | ☑ |
+| F17 | Quiet hours and marketing consent | S | ☑ |
 
 - **F14.** Resolving a ticket sends "How did we do? Reply 1–5" by text (or the
   portal link by email). `texts.rs` `record_inbound` matches a lone digit from that
@@ -132,6 +132,27 @@ group, and Settings → Schedule in the console. Covered by
   into documents on the resident and, when linked, the ticket.
 - **F17.** Non-urgent texts wait until 8 AM local; marketing texts need separate
   consent.
+- **Shipped (F14–F17).** The rules live in `text_auto.rs`, called from
+  `texts::record_inbound` and the notification job. Resolving a resident's work
+  order texts "How did we do? Reply 1–5" (or emails a rating link when there's no
+  number), once per ticket via the notice log. A reply of 1–5 ("4", "5 stars",
+  "5/5") from that lease's number within 7 days of the ask becomes the review,
+  is audited, tells staff, and thanks the resident; a stranger's digit is just a
+  text. A resident's text with a repair word and a trouble word ("faucet is
+  leaking") gets a link to `/account/maintenance?new=1&…` with the title,
+  category and description filled in, at most once a day per thread; a catalog
+  issue whose words all match names the request. Migration 061 adds the thread
+  assignee, marketing consent, filed media on messages and `text_saved_reply`.
+  `PATCH /texts/<id>` takes `assignee` (teammates only, the new owner hears in
+  the app) and `marketing_consent` (not while stopped); `GET /texts?mine=true`;
+  `GET/POST /texts/replies`, `PATCH/DELETE /texts/replies/<id>`. Twilio media
+  URLs are fetched with the account's credentials by an `sms_media` job (only
+  from `api.twilio.com`, 10 MB cap) and filed on the resident's lease. Quiet
+  hours (settings group Texts: on, 21 to 8, `America/Los_Angeles`) hold
+  automatic texts until morning; typed replies, password and invite messages,
+  and answers to someone who just texted go at once. A text queued with
+  `marketing: true` is skipped without consent. Missed-call text-back is still
+  open.
 
 ## Batch D — Listings, owners, analytics, Spanish (areas 12, 14–16)
 

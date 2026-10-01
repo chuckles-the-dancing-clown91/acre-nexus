@@ -111,6 +111,7 @@ pub use super::sms_thread::Entity as SmsThread;
 pub use super::sso_assertion::Entity as SsoAssertion;
 pub use super::tenant::Entity as Tenant;
 pub use super::tenant_module::Entity as TenantModule;
+pub use super::text_saved_reply::Entity as TextSavedReply;
 pub use super::theme::Entity as Theme;
 pub use super::ticket_comment::Entity as TicketComment;
 pub use super::ticket_line::Entity as TicketLine;
