@@ -31,6 +31,8 @@ server-rendered public site for search (`docs/SEO.md`).
 | 16 | Spanish for everything a resident sees | ☐ |
 | 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
 
+The concrete fixes, sized and in build order, are in [`FIX-PLAN.md`](FIX-PLAN.md).
+
 **Order for round 2:** 9 first, because Bree's portfolio can't go live on lists
 with no limits, jobs nobody can see, and a restore nobody has tried. Then 10,
 since it turns data we already hold into fewer calls to the office. 11 comes
@@ -316,8 +318,9 @@ the frontend has nine unit-test files and one Playwright spec.
 
 ## 10. Reminders that run themselves ☐
 
-**Today.** Only two jobs run on their own: `billing_cycle` (charges, late fees) and
-`reminder_scan` (calendar reminders, staff only). There is no rent-due notice; the
+**Today.** Six jobs run on their own (`billing_cycle`, `reminder_scan`,
+`helpdesk_scan`, `workforce_scan`, `property_photo_scan`, `platform_billing`), but
+none sends residents a reminder; `reminder_scan` only tells staff. There is no rent-due notice; the
 only late notice is `late_fee_applied`. Autopay failure sends the generic
 `payment_failed`. Leases get a staff reminder at 30, 7 and 1 days, but renewals are
 proposed by hand. Inspections create no reminder. No calendar invites (ICS), no

@@ -308,9 +308,10 @@ Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
 ## Phase 3 — Reminders that run themselves ◐
 
 Everything Alpha's scheduler does, translated to rentals, on the existing job
-queue. Checked against the code on 2026-10-01: only `billing_cycle` and
-`reminder_scan` run on their own today, and there is no Settings → Schedule page
-or run history yet. Exists: late-fee and payment-failed emails, a staff reminder
+queue. Checked against the code on 2026-10-01: six jobs run on their own
+(billing, staff reminders, helpdesk, workforce, property photos, platform
+billing), none of them sends residents a reminder, and there is no Settings →
+Schedule page or run history yet. Exists: late-fee and payment-failed emails, a staff reminder
 for each expiring lease (30/7/1 days), and the resident's 1–5 rating of a work
 order in the portal. Everything below that is not marked is planned as
 **area 10** in `docs/ROADMAP-NEXT.md`; the schedule page is area 9.
