@@ -117,7 +117,15 @@ async fn run(
         );
     }
     if let Some(t) = &f.target_type {
-        cond = cond.add(entity::audit_log::Column::TargetType.eq(t.clone()));
+        // "process" covers a turn and its steps.
+        cond = if t == "process" {
+            cond.add(
+                entity::audit_log::Column::TargetType
+                    .is_in(["process", "process_step", "process_template"]),
+            )
+        } else {
+            cond.add(entity::audit_log::Column::TargetType.eq(t.clone()))
+        };
     }
     if let Some(t) = &f.target_id {
         cond = cond.add(entity::audit_log::Column::TargetId.eq(t.clone()));

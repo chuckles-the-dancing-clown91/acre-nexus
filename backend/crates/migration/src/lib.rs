@@ -55,6 +55,7 @@ mod m20240101_000047_property_geo;
 mod m20240101_000048_parts;
 mod m20240101_000049_partner_link;
 mod m20240101_000050_audit_trail;
+mod m20240101_000051_processes;
 
 pub struct Migrator;
 
@@ -112,6 +113,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000048_parts::Migration),
             Box::new(m20240101_000049_partner_link::Migration),
             Box::new(m20240101_000050_audit_trail::Migration),
+            Box::new(m20240101_000051_processes::Migration),
         ]
     }
 }

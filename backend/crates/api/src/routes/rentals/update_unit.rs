@@ -48,6 +48,17 @@ pub async fn update_unit(
         am.market_rent_cents = Set(Some(v));
     }
     if let Some(v) = b.status {
+        // A unit cannot go back on the market while its turn has required
+        // steps open: finish the turn (or finish it with an override) first.
+        if v == "vacant" && before.status != "vacant" {
+            let unmet = crate::process::unmet_for_unit(&db, scope.tenant_id, uid).await?;
+            if !unmet.is_empty() {
+                return Err(ApiError::Conflict(format!(
+                    "the turn still has required steps open: {}",
+                    unmet.join(", ")
+                )));
+            }
+        }
         am.status = Set(v);
     }
     am.updated_at = Set(Utc::now().into());

@@ -234,6 +234,12 @@ export const MODULES: ModuleDef[] = [
         icon: "wrench",
         permission: "maintenance:read",
       },
+      {
+        href: "/console/turns",
+        label: "Turnovers",
+        icon: "home",
+        permission: "maintenance:read",
+      },
     ],
   },
   {

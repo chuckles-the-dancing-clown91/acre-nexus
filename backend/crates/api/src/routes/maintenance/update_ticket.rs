@@ -245,6 +245,12 @@ pub async fn update_ticket(
     am.updated_at = Set(now.into());
     let saved = am.update(&db).await?;
 
+    // A resolved work order completes the turnover step that opened it.
+    if matches!(status_changed.as_deref(), Some("resolved" | "closed")) {
+        crate::process::on_ticket_resolved(&db, scope.tenant_id, saved.id, Some(user.user_id))
+            .await?;
+    }
+
     // The waiting-on follow-up note lands as an internal comment.
     if let Some((label, note)) = &waiting_note {
         let comment = entity::ticket_comment::ActiveModel {

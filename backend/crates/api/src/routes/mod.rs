@@ -50,6 +50,7 @@ pub mod payouts;
 pub mod platform;
 pub mod portfolio;
 pub mod portfolios;
+pub mod process;
 pub mod properties;
 pub mod property_intel;
 pub mod public;

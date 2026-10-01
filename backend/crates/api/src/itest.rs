@@ -95,6 +95,7 @@ async fn integration_suite() {
     parts_loop_and_closeout(&c).await;
     alpha_vendor_link(&c).await;
     audit_trail_who_changed_what(&c).await;
+    turnover_step_logic(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -2547,4 +2548,275 @@ async fn audit_trail_who_changed_what(c: &Ctx) {
             .all(|r| r["tenant_id"].is_null() || r["tenant_id"] == cascade.to_string().as_str()),
         "{legacy}"
     );
+}
+
+/// Turnover step logic: dependencies unblock steps, gates hold, a resolved
+/// work order completes its step, the unit cannot go vacant mid-turn, and
+/// the whole thing lands in the property's history.
+async fn turnover_step_logic(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let mgr = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:manage",
+            "maintenance:manage",
+            "maintenance:read",
+            "audit:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+    let (st, unit) = post_json(
+        c,
+        &format!("/properties/{pid}/units"),
+        &mgr,
+        serde_json::json!({ "unit_number": "TURN-1", "market_rent_cents": 150000, "status": "occupied" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{unit}");
+    let uid = unit["id"].as_str().unwrap().to_string();
+
+    // Start the turn: 13 steps, only the first is ready.
+    let (st, p) = post_json(
+        c,
+        &format!("/units/{uid}/turn"),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    let proc_id = p["id"].as_str().unwrap().to_string();
+    assert_eq!(p["total"], 13);
+    assert_eq!(p["done"], 0);
+    let step_id = |p: &serde_json::Value, key: &str| -> String {
+        p["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["key"] == key)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let status_of = |p: &serde_json::Value, key: &str| -> String {
+        p["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["key"] == key)
+            .unwrap()["status"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(status_of(&p, "notice"), "ready");
+    assert_eq!(status_of(&p, "inspect"), "blocked");
+
+    // A second turn on the same unit is refused.
+    let (st, _) = post_json(
+        c,
+        &format!("/units/{uid}/turn"),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // A blocked step cannot be completed; finishing it unblocks the next.
+    let act = |id: String, body: serde_json::Value| {
+        let mgr = mgr.clone();
+        async move { post_json(c, &format!("/process-steps/{id}/action"), &mgr, body).await }
+    };
+    let (st, _) = act(
+        step_id(&p, "inspect"),
+        serde_json::json!({ "action": "complete" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, p) = act(
+        step_id(&p, "notice"),
+        serde_json::json!({ "action": "complete" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(status_of(&p, "notice"), "done");
+    assert_eq!(status_of(&p, "inspect"), "ready");
+    assert_eq!(status_of(&p, "repairs"), "blocked");
+
+    // The inspection needs a photo; skipping needs a reason.
+    let (st, _) = act(
+        step_id(&p, "inspect"),
+        serde_json::json!({ "action": "complete" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = act(
+        step_id(&p, "inspect"),
+        serde_json::json!({ "action": "skip" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, p) = act(
+        step_id(&p, "inspect"),
+        serde_json::json!({ "action": "skip", "reason": "Done on paper at move-out" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(status_of(&p, "repairs"), "ready");
+    assert_eq!(status_of(&p, "paint"), "blocked");
+
+    // Repairs opens a work order; resolving it completes the step.
+    let (st, p) = post_json(
+        c,
+        &format!("/process-steps/{}/ticket", step_id(&p, "repairs")),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(status_of(&p, "repairs"), "doing");
+    let tid = p["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["key"] == "repairs")
+        .unwrap()["ticket_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("/process-steps/{}/ticket", step_id(&p, "repairs")),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &mgr,
+        serde_json::json!({ "status": "resolved" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, p) = get_json(c, &format!("/processes/{proc_id}"), &mgr).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(status_of(&p, "repairs"), "done");
+    assert_eq!(status_of(&p, "trash_out"), "ready");
+    assert_eq!(status_of(&p, "paint"), "blocked"); // waits on trash-out too
+    assert_eq!(status_of(&p, "rekey"), "ready");
+
+    // The unit cannot go vacant while required steps are open.
+    let (st, body) = send_json(
+        c,
+        Method::Patch,
+        &format!("/units/{uid}"),
+        &mgr,
+        serde_json::json!({ "status": "vacant" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{body}");
+
+    // Finishing needs the required steps, or an override reason.
+    let (st, _) = post_json(
+        c,
+        &format!("/processes/{proc_id}/finish"),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, p) = post_json(
+        c,
+        &format!("/processes/{proc_id}/finish"),
+        &mgr,
+        serde_json::json!({ "override_reason": "Owner is selling as-is" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["status"], "done");
+    assert_eq!(p["override_reason"], "Owner is selling as-is");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/units/{uid}"),
+        &mgr,
+        serde_json::json!({ "status": "vacant" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // Templates: a loop is refused, a valid recipe saves and can be started.
+    let (st, tpls) = get_json(c, "/process-templates?kind=turnover", &mgr).await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(tpls[0]["steps"].as_array().unwrap().len(), 13);
+    let (st, _) = post_json(
+        c,
+        "/process-templates",
+        &mgr,
+        serde_json::json!({ "name": "Loop", "steps": [
+            { "key": "a", "title": "A", "depends_on": ["b"] },
+            { "key": "b", "title": "B", "depends_on": ["a"] }
+        ]}),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, t) = post_json(
+        c,
+        "/process-templates",
+        &mgr,
+        serde_json::json!({ "name": "Quick turn", "steps": [
+            { "key": "clean", "title": "Clean" },
+            { "key": "list", "title": "List it", "depends_on": ["clean"] }
+        ]}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let (st, p2) = post_json(
+        c,
+        &format!("/units/{uid}/turn"),
+        &mgr,
+        serde_json::json!({ "template_id": t["id"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p2}");
+    assert_eq!(p2["total"], 2);
+    let (st, p2) = post_json(
+        c,
+        &format!("/processes/{}/cancel", p2["id"].as_str().unwrap()),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(p2["status"], "cancelled");
+
+    // Another workspace sees none of it.
+    let other = mint(c, Some(cascade), false, &["maintenance:read"]);
+    let (st, _) = get_json(c, &format!("/processes/{proc_id}"), &other).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, list) = get_json(c, "/processes", &other).await;
+    assert_eq!(st, Status::Ok);
+    assert!(list.as_array().unwrap().is_empty());
+
+    // It all shows up on the property's history.
+    let (st, hist) = get_json(c, &format!("/properties/{pid}/history?limit=100"), &mgr).await;
+    assert_eq!(st, Status::Ok, "{hist}");
+    let actions: Vec<&str> = hist["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["action"].as_str())
+        .collect();
+    for want in ["process.start", "process.step_update", "process.finish"] {
+        assert!(actions.contains(&want), "missing {want} in {actions:?}");
+    }
 }

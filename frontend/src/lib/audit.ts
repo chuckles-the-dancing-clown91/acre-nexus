@@ -77,7 +77,7 @@ export const KINDS: { value: string; label: string }[] = [
   { value: "lease", label: "Leases" },
   { value: "listing", label: "Listings" },
   { value: "site_map", label: "Site maps" },
-  { value: "turn", label: "Turnovers" },
+  { value: "process", label: "Turnovers" },
 ];
 
 /** `market_rent_cents` → "Market rent". */

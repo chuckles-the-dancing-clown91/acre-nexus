@@ -57,6 +57,7 @@ mod payouts;
 mod pdf;
 mod pdfdoc;
 mod pii;
+mod process;
 mod providers;
 mod ratelimit;
 mod rbac;

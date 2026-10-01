@@ -391,3 +391,10 @@ pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";
 pub const PLATFORM_INVOICE_PAID: &str = "platform_invoice.paid";
 pub const PLATFORM_INVOICE_VOID: &str = "platform_invoice.void";
 pub const TENANT_PLAN_CHANGE: &str = "tenant.plan_change";
+
+// ---- Step processes (turnovers) ----
+pub const PROCESS_START: &str = "process.start";
+pub const PROCESS_FINISH: &str = "process.finish";
+pub const PROCESS_CANCEL: &str = "process.cancel";
+pub const PROCESS_STEP_UPDATE: &str = "process.step_update";
+pub const PROCESS_TEMPLATE_SAVE: &str = "process.template_save";

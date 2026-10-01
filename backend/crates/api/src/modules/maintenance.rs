@@ -34,6 +34,16 @@ impl PlatformModule for MaintenanceModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
+            crate::routes::process::list_templates,
+            crate::routes::process::create_template,
+            crate::routes::process::update_template,
+            crate::routes::process::list_processes,
+            crate::routes::process::get_process,
+            crate::routes::process::start_turn,
+            crate::routes::process::step_action,
+            crate::routes::process::step_ticket,
+            crate::routes::process::finish_process,
+            crate::routes::process::cancel_process,
             maintenance::list_tickets::list_tickets,
             maintenance::list_property_tickets::list_property_tickets,
             maintenance::property_maintenance::property_maintenance,
