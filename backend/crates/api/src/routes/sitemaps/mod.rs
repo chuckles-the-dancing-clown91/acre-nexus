@@ -550,9 +550,9 @@ async fn check_features(
                 rules::FEATURE_KINDS.join(", ")
             )));
         }
-        rules::validate_geometry(&f.kind, &f.geometry).map_err(&at)?;
+        rules::validate_geometry(&f.kind, &f.geometry).map_err(at)?;
         let attrs = f.attrs.clone().unwrap_or_else(|| json!({}));
-        rules::validate_attrs(&f.kind, &attrs).map_err(&at)?;
+        rules::validate_attrs(&f.kind, &attrs).map_err(at)?;
         if let Some(u) = f.unit_id {
             if f.kind != "unit" {
                 return Err(at("only a unit can be linked to a unit record".into()));
