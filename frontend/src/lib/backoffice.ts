@@ -102,13 +102,7 @@ const q = (
 // ---------------------------------------------------------------------------
 
 export type EntryKind =
-  | "work_order"
-  | "project"
-  | "property"
-  | "travel"
-  | "shop"
-  | "admin"
-  | "other";
+  "work_order" | "project" | "property" | "travel" | "shop" | "admin" | "other";
 
 export const ENTRY_KIND_LABELS: Record<EntryKind, string> = {
   work_order: "Work order",
@@ -121,10 +115,7 @@ export const ENTRY_KIND_LABELS: Record<EntryKind, string> = {
 };
 
 export type EmploymentType =
-  | "full_time"
-  | "part_time"
-  | "seasonal"
-  | "contractor";
+  "full_time" | "part_time" | "seasonal" | "contractor";
 
 export const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
   full_time: "Full-time",
@@ -862,13 +853,7 @@ export const gusto = {
 
 export type SubjectType = "owner" | "owner_lead" | "counterparty" | "property";
 export type NoteKind =
-  | "note"
-  | "call"
-  | "email"
-  | "meeting"
-  | "issue"
-  | "text"
-  | "update";
+  "note" | "call" | "email" | "meeting" | "issue" | "text" | "update";
 
 export interface CrmNote {
   id: string;

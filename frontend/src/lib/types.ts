@@ -271,6 +271,14 @@ export interface PortfolioSummary {
   occupancy_pct: number;
   monthly_revenue_cents: number;
   kpis: Kpi[];
+  open_tickets: number | null;
+  urgent_tickets: number | null;
+  delinquent_tenants: number | null;
+  delinquent_balance_cents: number | null;
+  delinquent_balance_label: string | null;
+  pending_applications: number | null;
+  upcoming_reminders: number | null;
+  overdue_reminders: number | null;
 }
 
 export interface LlcGroup {

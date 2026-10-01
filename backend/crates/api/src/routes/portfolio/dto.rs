@@ -15,6 +15,20 @@ pub struct PortfolioSummary {
     pub occupancy_pct: i64,
     pub monthly_revenue_cents: i64,
     pub kpis: Vec<Kpi>,
+    /// Open (not resolved/closed) maintenance tickets, when the viewer holds
+    /// `maintenance:read`; omitted otherwise.
+    pub open_tickets: Option<i64>,
+    pub urgent_tickets: Option<i64>,
+    /// Leases with a positive balance, when the viewer holds `ledger:read`.
+    pub delinquent_tenants: Option<i64>,
+    pub delinquent_balance_cents: Option<i64>,
+    pub delinquent_balance_label: Option<String>,
+    /// Applications awaiting a decision, when the viewer holds `application:read`.
+    pub pending_applications: Option<i64>,
+    /// Active reminders due within 14 days (or already overdue), when the
+    /// viewer holds `calendar:read`.
+    pub upcoming_reminders: Option<i64>,
+    pub overdue_reminders: Option<i64>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

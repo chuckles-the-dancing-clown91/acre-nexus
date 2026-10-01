@@ -81,12 +81,7 @@ export const OWNER_ROLES = [
 ] as const;
 
 export type StepAction =
-  | "start"
-  | "complete"
-  | "skip"
-  | "reopen"
-  | "assign"
-  | "note";
+  "start" | "complete" | "skip" | "reopen" | "assign" | "note";
 
 const post = <T>(path: string, body: unknown = {}) =>
   request<T>(path, { method: "POST", auth: true, body });

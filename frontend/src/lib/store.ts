@@ -4,7 +4,9 @@
 // that don't belong to server state (TanStack Query owns that) or to a single
 // page. Persisted slices use the `persist` middleware so they survive reloads.
 //
-// - sidebarCollapsed: console sidebar collapse toggle (persisted).
+// - sidebarCollapsed / collapsedGroups: console sidebar layout (persisted).
+// - paletteOpen / mobileNavOpen: transient overlays.
+// - aura: the health tone the ambient backdrop glows with (set by pages).
 // - actingTenant: the tenant a platform staff user is "viewing as". This mirrors
 //   the localStorage value the api client reads via `actingTenant` in api.ts;
 //   `setActingTenant` keeps the two in sync so authenticated requests pick up
@@ -14,11 +16,25 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { actingTenant as actingTenantStore } from "./api";
 
+export type AuraTone = "good" | "warn" | "bad" | "info";
+
 interface UiState {
-  /** Console sidebar collapsed state. */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  /** Nav group keys the user has folded away. */
+  collapsedGroups: Record<string, boolean>;
+  toggleGroup: (key: string) => void;
+
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (open: boolean) => void;
+
+  aura: AuraTone | null;
+  setAura: (tone: AuraTone | null) => void;
 
   /** Staff "view as" tenant slug (null = not impersonating). */
   actingTenant: string | null;
@@ -33,6 +49,24 @@ export const useUiStore = create<UiState>()(
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
+      collapsedGroups: {},
+      toggleGroup: (key) =>
+        set((s) => ({
+          collapsedGroups: {
+            ...s.collapsedGroups,
+            [key]: !s.collapsedGroups[key],
+          },
+        })),
+
+      paletteOpen: false,
+      setPaletteOpen: (open) => set({ paletteOpen: open }),
+
+      mobileNavOpen: false,
+      setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+
+      aura: null,
+      setAura: (tone) => set({ aura: tone }),
+
       actingTenant:
         typeof window === "undefined" ? null : actingTenantStore.get(),
       setActingTenant: (slug) => {
@@ -45,8 +79,10 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "acre.ui",
-      // Only persist the sidebar; actingTenant is owned by the api client's key.
-      partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed }),
+      partialize: (s) => ({
+        sidebarCollapsed: s.sidebarCollapsed,
+        collapsedGroups: s.collapsedGroups,
+      }),
     }
   )
 );

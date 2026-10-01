@@ -1,20 +1,38 @@
 "use client";
 
-import { ThemeProvider } from "@/lib/theme";
-import { AuthProvider } from "@/lib/auth";
+import { MotionConfig } from "motion/react";
+import { Toaster } from "sonner";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { QueryProvider } from "@/lib/query";
-import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/lib/auth";
+import { ThemeProvider } from "@/theme/ThemeProvider";
+import type { Gate, ThemeName } from "@/theme/themes";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  theme,
+  gate,
+  hud,
+  children,
+}: {
+  theme: ThemeName;
+  gate: Gate;
+  hud: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    // QueryProvider is outermost so every client component (including ones that
-    // live under ThemeProvider/AuthProvider) can use TanStack Query hooks.
     <QueryProvider>
-      <ThemeProvider>
+      <ThemeProvider theme={theme} gate={gate} hud={hud}>
         <AuthProvider>
-          {children}
-          {/* Toast outlet — Toaster reads the theme, so it sits inside it. */}
-          <Toaster position="bottom-right" richColors />
+          <MotionConfig reducedMotion="user">
+            <TooltipProvider delayDuration={250}>{children}</TooltipProvider>
+          </MotionConfig>
+          <Toaster
+            position="bottom-right"
+            theme={theme === "obsidian" ? "dark" : "light"}
+            toastOptions={{
+              className: "!glass-strong !rounded-2xl !text-fg !font-sans",
+            }}
+          />
         </AuthProvider>
       </ThemeProvider>
     </QueryProvider>

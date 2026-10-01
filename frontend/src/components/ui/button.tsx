@@ -1,41 +1,30 @@
-"use client";
-
-import * as React from "react";
+import { forwardRef } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-
+import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/**
- * shadcn/ui Button. Lives in its own file (the legacy primitive Button still
- * lives in `components/ui/index.tsx`); import this one explicitly via
- * `import { Button } from "@/components/ui/button"`. Colours come from the
- * shadcn token bridge, so it inherits the Vantedge brand.
- */
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+export const buttonVariants = cva(
+  "relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out-soft select-none active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:opacity-90",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:opacity-90",
-        outline: "border border-line-2 bg-surface text-ink hover:bg-surface-2",
-        secondary: "bg-secondary text-secondary-foreground hover:opacity-90",
-        ghost: "text-ink-2 hover:bg-surface-2",
-        link: "text-primary underline-offset-4 hover:underline",
+        primary:
+          "bg-accent text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_8px_24px_-12px_var(--accent)] hover:bg-accent-hover hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_10px_30px_-10px_var(--accent)]",
+        secondary:
+          "border border-line-strong bg-fill text-fg backdrop-blur-md hover:border-fg-4 hover:bg-fill-2",
+        ghost: "text-fg-2 hover:bg-fill-2 hover:text-fg",
+        danger:
+          "border border-bad/30 bg-bad/10 text-bad hover:border-bad/50 hover:bg-bad/15",
       },
       size: {
-        default: "h-10 px-4 py-2.5",
-        sm: "h-9 rounded-lg px-3",
-        lg: "h-11 rounded-xl px-8",
-        icon: "h-10 w-10",
+        sm: "h-8 px-3 text-xs",
+        md: "h-10 px-4 text-sm",
+        lg: "h-12 px-5 text-[15px]",
+        icon: "size-9",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
+    defaultVariants: { variant: "primary", size: "md" },
   }
 );
 
@@ -44,20 +33,41 @@ export interface ButtonProps
     React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
+  loading?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      className,
+      variant,
+      size,
+      asChild,
+      loading,
+      disabled,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Comp = asChild ? Slot : "button";
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        className={cn(buttonVariants({ variant, size }), className)}
+        disabled={disabled || loading}
         {...props}
-      />
+      >
+        {loading ? (
+          <>
+            <LoaderCircle className="animate-spin" />
+            {children}
+          </>
+        ) : (
+          children
+        )}
+      </Comp>
     );
   }
 );
 Button.displayName = "Button";
-
-export { Button, buttonVariants };

@@ -17,12 +17,18 @@ export interface ModuleNavItem {
   permission?: string;
 }
 
+/** Sidebar section a module's nav items are grouped under. */
+export type NavGroupKey =
+  "property" | "finance" | "team" | "deals" | "platform";
+
 /** A pluggable product module as seen by the frontend. */
 export interface ModuleDef {
   /** Stable key, identical to the backend module key. */
   key: string;
   label: string;
   description: string;
+  /** Sidebar section this module's nav items are grouped under. */
+  group: NavGroupKey;
   /** Navigation entries this module adds to the console sidebar. */
   nav: ModuleNavItem[];
   /** Whether the module is on for a tenant with no explicit override. */
@@ -31,12 +37,22 @@ export interface ModuleDef {
   preview?: boolean;
 }
 
+/** Sidebar section headers, in display order. */
+export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
+  { key: "property", label: "Property" },
+  { key: "finance", label: "Finance" },
+  { key: "team", label: "Team" },
+  { key: "deals", label: "Deals" },
+  { key: "platform", label: "Platform & integrations" },
+];
+
 /** Every module the frontend knows how to render. */
 export const MODULES: ModuleDef[] = [
   {
     key: "properties",
     label: "Property Management",
     description: "Portfolio, property profiles, and LLC holding entities.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
@@ -48,7 +64,7 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/properties/onboard",
         label: "Onboard",
-        icon: "check",
+        icon: "house-plus",
         permission: "property:write",
       },
       {
@@ -60,19 +76,19 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/workflows",
         label: "Workflows",
-        icon: "chart",
+        icon: "workflow",
         permission: "property:read",
       },
       {
         href: "/console/llcs",
         label: "LLCs",
-        icon: "shield",
+        icon: "landmark",
         permission: "property:read",
       },
       {
         href: "/console/onboarding",
         label: "Getting set up",
-        icon: "check",
+        icon: "rocket",
         permission: "tenant:manage",
       },
     ],
@@ -82,12 +98,13 @@ export const MODULES: ModuleDef[] = [
     label: "Entities & Contacts",
     description:
       "Registry of banks, lenders, contractors and other counterparties, with notes.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/entities",
         label: "Entities",
-        icon: "globe",
+        icon: "briefcase",
         permission: "entity:read",
       },
       {
@@ -102,12 +119,13 @@ export const MODULES: ModuleDef[] = [
     key: "rentals",
     label: "Rentals & Leasing",
     description: "Units, leases/tenancies, and the rent ledger.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/leases",
         label: "Tenants",
-        icon: "user",
+        icon: "users",
         permission: "lease:read",
       },
     ],
@@ -117,6 +135,7 @@ export const MODULES: ModuleDef[] = [
     label: "Accounting & Payments",
     description:
       "Double-entry ledger per LLC, rent collection (cards/ACH with autopay), late fees, bank reconciliation, and owner payouts.",
+    group: "finance",
     defaultEnabled: true,
     nav: [
       {
@@ -134,7 +153,7 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/payouts",
         label: "Payouts",
-        icon: "dollar",
+        icon: "coins",
         permission: "ledger:read",
       },
       {
@@ -150,6 +169,7 @@ export const MODULES: ModuleDef[] = [
     label: "Team & Time",
     description:
       "Staff profiles, the time clock against work orders and projects, timesheets with approval and missed punches, shifts, and time off.",
+    group: "team",
     defaultEnabled: true,
     nav: [
       {
@@ -160,13 +180,13 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/team",
         label: "Team",
-        icon: "users",
+        icon: "id-card",
         permission: "team:read",
       },
       {
         href: "/console/timesheets",
         label: "Timesheets",
-        icon: "calendar",
+        icon: "timesheet",
         permission: "team:read",
       },
     ],
@@ -176,12 +196,13 @@ export const MODULES: ModuleDef[] = [
     label: "Back Office",
     description:
       "Expenses and mileage with receipts, work-order costing, billing in-house maintenance to owners, and payroll, profit and tax reports.",
+    group: "finance",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/back-office",
         label: "Back office",
-        icon: "chart",
+        icon: "calculator",
         permission: "team:read",
       },
       {
@@ -197,6 +218,7 @@ export const MODULES: ModuleDef[] = [
     label: "Calendar & Reminders",
     description:
       "One schedule for everything with a due date: lease renewals (auto-synced), license / insurance expirations, tours, and inspections.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
@@ -212,18 +234,19 @@ export const MODULES: ModuleDef[] = [
     label: "Lease Builder & Tenancy",
     description:
       "Conditional fees & discounts, vehicle profiles, templated lease documents, and tenant history.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/fees",
         label: "Fee schedule",
-        icon: "dollar",
+        icon: "tags",
         permission: "fee:read",
       },
       {
         href: "/console/tenant-history",
         label: "Tenant history",
-        icon: "search",
+        icon: "history",
         permission: "lease:read",
       },
     ],
@@ -232,6 +255,7 @@ export const MODULES: ModuleDef[] = [
     key: "maintenance",
     label: "Maintenance & Work Orders",
     description: "Maintenance tickets assignable to staff or contractors.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
@@ -243,7 +267,7 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/turns",
         label: "Turnovers",
-        icon: "home",
+        icon: "roller",
         permission: "maintenance:read",
       },
     ],
@@ -253,18 +277,19 @@ export const MODULES: ModuleDef[] = [
     label: "Resident Messaging",
     description:
       "Resident ↔ manager message threads: residents write from the portal, staff reply from the console.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/messages",
         label: "Messages",
-        icon: "mail",
+        icon: "inbox",
         permission: "message:read",
       },
       {
         href: "/console/texts",
         label: "Texts",
-        icon: "chat",
+        icon: "phone",
         permission: "message:read",
       },
     ],
@@ -274,6 +299,7 @@ export const MODULES: ModuleDef[] = [
     label: "Title & Ownership",
     description:
       "Deed ownership and liens / encumbrances (shown on properties).",
+    group: "property",
     defaultEnabled: true,
     nav: [],
   },
@@ -282,30 +308,31 @@ export const MODULES: ModuleDef[] = [
     label: "Leasing & Listings",
     description:
       "Public listings website, listing management, applications (website, renter portal, back office), and tenant screening.",
+    group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/listings",
         label: "Listings",
-        icon: "globe",
+        icon: "megaphone",
         permission: "listing:read",
       },
       {
         href: "/console/applications",
         label: "Applications",
-        icon: "user",
+        icon: "clipboard",
         permission: "application:read",
       },
       {
         href: "/console/leads",
         label: "Leads",
-        icon: "mail",
+        icon: "magnet",
         permission: "application:read",
       },
       {
         href: "/console/tours",
         label: "Tours",
-        icon: "calendar",
+        icon: "door",
         permission: "application:read",
       },
     ],
@@ -315,6 +342,7 @@ export const MODULES: ModuleDef[] = [
     label: "Vendor API",
     description:
       "Scoped, revocable API tokens, the public /api/v1 endpoints, and outbound webhook subscriptions.",
+    group: "platform",
     defaultEnabled: true,
     nav: [
       {
@@ -329,12 +357,13 @@ export const MODULES: ModuleDef[] = [
     key: "theming",
     label: "Branding & Theming",
     description: "White-label branding, colours, and legal templates.",
+    group: "platform",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/branding",
         label: "Branding",
-        icon: "globe",
+        icon: "palette",
         permission: "theme:write",
       },
     ],
@@ -344,6 +373,7 @@ export const MODULES: ModuleDef[] = [
     label: "Domains & Routing",
     description:
       "White-label custom domains and audience routing (admin / owner / renter portals).",
+    group: "platform",
     defaultEnabled: true,
     nav: [
       {
@@ -359,6 +389,7 @@ export const MODULES: ModuleDef[] = [
     label: "Integrations",
     description:
       "Credential vault, document storage, notifications (email/SMS), and inbound webhooks.",
+    group: "platform",
     defaultEnabled: true,
     nav: [
       {
@@ -370,7 +401,7 @@ export const MODULES: ModuleDef[] = [
       {
         href: "/console/integrations",
         label: "Integrations",
-        icon: "key",
+        icon: "plug",
         permission: "integrations:manage",
       },
     ],
@@ -380,13 +411,14 @@ export const MODULES: ModuleDef[] = [
     label: "Acquisitions & Flips",
     description:
       "Buy-side deal pipeline with underwriting (cap rate, cash-on-cash, IRR, DSCR), a due-diligence data room, and one-click conversion into an owned property.",
+    group: "deals",
     defaultEnabled: true,
     preview: false,
     nav: [
       {
         href: "/console/flips",
         label: "Acquisitions",
-        icon: "dollar",
+        icon: "trending",
         permission: "deal:read",
       },
     ],
@@ -396,6 +428,7 @@ export const MODULES: ModuleDef[] = [
     label: "Rehab & Construction",
     description:
       "Renovation budgets, draw requests with progress photos, change orders, and lien waivers for flip/BRRRR projects. Accessed from a property's Rehab page.",
+    group: "property",
     defaultEnabled: true,
     preview: false,
     // Contextual: reached from the property profile's Rehab link, so no
@@ -407,6 +440,7 @@ export const MODULES: ModuleDef[] = [
     label: "Reports & Exports",
     description:
       "Standard PM reports — rent roll, T-12, aging, and delinquency — with CSV/PDF export.",
+    group: "finance",
     defaultEnabled: true,
     preview: false,
     nav: [
