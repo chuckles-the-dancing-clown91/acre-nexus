@@ -69,6 +69,16 @@ export interface User {
   memberships: Membership[];
   /** Workspaces the user can switch between. */
   workspaces: Workspace[];
+  /**
+   * How much of the active workspace the user sees: the whole company, or
+   * only the properties assigned to them (field roles and owners).
+   */
+  reach?: Reach;
+}
+
+export interface Reach {
+  scope: "company" | "properties";
+  property_ids: string[];
 }
 
 export interface TokenResponse {

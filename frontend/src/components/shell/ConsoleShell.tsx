@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useUiStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Ambient } from "@/components/ambient";
-import { BrandLogo } from "@/components/brand";
+import { GateLogo } from "@/components/brand";
 import { useTheme } from "@/theme/ThemeProvider";
 import { CommandPalette } from "./CommandPalette";
 import { Sidebar } from "./Sidebar";
@@ -76,7 +76,7 @@ function MobileNav() {
 }
 
 function Booting() {
-  const { brand } = useTheme();
+  const { brand, gate } = useTheme();
   return (
     <div className="flex min-h-dvh items-center justify-center">
       <Ambient />
@@ -86,7 +86,12 @@ function Booting() {
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center gap-4"
       >
-        <BrandLogo brand={brand} size={44} className="animate-pulse" />
+        <GateLogo
+          brand={brand}
+          branded={gate.branded}
+          size={44}
+          className="animate-pulse"
+        />
         <span className="eyebrow">Loading workspace</span>
       </motion.div>
     </div>

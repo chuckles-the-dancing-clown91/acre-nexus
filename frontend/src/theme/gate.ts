@@ -24,8 +24,17 @@ const DEFAULT_AUDIENCE = normalizeAudience(
   process.env.NEXT_PUBLIC_DEFAULT_AUDIENCE ?? "admin"
 );
 const REVALIDATE = 60;
+// Vantedge's own hosts (e.g. `app.vantedge.com`): the staff console, branded
+// Vantedge.
+const PLATFORM_HOSTS = (process.env.PLATFORM_HOSTS ?? "")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+// Local development only: act as this client's branded domain, to preview
+// what their people see.
+const PREVIEW_TENANT = process.env.BRANDED_TENANT_PREVIEW?.trim() || null;
 
-const FALLBACK_BRAND: Brand = {
+export const VANTEDGE_BRAND: Brand = {
   company_name: "Vantedge",
   logo_url: null,
   accent_color: DEFAULT_ACCENT,
@@ -45,9 +54,9 @@ async function getJson<T>(path: string, tenant?: string): Promise<T | null> {
 
 async function brandFor(tenant: string): Promise<Brand> {
   const t = await getJson<PublicTheme>("/public/theme", tenant);
-  if (!t) return FALLBACK_BRAND;
+  if (!t) return VANTEDGE_BRAND;
   return {
-    company_name: t.company_name || FALLBACK_BRAND.company_name,
+    company_name: t.company_name || VANTEDGE_BRAND.company_name,
     logo_url: t.logo_url,
     accent_color: t.accent_color || t.primary_color || DEFAULT_ACCENT,
   };
@@ -69,18 +78,43 @@ export async function resolveGate(): Promise<Gate> {
     .split(":")[0]
     .toLowerCase();
 
-  let tenant = DEFAULT_TENANT;
-  let audience: Audience = isLocal(host) ? DEFAULT_AUDIENCE : "public";
-  if (!isLocal(host)) {
-    const r = await getJson<ResolveResult>(
-      `/public/resolve?host=${encodeURIComponent(host)}`
-    );
-    if (r) {
-      tenant = r.tenant_slug;
-      audience = normalizeAudience(r.audience);
+  // Vantedge's own hosts: the console, in Vantedge's colours.
+  if (isLocal(host) || PLATFORM_HOSTS.includes(host)) {
+    if (isLocal(host) && PREVIEW_TENANT) {
+      return {
+        tenant: PREVIEW_TENANT,
+        audience: DEFAULT_AUDIENCE,
+        brand: await brandFor(PREVIEW_TENANT),
+        branded: true,
+      };
     }
+    return {
+      tenant: DEFAULT_TENANT,
+      audience: isLocal(host) ? DEFAULT_AUDIENCE : "admin",
+      brand: VANTEDGE_BRAND,
+      branded: false,
+    };
   }
-  return { tenant, audience, brand: await brandFor(tenant) };
+
+  // A client's verified domain: their audience and their brand.
+  const r = await getJson<ResolveResult>(
+    `/public/resolve?host=${encodeURIComponent(host)}`
+  );
+  if (r) {
+    return {
+      tenant: r.tenant_slug,
+      audience: normalizeAudience(r.audience),
+      brand: await brandFor(r.tenant_slug),
+      branded: true,
+    };
+  }
+  // An unknown host gets the neutral public surface.
+  return {
+    tenant: DEFAULT_TENANT,
+    audience: "public",
+    brand: VANTEDGE_BRAND,
+    branded: false,
+  };
 }
 
 export async function hudPreference(): Promise<boolean> {

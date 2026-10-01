@@ -1594,6 +1594,11 @@ async fn seed_reach(
     seed_profile(db, sam, "Sam", "Ortiz").await?;
     for p in &props[2..4] {
         assign(sam, "property", p.id, "property_manager").await?;
+        // Assigning a property manager through the API names them on the
+        // property; keep the demo consistent with that.
+        let mut am: entity::property::ActiveModel = p.clone().into();
+        am.manager = Set("Sam Ortiz".into());
+        am.update(db).await?;
     }
     Ok(())
 }

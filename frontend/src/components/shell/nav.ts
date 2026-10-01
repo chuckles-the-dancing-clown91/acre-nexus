@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth";
 import { useModules } from "@/lib/modules";
 import { usePortfolioSummary } from "@/lib/queries";
-import { useHasTenantScope } from "./tenant-scope";
+import { useHasTenantScope, useReach } from "./tenant-scope";
 import { MODULES, NAV_GROUPS } from "@/modules/registry";
 import type { Tone } from "@/components/ui/badge";
 
@@ -35,6 +35,17 @@ export const DASHBOARD: NavItem = {
   exact: true,
 };
 
+/**
+ * Screens that work for someone who sees only their assigned properties. The
+ * server closes everything else to them, so the nav doesn't offer it.
+ */
+const REACH_AWARE = new Set([
+  "/console/properties",
+  "/console/leases",
+  "/console/maintenance",
+  "/console/my-time",
+]);
+
 export function isActive(item: NavItem, pathname: string): boolean {
   return item.exact
     ? pathname === item.href
@@ -45,6 +56,7 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
   const { user, can } = useAuth();
   const { isEnabled } = useModules();
   const scoped = useHasTenantScope();
+  const { scoped: propertyScoped } = useReach();
   const { data: summary } = usePortfolioSummary({
     enabled: scoped && can("property:read"),
   });
@@ -72,6 +84,7 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
       ).flatMap((m) =>
         m.nav
           .filter((item) => !item.permission || can(item.permission))
+          .filter((item) => !propertyScoped || REACH_AWARE.has(item.href))
           .map((item) => ({
             ...item,
             preview: m.preview,
@@ -84,31 +97,36 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
       key: "admin",
       label: "Admin",
       items: [
-        can("member:read") && {
-          href: "/console/members",
-          label: "Members",
-          icon: "user-cog",
-        },
-        can("billing:read") && {
-          href: "/console/billing",
-          label: "Billing",
-          icon: "wallet",
-        },
-        can("tenant:manage") && {
-          href: "/console/modules",
-          label: "Modules",
-          icon: "blocks",
-        },
-        can("tenant:manage") && {
-          href: "/console/settings",
-          label: "Settings",
-          icon: "settings",
-        },
-        can("audit:read") && {
-          href: "/console/audit",
-          label: "Audit trail",
-          icon: "scroll",
-        },
+        !propertyScoped &&
+          can("member:read") && {
+            href: "/console/members",
+            label: "Members",
+            icon: "user-cog",
+          },
+        !propertyScoped &&
+          can("billing:read") && {
+            href: "/console/billing",
+            label: "Billing",
+            icon: "wallet",
+          },
+        !propertyScoped &&
+          can("tenant:manage") && {
+            href: "/console/modules",
+            label: "Modules",
+            icon: "blocks",
+          },
+        !propertyScoped &&
+          can("tenant:manage") && {
+            href: "/console/settings",
+            label: "Settings",
+            icon: "settings",
+          },
+        !propertyScoped &&
+          can("audit:read") && {
+            href: "/console/audit",
+            label: "Audit trail",
+            icon: "scroll",
+          },
         // Security is per-user (MFA + linked identities), so it has no gate.
         { href: "/console/security", label: "Security", icon: "shield-check" },
       ].filter(Boolean) as NavItem[],
@@ -155,7 +173,7 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
         (g) => g.items.length > 0
       ),
     };
-  }, [user, can, isEnabled, summary]);
+  }, [user, can, isEnabled, summary, propertyScoped]);
 }
 
 /** The nav item (and its group) that best matches a path, for breadcrumbs. */

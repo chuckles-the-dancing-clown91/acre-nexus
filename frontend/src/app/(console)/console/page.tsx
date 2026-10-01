@@ -31,6 +31,7 @@ import { Ring, Sparkline, TrendChart } from "@/components/charts";
 import {
   useActingTenant,
   useHasTenantScope,
+  useReach,
 } from "@/components/shell/tenant-scope";
 import {
   Badge,
@@ -63,12 +64,15 @@ function healthAura(s: PortfolioSummary): AuraTone | null {
 export default function DashboardPage() {
   const { user, can } = useAuth();
   const scoped = useHasTenantScope();
+  // Field roles and owners see only their properties; company-wide money and
+  // onboarding aren't theirs.
+  const { scoped: propertyScoped } = useReach();
   const setAura = useUiStore((s) => s.setAura);
   const { acting } = useActingTenant();
   const summary = usePortfolioSummary({ enabled: scoped });
   const properties = useProperties({ enabled: scoped });
   const series = useFinanceSeries(12, {
-    enabled: scoped && can("ledger:read"),
+    enabled: scoped && !propertyScoped && can("ledger:read"),
   });
   // Staff viewing a client should see that client's name, not "Vantedge HQ".
   const { data: tenants } = useQuery({
@@ -107,14 +111,18 @@ export default function DashboardPage() {
               <>
                 {workspace && <span className="text-fg">{workspace}</span>}
                 {workspace && " · "}
-                {s.properties} properties · {s.units} units
+                {propertyScoped
+                  ? `Your ${s.properties === 1 ? "property" : `${s.properties} properties`}`
+                  : `${s.properties} properties`}{" "}
+                · {s.units} units
               </>
             ) : (
               <Skeleton className="h-5 w-64" />
             )
           }
           actions={
-            can("property:write") && (
+            can("property:write") &&
+            !propertyScoped && (
               <Button asChild>
                 <Link href="/console/properties/onboard">
                   <Plus />
@@ -205,7 +213,9 @@ export default function DashboardPage() {
                 <Kpi
                   label="Properties"
                   value={String(s.properties)}
-                  hint="In this workspace"
+                  hint={
+                    propertyScoped ? "Assigned to you" : "In this workspace"
+                  }
                 />
               )}
             </motion.div>

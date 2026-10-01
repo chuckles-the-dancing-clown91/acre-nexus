@@ -50,7 +50,7 @@ export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
 export const MODULES: ModuleDef[] = [
   {
     key: "properties",
-    label: "Property Management",
+    label: "Properties & Portfolio",
     description: "Portfolio, property profiles, and LLC holding entities.",
     group: "property",
     defaultEnabled: true,

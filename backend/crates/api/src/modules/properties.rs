@@ -18,7 +18,7 @@ impl PlatformModule for PropertiesModule {
     fn manifest(&self) -> ModuleManifest {
         ModuleManifest {
             key: "properties",
-            name: "Property Management",
+            name: "Properties & Portfolio",
             description: "Portfolio, onboarding, property profiles, financing, \
                           investment workflows, and LLC holding entities.",
             permissions: &[
