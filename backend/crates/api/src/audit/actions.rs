@@ -402,3 +402,6 @@ pub const PROCESS_TEMPLATE_SAVE: &str = "process.template_save";
 // ---- Issue catalog ----
 pub const ISSUE_TEMPLATE_SAVE: &str = "issue_template.save";
 pub const ISSUE_GENERATE: &str = "issue.generate_ticket";
+
+// ---- Business profile ----
+pub const BUSINESS_PROFILE_SAVE: &str = "business_profile.save";

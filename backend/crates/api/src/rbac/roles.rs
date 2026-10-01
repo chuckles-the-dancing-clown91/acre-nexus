@@ -111,6 +111,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ApplicationRead,
             AuditRead,
             ImpersonateTenant,
+            IntegrationsManage,
         ],
     },
     SystemRole {
@@ -128,6 +129,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ApplicationRead,
             TenantManage,
             ImpersonateTenant,
+            IntegrationsManage,
         ],
     },
     SystemRole {

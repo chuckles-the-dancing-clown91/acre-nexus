@@ -57,6 +57,7 @@ mod m20240101_000049_partner_link;
 mod m20240101_000050_audit_trail;
 mod m20240101_000051_processes;
 mod m20240101_000052_issue_catalog;
+mod m20240101_000053_business_profile;
 
 pub struct Migrator;
 
@@ -116,6 +117,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000050_audit_trail::Migration),
             Box::new(m20240101_000051_processes::Migration),
             Box::new(m20240101_000052_issue_catalog::Migration),
+            Box::new(m20240101_000053_business_profile::Migration),
         ]
     }
 }

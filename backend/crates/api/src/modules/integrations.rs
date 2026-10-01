@@ -56,6 +56,11 @@ impl PlatformModule for IntegrationsModule {
             // secrets: write-only credential vault
             integrations::list_secrets::list_secrets,
             integrations::set_secret::set_secret,
+            // business profile + Google reviews
+            crate::routes::business::get_profile,
+            crate::routes::business::save_profile,
+            crate::routes::business::google_search,
+            crate::routes::business::google_place,
             integrations::delete_secret::delete_secret,
             // notification send history
             integrations::list_notifications::list_notifications,

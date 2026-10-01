@@ -4,6 +4,7 @@
 // backend `settings` subsystem). Renders each setting generically by kind and
 // saves overrides. Gated by `tenant:manage`.
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useSettings, useSetSetting } from "@/lib/queries";
 import type { SettingView } from "@/lib/types";
@@ -42,6 +43,14 @@ export default function SettingsPage() {
         <p className="text-ink-3">
           Workspace-wide configuration for your firm.
         </p>
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/business"
+            className="mt-3 inline-block rounded-xl border border-accent bg-accent-soft px-3 py-2 text-sm font-semibold text-accent-2"
+          >
+            Business profile and Google reviews
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}

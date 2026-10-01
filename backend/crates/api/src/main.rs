@@ -38,6 +38,7 @@ mod error;
 mod esign;
 mod finance;
 mod geo;
+mod google_places;
 mod guards;
 mod helpdesk;
 mod leasedoc;

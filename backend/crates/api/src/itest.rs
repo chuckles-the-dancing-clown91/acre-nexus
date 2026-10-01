@@ -97,6 +97,7 @@ async fn integration_suite() {
     audit_trail_who_changed_what(&c).await;
     turnover_step_logic(&c).await;
     issue_catalog_generates_ticket_and_shopping_list(&c).await;
+    business_profile_and_google_reviews(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -2961,4 +2962,146 @@ async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
         .unwrap()
         .iter()
         .any(|e| e["action"] == "issue.generate_ticket"));
+}
+
+/// Business profile and Google reviews: the client edits it, a Vantedge
+/// employee edits the same record (flagged as support), the public site gets
+/// the filtered reviews, and another workspace sees none of it.
+async fn business_profile_and_google_reviews(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let owner = mint(c, Some(nw), false, &["integrations:manage", "audit:read"]);
+    let nobody = mint(c, Some(nw), false, &["property:read"]);
+
+    // Nothing yet; no permission, no access.
+    let (st, p) = get_json(c, "/business-profile", &owner).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert!(p["google_place_id"].is_null());
+    assert_eq!(p["min_rating"], 4);
+    let (st, _) = get_json(c, "/business-profile", &nobody).await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Save, with validation.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &owner,
+        serde_json::json!({ "website": "javascript:alert(1)" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &owner,
+        serde_json::json!({ "min_rating": 9 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, p) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &owner,
+        serde_json::json!({ "business_name": "Northwind Rentals", "phone": "555-0100",
+            "website": "https://northwind.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["business_name"], "Northwind Rentals");
+
+    // Find the business on Google (sample data without a live key), pick it.
+    let (st, found) = get_json(
+        c,
+        "/business-profile/google/search?q=Northwind%20Rentals",
+        &owner,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{found}");
+    let place_id = found[0]["place_id"].as_str().unwrap().to_string();
+    let (st, _) = get_json(c, "/business-profile/google/place", &owner).await;
+    assert_eq!(st, Status::NotFound, "no place picked yet");
+    let (st, p) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &owner,
+        serde_json::json!({ "google_place_id": place_id, "google_place_name": "Northwind Rentals" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert!(p["review_link"].as_str().unwrap().contains(&place_id));
+    let (st, place) = get_json(c, "/business-profile/google/place?refresh=true", &owner).await;
+    assert_eq!(st, Status::Ok, "{place}");
+    assert_eq!(place["reviews"].as_array().unwrap().len(), 3);
+
+    // The public site: the 3-star review is under the 4-star floor.
+    async fn public(c: &Ctx, slug: &'static str) -> (Status, serde_json::Value) {
+        let resp = c
+            .client
+            .get("/public/reviews")
+            .header(Header::new("X-Tenant", slug))
+            .dispatch()
+            .await;
+        let st = resp.status();
+        (st, resp.into_json::<serde_json::Value>().await.unwrap())
+    }
+    let (st, pr) = public(c, "northwind").await;
+    assert_eq!(st, Status::Ok, "{pr}");
+    assert_eq!(pr["reviews"].as_array().unwrap().len(), 2);
+    assert!(pr["write_url"].as_str().unwrap().contains(&place_id));
+    // Hidden when switched off.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &owner,
+        serde_json::json!({ "show_reviews": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, pr) = public(c, "northwind").await;
+    assert!(pr["reviews"].as_array().unwrap().is_empty());
+    // Another workspace has no profile.
+    let (st, pr) = public(c, "cascade").await;
+    assert_eq!(st, Status::Ok);
+    assert!(pr["reviews"].as_array().unwrap().is_empty());
+    let other = mint(c, Some(cascade), false, &["integrations:manage"]);
+    let (_, p) = get_json(c, "/business-profile", &other).await;
+    assert!(p["business_name"].is_null());
+
+    // A Vantedge employee fixes the phone number on a call.
+    let staff = mint(c, Some(nw), true, &["integrations:manage"]);
+    let (st, p) = send_json(
+        c,
+        Method::Put,
+        "/business-profile",
+        &staff,
+        serde_json::json!({ "phone": "555-0199" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    let (st, trail) = get_json(
+        c,
+        "/audit/events?target_type=business_profile&limit=50",
+        &owner,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{trail}");
+    let events = trail["events"].as_array().unwrap();
+    let call = events
+        .iter()
+        .find(|e| e["support"] == true)
+        .expect("the support edit is flagged");
+    assert_eq!(call["action"], "business_profile.save");
+    assert!(call["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|ch| ch["field"] == "phone" && ch["to"] != "555-0199"));
+    // Contact details are masked in the trail, never shown in full.
+    assert!(events.iter().any(|e| e["support"] == false));
 }

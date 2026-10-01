@@ -40,6 +40,7 @@ impl PlatformModule for LeasingModule {
             public::listings::listings,
             public::listing_detail::listing_detail,
             public::public_theme::public_theme,
+            crate::routes::business::public_reviews,
             public::apply::apply,
             // console listing management
             listings::list::list,

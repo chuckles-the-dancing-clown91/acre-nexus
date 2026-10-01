@@ -10,6 +10,7 @@ pub use super::audit_log::Entity as AuditLog;
 pub use super::background_job::Entity as BackgroundJob;
 pub use super::bank_account::Entity as BankAccount;
 pub use super::bank_txn::Entity as BankTxn;
+pub use super::business_profile::Entity as BusinessProfile;
 pub use super::capital_call::Entity as CapitalCall;
 pub use super::capital_call_line::Entity as CapitalCallLine;
 pub use super::counterparty::Entity as Counterparty;

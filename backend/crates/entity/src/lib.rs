@@ -27,6 +27,7 @@ pub mod audit_log;
 pub mod background_job;
 pub mod bank_account;
 pub mod bank_txn;
+pub mod business_profile;
 pub mod capital_call;
 pub mod capital_call_line;
 pub mod counterparty;

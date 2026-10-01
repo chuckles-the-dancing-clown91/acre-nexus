@@ -6,6 +6,7 @@ import type { Listing } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { ListingCard } from "@/components/ListingCard";
 import { Icon } from "@/components/Icon";
+import { ReviewsStrip } from "@/components/ReviewsStrip";
 import { BrandMark, BRAND_NAME, BRAND_SLOGAN } from "@/components/Brand";
 
 export default function HomePage() {
@@ -106,6 +107,8 @@ export default function HomePage() {
             </div>
           )}
         </section>
+
+        <ReviewsStrip />
       </main>
       <footer className="border-t border-line py-6">
         <div className="mx-auto flex max-w-[1240px] items-center gap-2 px-6 text-xs text-ink-3">
