@@ -21,36 +21,19 @@ adds a kit to a work order that's already open.
 Estimates use two settings: `maintenance.labor_rate_cents` (in-house, default
 $75/hr) and `maintenance.contractor_rate_cents` (default $125/hr).
 
-Starter kits, added by name to every workspace that doesn't have them:
-shower replacement, toilet replacement, water heater replacement, drywall
-patch and paint, unit turn repaint, HVAC seasonal service. Retired kits stay
-retired. Kits are seeded server-side in `api/src/servicedesk.rs`; editing kits
-in the new console is still to come (the API supports it:
-`POST/PUT /issue-templates`).
+Starter kits are added once per workspace: shower replacement, toilet
+replacement, water heater replacement, drywall patch and paint, unit turn
+repaint, HVAC seasonal service. After that the catalog is the workspace's;
+renamed, changed or retired kits stay that way. Kits are seeded server-side
+in `api/src/servicedesk.rs`.
 
-## On a work order
-
-| | Route |
-|---|---|
-| Tasks: list, add, edit (status, trade, time, vendor, order), remove | `/tickets/<id>/tasks[/<task_id>]` |
-| Send a task to a vendor | `POST /tickets/<id>/tasks/<task_id>/dispatch` |
-| Vendors for a trade (matching first, insurance and link status) | `GET /tickets/<id>/vendors?trade=` |
-| Estimate vs spent, variance, receipts, trades needing a vendor | `GET /tickets/<id>/costs` |
-| Upload a photo, receipt or document | `POST /tickets/<id>/uploads` |
-| Files with short-lived links | `GET /tickets/<id>/files` |
-| Notes with photos (`document_ids`) | `POST /tickets/<id>/comments` |
-| Expenses with receipts | `GET/POST /tickets/<id>/expenses` |
-
-**Vendors.** Any contractor (a counterparty of kind `contractor`) can take
-work; their `trades` decide who's suggested. A vendor linked to a partner
-system (Alpha Power Wash today, through the partner link) gets the job in
-their own board; every other vendor gets the work order by email. The
-insurance rule (`compliance.require_coi`) applies to every send.
-
-**Spent** is line items plus expenses plus approved quotes. Expenses can be
-marked billable to the owner or reimbursable to whoever paid.
-
-## Schedule
+Managers build and change kits at `/console/maintenance/kits/new` and
+`/console/maintenance/kits/<id>` (`POST`/`PUT`/`DELETE /issue-templates`):
+tasks in order with trade, minutes and a contractor flag, parts with quantity
+and typical cost, and running totals. "Copy" starts a new kit from an existing
+one. Retiring a kit removes it from the catalog; work orders and routines
+already made from it keep their tasks and parts. An older catalog entry with
+only a checklist opens with the checklist as tasks.
 
 A maintenance plan (`/maintenance-plans`) repeats on a cadence and, when due,
 opens a work order. With `issue_template_id` set, that work order starts with

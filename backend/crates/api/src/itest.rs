@@ -5684,4 +5684,74 @@ async fn service_desk(c: &Ctx) {
         Status::Forbidden,
         "parts on their work order are theirs"
     );
+    // The catalog is the company's to edit. A renamed starter kit stays
+    // renamed; it doesn't come back under its old name.
+    let mut edited = shower.clone();
+    edited["name"] = serde_json::json!("Shower remodel");
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/issue-templates/{kit_id}"),
+        &pm,
+        edited.clone(),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden, "a property manager uses the catalog");
+    let (st, saved) = send_json(
+        c,
+        Method::Put,
+        &format!("/issue-templates/{kit_id}"),
+        &staff,
+        edited,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{saved}");
+    assert_eq!(saved["tasks"], shower["tasks"]);
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let names: Vec<&str> = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"Shower remodel"));
+    assert!(!names.contains(&"Shower replacement"), "{names:?}");
+
+    // Their own kit, priced at their rates, then retired.
+    let (st, mine) = post_json(
+        c,
+        "/issue-templates",
+        &staff,
+        serde_json::json!({
+            "name": "Garbage disposal swap",
+            "category": "appliance",
+            "tasks": [
+                { "title": "Pull the old unit", "trade": "plumbing", "est_minutes": 30 },
+                { "title": "Wire and mount", "trade": "electrical", "est_minutes": 45,
+                  "needs_contractor": true }
+            ],
+            "parts": [{ "name": "Disposal 1/2 HP", "quantity": 1, "unit_cost_cents": 12900 }]
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert_eq!(mine["contractor_trades"], serde_json::json!(["electrical"]));
+    assert!(mine["est_labor_cents"].as_i64().unwrap() > 0);
+    assert_eq!(mine["est_parts_cents"], 12900);
+    let mine_id = mine["id"].as_str().unwrap();
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/issue-templates/{mine_id}"),
+        &staff,
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    assert!(!kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|k| k["id"] == mine["id"]));
 }

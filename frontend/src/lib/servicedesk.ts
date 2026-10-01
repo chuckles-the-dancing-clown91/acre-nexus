@@ -185,8 +185,164 @@ const post = <T>(path: string, body: unknown) =>
 const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: "PATCH", auth: true, body });
 
+export const KIT_CATEGORIES = [
+  "plumbing",
+  "electrical",
+  "hvac",
+  "appliance",
+  "structural",
+  "general",
+] as const;
+
+export const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+
+/** A kit as it's being edited: strings for the number fields so a blank stays
+ * blank while typing. */
+export interface KitDraft {
+  name: string;
+  area: string;
+  category: string;
+  priority: string;
+  description: string;
+  tasks: {
+    title: string;
+    trade: string;
+    minutes: string;
+    needs_contractor: boolean;
+  }[];
+  parts: {
+    name: string;
+    quantity: string;
+    cost: string;
+    inventory_item_id: string | null;
+  }[];
+}
+
+/** What the server takes to save a kit. */
+export interface KitReq {
+  name: string;
+  area: string | null;
+  category: string;
+  priority: string;
+  description: string | null;
+  est_minutes: number | null;
+  checklist: string[];
+  tasks: KitTask[];
+  parts: KitPart[];
+}
+
+export function emptyDraft(): KitDraft {
+  return {
+    name: "",
+    area: "",
+    category: "general",
+    priority: "normal",
+    description: "",
+    tasks: [],
+    parts: [],
+  };
+}
+
+/** Start a draft from a saved kit. An older catalog entry with only a
+ * checklist gets its checklist as tasks, so saving moves it to tasks. */
+export function draftFrom(kit: Kit): KitDraft {
+  const tasks = kit.tasks.length
+    ? kit.tasks.map((t) => ({
+        title: t.title,
+        trade: t.trade,
+        minutes: t.est_minutes ? String(t.est_minutes) : "",
+        needs_contractor: t.needs_contractor,
+      }))
+    : kit.checklist.map((c) => ({
+        title: c,
+        trade: "general",
+        minutes: "",
+        needs_contractor: false,
+      }));
+  return {
+    name: kit.name,
+    area: kit.area ?? "",
+    category: kit.category,
+    priority: kit.priority,
+    description: kit.description ?? "",
+    tasks,
+    parts: kit.parts.map((p) => ({
+      name: p.name,
+      quantity: String(p.quantity),
+      cost:
+        p.unit_cost_cents != null ? (p.unit_cost_cents / 100).toFixed(2) : "",
+      inventory_item_id: p.inventory_item_id,
+    })),
+  };
+}
+
+function wholeMinutes(raw: string): number | null {
+  const n = Math.round(Number(raw));
+  return raw.trim() && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The draft as the server takes it: blank lines dropped, numbers parsed. */
+export function draftToReq(d: KitDraft): KitReq {
+  const tasks: KitTask[] = d.tasks
+    .filter((t) => t.title.trim())
+    .map((t) => ({
+      title: t.title.trim(),
+      trade: t.trade,
+      est_minutes: wholeMinutes(t.minutes),
+      needs_contractor: t.needs_contractor,
+    }));
+  const parts: KitPart[] = d.parts
+    .filter((p) => p.name.trim())
+    .map((p) => ({
+      name: p.name.trim(),
+      quantity: Math.max(1, Math.round(Number(p.quantity)) || 1),
+      inventory_item_id: p.inventory_item_id,
+      unit_cost_cents: parseCents(p.cost),
+    }));
+  const minutes = tasks.reduce((s, t) => s + (t.est_minutes ?? 0), 0);
+  return {
+    name: d.name.trim(),
+    area: d.area.trim() || null,
+    category: d.category,
+    priority: d.priority,
+    description: d.description.trim() || null,
+    est_minutes: minutes || null,
+    checklist: [],
+    tasks,
+    parts,
+  };
+}
+
+/** Running totals while editing: time in-house and by contractors, parts. */
+export function draftTotals(d: KitDraft): {
+  minutes: number;
+  contractorMinutes: number;
+  partsCents: number;
+} {
+  const r = draftToReq(d);
+  let minutes = 0;
+  let contractorMinutes = 0;
+  for (const t of r.tasks) {
+    if (t.needs_contractor) contractorMinutes += t.est_minutes ?? 0;
+    else minutes += t.est_minutes ?? 0;
+  }
+  const partsCents = r.parts.reduce(
+    (s, p) => s + (p.unit_cost_cents ?? 0) * p.quantity,
+    0
+  );
+  return { minutes, contractorMinutes, partsCents };
+}
+
 export const desk = {
   kits: () => request<Kit[]>("/issue-templates", { auth: true }),
+  createKit: (body: KitReq) => post<Kit>("/issue-templates", body),
+  updateKit: (id: string, body: KitReq) =>
+    request<Kit>(`/issue-templates/${id}`, { method: "PUT", auth: true, body }),
+  retireKit: (id: string) =>
+    request<{ ok: boolean }>(`/issue-templates/${id}`, {
+      method: "DELETE",
+      auth: true,
+    }),
   generate: (
     kitId: string,
     body: {

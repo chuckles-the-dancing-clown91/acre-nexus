@@ -329,16 +329,21 @@ const KITS: &[Kit] = &[
     },
 ];
 
-/// Add any starter kit the workspace doesn't have yet (by name). Kits a
-/// workspace retired stay retired.
+/// Give a workspace the starter kits, once. After that the catalog is theirs:
+/// kits they rename, change or retire stay that way. A name the workspace
+/// already uses is skipped.
 pub async fn ensure_kits(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<()> {
-    let have: Vec<String> = IssueTemplate::find()
+    let rows = IssueTemplate::find()
         .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
         .all(db)
-        .await?
-        .into_iter()
-        .map(|t| t.name.to_lowercase())
-        .collect();
+        .await?;
+    let seeded_before = rows
+        .iter()
+        .any(|t| t.seeded && t.tasks.as_array().is_some_and(|a| !a.is_empty()));
+    if seeded_before {
+        return Ok(());
+    }
+    let have: Vec<String> = rows.into_iter().map(|t| t.name.to_lowercase()).collect();
     let now = Utc::now();
     for k in KITS {
         if have.contains(&k.name.to_lowercase()) {

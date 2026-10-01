@@ -2,11 +2,22 @@
 
 // Job kits: the catalog a work order starts from. Each kit lists its tasks by
 // trade (contractor work flagged) and the parts it takes, with an estimate.
+// The company's managers add their own, change any, or copy one to start.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ClipboardList, HardHat, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  Copy,
+  HardHat,
+  Pencil,
+  Plus,
+  Search,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { useReach } from "@/components/shell/tenant-scope";
 import { desk, tradeLabel } from "@/lib/servicedesk";
 import { KitPreview } from "@/components/desk/KitPreview";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +28,10 @@ import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 export default function KitsPage() {
+  const { can } = useAuth();
+  const { scoped } = useReach();
+  // The catalog is the company's: people scoped to properties use it.
+  const edit = can("maintenance:manage") && !scoped;
   const kits = useQuery({ queryKey: ["kits"], queryFn: desk.kits });
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -44,9 +59,19 @@ export default function KitsPage() {
         title="Job kits"
         description="Pick one on a new work order and its tasks, parts and estimate come with it."
         actions={
-          <Button asChild>
-            <Link href="/console/maintenance/new">New work order</Link>
-          </Button>
+          <>
+            {edit && (
+              <Button variant="secondary" asChild>
+                <Link href="/console/maintenance/kits/new">
+                  <Plus />
+                  New kit
+                </Link>
+              </Button>
+            )}
+            <Button asChild>
+              <Link href="/console/maintenance/new">New work order</Link>
+            </Button>
+          </>
         }
       />
       <div className="relative max-w-sm">
@@ -115,6 +140,22 @@ export default function KitsPage() {
             {open === k.id && (
               <div className="border-t border-line p-4">
                 <KitPreview kit={k} />
+                {edit && (
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" asChild>
+                      <Link href={`/console/maintenance/kits/new?from=${k.id}`}>
+                        <Copy />
+                        Copy
+                      </Link>
+                    </Button>
+                    <Button size="sm" variant="secondary" asChild>
+                      <Link href={`/console/maintenance/kits/${k.id}`}>
+                        <Pencil />
+                        Edit
+                      </Link>
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </Panel>
