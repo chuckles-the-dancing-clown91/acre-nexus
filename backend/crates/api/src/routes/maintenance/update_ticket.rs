@@ -143,6 +143,7 @@ pub async fn update_ticket(
     }
 
     let now = Utc::now();
+    let before = existing.clone();
     let mut am: entity::maintenance_ticket::ActiveModel = existing.into();
     if let Some(v) = b.title {
         am.title = Set(v);
@@ -393,14 +394,16 @@ pub async fn update_ticket(
         }
     }
 
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::TICKET_UPDATE,
-        Some("maintenance_ticket"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": saved.status, "priority": saved.priority })),
+        "maintenance_ticket",
+        saved.id,
+        Some(saved.property_id),
+        &saved.title,
+        &before,
+        &saved,
     )
     .await;
     Ok(Json(TicketDto::from(saved)))

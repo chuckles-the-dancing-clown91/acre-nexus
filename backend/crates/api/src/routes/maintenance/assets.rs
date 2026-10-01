@@ -140,18 +140,14 @@ pub async fn create_asset(
     .insert(&db)
     .await?;
 
-    crate::audit::record(
+    crate::audit::change::created(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::ASSET_CREATE,
-        Some("asset"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({
-            "property_id": saved.property_id,
-            "kind": saved.kind,
-            "name": saved.name,
-        })),
+        "asset",
+        saved.id,
+        Some(saved.property_id),
+        &saved.name,
     )
     .await;
 
@@ -178,6 +174,7 @@ pub async fn update_asset(
         .ok_or_else(|| ApiError::NotFound("asset not found".into()))?;
     let b = body.into_inner();
 
+    let before = asset.clone();
     let mut am: entity::asset::ActiveModel = asset.into();
     if let Some(v) = b.name.map(|s| s.trim().to_string()) {
         if v.is_empty() {
@@ -233,14 +230,16 @@ pub async fn update_asset(
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
 
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::ASSET_UPDATE,
-        Some("asset"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": saved.status })),
+        "asset",
+        saved.id,
+        Some(saved.property_id),
+        &saved.name,
+        &before,
+        &saved,
     )
     .await;
 

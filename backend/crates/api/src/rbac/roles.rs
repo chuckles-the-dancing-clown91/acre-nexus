@@ -16,6 +16,7 @@ pub struct SystemRole {
 
 /// Tenant-admin permission bundle (everything within a workspace).
 const TENANT_FULL: &[Permission] = &[
+    AuditRead,
     PropertyRead,
     PropertyWrite,
     EntityRead,

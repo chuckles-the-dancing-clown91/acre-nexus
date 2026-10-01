@@ -84,14 +84,14 @@ pub async fn create(
     .insert(&db)
     .await?;
 
-    crate::audit::record(
+    crate::audit::change::created(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::LISTING_CREATE,
-        Some("listing"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "property_id": pid, "title": title })),
+        "listing",
+        saved.id,
+        Some(pid),
+        &title,
     )
     .await;
 

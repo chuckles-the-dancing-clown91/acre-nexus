@@ -94,6 +94,7 @@ async fn integration_suite() {
     property_autofill_and_photo(&c).await;
     parts_loop_and_closeout(&c).await;
     alpha_vendor_link(&c).await;
+    audit_trail_who_changed_what(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -2293,4 +2294,257 @@ async fn alpha_vendor_link(c: &Ctx) {
     assert_eq!(resp.status(), Status::Ok);
     let (_, after) = get_json(c, &format!("/entities/{vid}/partner"), &office).await;
     assert_eq!(after["linked"], false);
+}
+
+/// Roadmap area 1: who changed what, on which property. Edits to a property,
+/// its unit and a work order leave before → after diffs on the property's
+/// history; a Vantedge employee's edit is flagged as support; contact details
+/// never appear; another workspace sees none of it.
+async fn audit_trail_who_changed_what(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let mgr = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:manage",
+            "maintenance:manage",
+            "maintenance:read",
+            "audit:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+
+    // The property: rename it, and change its manager.
+    let (st, before) = get_json(c, &format!("/properties/{pid}"), &mgr).await;
+    assert_eq!(st, Status::Ok);
+    let old_name = before["name"].as_str().unwrap().to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{pid}"),
+        &mgr,
+        serde_json::json!({ "name": "Renamed for the audit test", "manager": "Pat Lee" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    // A save that changes nothing leaves no row.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{pid}"),
+        &mgr,
+        serde_json::json!({ "name": "Renamed for the audit test" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // A unit on it, then a rent change.
+    let (st, unit) = post_json(c, &format!("/properties/{pid}/units"), &mgr, serde_json::json!({ "unit_number": "AUD-1", "market_rent_cents": 120000, "status": "vacant" })).await;
+    assert_eq!(st, Status::Ok, "{unit}");
+    let uid = unit["id"].as_str().unwrap().to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/units/{uid}"),
+        &mgr,
+        serde_json::json!({ "market_rent_cents": 135000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // A work order, then its status.
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &mgr,
+        serde_json::json!({ "title": "Audit leak", "priority": "normal" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &mgr,
+        serde_json::json!({ "status": "triage", "priority": "high" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // A Vantedge employee, acting on the workspace, edits the property too.
+    let staff = mint(c, Some(nw), true, &["property:read", "property:write"]);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{pid}"),
+        &staff,
+        serde_json::json!({ "name": "Fixed by support" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    let (st, hist) = get_json(c, &format!("/properties/{pid}/history"), &mgr).await;
+    assert_eq!(st, Status::Ok, "{hist}");
+    let events = hist["events"].as_array().unwrap();
+    let find = |label: &str, summary_has: &str| {
+        events.iter().find(|e| {
+            e["label"].as_str().unwrap_or("").contains(label)
+                && e["summary"].as_str().unwrap_or("").contains(summary_has)
+        })
+    };
+    // The rename: from the old name to the new one, by the manager, not support.
+    let rename = events
+        .iter()
+        .find(|e| {
+            e["changes"]
+                .as_array()
+                .map(|ch| {
+                    ch.iter()
+                        .any(|x| x["field"] == "name" && x["to"] == "Renamed for the audit test")
+                })
+                .unwrap_or(false)
+        })
+        .unwrap_or_else(|| panic!("{hist}"));
+    assert_eq!(rename["support"], false);
+    assert!(
+        rename["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["field"] == "name" && x["from"] == old_name.as_str()),
+        "{rename}"
+    );
+    assert!(rename["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["field"] == "manager" && x["to"] == "Pat Lee"));
+    // Only one rename event: the no-op save left nothing.
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e["changes"]
+                .as_array()
+                .map(|ch| ch.iter().any(|x| x["to"] == "Renamed for the audit test"))
+                .unwrap_or(false))
+            .count(),
+        1
+    );
+    // The unit: created, then its rent changed from 1200 to 1350.
+    assert!(find("Unit AUD-1", "created").is_some(), "{hist}");
+    let rent = find("Unit AUD-1", "changed").expect("unit rent change");
+    assert!(
+        rent["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["field"] == "market_rent_cents" && x["from"] == 120000 && x["to"] == 135000),
+        "{rent}"
+    );
+    // The work order: its status and priority.
+    let tk = find("Audit leak", "changed").expect("ticket change");
+    assert!(tk["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["field"] == "status" && x["to"] == "triage"));
+    // Support is flagged, and filterable.
+    let sup = events
+        .iter()
+        .find(|e| {
+            e["changes"]
+                .as_array()
+                .map(|ch| ch.iter().any(|x| x["to"] == "Fixed by support"))
+                .unwrap_or(false)
+        })
+        .expect("support edit");
+    assert_eq!(sup["support"], true);
+    let (_, only) = get_json(c, &format!("/properties/{pid}/history?support=true"), &mgr).await;
+    assert!(only["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["support"] == true));
+    assert!(!only["events"].as_array().unwrap().is_empty());
+    // Kind filter and paging.
+    let (_, units_only) = get_json(c, &format!("/properties/{pid}/history?kind=unit"), &mgr).await;
+    assert!(units_only["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["target_type"] == "unit"));
+    let (_, page1) = get_json(c, &format!("/properties/{pid}/history?limit=2"), &mgr).await;
+    assert_eq!(page1["events"].as_array().unwrap().len(), 2);
+    let next = page1["next"].as_str().expect("a second page");
+    let (_, page2) = get_json(
+        c,
+        &format!(
+            "/properties/{pid}/history?limit=2&before={}",
+            next.replace('+', "%2B")
+        ),
+        &mgr,
+    )
+    .await;
+    assert!(page2["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["id"] != page1["events"][0]["id"]));
+
+    // The workspace trail and the CSV, for someone with audit:read.
+    let (st, trail) = get_json(
+        c,
+        &format!("/audit/events?property_id={pid}&target_type=maintenance_ticket"),
+        &mgr,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{trail}");
+    assert!(!trail["events"].as_array().unwrap().is_empty());
+    let resp = c
+        .client
+        .get(format!("/audit/events.csv?property_id={pid}"))
+        .header(bearer(&mgr))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let csv = resp.into_string().await.unwrap();
+    assert!(csv.starts_with("When,Who,Vantedge support"), "{csv}");
+    assert!(csv.contains("Renamed for the audit test"), "{csv}");
+    // Without audit:read there's the property's history but not the workspace trail.
+    let plain = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, &format!("/properties/{pid}/history"), &plain).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = get_json(c, "/audit/events", &plain).await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Another workspace sees none of it — not by property id, not in its trail.
+    let other = mint(c, Some(cascade), false, &["property:read", "audit:read"]);
+    let (st, _) = get_json(c, &format!("/properties/{pid}/history"), &other).await;
+    assert_eq!(st, Status::NotFound);
+    let (_, theirs) = get_json(c, "/audit/events?limit=200", &other).await;
+    assert!(
+        theirs["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["label"] != "Unit AUD-1" && e["label"] != "Audit leak"),
+        "{theirs}"
+    );
+    // …and the older platform route no longer shows other workspaces' rows to a workspace-bound principal.
+    let (st, legacy) = get_json(c, "/admin/audit?limit=500", &other).await;
+    assert_eq!(st, Status::Ok);
+    assert!(
+        legacy
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["tenant_id"].is_null() || r["tenant_id"] == cascade.to_string().as_str()),
+        "{legacy}"
+    );
 }

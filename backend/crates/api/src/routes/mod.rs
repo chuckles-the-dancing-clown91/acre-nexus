@@ -14,6 +14,7 @@ pub mod accounting;
 pub mod api_tokens;
 pub mod applications;
 pub mod assignments;
+pub mod audit_trail;
 pub mod auth;
 pub mod backoffice;
 pub mod banking;
@@ -139,6 +140,10 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         iam::permissions::permissions,
         iam::profile_types::profile_types,
         iam::list_audit::list_audit,
+        // the audit trail: who changed what, on which property
+        audit_trail::property_history,
+        audit_trail::events,
+        audit_trail::events_csv,
         iam::list_roles::list_roles,
         iam::create_role::create_role,
         iam::update_role::update_role,

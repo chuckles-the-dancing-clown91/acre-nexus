@@ -49,14 +49,14 @@ pub async fn create_unit(
         updated_at: Set(now.into()),
     };
     let saved = model.insert(&db).await?;
-    crate::audit::record(
+    crate::audit::change::created(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::UNIT_CREATE,
-        Some("unit"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "property_id": saved.property_id, "unit_number": saved.unit_number })),
+        "unit",
+        saved.id,
+        Some(saved.property_id),
+        &format!("Unit {}", saved.unit_number),
     )
     .await;
     Ok(Json(UnitDto::from(saved)))

@@ -30,6 +30,7 @@ pub async fn update_lease(
         .await?
         .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
     let b = body.into_inner();
+    let before = existing.clone();
     let mut am: entity::lease::ActiveModel = existing.into();
     if let Some(v) = b.unit_id {
         am.unit_id = Set(Some(v));
@@ -80,14 +81,16 @@ pub async fn update_lease(
     let saved = am.update(&db).await?;
     // Keep property occupancy + unit status in sync when the lease status changes.
     crate::rentals_occupancy::sync_property_occupancy(&db, saved.property_id).await;
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::LEASE_UPDATE,
-        Some("lease"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": saved.status, "payment_status": saved.payment_status })),
+        "lease",
+        saved.id,
+        Some(saved.property_id),
+        &format!("Lease — {}", saved.tenant_name),
+        &before,
+        &saved,
     )
     .await;
     Ok(Json(LeaseDto::from(saved)))

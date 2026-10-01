@@ -202,6 +202,21 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
+          {can("audit:read") && (
+            <Link
+              href="/console/audit"
+              className={clsx(
+                "mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+                pathname.startsWith("/console/audit")
+                  ? "bg-accent-soft text-accent-2"
+                  : "text-ink-2 hover:bg-surface-2"
+              )}
+            >
+              <Icon name="search" size={17} />
+              Audit trail
+            </Link>
+          )}
+
           {/* Security is per-user (MFA + linked social identities) — no gate. */}
           <Link
             href="/console/security"

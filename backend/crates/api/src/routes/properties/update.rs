@@ -33,6 +33,7 @@ pub async fn update(
     let resource = crate::rbac::scope::ResourceScope::property(p.id, p.portfolio_id, p.llc_id);
     crate::tenancy::resolve::require_scoped(&db, &user, Permission::PropertyWrite, &resource)
         .await?;
+    let before = p.clone();
     let mut am: entity::property::ActiveModel = p.into();
     let b = body.into_inner();
     if let Some(v) = b.name {
@@ -88,14 +89,16 @@ pub async fn update(
     if address_changed {
         crate::geo::queue_fetch(&db, scope.tenant_id, saved.id).await;
     }
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::PROPERTY_UPDATE,
-        Some("property"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        None,
+        "property",
+        saved.id,
+        Some(saved.id),
+        &saved.name,
+        &before,
+        &saved,
     )
     .await;
     Ok(Json(PropertyResp::from(saved)))

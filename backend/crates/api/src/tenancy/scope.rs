@@ -12,7 +12,6 @@ pub struct TenantScope {
     pub tenant_id: Uuid,
     /// True when a staff user is impersonating this tenant. Surfaced for audit
     /// logging / "viewing as" banners that consume it.
-    #[allow(dead_code)]
     pub impersonated: bool,
 }
 

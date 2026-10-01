@@ -13,7 +13,7 @@ map and on the autofill work already done.
 
 | # | Area | Status |
 |---|------|--------|
-| 1 | Audit trail: who changed what on which property | ☐ |
+| 1 | Audit trail: who changed what on which property | ☑ |
 | 2 | Business profile, Google reviews and integrations (client + Vantedge staff) | ☐ |
 | 3 | Turnover with step logic | ☐ |
 | 4 | Issue catalog → generate ticket → parts → shopping list | ☐ |
@@ -24,7 +24,7 @@ map and on the autofill work already done.
 
 ---
 
-## 1. Audit trail: who changed what on which property ☐
+## 1. Audit trail: who changed what on which property ☑
 
 **Today.** `audit_log` has two layers: a fairing that logs every request, and ~250
 domain events written with `audit::record`. `GET /admin/audit` returns the latest
@@ -33,6 +33,14 @@ before/after values** (`property.update` is recorded with no metadata; a setting
 edit stores only the new value), no pagination, no date filter, no export, and no
 retention rule. A Vantedge employee acting on a customer's workspace is flagged
 `impersonated` in the request scope but that flag never reaches the log.
+
+**Shipped.** The design below, plus a fix found on the way: `GET /admin/audit`
+did not filter by workspace (the table sits outside row-level security), so a
+workspace-bound principal could have read other workspaces' rows — it now
+filters, and a regression test covers it. Tenant owners now hold `audit:read`.
+Contact details (email, phone) are masked in diffs so personal data isn't
+copied into the trail. Property, unit, lease, listing, work order and appliance
+edits and creations are covered; later areas write to it as they land.
 
 **Design.**
 - `audit_log` gains `property_id` (indexed) and `support` (true when a Vantedge

@@ -34,6 +34,8 @@ pub async fn record(
         request_id: NotSet,
         ip: NotSet,
         duration_ms: NotSet,
+        property_id: NotSet,
+        support: NotSet,
         // A domain event with no actor is a system/anonymous action (e.g. a
         // public application submission); otherwise it was a signed-in user.
         principal_kind: Set(Some(

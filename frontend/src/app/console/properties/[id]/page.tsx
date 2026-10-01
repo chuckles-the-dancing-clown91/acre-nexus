@@ -27,12 +27,19 @@ import type {
 import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { AssetsCard } from "@/components/AssetsCard";
+import { PropertyHistoryTab } from "@/components/PropertyHistoryTab";
 import { AssignmentsCard } from "@/components/AssignmentsCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
 
-type TabKey = "overview" | "financials" | "maintenance" | "media" | "documents";
+type TabKey =
+  | "overview"
+  | "financials"
+  | "maintenance"
+  | "media"
+  | "documents"
+  | "history";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -40,6 +47,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "maintenance", label: "Maintenance" },
   { key: "media", label: "Media" },
   { key: "documents", label: "Documents" },
+  { key: "history", label: "History" },
 ];
 
 export default function PropertyProfilePage() {
@@ -391,6 +399,7 @@ export default function PropertyProfilePage() {
         />
       )}
       {tab === "financials" && <FinancialsTab data={financials} />}
+      {tab === "history" && <PropertyHistoryTab propertyId={id} />}
       {tab === "maintenance" && <MaintenanceTab data={maint} />}
       {tab === "media" && (
         <MediaTab
