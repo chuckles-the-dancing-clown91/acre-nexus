@@ -32,6 +32,7 @@ pub mod geo;
 pub mod hoa;
 pub mod iam;
 pub mod integrations;
+pub mod jobs;
 pub mod leads;
 pub mod lease_charges;
 pub mod lease_docs;
@@ -149,6 +150,9 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         audit_trail::property_history,
         audit_trail::events,
         audit_trail::events_csv,
+        jobs::schedule,
+        jobs::list,
+        jobs::run_now,
         iam::list_roles::list_roles,
         iam::create_role::create_role,
         iam::update_role::update_role,

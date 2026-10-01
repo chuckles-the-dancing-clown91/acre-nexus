@@ -114,14 +114,14 @@ pub async fn handle_cycle_job(
 }
 
 /// The date rent falls due in `month` given the tenant's due-day setting.
-fn due_date_for_month(year: i32, month: u32, due_day: i64) -> NaiveDate {
+pub(crate) fn due_date_for_month(year: i32, month: u32, due_day: i64) -> NaiveDate {
     let day = due_day.clamp(1, 28) as u32;
     NaiveDate::from_ymd_opt(year, month, day).expect("day clamped to 28 is always valid")
 }
 
 /// The month's recurring amount for a lease: base rent plus signed recurring
 /// charges (garage fees, discounts …), never below zero.
-fn monthly_amount(rent_cents: i64, charges: &[entity::lease_charge::Model]) -> i64 {
+pub(crate) fn monthly_amount(rent_cents: i64, charges: &[entity::lease_charge::Model]) -> i64 {
     let extras: i64 = charges
         .iter()
         .filter(|c| c.recurring)

@@ -18,16 +18,18 @@ use crate::tenancy::TenantScope;
 use entity::prelude::{Application, User, UserProfile, Vehicle};
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
-/// `GET /my/applications` — the signed-in user's applications, newest first.
+/// `GET /my/applications?limit` — the signed-in user's applications, newest
+/// first, at most `limit` (default 100, max 200).
 #[rocket_okapi::openapi(tag = "Renter Portal")]
-#[get("/my/applications")]
+#[get("/my/applications?<limit>")]
 pub async fn my_applications(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    limit: Option<u64>,
 ) -> ApiResult<Json<Vec<ApplicationResp>>> {
     let me = User::find_by_id(user.user_id)
         .one(&db)
@@ -41,6 +43,7 @@ pub async fn my_applications(
                 .add(entity::application::Column::Email.eq(me.email.to_lowercase())),
         )
         .order_by_desc(entity::application::Column::CreatedAt)
+        .limit(crate::paging::limit(limit, 100, 200))
         .all(&db)
         .await?;
     Ok(Json(rows.into_iter().map(ApplicationResp::from).collect()))

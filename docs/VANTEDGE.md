@@ -307,6 +307,12 @@ Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
 
 ## Phase 3 — Reminders that run themselves ◐
 
+Update: rent due and past due, autopay failed, lease expiry with a drafted
+renewal, inspection reminders with a calendar file, warranty notices, the
+morning summary and Settings → Schedule shipped as fix-plan batch A. Left from
+the list below: "tech on the way", rating by text, renter's and vendor
+insurance.
+
 Everything Alpha's scheduler does, translated to rentals, on the existing job
 queue. Checked against the code on 2026-10-01: six jobs run on their own
 (billing, staff reminders, helpdesk, workforce, property photos, platform

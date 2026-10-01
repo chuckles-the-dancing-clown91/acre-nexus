@@ -295,15 +295,37 @@ pub async fn settle_payment(
             })),
         )
         .await;
+        // An autopay failure says so, with the due date and a pay-now link;
+        // a payment the resident made themselves gets the plain notice.
+        let autopay = match payment.method_id {
+            Some(mid) => entity::prelude::PaymentMethod::find_by_id(mid)
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .is_some_and(|m| m.autopay),
+            None => false,
+        };
+        let web = std::env::var("PUBLIC_WEB_URL")
+            .ok()
+            .map(|s| s.trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "http://localhost:3000".into());
         notify_resident(
             db,
             tenant_id,
             &lease,
-            "payment_failed",
+            if autopay {
+                "autopay_failed"
+            } else {
+                "payment_failed"
+            },
             &payment,
             json!({
                 "amount": crate::dto::usd(payment.amount_cents),
                 "reason": reason,
+                "due_date": payment.due_date,
+                "pay_url": format!("{web}/account/payments"),
             }),
         )
         .await;

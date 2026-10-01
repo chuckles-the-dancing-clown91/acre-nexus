@@ -7,25 +7,31 @@ relative to `backend/crates/api/src` unless they start with `frontend/`.
 
 Legend: ☐ planned · ◐ in progress · ☑ done. Batches are the build order.
 
+**Batch A shipped** (F1–F10): `resident_reminders.rs`, `notices.rs`,
+`paging.rs`, `routes/jobs`, migration `000059_notice_log`, the Reminders settings
+group, and Settings → Schedule in the console. Covered by
+`batch_a_limits_jobs_and_reminders` in the integration suite.
+
 ## Batch A — Go-live safety and reminders (areas 9 and 10)
 
 | ID | Fix | Size | Status |
 |----|-----|------|--------|
-| F1 | Limits on lists that can grow | S | ☐ |
-| F2 | Job history and run-now (Settings → Schedule) | M | ☐ |
-| F3 | Notice log so every automatic message sends once | S | ☐ |
-| F4 | Rent due and rent past-due notices | M | ☐ |
-| F5 | Autopay failed notice with a pay-now link | S | ☐ |
-| F6 | Lease expiry at 90/60/30 days opens a draft renewal | M | ☐ |
-| F7 | Inspection appointment reminders and a calendar file | M | ☐ |
-| F8 | Warranty and plan-due reminders to staff | S | ☐ |
-| F9 | Manager morning digest | M | ☐ |
+| F1 | Limits on lists that can grow | S | ☑ |
+| F2 | Job history and run-now (Settings → Schedule) | M | ☑ |
+| F3 | Notice log so every automatic message sends once | S | ☑ |
+| F4 | Rent due and rent past-due notices | M | ☑ |
+| F5 | Autopay failed notice with a pay-now link | S | ☑ |
+| F6 | Lease expiry at 90/60/30 days opens a draft renewal | M | ☑ |
+| F7 | Inspection appointment reminders and a calendar file | M | ☑ |
+| F8 | Warranty and plan-due reminders to staff | S | ☑ |
+| F9 | Manager morning digest | M | ☑ |
 | F10 | Correct the docs on which jobs run on their own | S | ☑ |
 
 - **F1. Limits.** `GET /applications`, `GET /my/applications` and
-  `GET /public/listings` load every row. Add `limit` (default 50, max 200) and a
-  `before` cursor on the staff and portal lists, ordered newest first; cap public
-  listings at 200 after the search filters. Files: `routes/applications/list.rs`,
+  `GET /public/listings` loaded every row. Shipped: `limit` (staff default 200,
+  max 500; portal default 100, max 200) and a `before` cursor on the staff list,
+  newest first; public search answers at most 200 homes. The response shape is
+  unchanged, so existing screens keep working. Files: `routes/applications/list.rs`,
   `routes/applications/portal.rs`, `routes/public/listings.rs`. Test: integration
   test asks for `limit=1` and follows the cursor.
 - **F2. Job history.** No screen shows background jobs. Add `GET /admin/jobs`
@@ -54,9 +60,10 @@ Legend: ☐ planned · ◐ in progress · ☑ done. Batches are the build order.
   current rent for a manager to review and send. Nothing reaches the resident from
   this step. Files: `resident_reminders.rs`, `renewals.rs`. Test: a lease ending
   in 85 days gets exactly one draft renewal and one staff notice.
-- **F7. Inspections.** Inspections create no reminder. Send the resident an
-  `inspection_reminder` two days and one day before `scheduled_date`, with a link to
-  a calendar file: `GET /my/inspections/<id>/calendar.ics` (portal) and a staff
+- **F7. Inspections.** Inspections created no reminder. Shipped: the resident gets
+  `inspection_reminder` two days and one day before `scheduled_date`, with a signed
+  calendar link `GET /public/inspections/<id>/calendar.ics?sig=` that works from
+  the email without signing in (a guessed link answers 404), and staff get
   `GET /inspections/<id>/calendar.ics`. The ICS writer is a pure function with
   escaping and line folding. Test: the ICS has one VEVENT with the right date.
 - **F8. Warranty and plans.** Warranties are stored but nothing warns before they

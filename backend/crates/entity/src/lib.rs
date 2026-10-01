@@ -82,6 +82,7 @@ pub mod membership;
 pub mod message;
 pub mod message_thread;
 pub mod mortgage;
+pub mod notice_log;
 pub mod notification;
 pub mod notification_provider;
 pub mod onboarding_workflow;

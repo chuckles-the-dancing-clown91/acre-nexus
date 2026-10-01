@@ -46,6 +46,8 @@ impl PlatformModule for RentalsModule {
             lifecycle::inspections::update_item,
             lifecycle::inspections::delete_item,
             lifecycle::inspections::my_inspections,
+            lifecycle::inspections::inspection_calendar,
+            lifecycle::inspections::public_inspection_calendar,
             // security-deposit disposition (Phase 5)
             lifecycle::deposits::get_lease_deposit,
             lifecycle::deposits::upsert_disposition,

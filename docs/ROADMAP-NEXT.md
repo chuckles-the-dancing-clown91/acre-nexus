@@ -21,8 +21,8 @@ server-rendered public site for search (`docs/SEO.md`).
 | 6 | Tenant home search | ◐ |
 | 7 | House onboarding with autofill | ◐ |
 | 8 | Campground reservations (follows the map) | ☐ |
-| 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ☐ |
-| 10 | Reminders that run themselves, for residents and managers | ☐ |
+| 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
+| 10 | Reminders that run themselves, for residents and managers | ☑ |
 | 11 | Vendor portal and compliance (W-9, COI, 1099) | ☐ |
 | 12 | Owner portal and spend approvals | ☐ |
 | 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☐ |
@@ -295,7 +295,10 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
 Checked against the code on 2026-10-01. "Today" lists what exists, with paths
 relative to `backend/crates/api/src` unless they start with `frontend/`.
 
-## 9. Go-live hardening ☐
+## 9. Go-live hardening ◐
+
+Shipped: list limits and Settings → Schedule (job history, run now). Left:
+backups and the restore drill, Playwright journeys, the provider go-live page.
 
 **Today.** `GET /applications`, `GET /my/applications` and `GET /public/listings`
 return every row (`routes/applications/list.rs`, `routes/applications/portal.rs`,
@@ -316,7 +319,12 @@ the frontend has nine unit-test files and one Playwright spec.
 - A "go live" checklist page for each provider (`LIVE_PROVIDERS`): keys present,
   test call passed, webhook signature verified.
 
-## 10. Reminders that run themselves ☐
+## 10. Reminders that run themselves ☑
+
+Shipped as fixes F3–F9 in [`FIX-PLAN.md`](FIX-PLAN.md): rent due and past due,
+autopay failed, lease expiry with a drafted renewal, inspection reminders with a
+calendar file, warranty notices and the managers' morning summary, each sent
+once through the notice log and each with its own setting.
 
 **Today.** Six jobs run on their own (`billing_cycle`, `reminder_scan`,
 `helpdesk_scan`, `workforce_scan`, `property_photo_scan`, `platform_billing`), but

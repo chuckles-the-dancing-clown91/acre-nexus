@@ -454,3 +454,53 @@ pub async fn my_inspections(
     }
     Ok(Json(out))
 }
+
+/// `GET /inspections/<id>/calendar.ics` — the inspection as a calendar file.
+#[rocket_okapi::openapi(skip)]
+#[get("/inspections/<id>/calendar.ics")]
+pub async fn inspection_calendar(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+) -> ApiResult<crate::routes::reports::ReportFile> {
+    user.require(Permission::LeaseRead)?;
+    let i = find_inspection(&db, scope.tenant_id, id).await?;
+    let ics = crate::resident_reminders::inspection_ics(&db, &i)
+        .await
+        .ok_or_else(|| ApiError::Conflict("this inspection has no date yet".into()))?;
+    Ok(crate::routes::reports::ReportFile::new(
+        ics.into_bytes(),
+        "text/calendar; charset=utf-8",
+        format!("inspection-{}.ics", i.id),
+    ))
+}
+
+/// `GET /public/inspections/<id>/calendar.ics?sig` — the same file from the
+/// link in a reminder email; the signature stands in for signing in.
+#[rocket_okapi::openapi(skip)]
+#[get("/public/inspections/<id>/calendar.ics?<sig>")]
+pub async fn public_inspection_calendar(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    id: &str,
+    sig: Option<String>,
+) -> ApiResult<crate::routes::reports::ReportFile> {
+    let iid = Uuid::parse_str(id).map_err(|_| ApiError::NotFound("not found".into()))?;
+    if !crate::resident_reminders::calendar_sig_ok(iid, sig.as_deref().unwrap_or("")) {
+        return Err(ApiError::NotFound("not found".into()));
+    }
+    let i = Inspection::find_by_id(iid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("not found".into()))?;
+    let ics = crate::resident_reminders::inspection_ics(&db, &i)
+        .await
+        .ok_or_else(|| ApiError::NotFound("not found".into()))?;
+    Ok(crate::routes::reports::ReportFile::new(
+        ics.into_bytes(),
+        "text/calendar; charset=utf-8",
+        format!("inspection-{}.ics", i.id),
+    ))
+}

@@ -282,6 +282,58 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{company}: your payment of {amount} failed ({reason}). Please try another method.",
     },
     DefaultTemplate {
+        key: "autopay_failed",
+        subject: "Your automatic rent payment didn't go through",
+        body: "Hi {recipient},\n\nYour automatic payment of {amount} for rent due {due_date} \
+               could not be processed: {reason}. No money was taken, and we won't retry this \
+               payment on its own.\n\nPay now: {pay_url}\n\n— {company}",
+        sms: "{company}: your autopay of {amount} failed ({reason}). Pay now: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "rent_due",
+        subject: "Rent of {amount} is due {due_date}",
+        body: "Hi {recipient},\n\nA reminder that your rent of {amount} is due on {due_date}.\n\n\
+               Pay online: {pay_url}\n\nIf you've already paid, thank you, and please ignore \
+               this.\n\n— {company}",
+        sms: "{company}: rent of {amount} is due {due_date}. Pay: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "rent_past_due",
+        subject: "Your rent due {due_date} is unpaid",
+        body: "Hi {recipient},\n\nWe haven't received your rent of {amount} that was due on \
+               {due_date}. Please pay as soon as you can to avoid a late fee.\n\nPay online: \
+               {pay_url}\n\nIf you've already paid, thank you, and please ignore this.\n\n— {company}",
+        sms: "{company}: rent of {amount} due {due_date} is unpaid. Pay: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "inspection_reminder",
+        subject: "Your {kind} inspection is {when}",
+        body: "Hi {recipient},\n\nA reminder that the {kind} inspection at {place} is \
+               scheduled for {date}.\n\nAdd it to your calendar: {calendar_url}\n\nTo change \
+               the time, reply to this email or message us in your portal.\n\n— {company}",
+        sms: "{company}: your {kind} inspection at {place} is {date}.",
+    },
+    DefaultTemplate {
+        key: "lease_expiring",
+        subject: "Lease ending in {days} days: {tenant}, {place}",
+        body: "Hi {recipient},\n\nThe lease for {tenant} at {place} ends on {end_date} \
+               ({days} days). {renewal_note}\n\n— {company}",
+        sms: "Lease for {tenant} at {place} ends {end_date} ({days} days).",
+    },
+    DefaultTemplate {
+        key: "warranty_expiring",
+        subject: "Warranty ending {date}: {asset}",
+        body: "Hi {recipient},\n\nThe warranty on {asset} at {place} ends on {date}. If it \
+               needs a claim or a service visit, now is the time.\n\n— {company}",
+        sms: "Warranty on {asset} at {place} ends {date}.",
+    },
+    DefaultTemplate {
+        key: "manager_digest",
+        subject: "Morning summary: {headline}",
+        body: "Good morning {recipient},\n\n{summary}\n\nOpen the console: {console_url}\n\n— {company}",
+        sms: "Morning summary: {headline}",
+    },
+    DefaultTemplate {
         key: "payment_received",
         subject: "Payment received: {amount} from {resident}",
         body: "Hi {recipient},\n\n{resident} paid {amount}. The payment has settled, posted \
@@ -1147,7 +1199,7 @@ pub async fn notify_staff(
 }
 
 /// Active tenant users holding `permission_key` through any of their roles.
-async fn staff_with_permission(
+pub(crate) async fn staff_with_permission(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     permission_key: &str,

@@ -424,3 +424,6 @@ pub const SSO_ROTATE: &str = "sso.rotate";
 pub const SSO_DISABLE: &str = "sso.disable";
 pub const SSO_LAUNCH: &str = "sso.launch";
 pub const SSO_LOGIN: &str = "auth.sso_login";
+
+// ---- Schedule ----
+pub const JOB_RUN_NOW: &str = "job.run_now";

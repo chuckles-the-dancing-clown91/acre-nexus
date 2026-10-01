@@ -43,6 +43,12 @@ export default function SettingsPage() {
         <p className="text-ink-3">
           Workspace-wide configuration for your firm.
         </p>
+        <Link
+          href="/console/settings/schedule"
+          className="mr-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+        >
+          Schedule
+        </Link>
         {can("integrations:manage") && (
           <Link
             href="/console/settings/business"

@@ -23,6 +23,90 @@ use uuid::Uuid;
 /// [`entity::lease_renewal`]).
 pub const OPEN_STATUSES: &[&str] = &["proposed", "sent", "signed"];
 
+/// The terms of a renewal being proposed.
+pub struct Terms {
+    pub new_rent_cents: i64,
+    pub new_start_date: String,
+    pub new_end_date: Option<String>,
+    pub term_months: Option<i32>,
+    pub notes: Option<String>,
+}
+
+/// Create a `proposed` renewal (not yet sent to the resident) and its addendum
+/// document. Shared by the propose route and the lease-expiry reminder, which
+/// drafts one for a manager to review. Returns the renewal, the document id
+/// and the addendum text.
+pub async fn create_proposal(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    lease: &entity::lease::Model,
+    terms: Terms,
+    created_by: Option<Uuid>,
+) -> crate::error::ApiResult<(entity::lease_renewal::Model, Uuid, String)> {
+    use crate::error::ApiError;
+    use entity::prelude::{Property, Unit};
+    let now = Utc::now();
+    let renewal = entity::lease_renewal::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(lease.id),
+        status: Set("proposed".into()),
+        current_rent_cents: Set(lease.rent_cents),
+        new_rent_cents: Set(terms.new_rent_cents),
+        new_start_date: Set(terms.new_start_date),
+        new_end_date: Set(terms.new_end_date),
+        term_months: Set(terms.term_months),
+        notes: Set(terms.notes),
+        lease_document_id: Set(None),
+        envelope_id: Set(None),
+        created_by: Set(created_by),
+        activated_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+
+    // The addendum is kept distinct from the lease agreement by `purpose`, so
+    // the normal signing flow never picks it up.
+    let property = Property::find_by_id(lease.property_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
+    let unit = match lease.unit_id {
+        Some(uid) => Unit::find_by_id(uid).one(db).await?,
+        None => None,
+    };
+    let body_text =
+        crate::leasedoc::render_renewal_addendum(lease, &property, unit.as_ref(), &renewal);
+    let title =
+        crate::settings::get_string(db, tenant_id, crate::settings::LEASE_RENEWAL_DOC_TITLE).await;
+    let doc = entity::lease_document::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        lease_id: Set(lease.id),
+        title: Set(title),
+        body: Set(body_text.clone()),
+        format: Set("text".into()),
+        purpose: Set("renewal_addendum".into()),
+        status: Set("draft".into()),
+        generated_at: Set(now.into()),
+        signed_at: Set(None),
+        signed_by: Set(None),
+        signed_hash: Set(None),
+        signed_ip: Set(None),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    let doc_id = doc.id;
+    let mut rm: entity::lease_renewal::ActiveModel = renewal.into();
+    rm.lease_document_id = Set(Some(doc_id));
+    rm.updated_at = Set(now.into());
+    let renewal = rm.update(db).await?;
+    Ok((renewal, doc_id, body_text))
+}
+
 // ---------------------------------------------------------------------------
 // Pure term helpers (unit-tested)
 // ---------------------------------------------------------------------------

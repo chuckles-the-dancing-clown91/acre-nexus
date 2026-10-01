@@ -24,7 +24,11 @@ impl PlatformModule for CalendarModule {
                  (auto-synced), license / insurance expirations, tours, and inspections — \
                  notified at configurable lead times through the notification substrate.",
             permissions: &[Permission::CalendarRead, Permission::CalendarManage],
-            job_kinds: &[crate::reminders::SCAN_KIND],
+            job_kinds: &[
+                crate::reminders::SCAN_KIND,
+                crate::resident_reminders::KIND,
+                crate::resident_reminders::DIGEST_KIND,
+            ],
             default_enabled: true,
             preview: false,
         }
@@ -43,6 +47,12 @@ impl PlatformModule for CalendarModule {
         match ctx.job.kind.as_str() {
             k if k == crate::reminders::SCAN_KIND => {
                 Some(crate::reminders::handle_scan_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::resident_reminders::KIND => {
+                Some(crate::resident_reminders::handle_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::resident_reminders::DIGEST_KIND => {
+                Some(crate::resident_reminders::handle_digest_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }

@@ -103,6 +103,7 @@ async fn integration_suite() {
     alpha_single_sign_on(&c).await;
     embed_settings(&c).await;
     seo_site_info(&c).await;
+    batch_a_limits_jobs_and_reminders(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3937,4 +3938,298 @@ async fn seo_site_info(c: &Ctx) {
 
     let (st, _) = get("/public/resolve?host=nowhere.example".into()).await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// Fix plan batch A: list limits, the job schedule, and reminders that run
+/// themselves (each sent once), with the inspection calendar file.
+async fn batch_a_limits_jobs_and_reminders(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let admin = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "tenant:manage",
+            "application:read",
+            "property:read",
+            "property:write",
+            "lease:read",
+            "lease:manage",
+            "maintenance:manage",
+            "maintenance:read",
+        ],
+    );
+
+    // F1: limits and a cursor on the applications list.
+    let (st, all) = get_json(c, "/applications", &admin).await;
+    assert_eq!(st, Status::Ok);
+    let all = all.as_array().unwrap().clone();
+    if all.len() >= 2 {
+        let (_, one) = get_json(c, "/applications?limit=1", &admin).await;
+        assert_eq!(one.as_array().unwrap().len(), 1);
+        let cursor = one[0]["created_at"].as_str().unwrap().to_string();
+        let (st, next) = get_json(
+            c,
+            &format!("/applications?limit=1&before={}", urlencode(&cursor)),
+            &admin,
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{next}");
+        assert_ne!(next[0]["id"], one[0]["id"]);
+    }
+    let (st, _) = get_json(c, "/applications?before=yesterday", &admin).await;
+    assert_eq!(st, Status::BadRequest);
+
+    // F2: the schedule shows this workspace's recurring jobs; run-now.
+    crate::resident_reminders::ensure_job(&c.db, nw, crate::resident_reminders::KIND)
+        .await
+        .unwrap();
+    crate::resident_reminders::ensure_job(&c.db, nw, crate::resident_reminders::KIND)
+        .await
+        .unwrap();
+    let (st, sched) = get_json(c, "/admin/jobs/schedule", &admin).await;
+    assert_eq!(st, Status::Ok, "{sched}");
+    let job = sched
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["kind"] == "resident_reminders")
+        .expect("the reminders job is scheduled")
+        .clone();
+    assert!(job["label"].as_str().unwrap().contains("Rent due"));
+    let jid = job["id"].as_str().unwrap().to_string();
+    let live = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("resident_reminders"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert_eq!(live.len(), 1, "ensuring twice keeps one job");
+    let (st, ran) = post_json(
+        c,
+        &format!("/admin/jobs/{jid}/run-now"),
+        &admin,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{ran}");
+    let other = mint(c, Some(cascade), false, &["tenant:manage"]);
+    let (st, _) = post_json(
+        c,
+        &format!("/admin/jobs/{jid}/run-now"),
+        &other,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+    let (st, theirs) = get_json(c, "/admin/jobs?kind=resident_reminders", &other).await;
+    assert_eq!(st, Status::Ok);
+    assert!(theirs.as_array().unwrap().is_empty());
+    let nobody = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/admin/jobs/schedule", &nobody).await;
+    assert_eq!(st, Status::Forbidden);
+
+    // A lease to remind about.
+    let pid = property_ids(c, nw).await[0];
+    let today = chrono::Utc::now().date_naive();
+    let end = today + chrono::Duration::days(85);
+    let (st, lease) = post_json(
+        c,
+        &format!("/properties/{pid}/leases"),
+        &admin,
+        serde_json::json!({
+            "tenant_name": "Rita Reminder",
+            "tenant_email": "rita.reminder@example.com",
+            "rent_cents": 150000,
+            "start_date": (today - chrono::Duration::days(200)).to_string(),
+            "end_date": end.to_string(),
+            "status": "active",
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    let lid = uuid::Uuid::parse_str(lease["id"].as_str().unwrap()).unwrap();
+    let emails = |template: &'static str| async move {
+        entity::prelude::BackgroundJob::find()
+            .filter(entity::background_job::Column::TenantId.eq(nw))
+            .filter(entity::background_job::Column::Kind.eq("auto_email"))
+            .all(&c.db)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|j| {
+                j.payload["template"] == template && j.payload["to"] == "rita.reminder@example.com"
+            })
+            .count()
+    };
+
+    // F4: rent due, two days before the rent day; once only.
+    let due_day = crate::settings::get_i64(&c.db, nw, crate::settings::PAYMENTS_RENT_DUE_DAY).await;
+    let next_due =
+        crate::resident_reminders::next_due_date(today + chrono::Duration::days(1), due_day);
+    let two_before = next_due - chrono::Duration::days(2);
+    crate::resident_reminders::rent_due(&c.db, nw, two_before)
+        .await
+        .unwrap();
+    assert_eq!(emails("rent_due").await, 1);
+    crate::resident_reminders::rent_due(&c.db, nw, two_before)
+        .await
+        .unwrap();
+    assert_eq!(emails("rent_due").await, 1, "never twice");
+
+    // F4: rent past due, the day after; once only.
+    let yesterday = today - chrono::Duration::days(1);
+    entity::lease_payment::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        lease_id: Set(lid),
+        due_date: Set(yesterday.to_string()),
+        amount_cents: Set(150000),
+        paid_date: Set(None),
+        status: Set("due".into()),
+        method: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        kind: Set("rent".into()),
+        method_id: Set(None),
+        provider: Set(None),
+        external_id: Set(None),
+        failure_reason: Set(None),
+        receipt_number: Set(None),
+        ledger_txn_id: Set(None),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    crate::resident_reminders::rent_past_due(&c.db, nw, today)
+        .await
+        .unwrap();
+    crate::resident_reminders::rent_past_due(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert_eq!(emails("rent_past_due").await, 1);
+
+    // F6: 85 days out → one proposed renewal at the current rent, once.
+    crate::resident_reminders::lease_expiry(&c.db, nw, today)
+        .await
+        .unwrap();
+    crate::resident_reminders::lease_expiry(&c.db, nw, today)
+        .await
+        .unwrap();
+    let renewals = entity::prelude::LeaseRenewal::find()
+        .filter(entity::lease_renewal::Column::LeaseId.eq(lid))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert_eq!(renewals.len(), 1);
+    assert_eq!(renewals[0].status, "proposed", "drafted, not sent");
+    assert_eq!(renewals[0].new_rent_cents, 150000);
+    assert!(renewals[0].lease_document_id.is_some());
+    assert!(
+        emails("lease_renewal_sent").await == 0,
+        "nothing reaches the resident from the reminder"
+    );
+
+    // F7: an inspection tomorrow → a reminder with a working calendar link.
+    let (st, insp) = post_json(
+        c,
+        &format!("/leases/{lid}/inspections"),
+        &admin,
+        serde_json::json!({ "kind": "move_out", "scheduled_date": (today + chrono::Duration::days(1)).to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{insp}");
+    let iid = insp["id"].as_str().unwrap().to_string();
+    crate::resident_reminders::inspections(&c.db, nw, today)
+        .await
+        .unwrap();
+    crate::resident_reminders::inspections(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert_eq!(emails("inspection_reminder").await, 1);
+    let sig = crate::resident_reminders::calendar_sig(uuid::Uuid::parse_str(&iid).unwrap());
+    let resp = c
+        .client
+        .get(format!("/public/inspections/{iid}/calendar.ics?sig={sig}"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert!(resp
+        .headers()
+        .get_one("Content-Type")
+        .unwrap_or("")
+        .starts_with("text/calendar"));
+    let body = resp.into_string().await.unwrap();
+    assert!(
+        body.contains("BEGIN:VEVENT") && body.contains("Move-out inspection"),
+        "{body}"
+    );
+    let resp = c
+        .client
+        .get(format!(
+            "/public/inspections/{iid}/calendar.ics?sig=00000000000000000000000000000000"
+        ))
+        .dispatch()
+        .await;
+    assert_eq!(
+        resp.status(),
+        Status::NotFound,
+        "a guessed link does not work"
+    );
+    let resp = c
+        .client
+        .get(format!("/inspections/{iid}/calendar.ics"))
+        .header(bearer(&admin))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+
+    // F8: a warranty ending in 20 days notifies staff once.
+    let (st, asset) = post_json(
+        c,
+        "/assets",
+        &admin,
+        serde_json::json!({ "property_id": pid, "name": "Reminder water heater", "kind": "plumbing",
+            "warranty_expires": (today + chrono::Duration::days(20)).to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{asset}");
+    let n1 = crate::resident_reminders::warranties(&c.db, nw, today)
+        .await
+        .unwrap();
+    let n2 = crate::resident_reminders::warranties(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert!(n1 >= 1);
+    assert_eq!(n2, 0);
+
+    // F9: the digest counts what needs attention, and sends once a day.
+    let d = crate::resident_reminders::compute_digest(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert!(!d.is_empty());
+    let first = crate::resident_reminders::send_digest(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert_eq!(first["sent"], true, "{first}");
+    let second = crate::resident_reminders::send_digest(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert_eq!(second["sent"], false);
+
+    // The reminder-drafted renewal is in the audit trail as automatic.
+    let logged = entity::prelude::AuditLog::find()
+        .filter(entity::audit_log::Column::TenantId.eq(nw))
+        .filter(entity::audit_log::Column::Action.eq("lease_renewal.propose"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert!(logged
+        .iter()
+        .any(|r| r.metadata.as_ref().is_some_and(|m| m["automatic"] == true)));
+}
+
+fn urlencode(s: &str) -> String {
+    s.replace('+', "%2B").replace(':', "%3A")
 }

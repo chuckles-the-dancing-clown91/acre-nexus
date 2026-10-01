@@ -65,6 +65,7 @@ pub use super::membership::Entity as Membership;
 pub use super::message::Entity as Message;
 pub use super::message_thread::Entity as MessageThread;
 pub use super::mortgage::Entity as Mortgage;
+pub use super::notice_log::Entity as NoticeLog;
 pub use super::notification::Entity as Notification;
 pub use super::notification_provider::Entity as NotificationProvider;
 pub use super::onboarding_workflow::Entity as OnboardingWorkflow;

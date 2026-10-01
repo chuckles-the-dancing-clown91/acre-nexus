@@ -75,6 +75,24 @@ pub const CALENDAR_DEFAULT_LEAD_DAYS: &str = "calendar.default_lead_days";
 pub const CALENDAR_SCAN_INTERVAL_SECS: &str = "calendar.scan_interval_secs";
 /// Auto-create a renewal reminder for every active lease with an end date.
 pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
+/// Automatic notices to residents (rent, inspections) and staff (lease expiry, warranties).
+pub const REMINDERS_ENABLED: &str = "reminders.enabled";
+/// Days before the rent day that residents hear rent is due (0 = off).
+pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
+/// Tell residents the day after rent was due and is still unpaid.
+pub const REMINDERS_RENT_PAST_DUE: &str = "reminders.rent_past_due";
+/// Days before a lease ends that staff hear about it ("90,60,30").
+pub const REMINDERS_LEASE_EXPIRY_DAYS: &str = "reminders.lease_expiry_days";
+/// At the first lease-expiry notice, draft a renewal for a manager to review.
+pub const REMINDERS_DRAFT_RENEWAL: &str = "reminders.draft_renewal";
+/// Days before an inspection that the resident is reminded ("2,1").
+pub const REMINDERS_INSPECTION_DAYS: &str = "reminders.inspection_days";
+/// Days before a warranty ends that staff hear about it (0 = off).
+pub const REMINDERS_WARRANTY_DAYS: &str = "reminders.warranty_days";
+/// Send managers a morning summary email.
+pub const REMINDERS_MANAGER_DIGEST: &str = "reminders.manager_digest";
+/// Hour of the day (UTC, 0–23) the morning summary goes out.
+pub const REMINDERS_DIGEST_HOUR_UTC: &str = "reminders.digest_hour_utc";
 /// SLA first-response targets per priority (`urgent:4,high:8,…`, hours).
 pub const HELPDESK_SLA_RESPONSE_HOURS: &str = "helpdesk.sla_response_hours";
 /// SLA resolution targets per priority (`urgent:24,high:72,…`, hours).
@@ -409,6 +427,90 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_ENABLED,
+        label: "Automatic notices",
+        description: "Send the notices below on their own: rent due and past due, \
+                      inspection reminders, lease expiry and warranty notices, and \
+                      the managers' morning summary.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_RENT_DUE_DAYS,
+        label: "Rent due notice (days before)",
+        description: "Tell residents rent is due this many days before the rent \
+                      day. Residents on autopay are skipped. 0 turns it off.",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(3),
+    },
+    SettingDef {
+        key: REMINDERS_RENT_PAST_DUE,
+        label: "Rent past due notice",
+        description: "Tell residents the day after rent was due if it is still \
+                      unpaid, before any late fee.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_LEASE_EXPIRY_DAYS,
+        label: "Lease expiry notices (days before)",
+        description: "Comma-separated days before a lease ends that the office \
+                      hears about it, e.g. \"90,60,30\".",
+        group: "Reminders",
+        kind: SettingKind::Text,
+        default: || json!("90,60,30"),
+    },
+    SettingDef {
+        key: REMINDERS_DRAFT_RENEWAL,
+        label: "Draft renewals automatically",
+        description: "At the first lease expiry notice, draft a renewal at the \
+                      current rent for a manager to review and send. Nothing \
+                      reaches the resident until a person sends it.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_INSPECTION_DAYS,
+        label: "Inspection reminders (days before)",
+        description: "Comma-separated days before a scheduled inspection that the \
+                      resident is reminded, e.g. \"2,1\".",
+        group: "Reminders",
+        kind: SettingKind::Text,
+        default: || json!("2,1"),
+    },
+    SettingDef {
+        key: REMINDERS_WARRANTY_DAYS,
+        label: "Warranty ending notice (days before)",
+        description: "Tell the office this many days before an appliance's \
+                      warranty ends. 0 turns it off.",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(30),
+    },
+    SettingDef {
+        key: REMINDERS_MANAGER_DIGEST,
+        label: "Managers' morning summary",
+        description: "One email each morning to staff who can see properties: \
+                      rent late, leases ending soon, work orders past SLA, turns \
+                      past target and new tour requests. Skipped when empty.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_DIGEST_HOUR_UTC,
+        label: "Morning summary hour (UTC)",
+        description: "The hour of the day, in UTC, the morning summary is sent \
+                      (14 is 7 AM Pacific in summer).",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(14),
     },
     SettingDef {
         key: HELPDESK_SLA_RESPONSE_HOURS,

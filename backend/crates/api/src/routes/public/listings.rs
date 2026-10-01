@@ -41,7 +41,8 @@ pub async fn listings(
         .all(&db)
         .await?;
     let rows = rows.into_iter().map(ListingResp::from).collect();
-    Ok(Json(apply(
+    // A public list never answers more than this many homes.
+    let mut found = apply(
         rows,
         &Search {
             q,
@@ -53,5 +54,10 @@ pub async fn listings(
             available_now: available_now.unwrap_or(false),
             sort,
         },
-    )))
+    );
+    found.truncate(PUBLIC_LIMIT);
+    Ok(Json(found))
 }
+
+/// The most homes one public search answers with.
+pub const PUBLIC_LIMIT: usize = 200;
