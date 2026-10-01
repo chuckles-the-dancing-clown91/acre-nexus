@@ -473,7 +473,7 @@ function Tax1099() {
     [...r.nec, ...r.misc].map((x) => [
       x.form,
       x.name,
-      x.tin ?? "—",
+      x.tin ?? (x.missing_tin ? "W-9 missing" : "—"),
       x.box_label,
       x.amount_label,
     ]);
@@ -502,6 +502,15 @@ function Tax1099() {
             Recipients at or above {data.threshold_label} · NEC{" "}
             {data.nec_total_label} · MISC {data.misc_total_label}
           </div>
+          {data.missing_tin_count > 0 && (
+            <div className="rounded-xl border border-line-2 bg-warn-soft px-3 py-2 text-sm">
+              {data.missing_tin_count === 1
+                ? "1 vendor has"
+                : `${data.missing_tin_count} vendors have`}{" "}
+              no W-9 on file. Add it on the vendor&apos;s page before you file.
+              The export has full taxpayer ids, and each download is logged.
+            </div>
+          )}
           <DataTable
             headers={["Form", "Recipient", "TIN/EIN", "Box", "Amount"]}
             rows={recipientRows(data)}

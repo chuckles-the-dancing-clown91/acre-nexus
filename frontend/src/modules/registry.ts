@@ -52,6 +52,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:write",
       },
       {
+        href: "/console/maps",
+        label: "Site maps",
+        icon: "map",
+        permission: "property:read",
+      },
+      {
         href: "/console/workflows",
         label: "Workflows",
         icon: "chart",
@@ -234,6 +240,12 @@ export const MODULES: ModuleDef[] = [
         icon: "wrench",
         permission: "maintenance:read",
       },
+      {
+        href: "/console/turns",
+        label: "Turnovers",
+        icon: "home",
+        permission: "maintenance:read",
+      },
     ],
   },
   {
@@ -288,6 +300,12 @@ export const MODULES: ModuleDef[] = [
         href: "/console/leads",
         label: "Leads",
         icon: "mail",
+        permission: "application:read",
+      },
+      {
+        href: "/console/tours",
+        label: "Tours",
+        icon: "calendar",
         permission: "application:read",
       },
     ],

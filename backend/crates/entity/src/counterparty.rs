@@ -27,6 +27,8 @@ pub struct Model {
     /// in the vault under `partner.<id>.api_key`.
     pub partner_kind: Option<String>,
     pub partner_base_url: Option<String>,
+    /// Where the vendor's Alpha web app lives, for single sign-on.
+    pub partner_web_url: Option<String>,
     pub partner_linked_at: Option<DateTimeWithTimeZone>,
     /// `ok` | `error` after the last call.
     pub partner_status: Option<String>,

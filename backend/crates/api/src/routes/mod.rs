@@ -14,10 +14,12 @@ pub mod accounting;
 pub mod api_tokens;
 pub mod applications;
 pub mod assignments;
+pub mod audit_trail;
 pub mod auth;
 pub mod backoffice;
 pub mod banking;
 pub mod billing;
+pub mod business;
 pub mod cap_table;
 pub mod crm;
 pub mod deals;
@@ -30,6 +32,7 @@ pub mod geo;
 pub mod hoa;
 pub mod iam;
 pub mod integrations;
+pub mod jobs;
 pub mod leads;
 pub mod lease_charges;
 pub mod lease_docs;
@@ -49,6 +52,7 @@ pub mod payouts;
 pub mod platform;
 pub mod portfolio;
 pub mod portfolios;
+pub mod process;
 pub mod properties;
 pub mod property_intel;
 pub mod public;
@@ -59,6 +63,8 @@ pub mod rentals;
 pub mod reports;
 pub mod search;
 pub mod settings;
+pub mod sitemaps;
+pub mod sso;
 pub mod syndication;
 pub mod team;
 pub mod tenant_history;
@@ -67,6 +73,7 @@ pub mod theme;
 pub mod title;
 pub mod vehicles;
 pub mod vendor;
+pub mod vendors;
 pub mod workflow;
 
 use rocket::serde::json::Json;
@@ -101,6 +108,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::oauth::start,
         auth::oauth::sandbox,
         auth::oauth::callback,
+        sso::sign_in,
         // MFA (TOTP)
         auth::mfa::setup,
         auth::mfa::confirm,
@@ -139,6 +147,13 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         iam::permissions::permissions,
         iam::profile_types::profile_types,
         iam::list_audit::list_audit,
+        // the audit trail: who changed what, on which property
+        audit_trail::property_history,
+        audit_trail::events,
+        audit_trail::events_csv,
+        jobs::schedule,
+        jobs::list,
+        jobs::run_now,
         iam::list_roles::list_roles,
         iam::create_role::create_role,
         iam::update_role::update_role,

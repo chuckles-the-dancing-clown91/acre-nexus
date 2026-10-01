@@ -75,6 +75,38 @@ pub const CALENDAR_DEFAULT_LEAD_DAYS: &str = "calendar.default_lead_days";
 pub const CALENDAR_SCAN_INTERVAL_SECS: &str = "calendar.scan_interval_secs";
 /// Auto-create a renewal reminder for every active lease with an end date.
 pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
+/// Automatic notices to residents (rent, inspections) and staff (lease expiry, warranties).
+pub const REMINDERS_ENABLED: &str = "reminders.enabled";
+/// Only send a vendor out with current liability insurance (or a reason).
+pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
+/// Text (or email) the resident for a 1–5 rating when their repair resolves.
+pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
+/// Answer a resident's repair-sounding text with a prefilled request link.
+pub const TEXTS_REPAIR_LINKS: &str = "texts.repair_links";
+/// Hold automatic texts overnight.
+pub const TEXTS_QUIET_HOURS: &str = "texts.quiet_hours";
+/// Quiet hours start at this hour (0–23, local).
+pub const TEXTS_QUIET_START: &str = "texts.quiet_start_hour";
+/// Quiet hours end at this hour (0–23, local).
+pub const TEXTS_QUIET_END: &str = "texts.quiet_end_hour";
+/// The time zone quiet hours are kept in.
+pub const TEXTS_TIMEZONE: &str = "texts.timezone";
+/// Days before the rent day that residents hear rent is due (0 = off).
+pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
+/// Tell residents the day after rent was due and is still unpaid.
+pub const REMINDERS_RENT_PAST_DUE: &str = "reminders.rent_past_due";
+/// Days before a lease ends that staff hear about it ("90,60,30").
+pub const REMINDERS_LEASE_EXPIRY_DAYS: &str = "reminders.lease_expiry_days";
+/// At the first lease-expiry notice, draft a renewal for a manager to review.
+pub const REMINDERS_DRAFT_RENEWAL: &str = "reminders.draft_renewal";
+/// Days before an inspection that the resident is reminded ("2,1").
+pub const REMINDERS_INSPECTION_DAYS: &str = "reminders.inspection_days";
+/// Days before a warranty ends that staff hear about it (0 = off).
+pub const REMINDERS_WARRANTY_DAYS: &str = "reminders.warranty_days";
+/// Send managers a morning summary email.
+pub const REMINDERS_MANAGER_DIGEST: &str = "reminders.manager_digest";
+/// Hour of the day (UTC, 0–23) the morning summary goes out.
+pub const REMINDERS_DIGEST_HOUR_UTC: &str = "reminders.digest_hour_utc";
 /// SLA first-response targets per priority (`urgent:4,high:8,…`, hours).
 pub const HELPDESK_SLA_RESPONSE_HOURS: &str = "helpdesk.sla_response_hours";
 /// SLA resolution targets per priority (`urgent:24,high:72,…`, hours).
@@ -409,6 +441,155 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: COMPLIANCE_REQUIRE_COI,
+        label: "Require vendor insurance to dispatch",
+        description: "A vendor without current general liability insurance on \
+                      file can only be assigned a work order with a reason, which \
+                      is recorded in the audit trail.",
+        group: "Vendors",
+        kind: SettingKind::Bool,
+        default: || json!(false),
+    },
+    SettingDef {
+        key: MAINTENANCE_ASK_RATING,
+        label: "Ask residents to rate repairs",
+        description: "When a resident's work order is resolved, text them \
+                      \"How did we do? Reply 1-5\" (or email a link when there's no \
+                      number). A reply of 1 to 5 within a week becomes the review.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_REPAIR_LINKS,
+        label: "Answer repair texts with a request link",
+        description: "When a resident texts about something broken, reply with a \
+                      link to a maintenance request already filled in. At most \
+                      once a day per conversation.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_HOURS,
+        label: "Quiet hours",
+        description: "Automatic texts (reminders, updates) wait until morning. \
+                      Replies you type, and answers to someone who just texted, \
+                      still go at once.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_START,
+        label: "Quiet hours start",
+        description: "Hour of the day (0-23) automatic texts stop.",
+        group: "Texts",
+        kind: SettingKind::Int,
+        default: || json!(21),
+    },
+    SettingDef {
+        key: TEXTS_QUIET_END,
+        label: "Quiet hours end",
+        description: "Hour of the day (0-23) automatic texts start again.",
+        group: "Texts",
+        kind: SettingKind::Int,
+        default: || json!(8),
+    },
+    SettingDef {
+        key: TEXTS_TIMEZONE,
+        label: "Texting time zone",
+        description: "Quiet hours are kept in this time zone, e.g. \
+                      America/Los_Angeles.",
+        group: "Texts",
+        kind: SettingKind::Text,
+        default: || json!("America/Los_Angeles"),
+    },
+    SettingDef {
+        key: REMINDERS_ENABLED,
+        label: "Automatic notices",
+        description: "Send the notices below on their own: rent due and past due, \
+                      inspection reminders, lease expiry and warranty notices, and \
+                      the managers' morning summary.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_RENT_DUE_DAYS,
+        label: "Rent due notice (days before)",
+        description: "Tell residents rent is due this many days before the rent \
+                      day. Residents on autopay are skipped. 0 turns it off.",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(3),
+    },
+    SettingDef {
+        key: REMINDERS_RENT_PAST_DUE,
+        label: "Rent past due notice",
+        description: "Tell residents the day after rent was due if it is still \
+                      unpaid, before any late fee.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_LEASE_EXPIRY_DAYS,
+        label: "Lease expiry notices (days before)",
+        description: "Comma-separated days before a lease ends that the office \
+                      hears about it, e.g. \"90,60,30\".",
+        group: "Reminders",
+        kind: SettingKind::Text,
+        default: || json!("90,60,30"),
+    },
+    SettingDef {
+        key: REMINDERS_DRAFT_RENEWAL,
+        label: "Draft renewals automatically",
+        description: "At the first lease expiry notice, draft a renewal at the \
+                      current rent for a manager to review and send. Nothing \
+                      reaches the resident until a person sends it.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_INSPECTION_DAYS,
+        label: "Inspection reminders (days before)",
+        description: "Comma-separated days before a scheduled inspection that the \
+                      resident is reminded, e.g. \"2,1\".",
+        group: "Reminders",
+        kind: SettingKind::Text,
+        default: || json!("2,1"),
+    },
+    SettingDef {
+        key: REMINDERS_WARRANTY_DAYS,
+        label: "Warranty ending notice (days before)",
+        description: "Tell the office this many days before an appliance's \
+                      warranty ends. 0 turns it off.",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(30),
+    },
+    SettingDef {
+        key: REMINDERS_MANAGER_DIGEST,
+        label: "Managers' morning summary",
+        description: "One email each morning to staff who can see properties: \
+                      rent late, leases ending soon, work orders past SLA, turns \
+                      past target and new tour requests. Skipped when empty.",
+        group: "Reminders",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: REMINDERS_DIGEST_HOUR_UTC,
+        label: "Morning summary hour (UTC)",
+        description: "The hour of the day, in UTC, the morning summary is sent \
+                      (14 is 7 AM Pacific in summer).",
+        group: "Reminders",
+        kind: SettingKind::Int,
+        default: || json!(14),
     },
     SettingDef {
         key: HELPDESK_SLA_RESPONSE_HOURS,

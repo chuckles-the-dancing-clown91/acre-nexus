@@ -16,6 +16,7 @@ pub struct SystemRole {
 
 /// Tenant-admin permission bundle (everything within a workspace).
 const TENANT_FULL: &[Permission] = &[
+    AuditRead,
     PropertyRead,
     PropertyWrite,
     EntityRead,
@@ -110,6 +111,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ApplicationRead,
             AuditRead,
             ImpersonateTenant,
+            IntegrationsManage,
         ],
     },
     SystemRole {
@@ -127,6 +129,7 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
             ApplicationRead,
             TenantManage,
             ImpersonateTenant,
+            IntegrationsManage,
         ],
     },
     SystemRole {

@@ -51,14 +51,14 @@ pub async fn create(
     };
     let saved = model.insert(&db).await?;
     crate::geo::queue_fetch(&db, scope.tenant_id, saved.id).await;
-    crate::audit::record(
+    crate::audit::change::created(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::PROPERTY_CREATE,
-        Some("property"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "name": saved.name, "city": saved.city })),
+        "property",
+        saved.id,
+        Some(saved.id),
+        &saved.name,
     )
     .await;
     Ok(Json(PropertyResp::from(saved)))

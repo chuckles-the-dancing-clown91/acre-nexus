@@ -22,6 +22,12 @@ pub async fn list_audit(
 ) -> ApiResult<Json<Vec<AuditEntry>>> {
     user.require(Permission::AuditRead)?;
     let mut q = AuditLog::find().order_by_desc(entity::audit_log::Column::CreatedAt);
+    // `audit_log` is outside row-level security: a workspace-bound principal
+    // (a tenant admin, or staff acting inside one workspace) sees only that
+    // workspace's rows. Only the platform plane (no workspace) sees them all.
+    if let Some(tid) = user.tenant_id {
+        q = q.filter(entity::audit_log::Column::TenantId.eq(tid));
+    }
     if let Some(a) = action.filter(|s| !s.is_empty()) {
         q = q.filter(entity::audit_log::Column::Action.eq(a));
     }

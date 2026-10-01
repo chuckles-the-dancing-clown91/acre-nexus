@@ -9,6 +9,9 @@ Legend: ✅ shipped · 🟡 partial · ⬜ not started.
 
 ## TODO — what's next
 
+> The current, detailed plan is [`ROADMAP-NEXT.md`](ROADMAP-NEXT.md) (areas 1–17,
+> checked against the code on 2026-10-01). This file keeps the platform phases.
+
 The next slice of work, in dependency order:
 
 - [x] **Prod-safety config guards (T0 · #23/#24/#25)**: production
@@ -40,13 +43,13 @@ The next slice of work, in dependency order:
       same JWT session as password login. See
       [`IAM.md`](IAM.md#federated-login--mfa-issue-63). *(Enterprise SSO/SAML/SCIM
       stays in #12.)*
-- [ ] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
-      top of the new general ledger.
-- [ ] **Scale guards**: pagination caps on `GET /applications`,
+- [x] **Standard PM reports (#56)**: rent roll, T-12, aging & delinquency on
+      top of the new general ledger — shipped, see [`REPORTS.md`](REPORTS.md).
+- [ ] **Scale guards** *(planned as area 9 in [`ROADMAP-NEXT.md`](ROADMAP-NEXT.md))*: pagination caps on `GET /applications`,
       `GET /public/listings`, and `GET /my/applications` (the document,
       audit, payment, and ledger lists already cap).
 - [ ] **Automated e-sign reminder cadence** (settings-driven schedule + max
-      rounds) on top of today's manual remind — the reminders engine (#54)
+      rounds; planned with area 10) on top of today's manual remind — the reminders engine (#54)
       is now the natural home.
 
 ---
@@ -273,7 +276,8 @@ ledger.
       photos, and generated lien waivers. See [`REHAB.md`](REHAB.md).
 - [ ] Remaining real vendors (AVM / schools / county assessor) behind the
       provider seam; MLS/comps feed, permits/violations, insurance quotes.
-- [ ] Disposition / broker (#43), map / geospatial portfolio view (#57).
+- [ ] Disposition / broker (#43), map / geospatial portfolio view (#57; planned
+      as area 15 in [`ROADMAP-NEXT.md`](ROADMAP-NEXT.md)).
 
 **DoD (met):** a real address enriches from live sources with graceful fallback
 to simulation when a provider is unavailable; photos render on the property
@@ -290,7 +294,7 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
       statement per legal entity (reconciling with owner payouts) and the annual
       1099-NEC (vendors) + 1099-MISC (owner rents) export, both CSV/PDF. See
       [`REPORTS.md`](REPORTS.md).
-- [ ] **Reporting** (rest): portfolio analytics, custom report builder.
+- [ ] **Reporting** (rest): portfolio analytics, custom report builder (area 15).
 - [x] **Global search (#55)** — shipped: the `search` module — a permission-aware
       command palette across properties, tenants, entities, tickets, and LLCs.
 - [x] **SaaS billing** — shipped: per-door metered subscriptions (three plans,
@@ -303,7 +307,8 @@ profile. *(Remaining: more real vendors + the #40/#43/#57 sub-issues.)*
   - [x] **Rate limiting (#67)** — shipped: a fixed-window Rocket fairing with a
         tight auth bucket + generous general bucket, `X-RateLimit-*` headers, and
         `429` + `Retry-After` on breach. See [`RATE_LIMITING.md`](RATE_LIMITING.md).
-- [ ] MFA/2FA, SSO/SAML/SCIM (enterprise); GDPR/CCPA data requests.
+- [ ] Enterprise SSO/SAML/SCIM; GDPR/CCPA data requests. *(TOTP MFA and
+      Alpha ↔ Vantedge single sign-on are shipped; see [`SSO-AND-EMBEDS.md`](SSO-AND-EMBEDS.md).)*
 
 **DoD:** a paying tenant runs the full lifecycle in production with compliant
 controls and monitored SLOs. *(Reports, search, and SaaS billing done; hardening +

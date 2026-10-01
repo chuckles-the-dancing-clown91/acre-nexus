@@ -54,6 +54,19 @@ mod m20240101_000046_crm;
 mod m20240101_000047_property_geo;
 mod m20240101_000048_parts;
 mod m20240101_000049_partner_link;
+mod m20240101_000050_audit_trail;
+mod m20240101_000051_processes;
+mod m20240101_000052_issue_catalog;
+mod m20240101_000053_business_profile;
+mod m20240101_000054_site_maps;
+mod m20240101_000055_tour_requests;
+mod m20240101_000056_sso;
+mod m20240101_000057_embed;
+mod m20240101_000058_seo;
+mod m20240101_000059_notice_log;
+mod m20240101_000060_vendor_compliance;
+mod m20240101_000061_text_tools;
+mod m20240101_000062_listing_photos;
 
 pub struct Migrator;
 
@@ -110,6 +123,19 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000047_property_geo::Migration),
             Box::new(m20240101_000048_parts::Migration),
             Box::new(m20240101_000049_partner_link::Migration),
+            Box::new(m20240101_000050_audit_trail::Migration),
+            Box::new(m20240101_000051_processes::Migration),
+            Box::new(m20240101_000052_issue_catalog::Migration),
+            Box::new(m20240101_000053_business_profile::Migration),
+            Box::new(m20240101_000054_site_maps::Migration),
+            Box::new(m20240101_000055_tour_requests::Migration),
+            Box::new(m20240101_000056_sso::Migration),
+            Box::new(m20240101_000057_embed::Migration),
+            Box::new(m20240101_000058_seo::Migration),
+            Box::new(m20240101_000059_notice_log::Migration),
+            Box::new(m20240101_000060_vendor_compliance::Migration),
+            Box::new(m20240101_000061_text_tools::Migration),
+            Box::new(m20240101_000062_listing_photos::Migration),
         ]
     }
 }

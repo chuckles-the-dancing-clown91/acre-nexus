@@ -3,6 +3,7 @@
 //! `message:manage`. See [`crate::texts`] for the STOP rules and threading.
 
 pub mod console;
+pub mod replies;
 pub mod twilio;
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,10 @@ pub struct TextThreadDto {
     pub last_message_at: Option<String>,
     /// True once the number texted STOP (until it texts START).
     pub opted_out: bool,
+    /// The staff member who owns the conversation.
+    pub assigned_user_id: Option<Uuid>,
+    /// Consent on file for marketing texts.
+    pub marketing_consent: bool,
 }
 
 impl From<entity::sms_thread::Model> for TextThreadDto {
@@ -35,6 +40,8 @@ impl From<entity::sms_thread::Model> for TextThreadDto {
             last_preview: t.last_preview,
             last_message_at: t.last_message_at.map(|d| d.to_rfc3339()),
             opted_out: t.opted_out_at.is_some(),
+            assigned_user_id: t.assigned_user_id,
+            marketing_consent: t.marketing_opt_in_at.is_some(),
         }
     }
 }
@@ -51,8 +58,16 @@ pub struct TextMessageDto {
     pub template_key: Option<String>,
     pub sent_by: Option<String>,
     pub media_count: i32,
+    /// Photos that came with the text, once filed as documents.
+    pub media: Vec<TextMediaDto>,
     pub error: Option<String>,
     pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TextMediaDto {
+    pub document_id: Uuid,
+    pub content_type: String,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -75,7 +90,36 @@ pub struct StartTextReq {
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct UpdateTextThreadReq {
     /// `open` | `done`
-    pub status: String,
+    pub status: Option<String>,
+    /// A staff member's user id to own the conversation; `""` to clear.
+    pub assignee: Option<String>,
+    /// Record (true) or withdraw (false) consent to marketing texts.
+    pub marketing_consent: Option<bool>,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct SavedReplyDto {
+    pub id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub updated_at: String,
+}
+
+impl From<entity::text_saved_reply::Model> for SavedReplyDto {
+    fn from(r: entity::text_saved_reply::Model) -> Self {
+        SavedReplyDto {
+            id: r.id,
+            title: r.title,
+            body: r.body,
+            updated_at: r.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct SavedReplyReq {
+    pub title: String,
+    pub body: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

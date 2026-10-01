@@ -5,8 +5,11 @@ use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
+use crate::vendor_compliance;
 use chrono::Datelike;
-use entity::prelude::{Counterparty, Lease, LeasePayment, Llc, Property, VendorBill};
+use entity::prelude::{
+    Counterparty, Lease, LeasePayment, Llc, Property, VendorBill, VendorTaxProfile,
+};
 use rocket::serde::json::Json;
 use rocket::{get, State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -26,6 +29,8 @@ pub struct Recipient1099 {
     pub name: String,
     /// Taxpayer ID on file (EIN for legal entities); vendors collect theirs via W-9.
     pub tin: Option<String>,
+    /// True when a vendor has no W-9 on file, so the form can't be filed yet.
+    pub missing_tin: bool,
     pub address: Option<String>,
     pub amount_cents: i64,
     pub amount_label: String,
@@ -45,13 +50,19 @@ pub struct Tax1099Resp {
     pub nec_total_label: String,
     pub misc_total_cents: i64,
     pub misc_total_label: String,
+    /// NEC recipients still missing a W-9.
+    pub missing_tin_count: usize,
 }
 
 /// 1099-NEC: vendors paid (settled bills) at or above the threshold in `year`.
+///
+/// The on-screen report shows only the last four of each TIN; the export
+/// (`reveal`) carries the full number for filing.
 async fn nec_recipients(
     db: &crate::db::RequestDb,
     tenant_id: Uuid,
     year: i32,
+    reveal: bool,
 ) -> ApiResult<Vec<Recipient1099>> {
     let bills = VendorBill::find()
         .filter(entity::vendor_bill::Column::TenantId.eq(tenant_id))
@@ -73,24 +84,43 @@ async fn nec_recipients(
         .into_iter()
         .map(|c| (c.id, c))
         .collect();
-
-    let mut out: Vec<Recipient1099> = by_vendor
+    let w9s: HashMap<Uuid, entity::vendor_tax_profile::Model> = VendorTaxProfile::find()
+        .filter(entity::vendor_tax_profile::Column::TenantId.eq(tenant_id))
+        .all(db)
+        .await?
         .into_iter()
-        .filter(|(_, cents)| *cents >= THRESHOLD_CENTS)
-        .map(|(id, cents)| {
-            let v = vendors.get(&id);
-            Recipient1099 {
-                form: "1099-NEC".into(),
-                box_label: "Box 1 — Nonemployee compensation".into(),
-                recipient_id: id,
-                name: v.map(|c| c.name.clone()).unwrap_or_else(|| "—".into()),
-                tin: None,
-                address: v.and_then(|c| c.address.clone()),
-                amount_cents: cents,
-                amount_label: usd(cents),
-            }
-        })
+        .map(|p| (p.counterparty_id, p))
         .collect();
+
+    let mut out: Vec<Recipient1099> = vec![];
+    for (id, cents) in by_vendor {
+        if cents < THRESHOLD_CENTS {
+            continue;
+        }
+        let v = vendors.get(&id);
+        let w9 = w9s.get(&id);
+        let tin = match w9 {
+            Some(_) if reveal => vendor_compliance::reveal_tin(db, tenant_id, id).await,
+            Some(p) => Some(vendor_compliance::mask_tin(&p.tin_type, &p.tin_last4)),
+            None => None,
+        };
+        // The W-9's legal name is the one the IRS matches against the TIN.
+        let name = w9
+            .map(|p| p.legal_name.clone())
+            .or_else(|| v.map(|c| c.name.clone()))
+            .unwrap_or_else(|| "—".into());
+        out.push(Recipient1099 {
+            form: "1099-NEC".into(),
+            box_label: "Box 1 — Nonemployee compensation".into(),
+            recipient_id: id,
+            name,
+            missing_tin: w9.is_none(),
+            tin,
+            address: v.and_then(|c| c.address.clone()),
+            amount_cents: cents,
+            amount_label: usd(cents),
+        });
+    }
     out.sort_by_key(|r| std::cmp::Reverse(r.amount_cents));
     Ok(out)
 }
@@ -152,6 +182,7 @@ async fn misc_recipients(
                 box_label: "Box 1 — Rents".into(),
                 recipient_id: id,
                 name: l.map(|x| x.name.clone()).unwrap_or_else(|| "—".into()),
+                missing_tin: false,
                 tin: l.map(|x| x.ein.clone()),
                 address: None,
                 amount_cents: cents,
@@ -174,8 +205,14 @@ fn parse_year(year: Option<String>) -> ApiResult<i32> {
     }
 }
 
-async fn build(db: &crate::db::RequestDb, tenant_id: Uuid, year: i32) -> ApiResult<Tax1099Resp> {
-    let nec = nec_recipients(db, tenant_id, year).await?;
+async fn build(
+    db: &crate::db::RequestDb,
+    tenant_id: Uuid,
+    year: i32,
+    reveal: bool,
+) -> ApiResult<Tax1099Resp> {
+    let nec = nec_recipients(db, tenant_id, year, reveal).await?;
+    let missing_tin_count = nec.iter().filter(|r| r.missing_tin).count();
     let misc = misc_recipients(db, tenant_id, year).await?;
     let nec_total: i64 = nec.iter().map(|r| r.amount_cents).sum();
     let misc_total: i64 = misc.iter().map(|r| r.amount_cents).sum();
@@ -190,6 +227,7 @@ async fn build(db: &crate::db::RequestDb, tenant_id: Uuid, year: i32) -> ApiResu
         nec_total_label: usd(nec_total),
         misc_total_cents: misc_total,
         misc_total_label: usd(misc_total),
+        missing_tin_count,
     })
 }
 
@@ -205,7 +243,14 @@ fn to_table(r: &Tax1099Resp) -> ReportTable {
         vec![
             rec.form.clone(),
             rec.name.clone(),
-            rec.tin.clone().unwrap_or_else(|| "—".into()),
+            rec.tin.clone().unwrap_or_else(|| {
+                if rec.missing_tin {
+                    "W-9 missing"
+                } else {
+                    "—"
+                }
+                .into()
+            }),
             rec.box_label.clone(),
             rec.amount_label.clone(),
         ]
@@ -246,7 +291,7 @@ pub async fn tax_1099(
     user.require(Permission::ReportRead)?;
     crate::modules::require_enabled(&state.db, scope.tenant_id, "reports").await?;
     let y = parse_year(year)?;
-    Ok(Json(build(&db, scope.tenant_id, y).await?))
+    Ok(Json(build(&db, scope.tenant_id, y, false).await?))
 }
 
 /// `GET /reports/1099/export?<year>&<format>`.
@@ -263,7 +308,22 @@ pub async fn tax_1099_export(
     user.require(Permission::ReportRead)?;
     crate::modules::require_enabled(&state.db, scope.tenant_id, "reports").await?;
     let y = parse_year(year)?;
-    let report = build(&db, scope.tenant_id, y).await?;
+    let report = build(&db, scope.tenant_id, y, true).await?;
+    // The export carries full taxpayer ids, so who pulled it is recorded.
+    crate::audit::record(
+        &db,
+        Some(user.user_id),
+        crate::audit::actions::TAX_1099_EXPORT,
+        Some("report"),
+        Some(format!("1099-{y}")),
+        Some(scope.tenant_id),
+        Some(serde_json::json!({
+            "year": y,
+            "recipients": report.nec.len() + report.misc.len(),
+            "missing_tin": report.missing_tin_count,
+        })),
+    )
+    .await;
     export(
         &to_table(&report),
         &format!("1099-{y}"),

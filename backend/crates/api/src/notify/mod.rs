@@ -130,6 +130,13 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    DefaultTemplate {
+        key: "tour_requested",
+        subject: "Tour request: {name} for {home}",
+        body: "Hi {recipient},\n\n{name} asked to tour {home}. Preferred times: {times}. \
+               Reach them at {contact}. Open Tours in the console to follow up.\n\n— {company}",
+        sms: "Tour request from {name} for {home}. Contact {contact}.",
+    },
     // ---- The back office ----
     DefaultTemplate {
         key: "missed_punch",
@@ -273,6 +280,102 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                No money was taken. Please try again with another payment method, or contact \
                us if the problem persists.\n\n— {company}",
         sms: "{company}: your payment of {amount} failed ({reason}). Please try another method.",
+    },
+    DefaultTemplate {
+        key: "autopay_failed",
+        subject: "Your automatic rent payment didn't go through",
+        body: "Hi {recipient},\n\nYour automatic payment of {amount} for rent due {due_date} \
+               could not be processed: {reason}. No money was taken, and we won't retry this \
+               payment on its own.\n\nPay now: {pay_url}\n\n— {company}",
+        sms: "{company}: your autopay of {amount} failed ({reason}). Pay now: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "rent_due",
+        subject: "Rent of {amount} is due {due_date}",
+        body: "Hi {recipient},\n\nA reminder that your rent of {amount} is due on {due_date}.\n\n\
+               Pay online: {pay_url}\n\nIf you've already paid, thank you, and please ignore \
+               this.\n\n— {company}",
+        sms: "{company}: rent of {amount} is due {due_date}. Pay: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "rent_past_due",
+        subject: "Your rent due {due_date} is unpaid",
+        body: "Hi {recipient},\n\nWe haven't received your rent of {amount} that was due on \
+               {due_date}. Please pay as soon as you can to avoid a late fee.\n\nPay online: \
+               {pay_url}\n\nIf you've already paid, thank you, and please ignore this.\n\n— {company}",
+        sms: "{company}: rent of {amount} due {due_date} is unpaid. Pay: {pay_url}",
+    },
+    DefaultTemplate {
+        key: "inspection_reminder",
+        subject: "Your {kind} inspection is {when}",
+        body: "Hi {recipient},\n\nA reminder that the {kind} inspection at {place} is \
+               scheduled for {date}.\n\nAdd it to your calendar: {calendar_url}\n\nTo change \
+               the time, reply to this email or message us in your portal.\n\n— {company}",
+        sms: "{company}: your {kind} inspection at {place} is {date}.",
+    },
+    DefaultTemplate {
+        key: "lease_expiring",
+        subject: "Lease ending in {days} days: {tenant}, {place}",
+        body: "Hi {recipient},\n\nThe lease for {tenant} at {place} ends on {end_date} \
+               ({days} days). {renewal_note}\n\n— {company}",
+        sms: "Lease for {tenant} at {place} ends {end_date} ({days} days).",
+    },
+    DefaultTemplate {
+        key: "warranty_expiring",
+        subject: "Warranty ending {date}: {asset}",
+        body: "Hi {recipient},\n\nThe warranty on {asset} at {place} ends on {date}. If it \
+               needs a claim or a service visit, now is the time.\n\n— {company}",
+        sms: "Warranty on {asset} at {place} ends {date}.",
+    },
+    DefaultTemplate {
+        key: "text_assigned",
+        subject: "Text conversation with {sender} is yours",
+        body: "Hi {recipient},\n\nThe text conversation with {sender} was assigned to \
+               you.\n\n— {company}",
+        sms: "Texts with {sender} are now yours.",
+    },
+    DefaultTemplate {
+        key: "ticket_rate_request",
+        subject: "How did we do on \"{title}\"?",
+        body: "Hi {recipient},\n\nYour request \"{title}\" is done. How did we do? \
+               Rate it here: {url}\n\n— {company}",
+        sms: "{company}: \"{title}\" is done. How did we do? Reply 1-5 (5 is best).",
+    },
+    DefaultTemplate {
+        key: "ticket_rating_thanks",
+        subject: "Thanks for your rating",
+        body: "Thanks for rating \"{title}\" {rating} out of 5.\n\n— {company}",
+        sms: "Thanks! We recorded {rating}/5 for \"{title}\".",
+    },
+    DefaultTemplate {
+        key: "repair_link",
+        subject: "Send us a repair request",
+        body: "Sounds like something needs fixing. Send the request here and we'll \
+               get on it: {url}\n\n— {company}",
+        sms: "{company}: sounds like a repair. Send it to maintenance here (already filled \
+              in): {url}",
+    },
+    DefaultTemplate {
+        key: "coi_expiring",
+        subject: "Your insurance certificate ends {date}",
+        body: "Hi {recipient},\n\nOur records show your {kind} policy with {carrier} ends on \
+               {date}. Please send us the renewed certificate so we can keep sending you \
+               work.\n\nThank you,\n{company}",
+        sms: "{company}: your {kind} insurance with {carrier} ends {date}. Please send the \
+              renewed certificate.",
+    },
+    DefaultTemplate {
+        key: "vendor_coi_expiring",
+        subject: "{vendor}'s insurance ends {date}",
+        body: "Hi {recipient},\n\n{vendor}'s {kind} policy with {carrier} ends on {date}. \
+               We've asked them for the renewed certificate.\n\n— {company}",
+        sms: "{vendor}'s {kind} insurance ends {date}.",
+    },
+    DefaultTemplate {
+        key: "manager_digest",
+        subject: "Morning summary: {headline}",
+        body: "Good morning {recipient},\n\n{summary}\n\nOpen the console: {console_url}\n\n— {company}",
+        sms: "Morning summary: {headline}",
     },
     DefaultTemplate {
         key: "payment_received",
@@ -672,6 +775,36 @@ pub async fn handle_job(
             "channel": "sms",
             "template": template,
         }));
+    }
+
+    if channel == "sms" {
+        // Marketing texts need their own consent on top of not having stopped.
+        if job.payload.get("marketing").and_then(|v| v.as_bool()) == Some(true) {
+            let consented = match crate::texts::normalize_phone(&to) {
+                Some(p) => matches!(
+                    crate::texts::find_thread(db, job.tenant_id, &p).await,
+                    Ok(Some(t)) if t.marketing_opt_in_at.is_some()
+                ),
+                None => false,
+            };
+            if !consented {
+                return JobOutcome::completed(json!({
+                    "skipped": true,
+                    "reason": "no_marketing_consent",
+                    "channel": "sms",
+                    "template": template,
+                }));
+            }
+        }
+        // Quiet hours: automatic texts wait for the morning. A text staff
+        // typed (it has a message row already) goes when they send it.
+        if sms_message_id.is_none() && !crate::text_auto::QUIET_EXEMPT.contains(&template) {
+            if let Some(wait) = crate::text_auto::quiet_wait(db, job.tenant_id).await {
+                let mut out = JobOutcome::reschedule("pending", wait);
+                out.result = Some(json!({ "deferred": "quiet hours", "seconds": wait }));
+                return out;
+            }
+        }
     }
 
     // Idempotency: has this natural trigger already sent (or is it in flight on
@@ -1140,7 +1273,7 @@ pub async fn notify_staff(
 }
 
 /// Active tenant users holding `permission_key` through any of their roles.
-async fn staff_with_permission(
+pub(crate) async fn staff_with_permission(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     permission_key: &str,

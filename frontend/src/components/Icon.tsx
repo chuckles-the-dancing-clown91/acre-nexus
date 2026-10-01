@@ -4,6 +4,8 @@
 export const ICONS: Record<string, string> = {
   globe:
     "M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20",
+  map: "M9 3L3 5v16l6-2 6 2 6-2V3l-6 2-6-2zM9 3v16M15 5v16",
+  home: "M3 11l9-8 9 8M5 10v10h14V10M10 20v-6h4v6",
   user: "M20 21a8 8 0 10-16 0M12 11a4 4 0 100-8 4 4 0 000 8",
   building:
     "M3 21h18M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16M9 7h0M9 11h0M9 15h0M15 7h0M15 11h0M15 15h0",

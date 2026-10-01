@@ -45,6 +45,7 @@ impl PlatformModule for IntegrationsModule {
                 "auto_chat",
                 "webhook_event",
                 "document_retention",
+                "sms_media",
             ],
             default_enabled: true,
             preview: false,
@@ -56,6 +57,16 @@ impl PlatformModule for IntegrationsModule {
             // secrets: write-only credential vault
             integrations::list_secrets::list_secrets,
             integrations::set_secret::set_secret,
+            // Alpha single sign-on
+            crate::routes::sso::get_status,
+            crate::routes::sso::enable,
+            crate::routes::sso::disable,
+            crate::routes::sso::launch,
+            // business profile + Google reviews
+            crate::routes::business::get_profile,
+            crate::routes::business::save_profile,
+            crate::routes::business::google_search,
+            crate::routes::business::google_place,
             integrations::delete_secret::delete_secret,
             // notification send history
             integrations::list_notifications::list_notifications,
@@ -109,6 +120,7 @@ impl PlatformModule for IntegrationsModule {
                 Some(crate::notify::handle_job(ctx.db, ctx.job).await)
             }
             "document_retention" => Some(retention(ctx.db, ctx.job).await),
+            "sms_media" => Some(crate::text_auto::handle_media_job(ctx.db, ctx.job).await),
             // Verified inbound events dispatch on `payload.provider`: the
             // payments providers (stripe/plaid, Phase 3), the screening
             // provider (checkr, Phase 4), and inbound email (#62) consume

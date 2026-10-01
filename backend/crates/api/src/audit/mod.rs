@@ -17,6 +17,8 @@
 //! Each concern lives in its own small, readable file:
 //! * [`actions`] — the action-key taxonomy (stable dotted strings).
 //! * [`record`] — the domain-event writer.
+//! * [`change`] — update events with a before/after field diff, the property
+//!   they concern, and the support-staff flag (the "who changed what" trail).
 //! * [`actor`] — resolving the principal (user / API token / public) from a request.
 //! * [`request_log`] — the per-request writer used by the fairing.
 //! * [`skip`] — which paths are excluded from request auditing.
@@ -27,6 +29,7 @@
 
 pub mod actions;
 pub mod actor;
+pub mod change;
 pub mod fairing;
 pub mod record;
 pub mod request_log;

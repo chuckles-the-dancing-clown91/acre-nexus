@@ -27,6 +27,9 @@ pub const OWNER_TYPES: &[&str] = &[
     "rehab_draw",
     "tenant",
     "expense",
+    "site_map",
+    "process_step",
+    "listing",
 ];
 
 /// Filing buckets for the documents tab. Free-form is tolerated (the column is

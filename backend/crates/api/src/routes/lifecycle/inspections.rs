@@ -277,10 +277,26 @@ pub async fn complete_inspection(
     // Phase 6: a completed move-out inspection starts the turn — open a
     // make-ready ticket and flag the unit (setting-gated, best-effort).
     if saved.kind == "move_out" {
-        if let Err(e) =
-            crate::helpdesk::open_turnover_ticket(&db, scope.tenant_id, &saved, user.user_id).await
+        let ticket =
+            match crate::helpdesk::open_turnover_ticket(&db, scope.tenant_id, &saved, user.user_id)
+                .await
+            {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!("turnover ticket failed: {e}");
+                    None
+                }
+            };
+        if let Err(e) = crate::process::start_turn_for_move_out(
+            &db,
+            scope.tenant_id,
+            &saved,
+            ticket.as_ref(),
+            user.user_id,
+        )
+        .await
         {
-            tracing::error!("turnover ticket failed: {e}");
+            tracing::error!("turnover steps failed: {e}");
         }
     }
 
@@ -437,4 +453,54 @@ pub async fn my_inspections(
         out.push(detail(r, items));
     }
     Ok(Json(out))
+}
+
+/// `GET /inspections/<id>/calendar.ics` — the inspection as a calendar file.
+#[rocket_okapi::openapi(skip)]
+#[get("/inspections/<id>/calendar.ics")]
+pub async fn inspection_calendar(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+) -> ApiResult<crate::routes::reports::ReportFile> {
+    user.require(Permission::LeaseRead)?;
+    let i = find_inspection(&db, scope.tenant_id, id).await?;
+    let ics = crate::resident_reminders::inspection_ics(&db, &i)
+        .await
+        .ok_or_else(|| ApiError::Conflict("this inspection has no date yet".into()))?;
+    Ok(crate::routes::reports::ReportFile::new(
+        ics.into_bytes(),
+        "text/calendar; charset=utf-8",
+        format!("inspection-{}.ics", i.id),
+    ))
+}
+
+/// `GET /public/inspections/<id>/calendar.ics?sig` — the same file from the
+/// link in a reminder email; the signature stands in for signing in.
+#[rocket_okapi::openapi(skip)]
+#[get("/public/inspections/<id>/calendar.ics?<sig>")]
+pub async fn public_inspection_calendar(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    id: &str,
+    sig: Option<String>,
+) -> ApiResult<crate::routes::reports::ReportFile> {
+    let iid = Uuid::parse_str(id).map_err(|_| ApiError::NotFound("not found".into()))?;
+    if !crate::resident_reminders::calendar_sig_ok(iid, sig.as_deref().unwrap_or("")) {
+        return Err(ApiError::NotFound("not found".into()));
+    }
+    let i = Inspection::find_by_id(iid)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("not found".into()))?;
+    let ics = crate::resident_reminders::inspection_ics(&db, &i)
+        .await
+        .ok_or_else(|| ApiError::NotFound("not found".into()))?;
+    Ok(crate::routes::reports::ReportFile::new(
+        ics.into_bytes(),
+        "text/calendar; charset=utf-8",
+        format!("inspection-{}.ics", i.id),
+    ))
 }

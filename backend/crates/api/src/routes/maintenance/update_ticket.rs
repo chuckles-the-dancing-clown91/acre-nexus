@@ -50,6 +50,17 @@ pub async fn update_ticket(
     let newly_assigned_entity = b
         .assignee_entity_id
         .filter(|v| existing.assignee_entity_id != Some(*v));
+    if let Some(vendor) = newly_assigned_entity {
+        crate::vendor_compliance::check_dispatch(
+            &db,
+            scope.tenant_id,
+            vendor,
+            b.coi_override_reason.as_deref(),
+            Some(user.user_id),
+            tid,
+        )
+        .await?;
+    }
     let had_first_response = existing.first_response_at.is_some();
     let created_at = existing.created_at;
     let was_resolved = existing.resolved_at.is_some();
@@ -143,6 +154,7 @@ pub async fn update_ticket(
     }
 
     let now = Utc::now();
+    let before = existing.clone();
     let mut am: entity::maintenance_ticket::ActiveModel = existing.into();
     if let Some(v) = b.title {
         am.title = Set(v);
@@ -243,6 +255,15 @@ pub async fn update_ticket(
 
     am.updated_at = Set(now.into());
     let saved = am.update(&db).await?;
+
+    // A resolved work order completes the turnover step that opened it.
+    if matches!(status_changed.as_deref(), Some("resolved" | "closed")) {
+        crate::process::on_ticket_resolved(&db, scope.tenant_id, saved.id, Some(user.user_id))
+            .await?;
+        if let Err(e) = crate::text_auto::ask_for_rating(&db, scope.tenant_id, &saved).await {
+            tracing::error!("rating ask failed: {e}");
+        }
+    }
 
     // The waiting-on follow-up note lands as an internal comment.
     if let Some((label, note)) = &waiting_note {
@@ -393,14 +414,16 @@ pub async fn update_ticket(
         }
     }
 
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::TICKET_UPDATE,
-        Some("maintenance_ticket"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": saved.status, "priority": saved.priority })),
+        "maintenance_ticket",
+        saved.id,
+        Some(saved.property_id),
+        &saved.title,
+        &before,
+        &saved,
     )
     .await;
     Ok(Json(TicketDto::from(saved)))

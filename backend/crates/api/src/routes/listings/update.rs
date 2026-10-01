@@ -49,6 +49,7 @@ pub async fn update(
         }
     }
 
+    let before = listing.clone();
     let mut am: entity::listing::ActiveModel = listing.into();
     if let Some(v) = b.title.filter(|t| !t.trim().is_empty()) {
         am.title = Set(v);
@@ -79,14 +80,16 @@ pub async fn update(
     }
     let saved = am.update(&db).await?;
 
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::LISTING_UPDATE,
-        Some("listing"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": saved.status, "is_public": saved.is_public })),
+        "listing",
+        saved.id,
+        saved.property_id,
+        &saved.title,
+        &before,
+        &saved,
     )
     .await;
 

@@ -5,14 +5,14 @@ use super::dto::{ProposeRenewalReq, ProposeRenewalResp, RenewalDto};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
+use crate::renewals;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
-use crate::{leasedoc, renewals};
 use chrono::Utc;
-use entity::prelude::{Lease, LeaseRenewal, Property, Unit};
+use entity::prelude::{Lease, LeaseRenewal};
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -107,69 +107,20 @@ pub async fn propose(
     }
 
     let notes = b.notes.filter(|n| !n.trim().is_empty());
-    let now = Utc::now();
-    let renewal = entity::lease_renewal::ActiveModel {
-        id: Set(Uuid::new_v4()),
-        tenant_id: Set(scope.tenant_id),
-        lease_id: Set(lid),
-        status: Set("proposed".into()),
-        current_rent_cents: Set(lease.rent_cents),
-        new_rent_cents: Set(b.new_rent_cents),
-        new_start_date: Set(new_start_date),
-        new_end_date: Set(new_end_date),
-        term_months: Set(b.term_months),
-        notes: Set(notes),
-        lease_document_id: Set(None),
-        envelope_id: Set(None),
-        created_by: Set(Some(user.user_id)),
-        activated_at: Set(None),
-        created_at: Set(now.into()),
-        updated_at: Set(now.into()),
-    }
-    .insert(&db)
-    .await?;
-
-    // Render + persist the addendum document (kept distinct from the lease
-    // agreement by `purpose`, so the normal signing flow never picks it up).
-    let property = Property::find_by_id(lease.property_id)
-        .one(&db)
-        .await?
-        .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
-    let unit = match lease.unit_id {
-        Some(uid) => Unit::find_by_id(uid).one(&db).await?,
-        None => None,
-    };
-    let body_text = leasedoc::render_renewal_addendum(&lease, &property, unit.as_ref(), &renewal);
-    let title = crate::settings::get_string(
+    let (renewal, doc_id, body_text) = renewals::create_proposal(
         &db,
         scope.tenant_id,
-        crate::settings::LEASE_RENEWAL_DOC_TITLE,
+        &lease,
+        renewals::Terms {
+            new_rent_cents: b.new_rent_cents,
+            new_start_date,
+            new_end_date,
+            term_months: b.term_months,
+            notes,
+        },
+        Some(user.user_id),
     )
-    .await;
-    let doc = entity::lease_document::ActiveModel {
-        id: Set(Uuid::new_v4()),
-        tenant_id: Set(scope.tenant_id),
-        lease_id: Set(lid),
-        title: Set(title),
-        body: Set(body_text.clone()),
-        format: Set("text".into()),
-        purpose: Set("renewal_addendum".into()),
-        status: Set("draft".into()),
-        generated_at: Set(now.into()),
-        signed_at: Set(None),
-        signed_by: Set(None),
-        signed_hash: Set(None),
-        signed_ip: Set(None),
-        created_at: Set(now.into()),
-    }
-    .insert(&db)
     .await?;
-
-    let doc_id = doc.id;
-    let mut rm: entity::lease_renewal::ActiveModel = renewal.into();
-    rm.lease_document_id = Set(Some(doc_id));
-    rm.updated_at = Set(now.into());
-    let renewal = rm.update(&db).await?;
 
     crate::audit::record(
         &db,

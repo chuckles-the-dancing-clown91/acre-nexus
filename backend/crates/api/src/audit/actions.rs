@@ -391,3 +391,46 @@ pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";
 pub const PLATFORM_INVOICE_PAID: &str = "platform_invoice.paid";
 pub const PLATFORM_INVOICE_VOID: &str = "platform_invoice.void";
 pub const TENANT_PLAN_CHANGE: &str = "tenant.plan_change";
+
+// ---- Step processes (turnovers) ----
+pub const PROCESS_START: &str = "process.start";
+pub const PROCESS_FINISH: &str = "process.finish";
+pub const PROCESS_CANCEL: &str = "process.cancel";
+pub const PROCESS_STEP_UPDATE: &str = "process.step_update";
+pub const PROCESS_TEMPLATE_SAVE: &str = "process.template_save";
+
+// ---- Issue catalog ----
+pub const ISSUE_TEMPLATE_SAVE: &str = "issue_template.save";
+pub const ISSUE_GENERATE: &str = "issue.generate_ticket";
+
+// ---- Business profile ----
+pub const BUSINESS_PROFILE_SAVE: &str = "business_profile.save";
+
+// ---- Site maps ----
+pub const SITE_MAP_CREATE: &str = "site_map.create";
+pub const SITE_MAP_UPDATE: &str = "site_map.update";
+pub const SITE_MAP_DELETE: &str = "site_map.delete";
+pub const SITE_MAP_DRAW: &str = "site_map.draw";
+
+// ---- Tour requests ----
+pub const TOUR_REQUEST_UPDATE: &str = "tour_request.update";
+
+// ---- Autofill ----
+pub const PROPERTY_AUTOFILL: &str = "property.autofill_apply";
+
+// ---- Single sign-on ----
+pub const SSO_ENABLE: &str = "sso.enable";
+pub const SSO_ROTATE: &str = "sso.rotate";
+pub const SSO_DISABLE: &str = "sso.disable";
+pub const SSO_LAUNCH: &str = "sso.launch";
+pub const SSO_LOGIN: &str = "auth.sso_login";
+
+// ---- Schedule ----
+pub const JOB_RUN_NOW: &str = "job.run_now";
+
+// ---- Vendor compliance ----
+pub const VENDOR_W9_SAVE: &str = "vendor.w9_save";
+pub const VENDOR_INSURANCE_ADD: &str = "vendor.insurance_add";
+pub const VENDOR_INSURANCE_REMOVE: &str = "vendor.insurance_remove";
+pub const VENDOR_COI_OVERRIDE: &str = "vendor.coi_override";
+pub const TAX_1099_EXPORT: &str = "report.1099_export";

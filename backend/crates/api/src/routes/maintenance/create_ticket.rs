@@ -54,8 +54,20 @@ pub async fn create_ticket(
     };
     let (response_due, resolve_due) =
         crate::helpdesk::sla_targets(&db, scope.tenant_id, &priority, now).await;
+    let ticket_id = Uuid::new_v4();
+    if let Some(vendor) = b.assignee_entity_id {
+        crate::vendor_compliance::check_dispatch(
+            &db,
+            scope.tenant_id,
+            vendor,
+            b.coi_override_reason.as_deref(),
+            Some(user.user_id),
+            ticket_id,
+        )
+        .await?;
+    }
     let model = entity::maintenance_ticket::ActiveModel {
-        id: Set(Uuid::new_v4()),
+        id: Set(ticket_id),
         tenant_id: Set(scope.tenant_id),
         property_id: Set(pid),
         unit_id: Set(b.unit_id),
@@ -91,14 +103,14 @@ pub async fn create_ticket(
         updated_at: Set(now.into()),
     };
     let saved = model.insert(&db).await?;
-    crate::audit::record(
+    crate::audit::change::created(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::TICKET_CREATE,
-        Some("maintenance_ticket"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "property_id": saved.property_id, "category": saved.category, "priority": saved.priority })),
+        "maintenance_ticket",
+        saved.id,
+        Some(saved.property_id),
+        &saved.title,
     )
     .await;
 

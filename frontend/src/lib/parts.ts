@@ -286,6 +286,7 @@ export const partner = {
       requested_for?: string;
       service_key?: string;
       note?: string;
+      coi_override_reason?: string;
     }
   ) => post<MaintenanceTicket>(`/tickets/${ticketId}/dispatch`, body),
 };

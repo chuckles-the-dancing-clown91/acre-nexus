@@ -34,6 +34,14 @@ const LOCATIONS = [
   "Other",
 ];
 
+/** Links from texts and emails: `?new=1&title=…&category=…&description=…`
+ * opens a request already filled in; `?ticket=<id>` opens that request. Only
+ * read after the list loads, which is always in the browser. */
+function linkParam(key: string): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(key) ?? "";
+}
+
 const field =
   "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent";
 
@@ -99,12 +107,17 @@ export default function MyMaintenancePage() {
 }
 
 function NewRequestCard({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => linkParam("new") === "1");
   const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("general");
+  const [title, setTitle] = useState(() => linkParam("title").slice(0, 120));
+  const [category, setCategory] = useState(() => {
+    const c = linkParam("category");
+    return CATEGORIES.includes(c) ? c : "general";
+  });
   const [priority, setPriority] = useState("normal");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(() =>
+    linkParam("description").slice(0, 2000)
+  );
   const [location, setLocation] = useState("");
   const [accessNotes, setAccessNotes] = useState("");
   const [permissionToEnter, setPermissionToEnter] = useState(false);
@@ -265,7 +278,9 @@ function RequestList({
   tickets: MaintenanceTicket[];
   onChange: () => void;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(
+    () => linkParam("ticket") || null
+  );
   return (
     <Card>
       <div className="border-b border-line px-5 py-4 font-display text-lg font-bold">

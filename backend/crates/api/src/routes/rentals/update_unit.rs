@@ -30,6 +30,7 @@ pub async fn update_unit(
         .await?
         .ok_or_else(|| ApiError::NotFound("unit not found".into()))?;
     let b = body.into_inner();
+    let before = existing.clone();
     let mut am: entity::unit::ActiveModel = existing.into();
     if let Some(v) = b.unit_number {
         am.unit_number = Set(v);
@@ -47,18 +48,31 @@ pub async fn update_unit(
         am.market_rent_cents = Set(Some(v));
     }
     if let Some(v) = b.status {
+        // A unit cannot go back on the market while its turn has required
+        // steps open: finish the turn (or finish it with an override) first.
+        if v == "vacant" && before.status != "vacant" {
+            let unmet = crate::process::unmet_for_unit(&db, scope.tenant_id, uid).await?;
+            if !unmet.is_empty() {
+                return Err(ApiError::Conflict(format!(
+                    "the turn still has required steps open: {}",
+                    unmet.join(", ")
+                )));
+            }
+        }
         am.status = Set(v);
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
-    crate::audit::record(
+    crate::audit::change::change(
         &db,
-        Some(user.user_id),
+        crate::audit::change::Ctx::new(&user, &scope),
         crate::audit::actions::UNIT_UPDATE,
-        Some("unit"),
-        Some(saved.id.to_string()),
-        Some(scope.tenant_id),
-        Some(serde_json::json!({ "unit_number": saved.unit_number, "status": saved.status })),
+        "unit",
+        saved.id,
+        Some(saved.property_id),
+        &format!("Unit {}", saved.unit_number),
+        &before,
+        &saved,
     )
     .await;
     Ok(Json(UnitDto::from(saved)))

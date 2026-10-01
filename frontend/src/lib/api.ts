@@ -240,6 +240,17 @@ export interface TextThread {
   last_message_at: string | null;
   /** The number texted STOP (until it texts START). */
   opted_out: boolean;
+  /** The staff member who owns the conversation. */
+  assigned_user_id: string | null;
+  /** Consent on file for marketing texts. */
+  marketing_consent: boolean;
+}
+
+export interface SavedReply {
+  id: string;
+  title: string;
+  body: string;
+  updated_at: string;
 }
 
 export interface TextMessage {
@@ -250,6 +261,8 @@ export interface TextMessage {
   template_key: string | null;
   sent_by: string | null;
   media_count: number;
+  /** Photos that came with the text, once filed as documents. */
+  media: { document_id: string; content_type: string }[];
   error: string | null;
   created_at: string;
 }
@@ -308,11 +321,15 @@ export const api = {
 
   // ---- two-way texts (console inbox) ----
   textsStatus: () => request<TextsStatus>("/texts/status", { auth: true }),
-  textThreads: (status?: string) =>
-    request<TextThread[]>(
-      `/texts${status ? `?status=${encodeURIComponent(status)}` : ""}`,
-      { auth: true }
-    ),
+  textThreads: (status?: string, mine?: boolean) => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (mine) p.set("mine", "true");
+    const qs = p.toString();
+    return request<TextThread[]>(`/texts${qs ? `?${qs}` : ""}`, {
+      auth: true,
+    });
+  },
   /** One conversation, oldest text first. Marks it read. */
   textThread: (id: string) =>
     request<TextThreadDetail>(`/texts/${id}`, { auth: true }),
@@ -328,11 +345,31 @@ export const api = {
       auth: true,
       body: { phone, body },
     }),
-  updateTextThread: (id: string, status: "open" | "done") =>
+  updateTextThread: (
+    id: string,
+    body: {
+      status?: "open" | "done";
+      /** A teammate's user id, or "" to clear. */
+      assignee?: string;
+      marketing_consent?: boolean;
+    }
+  ) =>
     request<TextThread>(`/texts/${id}`, {
       method: "PATCH",
       auth: true,
-      body: { status },
+      body,
+    }),
+  savedReplies: () => request<SavedReply[]>("/texts/replies", { auth: true }),
+  saveReply: (title: string, body: string) =>
+    request<SavedReply>("/texts/replies", {
+      method: "POST",
+      auth: true,
+      body: { title, body },
+    }),
+  deleteReply: (id: string) =>
+    request<{ deleted: boolean }>(`/texts/replies/${id}`, {
+      method: "DELETE",
+      auth: true,
     }),
   /** Test mode only: act as if `phone` texted `body` in. */
   simulateText: (phone: string, body: string) =>
@@ -2925,7 +2962,10 @@ export interface Recipient1099 {
   box_label: string;
   recipient_id: string;
   name: string;
+  /** Last four only on screen; the export carries the full number. */
   tin: string | null;
+  /** A vendor with no W-9 on file yet. */
+  missing_tin: boolean;
   address: string | null;
   amount_cents: number;
   amount_label: string;
@@ -2941,6 +2981,7 @@ export interface Tax1099Resp {
   nec_total_label: string;
   misc_total_cents: number;
   misc_total_label: string;
+  missing_tin_count: number;
 }
 
 export interface RegisterDocumentInput {

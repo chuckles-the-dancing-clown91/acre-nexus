@@ -38,6 +38,8 @@ pub async fn write(db: &DatabaseConnection, rec: RequestRecord) {
         ip: Set(rec.ip),
         duration_ms: Set(Some(rec.duration_ms)),
         principal_kind: Set(Some(rec.actor.kind.to_string())),
+        property_id: NotSet,
+        support: NotSet,
         created_at: Set(chrono::Utc::now().into()),
     };
     if let Err(e) = entry.insert(db).await {

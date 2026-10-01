@@ -22,6 +22,10 @@ pub struct Model {
     pub last_message_at: Option<DateTimeWithTimeZone>,
     /// Set by STOP, cleared by START. No texts go out while set.
     pub opted_out_at: Option<DateTimeWithTimeZone>,
+    /// The staff member who owns the conversation.
+    pub assigned_user_id: Option<Uuid>,
+    /// Separate consent for marketing texts (STOP still wins over it).
+    pub marketing_opt_in_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

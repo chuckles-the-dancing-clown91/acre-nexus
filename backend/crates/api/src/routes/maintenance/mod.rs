@@ -8,6 +8,7 @@ pub mod create_ticket;
 pub mod dto;
 pub mod get_ticket;
 pub mod inventory;
+pub mod issues;
 pub mod lines;
 pub mod list_property_tickets;
 pub mod list_tickets;

@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { sso } from "@/lib/sso";
 import type { MfaChallenge } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 
@@ -26,6 +27,28 @@ function Callback() {
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
+    // Single sign-on from Alpha: the browser arrives with a signed token.
+    const ssoToken = params.get("sso") === "alpha" ? params.get("token") : null;
+    if (ssoToken) {
+      sso
+        .signIn(ssoToken)
+        .then((res) => {
+          if (res.outcome === "session" && res.session) {
+            establishSession(res.session);
+            router.replace("/console");
+          } else if (res.outcome === "mfa" && res.mfa) {
+            setChallenge(res.mfa);
+          } else {
+            throw new Error("Unexpected response from sign-in.");
+          }
+        })
+        .catch(() =>
+          setError(
+            "This sign-in link is not valid or has expired. Open it again from Alpha, or sign in here."
+          )
+        );
+      return;
+    }
     const provider = params.get("provider") ?? "";
     const codeParam = params.get("code") ?? "";
     const state = params.get("state") ?? "";

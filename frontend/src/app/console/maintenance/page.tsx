@@ -108,6 +108,12 @@ export default function MaintenancePage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
+            href="/console/maintenance/issues"
+            className="rounded-xl border border-accent bg-accent-soft px-3 py-2 text-sm font-semibold text-accent-2"
+          >
+            Report an issue
+          </Link>
+          <Link
             href="/console/maintenance/closeout"
             className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
           >

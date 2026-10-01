@@ -13,6 +13,16 @@ export interface Listing {
   status: string;
   available_on: string;
   description: string;
+  /** ISO time it was listed. */
+  listed_at?: string;
+  /** Pictures in order; the first is the hero. */
+  photos?: ListingPhoto[];
+}
+
+export interface ListingPhoto {
+  url: string;
+  alt: string;
+  caption: string | null;
 }
 
 export interface PublicTheme {
@@ -972,6 +982,8 @@ export interface CreateTicketInput {
 }
 
 export interface UpdateTicketInput {
+  /** Why to send a vendor without current insurance (when that is required). */
+  coi_override_reason?: string;
   title?: string;
   description?: string;
   category?: string;

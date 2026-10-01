@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { partner, type PartnerLink } from "@/lib/parts";
+import { sso } from "@/lib/sso";
 import { Badge, Button, Card } from "@/components/ui";
 
 const field =
@@ -128,6 +129,7 @@ export function PartnerLinkCard({
           )}
         </form>
       )}
+      {link.linked && <OpenInAlpha counterpartyId={counterpartyId} />}
       <div className="rounded-xl bg-surface-2 p-3 text-sm">
         <div className="text-xs font-semibold uppercase tracking-wide text-ink-3">
           For their Alpha API client
@@ -183,5 +185,46 @@ export function PartnerLinkCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/** Opens the vendor's Alpha signed in as you, when single sign-on is on. */
+function OpenInAlpha({ counterpartyId }: { counterpartyId: string }) {
+  const [on, setOn] = useState(false);
+  const [web, setWeb] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    sso
+      .status()
+      .then((s) => setOn(s.enabled))
+      .catch(() => setOn(false));
+  }, []);
+  if (!on) return null;
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await sso.launch({
+        counterparty_id: counterpartyId,
+        web_url: web.trim() || undefined,
+      });
+      window.open(r.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <input
+        className={`${field} w-72`}
+        placeholder="Their Alpha web address (first time only)"
+        value={web}
+        onChange={(e) => setWeb(e.target.value)}
+      />
+      <Button variant="outline" onClick={go} disabled={busy}>
+        Open in Alpha
+      </Button>
+    </div>
   );
 }

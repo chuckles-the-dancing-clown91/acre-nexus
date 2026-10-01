@@ -42,7 +42,9 @@ const newLine = (patch: Partial<Line> = {}): Line => ({
   ...patch,
 });
 
-/** Camera barcode reading through the browser's BarcodeDetector. */
+/** Camera barcode reading: the browser's BarcodeDetector where there is one
+ * (Chrome, Android), else the zxing decoder, loaded only when needed (Safari,
+ * Firefox). */
 function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -51,7 +53,15 @@ function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
     if (!video) return;
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let zxing: { stop: () => void } | null = null;
+    let stopped = false;
     let last = "";
+    const seen = (raw: string | undefined) => {
+      if (raw && raw !== last) {
+        last = raw;
+        onCode(raw);
+      }
+    };
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -59,6 +69,17 @@ function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
         });
         video.srcObject = stream;
         await video.play();
+        if (!("BarcodeDetector" in window)) {
+          const { BrowserMultiFormatReader } = await import("@zxing/browser");
+          const controls =
+            await new BrowserMultiFormatReader().decodeFromVideoElement(
+              video,
+              (result) => seen(result?.getText())
+            );
+          if (stopped) controls.stop();
+          else zxing = controls;
+          return;
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const Detector = (window as any).BarcodeDetector;
         const detector = new Detector({
@@ -75,11 +96,7 @@ function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
         timer = setInterval(async () => {
           try {
             const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue as string | undefined;
-            if (raw && raw !== last) {
-              last = raw;
-              onCode(raw);
-            }
+            seen(codes[0]?.rawValue as string | undefined);
           } catch {
             // a frame that couldn't be read; try the next one
           }
@@ -89,6 +106,8 @@ function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
       }
     })();
     return () => {
+      stopped = true;
+      zxing?.stop();
       if (timer) clearInterval(timer);
       stream?.getTracks().forEach((t) => t.stop());
     };
@@ -105,7 +124,9 @@ function CameraScanner({ onCode }: { onCode: (code: string) => void }) {
 }
 
 function cameraCanScan(): boolean {
-  return typeof window !== "undefined" && "BarcodeDetector" in window;
+  return (
+    typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+  );
 }
 
 export default function StockPage() {
@@ -277,7 +298,7 @@ export default function StockPage() {
               onClick={() => {
                 if (!camera && !cameraCanScan()) {
                   toast.error(
-                    "This browser can't read barcodes from the camera — use a scanner gun or type the code."
+                    "This browser can't use the camera here — use a scanner gun or type the code."
                   );
                   return;
                 }

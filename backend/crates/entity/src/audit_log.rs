@@ -48,6 +48,11 @@ pub struct Model {
     /// Kind of principal behind the request: `user`, `api_token`, `public`,
     /// or `system`.
     pub principal_kind: Option<String>,
+    /// The property this event is about (units, assets, tickets, leases and
+    /// listings carry their property), for per-property history.
+    pub property_id: Option<Uuid>,
+    /// A Vantedge employee made this change while acting on the workspace.
+    pub support: bool,
     pub created_at: DateTimeWithTimeZone,
 }
 

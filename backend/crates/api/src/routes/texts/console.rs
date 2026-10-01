@@ -145,6 +145,7 @@ async fn detail(
                 template_key: m.template_key,
                 sent_by: m.sent_by_user_id.and_then(|u| names.get(&u).cloned()),
                 media_count: m.media_count,
+                media: serde_json::from_value(m.media).unwrap_or_default(),
                 error: m.error,
                 created_at: m.created_at.to_rfc3339(),
             })
@@ -184,19 +185,24 @@ pub async fn status(
     }))
 }
 
-/// `GET /texts?status=` — conversations, most recent first.
+/// `GET /texts?status=&mine=` — conversations, most recent first; `mine`
+/// keeps the ones assigned to the caller.
 #[rocket_okapi::openapi(tag = "Texts")]
-#[get("/texts?<status>")]
+#[get("/texts?<status>&<mine>")]
 pub async fn list(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
     status: Option<String>,
+    mine: Option<bool>,
 ) -> ApiResult<Json<Vec<TextThreadDto>>> {
     user.require(Permission::MessageRead)?;
     let mut q = SmsThread::find().filter(entity::sms_thread::Column::TenantId.eq(scope.tenant_id));
     if let Some(s) = status.filter(|s| !s.trim().is_empty()) {
         q = q.filter(entity::sms_thread::Column::Status.eq(s.trim().to_lowercase()));
+    }
+    if mine == Some(true) {
+        q = q.filter(entity::sms_thread::Column::AssignedUserId.eq(user.user_id));
     }
     let threads = q
         .order_by_desc(entity::sms_thread::Column::LastMessageAt)
@@ -261,7 +267,8 @@ pub async fn start(
     Ok(Json(detail(&db, thread).await?))
 }
 
-/// `PATCH /texts/<id>` — mark a conversation done, or reopen it.
+/// `PATCH /texts/<id>` — mark a conversation done or reopen it, give it to a
+/// staff member, or record marketing consent.
 #[rocket_okapi::openapi(tag = "Texts")]
 #[patch("/texts/<id>", data = "<body>")]
 pub async fn update(
@@ -272,15 +279,69 @@ pub async fn update(
     body: Json<UpdateTextThreadReq>,
 ) -> ApiResult<Json<TextThreadDto>> {
     user.require(Permission::MessageManage)?;
-    let status = body.status.trim().to_lowercase();
-    if status != "open" && status != "done" {
-        return Err(ApiError::BadRequest("status must be open or done".into()));
-    }
+    let b = body.into_inner();
     let thread = find_thread(&db, scope.tenant_id, id).await?;
-    let mut am: entity::sms_thread::ActiveModel = thread.into();
-    am.status = Set(status.clone());
-    if status == "done" {
-        am.unread_count = Set(0);
+    let who = thread
+        .display_name
+        .clone()
+        .unwrap_or_else(|| thread.phone.clone());
+    let mut am: entity::sms_thread::ActiveModel = thread.clone().into();
+    let mut detail = serde_json::Map::new();
+
+    if let Some(status) = b.status.map(|s| s.trim().to_lowercase()) {
+        if status != "open" && status != "done" {
+            return Err(ApiError::BadRequest("status must be open or done".into()));
+        }
+        am.status = Set(status.clone());
+        if status == "done" {
+            am.unread_count = Set(0);
+        }
+        detail.insert("status".into(), serde_json::json!(status));
+    }
+
+    let mut new_owner = None;
+    if let Some(raw) = b.assignee.map(|s| s.trim().to_string()) {
+        let assignee = if raw.is_empty() {
+            None
+        } else {
+            let uid = Uuid::parse_str(&raw)
+                .map_err(|_| ApiError::BadRequest("assignee must be a user id".into()))?;
+            let member = entity::prelude::Membership::find()
+                .filter(entity::membership::Column::UserId.eq(uid))
+                .filter(entity::membership::Column::TenantId.eq(scope.tenant_id))
+                .one(&db)
+                .await?;
+            if member.is_none() {
+                return Err(ApiError::BadRequest(
+                    "that person isn't on this workspace's team".into(),
+                ));
+            }
+            Some(uid)
+        };
+        if assignee != thread.assigned_user_id {
+            new_owner = assignee;
+        }
+        am.assigned_user_id = Set(assignee);
+        detail.insert("assignee".into(), serde_json::json!(assignee));
+    }
+
+    if let Some(consent) = b.marketing_consent {
+        if consent && thread.opted_out_at.is_some() {
+            return Err(ApiError::Conflict(
+                "this number texted STOP; they need to text START first".into(),
+            ));
+        }
+        let at = if consent {
+            thread.marketing_opt_in_at.or(Some(Utc::now().into()))
+        } else {
+            None
+        };
+        am.marketing_opt_in_at = Set(at);
+        detail.insert("marketing_consent".into(), serde_json::json!(consent));
+    }
+
+    if detail.is_empty() {
+        return Err(ApiError::BadRequest("nothing to change".into()));
     }
     am.updated_at = Set(Utc::now().into());
     let thread = am.update(&db).await?;
@@ -291,9 +352,25 @@ pub async fn update(
         Some("sms_thread"),
         Some(thread.id.to_string()),
         Some(scope.tenant_id),
-        Some(serde_json::json!({ "status": status })),
+        Some(serde_json::Value::Object(detail)),
     )
     .await;
+
+    // The new owner hears about it, unless they gave it to themselves.
+    if let Some(uid) = new_owner.filter(|u| *u != user.user_id) {
+        if let Some(member) = User::find_by_id(uid).one(&db).await? {
+            crate::notify::in_app(
+                &db,
+                scope.tenant_id,
+                &member,
+                "text_assigned",
+                &serde_json::json!({ "sender": who }),
+                Some(("sms_thread", thread.id)),
+                &format!("assigned:{uid}:{}", Utc::now().timestamp()),
+            )
+            .await;
+        }
+    }
     Ok(Json(thread.into()))
 }
 
@@ -315,7 +392,7 @@ pub async fn simulate(
         ));
     }
     let text = clean_body(&body.body)?;
-    let thread = texts::record_inbound(&db, scope.tenant_id, &body.phone, &text, None, 0)
+    let thread = texts::record_inbound(&db, scope.tenant_id, &body.phone, &text, None, &[])
         .await?
         .ok_or_else(|| ApiError::BadRequest("that doesn't look like a phone number".into()))?;
     Ok(Json(detail(&db, thread).await?))

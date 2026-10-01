@@ -164,6 +164,9 @@ pub struct DispatchReq {
     pub requested_for: Option<String>,
     pub service_key: Option<String>,
     pub note: Option<String>,
+    /// When the insurance rule is on and this vendor has no current liability
+    /// cover, the reason to send them anyway (audited).
+    pub coi_override_reason: Option<String>,
 }
 
 /// `POST /tickets/<id>/dispatch` — send the work order to a linked vendor.
@@ -178,11 +181,21 @@ pub async fn dispatch(
 ) -> ApiResult<Json<TicketDto>> {
     user.require(Permission::MaintenanceManage)?;
     let b = body.into_inner();
+    let ticket_id = parse_id(id, "work order")?;
+    crate::vendor_compliance::check_dispatch(
+        &db,
+        scope.tenant_id,
+        b.counterparty_id,
+        b.coi_override_reason.as_deref(),
+        Some(user.user_id),
+        ticket_id,
+    )
+    .await?;
     let t = partner::dispatch(
         &db,
         scope.tenant_id,
         DispatchSpec {
-            ticket_id: parse_id(id, "work order")?,
+            ticket_id,
             counterparty_id: b.counterparty_id,
             requested_for: b.requested_for,
             service_key: b.service_key,

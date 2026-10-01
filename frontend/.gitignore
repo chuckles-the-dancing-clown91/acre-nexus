@@ -12,3 +12,6 @@ next-env.d.ts
 /playwright-report
 /test-results
 /.husky/_
+
+# copied from maplibre-gl by scripts/copy-maplibre-worker.mjs
+/public/maplibre

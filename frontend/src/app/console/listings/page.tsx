@@ -10,6 +10,7 @@ import type { ConsoleListing, Property } from "@/lib/types";
 import { Badge, Card, statusTone } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { logError } from "@/lib/log";
+import { ListingPhotos } from "@/components/ListingPhotos";
 
 export default function ListingsPage() {
   const { can } = useAuth();
@@ -20,6 +21,7 @@ export default function ListingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [photosFor, setPhotosFor] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -103,43 +105,54 @@ export default function ListingsPage() {
       <Card className="overflow-hidden">
         <div className="divide-y divide-line">
           {listings?.map((l) => (
-            <div
-              key={l.id}
-              className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-semibold">{l.title}</div>
-                <div className="text-xs text-ink-3">
-                  {l.address}, {l.city} · {l.beds} bd / {l.baths} ba ·{" "}
-                  {l.rent_label}/mo · available {l.available_on}
+            <div key={l.id}>
+              <div className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{l.title}</div>
+                  <div className="text-xs text-ink-3">
+                    {l.address}, {l.city} · {l.beds} bd / {l.baths} ba ·{" "}
+                    {l.rent_label}/mo · available {l.available_on}
+                  </div>
                 </div>
+                <Badge tone={statusTone(l.status)}>{l.status}</Badge>
+                <Badge tone={l.is_public ? "good" : "neutral"}>
+                  {l.is_public ? "public" : "hidden"}
+                </Badge>
+                {manage && (
+                  <>
+                    <select
+                      value={l.status}
+                      onChange={(e) => setStatus(l, e.target.value)}
+                      disabled={busy === l.id}
+                      className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
+                    >
+                      {["Available", "New", "Pending", "Leased"].map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => togglePublic(l)}
+                      disabled={busy === l.id}
+                      className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                    >
+                      {l.is_public ? "Unpublish" : "Publish"}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setPhotosFor(photosFor === l.id ? null : l.id)}
+                  className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold"
+                  aria-expanded={photosFor === l.id}
+                >
+                  Photos
+                </button>
               </div>
-              <Badge tone={statusTone(l.status)}>{l.status}</Badge>
-              <Badge tone={l.is_public ? "good" : "neutral"}>
-                {l.is_public ? "public" : "hidden"}
-              </Badge>
-              {manage && (
-                <>
-                  <select
-                    value={l.status}
-                    onChange={(e) => setStatus(l, e.target.value)}
-                    disabled={busy === l.id}
-                    className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs"
-                  >
-                    {["Available", "New", "Pending", "Leased"].map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => togglePublic(l)}
-                    disabled={busy === l.id}
-                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                  >
-                    {l.is_public ? "Unpublish" : "Publish"}
-                  </button>
-                </>
+              {photosFor === l.id && (
+                <div className="border-t border-line bg-surface-2/40 px-5 py-4">
+                  <ListingPhotos listingId={l.id} manage={manage} />
+                </div>
               )}
             </div>
           ))}

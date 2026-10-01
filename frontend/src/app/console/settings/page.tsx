@@ -4,6 +4,7 @@
 // backend `settings` subsystem). Renders each setting generically by kind and
 // saves overrides. Gated by `tenant:manage`.
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useSettings, useSetSetting } from "@/lib/queries";
 import type { SettingView } from "@/lib/types";
@@ -42,6 +43,44 @@ export default function SettingsPage() {
         <p className="text-ink-3">
           Workspace-wide configuration for your firm.
         </p>
+        <Link
+          href="/console/settings/schedule"
+          className="mr-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+        >
+          Schedule
+        </Link>
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/business"
+            className="mt-3 inline-block rounded-xl border border-accent bg-accent-soft px-3 py-2 text-sm font-semibold text-accent-2"
+          >
+            Business profile and Google reviews
+          </Link>
+        )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/sso"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Single sign-on
+          </Link>
+        )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/website"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Website widgets
+          </Link>
+        )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/search"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Search appearance
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}
