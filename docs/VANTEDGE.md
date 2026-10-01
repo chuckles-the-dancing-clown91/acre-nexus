@@ -45,7 +45,7 @@ e-sign, deals and rehab. The build-out is about the **people-facing layer**.
   meets edge, `components/Brand.tsx`, `app/icon.svg`); accent moved from orange
   `#f5451f` to the Vantedge teal `#0e7c86` (dark `#3cc3c9`), warm neutrals
   kept. Tenants still override the accent with white-label branding.
-- ☐ Internal identifiers (personas `acre_*`, DB roles `acre_app`, token prefix
+- ☐ Internal identifiers (personas `acre_*`, token prefix
   `acre_live_`, `X-Acre-Signature`, `acrenexus.example` seed domains). These are
   data and API contracts — rename behind a migration that accepts both old and
   new for one release (`vtg_live_` tokens, `X-Vantedge-Signature` sent alongside
@@ -101,7 +101,7 @@ the office texts back from one shared inbox.
 - ☐ Missed-call text-back (Twilio voice) as in Alpha.
 - ☐ Quiet hours for non-urgent texts (8 AM–9 PM local) and marketing consent.
 
-## Phase 2B — The back office: one set of hours, everything adds up ◐
+## Phase 2B — The back office: one set of hours, everything adds up ☑
 
 Built — see [`BACKOFFICE.md`](BACKOFFICE.md) for how it works.
 
@@ -250,7 +250,7 @@ other as vendor and client.
 
 **Inventory** ☑
 - Barcode / UPC / SKU lookup (`GET /inventory/lookup?code=`); **scan-in** with
-  the camera (BarcodeDetector, zxing fallback) or a scanner gun; receive /
+  the camera (BarcodeDetector, where the browser has it) or a scanner gun; receive /
   use / count movements with a landed, **weighted-average unit cost** spread
   across a receipt (tax + shipping); a Friday reorder list by vendor; use on a
   work order from the tech's phone.
@@ -305,10 +305,15 @@ Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
 - **Search.** The public site is server-rendered with per-page metadata, schema.org
   markup, share images, a sitemap and robots rules. See `docs/SEO.md`.
 
-## Phase 3 — Reminders that run themselves ☐
+## Phase 3 — Reminders that run themselves ◐
 
-Everything Alpha's scheduler does, translated to rentals. All on the existing
-job queue, retimed from Settings → Schedule with run history.
+Everything Alpha's scheduler does, translated to rentals, on the existing job
+queue. Checked against the code on 2026-10-01: only `billing_cycle` and
+`reminder_scan` run on their own today, and there is no Settings → Schedule page
+or run history yet. Exists: late-fee and payment-failed emails, a staff reminder
+for each expiring lease (30/7/1 days), and the resident's 1–5 rating of a work
+order in the portal. Everything below that is not marked is planned as
+**area 10** in `docs/ROADMAP-NEXT.md`; the schedule page is area 9.
 
 - Rent due (3 days before), rent late (day after grace), autopay failed.
 - Lease expiring (90/60/30 days) → kicks off the renewal workflow.
@@ -320,6 +325,9 @@ job queue, retimed from Settings → Schedule with run history.
 
 ## Phase 4 — Owner & vendor portals ☐
 
+Planned in detail as areas 11 (vendor) and 12 (owner) in `docs/ROADMAP-NEXT.md`.
+Owners use the console with the `landlord` role until then.
+
 - **Owner portal** (`/owner`): statements, payouts, property P&L, open work
   orders, documents, approve spend over a limit.
 - **Vendor portal** (`/vendor`): the work orders assigned to them, accept /
@@ -327,7 +335,10 @@ job queue, retimed from Settings → Schedule with run history.
   with expiry reminders. **Alpha is vendor #1** — and a Vantedge work order can
   be pushed into Alpha as a job (partner integration, both directions).
 
-## Phase 5 — Reviews, renewals marketing & Spanish ☐
+## Phase 5 — Reviews, renewals marketing & Spanish ◐
+
+Done: Google reviews on the public site (business profile, reviews strip, review
+link). Not done: review asks, campaigns, referral credits, Spanish (area 16).
 
 - Google reviews on each tenant's public listings site; review asks after a
   completed work order or a lease signing (never gated).
@@ -342,7 +353,8 @@ job queue, retimed from Settings → Schedule with run history.
   residents ("drip your faucets tonight").
 - Installable offline PWA for inspections (photos queue while offline).
 - Satellite measuring for turn estimates (roof, paint, flooring square feet).
-- Equipment/appliance register per unit with service schedules and warranties.
+- ☑ Equipment/appliance register per unit with service schedules and warranties
+  (phase 2C). Still missing: a reminder before a warranty expires (area 10).
 
 ## Phase 7 — Go-live gates (from the partnership letter) ☐
 
@@ -374,15 +386,25 @@ These are gates, not features. Nothing moves forward until the last one is done.
 
 ---
 
-**Still to port from Alpha** ☐ — QuickBooks Online export, equipment meters and
-service schedules, inventory movements with weighted-average cost, compliance
-documents (insurance, licenses, vendor COIs / W-9s) with expiry reminders, and
-offline punches from an installable app.
+**Still to port from Alpha** ◐
+- ☑ Service schedules (maintenance plans on an asset) and inventory movements
+  with weighted-average cost, both shipped in phase 2C.
+- ☐ QuickBooks Online export, equipment meters, offline punches from an
+  installable app.
+- ☐ Compliance documents with expiry reminders (vendor W-9 and COI are area 11;
+  today only a document category and a manual reminder exist).
+
+**Built, but not described in this plan:** HOA, cap table, mortgages, vehicles,
+title, the wholesale workflow, SaaS platform billing, custom domains, deposit
+disposition, outbound webhooks, and helpdesk SLA, follow-up and low-stock alerts.
+Their own docs are in `docs/`.
 
 ## Order of work
 
-1. Phase 0 rebrand (copy) — cheap, visible.
-2. Phase 1 invite + reset — unblocks every real user.
-3. Phase 2 two-way texts core.
-4. Everything else in phase order, re-prioritised with Bree after the first
-   30 days on her portfolio.
+1. ☑ Phase 0 rebrand (copy), phase 1 invite and reset, phase 2 two-way texts
+   core, phases 2B, 2C and 2D.
+2. Next, from `docs/ROADMAP-NEXT.md` round 2: go-live hardening (area 9), then
+   reminders (10), vendor portal and compliance (11), owner portal (12).
+3. Then texts round 2 (13) and listing media (14); analytics (15) once there are
+   a few months of turn and ticket history.
+4. Re-prioritise with Bree after the first 30 days on her portfolio.

@@ -1,15 +1,15 @@
 # Vantedge — what's left, and how we build it
 
-Written after phase 2C shipped (properties, appliances, the parts loop, close-out,
-the Alpha link). It covers the next eight areas the business asked for. Each has
-what exists today (checked against the code, not remembered), what's missing, the
-design, and the order. Legend: ☐ planned · ◐ in progress · ☑ shipped.
+Round 1 (areas 1–8) was written after phase 2C shipped and covered the eight
+areas the business asked for. Areas 1–5 are shipped, 6 and 7 are part done, and 8
+is still planned. **Round 2** (areas 9–17, further down) was mapped on 2026-10-01
+after a check of every open roadmap item against the code. Each area has what
+exists today, what's missing, the design and the order. Legend: ☐ planned ·
+◐ in progress · ☑ shipped.
 
-Order of work, and why: the **audit trail** goes first because every other area
-writes to it; **business profile** and **turnover** are small, high-value and
-independent; the **issue catalog** completes the ticket story; **site maps** are the
-biggest build and the new product surface; **home search + onboarding** ride on the
-map and on the autofill work already done.
+Also shipped since round 1 was written, outside the eight areas: Alpha ↔ Vantedge
+single sign-on, embeddable website widgets (`docs/SSO-AND-EMBEDS.md`), and a
+server-rendered public site for search (`docs/SEO.md`).
 
 | # | Area | Status |
 |---|------|--------|
@@ -21,8 +21,28 @@ map and on the autofill work already done.
 | 6 | Tenant home search | ◐ |
 | 7 | House onboarding with autofill | ◐ |
 | 8 | Campground reservations (follows the map) | ☐ |
+| 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ☐ |
+| 10 | Reminders that run themselves, for residents and managers | ☐ |
+| 11 | Vendor portal and compliance (W-9, COI, 1099) | ☐ |
+| 12 | Owner portal and spend approvals | ☐ |
+| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☐ |
+| 14 | Listing media, map search, saved searches and listing feeds | ☐ |
+| 15 | Operations analytics and the portfolio map | ☐ |
+| 16 | Spanish for everything a resident sees | ☐ |
+| 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
+
+**Order for round 2:** 9 first, because Bree's portfolio can't go live on lists
+with no limits, jobs nobody can see, and a restore nobody has tried. Then 10,
+since it turns data we already hold into fewer calls to the office. 11 comes
+before 12 because the 1099 export is already wrong without vendor TINs, and an
+expired COI is a liability today. 13 and 14 grow what residents and prospects
+see. 15 needs a few months of turn and ticket history to be worth reading, so it
+comes later on purpose. 8 waits for a campground customer. 16 and 17 run
+alongside whenever their owner asks.
 
 ---
+
+# Round 1
 
 ## 1. Audit trail: who changed what on which property ☑
 
@@ -237,17 +257,7 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
 
 ---
 
-## Cross-cutting rules for all of it
-
-- Every write that changes something a customer would ask "who did that?" about
-  goes through the audit writer (area 1), with before/after.
-- Vantedge support edits are flagged and visible to the customer.
-- New tables are tenant-owned with enforced row-level security, like the rest.
-- Anything that calls a paid service is sandbox-first (`LIVE_PROVIDERS`).
-- Each area ships with an integration test that walks it end to end, and a
-  screenshot review in a browser.
-
-## What shipped, and what is left
+## Round 1: what shipped, and what is left
 
 - **2 Business profile and Google reviews** ☑. One profile per workspace, Google
   place search and details (Places API New), display rules, a public reviews
@@ -275,3 +285,167 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
   entry. Left: year built and lot from a live parcel provider, utilities and
   schools, and proposing a rent from comparables.
 - **8 Campground reservations** ☐. Follows the map.
+
+---
+
+# Round 2
+
+Checked against the code on 2026-10-01. "Today" lists what exists, with paths
+relative to `backend/crates/api/src` unless they start with `frontend/`.
+
+## 9. Go-live hardening ☐
+
+**Today.** `GET /applications`, `GET /my/applications` and `GET /public/listings`
+return every row (`routes/applications/list.rs`, `routes/applications/portal.rs`,
+`routes/public/listings.rs`). Background jobs run through the durable queue, but
+no screen shows what ran, what failed, or when it runs next. Backups depend on the
+deploy. Backend tests are strong (unit tests plus an end-to-end integration suite);
+the frontend has nine unit-test files and one Playwright spec.
+
+**Design.**
+- Page-and-cursor limits on every list that can grow (default 50, max 200), with
+  `next` cursors like the audit trail. The public listing search keeps its filters.
+- **Settings → Schedule**: every job kind with its schedule, last run, outcome and
+  next run; run now; pause; retime within safe bounds. Reads `background_job`.
+- Nightly encrypted database backup to object storage, 30-day retention, and a
+  documented, timed restore drill on a scratch database.
+- Playwright journeys for the paths money and trust run through: sign in, rent
+  payment, application, work order to close-out, turnover, owner statement.
+- A "go live" checklist page for each provider (`LIVE_PROVIDERS`): keys present,
+  test call passed, webhook signature verified.
+
+## 10. Reminders that run themselves ☐
+
+**Today.** Only two jobs run on their own: `billing_cycle` (charges, late fees) and
+`reminder_scan` (calendar reminders, staff only). There is no rent-due notice; the
+only late notice is `late_fee_applied`. Autopay failure sends the generic
+`payment_failed`. Leases get a staff reminder at 30, 7 and 1 days, but renewals are
+proposed by hand. Inspections create no reminder. No calendar invites (ICS), no
+warranty-expiry reminder, no manager digest.
+
+**Design.** One `resident_reminders` job per workspace, each rule a setting with an
+on/off switch and lead days, every send logged against the lease:
+- Rent due (3 days before), rent late (the day after grace, before the fee),
+  autopay failed (with a pay-now link), each in the resident's language (area 16).
+- Lease expiry at 90/60/30 days: at 90 the renewal workflow opens a **draft**
+  proposal with the suggested rent for the manager to send. Nothing reaches the
+  resident without a person.
+- Inspection, move-in and move-out appointments with an ICS invite
+  (`text/calendar`), and a reschedule link.
+- Warranty and maintenance-plan due dates from the asset register.
+- **Morning digest** for managers: rent late, leases expiring, tickets past SLA,
+  turns past target, tours booked today. One email, skipped when empty.
+
+## 11. Vendor portal and compliance ☐
+
+**Today.** Vendors are counterparties. There is a token API for vendor systems
+(`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into. No
+W-9 or TIN is captured, so the 1099-NEC export has `tin: None`. No COI record or
+expiry, so an uninsured vendor can be dispatched.
+
+**Design.**
+- **`/vendor` portal** (invite by link, like residents): assigned work orders,
+  accept / schedule / on the way / done with photos and notes, submit a bill that
+  lands in accounts payable for approval.
+- **W-9**: legal name, TIN (encrypted with the PII key, shown as last four), tax
+  classification and signature; the 1099 export reads it and flags who is missing.
+- **COI**: carrier, policy, limits, expiry and the document. Thirty and seven days
+  before expiry the vendor gets a request; when expired, dispatch warns and needs
+  an override with a reason (audited).
+- Alpha vendors keep working through the partner link; the portal is for everyone else.
+
+## 12. Owner portal and spend approvals ☐
+
+**Today.** Owners sign into the full console with the `landlord` role. The data
+already exists staff-side: owner statements, payouts, rent roll, T-12, open work
+orders, documents. There is no approval threshold on spending.
+
+**Design.**
+- **`/owner` portal**: one page per property they own (through their LLCs) with
+  this month's money in and out, statements and payouts to download, occupancy,
+  open work orders with photos, turns in progress, and documents.
+- **Spend approvals**: a per-owner limit (for example $500). A work order, quote or
+  vendor bill over it waits for the owner's approve or decline, by portal link or a
+  text reply, with an emergency override for staff (audited).
+- Monthly statement email with the PDF, from the existing report.
+
+## 13. Texts, round 2 ☐
+
+**Today.** Two-way texts, STOP/START and a shared inbox are shipped. Missing:
+saved replies, assigning a thread, linking an unknown number, filing MMS photos
+(only the count is stored), text to work order, quiet hours and marketing consent,
+missed-call text-back.
+
+**Design.**
+- **Text to work order**: a message that reads like a repair ("sink is leaking")
+  gets a one-tap reply link that opens a prefilled request with the photos
+  attached; the issue catalog (area 4) suggests the issue.
+- **Rate by text**: when a ticket resolves, "How did we do? Reply 1–5"; the reply
+  becomes the ticket review that the portal already supports.
+- Saved replies, assign to a teammate, link an unknown number to a person, MMS
+  photos filed to the resident and the ticket, quiet hours (8 AM–9 PM) for anything
+  not urgent, and separate marketing consent.
+
+## 14. Listing media, map search and listing feeds ☐
+
+**Today.** Listings have no photos, so the public site, share images and
+structured data have no real picture. Search has filters but no map, no saved
+searches and no alerts. "Syndication" in the code is the investor waterfall; there
+is no Zillow or Apartments.com feed.
+
+**Design.**
+- **Listing photos**: upload, order and caption; the first is the hero; resized
+  variants; alt text required. Feeds the listing page, `og:image` and JSON-LD.
+- **Map view** of search results (properties already have coordinates) and the
+  published site map on the listing page with the unit highlighted.
+- **Saved searches and alerts** by email with double opt-in, and favourites.
+- **Listing feeds**: a per-workspace XML feed in the common rental listing format
+  for portals that accept a feed, plus availability updates when a unit leases.
+  Self-showing and lockboxes stay out until a customer asks.
+
+## 15. Operations analytics and the portfolio map ☐
+
+**Today.** Fixed reports exist (rent roll, T-12, aging, delinquency, owner
+statement, 1099) and a portfolio summary. Turns now record days vacant and cost;
+tickets record SLA, category, appliance and rating; the issue catalog records what
+broke. None of it is summarised. The portfolio map (#57) is not built.
+
+**Design.**
+- **Operations dashboard**: average days to turn and cost to turn by property and
+  month; tickets opened, past SLA and average rating; the issues that repeat by
+  property and appliance, with "replace instead of repair" flags where repair spend
+  passes a share of replacement cost.
+- **Leasing funnel**: tour requests → applications → leases, and days on market.
+- **Portfolio map**: every property on one map, coloured by occupancy or open
+  work, with the site maps one click away.
+- A saved-view report builder only after these show which questions repeat.
+
+## 16. Spanish for everything a resident sees ☐
+
+**Today.** No i18n at all; only the Spanish STOP words are handled.
+
+**Design.** A `language` on people (resident, applicant, vendor), message templates
+per language with English fallback, the resident portal and public site translated,
+lease and notice PDFs per language. Staff screens stay English. Start with the
+templates that send most (rent, maintenance, renewals).
+
+## 17. Family-plan features ☐
+
+From the partnership letter; none started.
+- **Related-party guard**: flag transactions between the family's entities; each
+  needs a market-rate note and an approver who isn't a party to it.
+- **Foundation mode**: income-limit certifications, voucher (HAP) payments split
+  from the tenant's share, and the at-cost management fee.
+- **Raw land** deal type: acreage, zoning, water and power access, price per acre.
+
+---
+
+## Cross-cutting rules for all of it (both rounds)
+
+- Every write that changes something a customer would ask "who did that?" about
+  goes through the audit writer (area 1), with before/after.
+- Vantedge support edits are flagged and visible to the customer.
+- New tables are tenant-owned with enforced row-level security, like the rest.
+- Anything that calls a paid service is sandbox-first (`LIVE_PROVIDERS`).
+- Each area ships with an integration test that walks it end to end, and a
+  screenshot review in a browser.
