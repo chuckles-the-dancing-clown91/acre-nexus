@@ -87,6 +87,7 @@ mod texts;
 mod tokens;
 mod totp;
 mod underwriting;
+mod vendor_compliance;
 mod webhooks_out;
 mod workflow;
 mod workforce;

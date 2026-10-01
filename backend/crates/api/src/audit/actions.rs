@@ -427,3 +427,10 @@ pub const SSO_LOGIN: &str = "auth.sso_login";
 
 // ---- Schedule ----
 pub const JOB_RUN_NOW: &str = "job.run_now";
+
+// ---- Vendor compliance ----
+pub const VENDOR_W9_SAVE: &str = "vendor.w9_save";
+pub const VENDOR_INSURANCE_ADD: &str = "vendor.insurance_add";
+pub const VENDOR_INSURANCE_REMOVE: &str = "vendor.insurance_remove";
+pub const VENDOR_COI_OVERRIDE: &str = "vendor.coi_override";
+pub const TAX_1099_EXPORT: &str = "report.1099_export";

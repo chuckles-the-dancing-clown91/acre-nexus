@@ -73,6 +73,7 @@ pub mod theme;
 pub mod title;
 pub mod vehicles;
 pub mod vendor;
+pub mod vendors;
 pub mod workflow;
 
 use rocket::serde::json::Json;

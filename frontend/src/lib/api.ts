@@ -2925,7 +2925,10 @@ export interface Recipient1099 {
   box_label: string;
   recipient_id: string;
   name: string;
+  /** Last four only on screen; the export carries the full number. */
   tin: string | null;
+  /** A vendor with no W-9 on file yet. */
+  missing_tin: boolean;
   address: string | null;
   amount_cents: number;
   amount_label: string;
@@ -2941,6 +2944,7 @@ export interface Tax1099Resp {
   nec_total_label: string;
   misc_total_cents: number;
   misc_total_label: string;
+  missing_tin_count: number;
 }
 
 export interface RegisterDocumentInput {

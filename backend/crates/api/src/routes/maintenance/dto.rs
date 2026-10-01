@@ -294,6 +294,8 @@ pub struct CreateTicketReq {
     pub asset_id: Option<Uuid>,
     pub due_date: Option<String>,
     pub cost_cents: Option<i64>,
+    /// See [`UpdateTicketReq::coi_override_reason`].
+    pub coi_override_reason: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -319,6 +321,9 @@ pub struct UpdateTicketReq {
     pub follow_up_note: Option<String>,
     pub due_date: Option<String>,
     pub cost_cents: Option<i64>,
+    /// When the insurance rule is on and this vendor has no current liability
+    /// cover, the reason to send them anyway (audited).
+    pub coi_override_reason: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

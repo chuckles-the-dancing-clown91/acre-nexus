@@ -50,6 +50,17 @@ pub async fn update_ticket(
     let newly_assigned_entity = b
         .assignee_entity_id
         .filter(|v| existing.assignee_entity_id != Some(*v));
+    if let Some(vendor) = newly_assigned_entity {
+        crate::vendor_compliance::check_dispatch(
+            &db,
+            scope.tenant_id,
+            vendor,
+            b.coi_override_reason.as_deref(),
+            Some(user.user_id),
+            tid,
+        )
+        .await?;
+    }
     let had_first_response = existing.first_response_at.is_some();
     let created_at = existing.created_at;
     let was_resolved = existing.resolved_at.is_some();

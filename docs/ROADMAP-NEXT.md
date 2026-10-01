@@ -347,12 +347,13 @@ on/off switch and lead days, every send logged against the lease:
 - **Morning digest** for managers: rent late, leases expiring, tickets past SLA,
   turns past target, tours booked today. One email, skipped when empty.
 
-## 11. Vendor portal and compliance ☐
+## 11. Vendor portal and compliance ◐
 
 **Today.** Vendors are counterparties. There is a token API for vendor systems
-(`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into. No
-W-9 or TIN is captured, so the 1099-NEC export has `tin: None`. No COI record or
-expiry, so an uninsured vendor can be dispatched.
+(`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into.
+W-9s and insurance certificates are now captured (fix plan F11 and F12): the 1099
+reads the TIN, policies are chased before they end, and a workspace can require
+current cover before dispatch. The portal (F13) is still to do.
 
 **Design.**
 - **`/vendor` portal** (invite by link, like residents): assigned work orders,

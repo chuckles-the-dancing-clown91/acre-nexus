@@ -253,6 +253,7 @@ pub async fn handle_job(
         step!("lease_expiry", lease_expiry(db, tenant_id, today));
         step!("inspections", inspections(db, tenant_id, today));
         step!("warranties", warranties(db, tenant_id, today));
+        step!("vendor_insurance", vendor_insurance(db, tenant_id, today));
     } else {
         summary["skipped"] = json!("automatic notices are off");
     }
@@ -673,6 +674,88 @@ pub(crate) async fn warranties(
     Ok(sent)
 }
 
+/// Which reminder a policy ending in `left` days is due for: 30 days out,
+/// then 7. `None` once it has lapsed or while it is further off.
+pub fn coi_lead(left: i64) -> Option<i64> {
+    match left {
+        0..=7 => Some(7),
+        8..=30 => Some(30),
+        _ => None,
+    }
+}
+
+/// F12: a vendor's insurance ending in 30 and in 7 days. The vendor is asked
+/// for the renewed certificate; staff are told. A policy already replaced by
+/// a later one of the same kind is left alone.
+pub(crate) async fn vendor_insurance(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    today: NaiveDate,
+) -> Result<u32, sea_orm::DbErr> {
+    let policies = entity::prelude::VendorInsurance::find()
+        .filter(entity::vendor_insurance::Column::TenantId.eq(tenant_id))
+        .all(db)
+        .await?;
+    let mut sent = 0;
+    for p in &policies {
+        let Ok(end) = NaiveDate::parse_from_str(&p.expires_on, "%Y-%m-%d") else {
+            continue;
+        };
+        let Some(lead) = coi_lead((end - today).num_days()) else {
+            continue;
+        };
+        let replaced = policies.iter().any(|o| {
+            o.id != p.id
+                && o.counterparty_id == p.counterparty_id
+                && o.kind == p.kind
+                && o.expires_on > p.expires_on
+        });
+        if replaced {
+            continue;
+        }
+        if !notices::claim(db, tenant_id, &format!("coi:{}:{lead}", p.id)).await? {
+            continue;
+        }
+        let Some(vendor) = entity::prelude::Counterparty::find_by_id(p.counterparty_id)
+            .one(db)
+            .await?
+        else {
+            continue;
+        };
+        let vars = json!({
+            "vendor": vendor.name,
+            "kind": p.kind.replace('_', " "),
+            "carrier": p.carrier,
+            "date": end.format("%B %-d, %Y").to_string(),
+        });
+        if let Some(email) = vendor.email.as_deref().filter(|e| !e.trim().is_empty()) {
+            crate::notify::notify_person(
+                db,
+                tenant_id,
+                email,
+                "coi_expiring",
+                vars.clone(),
+                Some(("counterparty", vendor.id)),
+                &format!("coi_expiring:{lead}"),
+            )
+            .await;
+        }
+        crate::notify::notify_staff(
+            db,
+            tenant_id,
+            "entity:read",
+            "vendor_coi_expiring",
+            vars,
+            Some(("counterparty", vendor.id)),
+            "vendor_coi_expiring",
+            None,
+        )
+        .await;
+        sent += 1;
+    }
+    Ok(sent)
+}
+
 // ---------------------------------------------------------------------------
 // F9: the managers' morning summary
 // ---------------------------------------------------------------------------
@@ -858,6 +941,16 @@ mod tests {
         assert_eq!(next_due_date(d("2026-10-02"), 1), d("2026-11-01"));
         assert_eq!(next_due_date(d("2026-12-15"), 5), d("2027-01-05"));
         assert_eq!(next_due_date(d("2026-02-10"), 28), d("2026-02-28"));
+    }
+
+    #[test]
+    fn coi_reminder_leads() {
+        assert_eq!(coi_lead(45), None);
+        assert_eq!(coi_lead(30), Some(30));
+        assert_eq!(coi_lead(8), Some(30));
+        assert_eq!(coi_lead(7), Some(7));
+        assert_eq!(coi_lead(0), Some(7));
+        assert_eq!(coi_lead(-1), None);
     }
 
     #[test]

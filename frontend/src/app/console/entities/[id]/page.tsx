@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { PartnerLinkCard } from "@/components/PartnerLinkCard";
+import { VendorComplianceCard } from "@/components/VendorComplianceCard";
 
 /** Turn a snake/lower key into a human label, e.g. `property_manager` → `Property manager`. */
 function humanize(key: string): string {
@@ -113,6 +114,10 @@ export default function EntityDetailPage() {
         detail.kind === "property_manager" ||
         detail.partner_kind) && (
         <PartnerLinkCard counterpartyId={detail.id} manage={canManage} />
+      )}
+
+      {detail.kind === "contractor" && (
+        <VendorComplianceCard counterpartyId={detail.id} manage={canManage} />
       )}
 
       <Card className="p-5">

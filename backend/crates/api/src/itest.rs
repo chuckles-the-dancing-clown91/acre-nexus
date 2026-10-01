@@ -104,6 +104,7 @@ async fn integration_suite() {
     embed_settings(&c).await;
     seo_site_info(&c).await;
     batch_a_limits_jobs_and_reminders(&c).await;
+    batch_b_vendor_compliance(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -4232,4 +4233,310 @@ async fn batch_a_limits_jobs_and_reminders(c: &Ctx) {
 
 fn urlencode(s: &str) -> String {
     s.replace('+', "%2B").replace(':', "%3A")
+}
+
+async fn batch_b_vendor_compliance(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let admin = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "tenant:manage",
+            "entity:read",
+            "entity:manage",
+            "maintenance:manage",
+            "maintenance:read",
+            "report:read",
+            "property:read",
+        ],
+    );
+    let today = chrono::Utc::now().date_naive();
+
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &admin,
+        serde_json::json!({ "kind": "contractor", "name": "Compliance Plumbing",
+            "email": "office@complianceplumbing.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let vid = v["id"].as_str().unwrap().to_string();
+
+    // Nothing on file yet: both problems show, and the vendor is on the list.
+    let (st, comp) = get_json(c, &format!("/entities/{vid}/compliance"), &admin).await;
+    assert_eq!(st, Status::Ok, "{comp}");
+    assert!(comp["w9"].is_null());
+    assert_eq!(comp["coi_current"], false);
+    assert_eq!(comp["problems"].as_array().unwrap().len(), 2);
+    let (_, list) = get_json(c, "/compliance/vendors", &admin).await;
+    assert!(list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["counterparty_id"] == vid));
+
+    // F11: the W-9. A bad TIN is refused; a good one is stored, masked.
+    let w9 = |tin: &str| {
+        serde_json::json!({ "legal_name": "Compliance Plumbing LLC", "classification": "llc_p",
+            "tin_type": "ein", "tin": tin, "signed_on": today.to_string() })
+    };
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/entities/{vid}/w9"),
+        &admin,
+        w9("00-1234567"),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "00 is not an IRS prefix");
+    let (st, comp) = send_json(
+        c,
+        Method::Put,
+        &format!("/entities/{vid}/w9"),
+        &admin,
+        w9("27-1234567"),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{comp}");
+    assert_eq!(comp["w9"]["tin_masked"], "••-•••4567");
+    let text = comp.to_string();
+    assert!(!text.contains("271234567") && !text.contains("27-1234567"));
+    let row = entity::prelude::VendorTaxProfile::find()
+        .filter(entity::vendor_tax_profile::Column::TenantId.eq(nw))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !row.tin_ciphertext.contains("271234567"),
+        "stored encrypted"
+    );
+    let trail = entity::prelude::AuditLog::find()
+        .filter(entity::audit_log::Column::Action.eq(crate::audit::actions::VENDOR_W9_SAVE))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert!(!trail.is_empty());
+    assert!(trail.iter().all(|a| !serde_json::to_string(&a.metadata)
+        .unwrap()
+        .contains("271234567")));
+    // Another workspace can't see or write it.
+    let other = mint(c, Some(cascade), false, &["entity:read", "entity:manage"]);
+    let (st, _) = get_json(c, &format!("/entities/{vid}/compliance"), &other).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/entities/{vid}/w9"),
+        &other,
+        w9("27-1234567"),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // F11: the 1099 shows the masked TIN; the export has the full one.
+    let llc = entity::prelude::Llc::find()
+        .filter(entity::llc::Column::TenantId.eq(nw))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("a seeded entity");
+    let now = chrono::Utc::now();
+    entity::vendor_bill::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        entity_id: Set(llc.id),
+        counterparty_id: Set(uuid::Uuid::parse_str(&vid).unwrap()),
+        property_id: Set(None),
+        maintenance_ticket_id: Set(None),
+        bill_number: Set(format!("BILL-COMP-{}", &vid[..8])),
+        memo: Set("Repipe".into()),
+        line_items: Set(serde_json::json!([])),
+        amount_cents: Set(250_000),
+        due_date: Set(None),
+        status: Set("paid".into()),
+        submitted_by: Set(None),
+        submitted_at: Set(None),
+        approved_by: Set(None),
+        approved_at: Set(None),
+        rejected_reason: Set(None),
+        provider: Set(None),
+        external_id: Set(None),
+        accrual_txn_id: Set(None),
+        payment_txn_id: Set(None),
+        failure_reason: Set(None),
+        paid_at: Set(Some(now.into())),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    use chrono::Datelike;
+    let year = today.year();
+    let (st, r) = get_json(c, &format!("/reports/1099?year={year}"), &admin).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let rec = r["nec"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["recipient_id"] == vid)
+        .expect("the vendor is a 1099 recipient")
+        .clone();
+    assert_eq!(rec["tin"], "••-•••4567");
+    assert_eq!(rec["name"], "Compliance Plumbing LLC", "the W-9 legal name");
+    assert_eq!(rec["missing_tin"], false);
+    let resp = c
+        .client
+        .get(format!("/reports/1099/export?year={year}&format=csv"))
+        .header(bearer(&admin))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let csv = resp.into_string().await.unwrap();
+    assert!(csv.contains("27-1234567"), "{csv}");
+    let exports = entity::prelude::AuditLog::find()
+        .filter(entity::audit_log::Column::Action.eq(crate::audit::actions::TAX_1099_EXPORT))
+        .filter(entity::audit_log::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert!(!exports.is_empty(), "who pulled full TINs is recorded");
+
+    // F12: the dispatch gate is off by default.
+    let pid = property_ids(c, nw).await[0];
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &admin,
+        serde_json::json!({ "title": "Leak under sink" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, set) = send_json(
+        c,
+        Method::Put,
+        "/settings/compliance.require_coi",
+        &admin,
+        serde_json::json!({ "value": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{set}");
+    let assign = |reason: Option<&str>| serde_json::json!({ "assignee_entity_id": vid, "coi_override_reason": reason });
+    let (st, err) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &admin,
+        assign(None),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{err}");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &admin,
+        assign(Some("Emergency, the usual plumber is out")),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let overrides = entity::prelude::AuditLog::find()
+        .filter(entity::audit_log::Column::Action.eq(crate::audit::actions::VENDOR_COI_OVERRIDE))
+        .filter(entity::audit_log::Column::TargetId.eq(tid.clone()))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert_eq!(overrides.len(), 1);
+
+    // F12: insurance. A current certificate clears the gate.
+    let (st, comp) = post_json(
+        c,
+        &format!("/entities/{vid}/insurance"),
+        &admin,
+        serde_json::json!({ "kind": "general_liability", "carrier": "Acme Mutual",
+            "limit_cents": 100_000_000, "expires_on": (today + chrono::Duration::days(20)).to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{comp}");
+    assert_eq!(comp["coi_current"], true);
+    assert_eq!(comp["insurance"][0]["state"], "expiring");
+    let (st, t2) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &admin,
+        serde_json::json!({ "title": "Second leak", "assignee_entity_id": vid }),
+    )
+    .await;
+    assert_eq!(
+        st,
+        Status::Ok,
+        "covered vendors go out without a reason: {t2}"
+    );
+
+    // F12: the 30-day reminder goes to the vendor once.
+    let vendor_emails = || async {
+        entity::prelude::BackgroundJob::find()
+            .filter(entity::background_job::Column::TenantId.eq(nw))
+            .filter(entity::background_job::Column::Kind.eq("auto_email"))
+            .all(&c.db)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|j| {
+                j.payload["template"] == "coi_expiring"
+                    && j.payload["to"] == "office@complianceplumbing.example"
+            })
+            .count()
+    };
+    crate::resident_reminders::vendor_insurance(&c.db, nw, today)
+        .await
+        .unwrap();
+    crate::resident_reminders::vendor_insurance(&c.db, nw, today)
+        .await
+        .unwrap();
+    assert_eq!(vendor_emails().await, 1);
+    // Then the 7-day one.
+    crate::resident_reminders::vendor_insurance(&c.db, nw, today + chrono::Duration::days(15))
+        .await
+        .unwrap();
+    assert_eq!(vendor_emails().await, 2);
+
+    // Removing it puts the gate back.
+    let cert = comp["insurance"][0]["id"].as_str().unwrap().to_string();
+    let (st, comp) = send_json(
+        c,
+        Method::Delete,
+        &format!("/vendor-insurance/{cert}"),
+        &admin,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{comp}");
+    assert_eq!(comp["coi_current"], false);
+    let (st, _) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &admin,
+        serde_json::json!({ "title": "Third leak", "assignee_entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // Leave the workspace as the other scenarios expect it.
+    send_json(
+        c,
+        Method::Put,
+        "/settings/compliance.require_coi",
+        &admin,
+        serde_json::json!({ "value": false }),
+    )
+    .await;
 }

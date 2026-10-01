@@ -24,6 +24,7 @@ import { DocumentsCard } from "@/components/DocumentsCard";
 import { CostingCard } from "@/components/CostingCard";
 import { PartsCard } from "@/components/PartsCard";
 import { DispatchCard } from "@/components/DispatchCard";
+import { withCoiOverride } from "@/lib/vendors";
 
 const STATUSES = [
   "open",
@@ -112,8 +113,9 @@ export default function TicketDetailPage() {
     setBusy(true);
     setError(null);
     try {
-      await fn();
-      if (ok) toast.success(ok);
+      // `null` means the person backed out (e.g. declined to give a reason).
+      const done = await fn();
+      if (ok && done !== null) toast.success(ok);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Request failed");
@@ -346,11 +348,15 @@ export default function TicketDetailPage() {
               disabled={!manage || busy}
               onChange={(e) => {
                 if (!e.target.value) return;
+                const vendorId = e.target.value;
                 void run(
                   () =>
-                    api.updateTicket(ticket.id, {
-                      assignee_entity_id: e.target.value,
-                    }),
+                    withCoiOverride((reason) =>
+                      api.updateTicket(ticket.id, {
+                        assignee_entity_id: vendorId,
+                        coi_override_reason: reason,
+                      })
+                    ),
                   "Contractor dispatched."
                 );
               }}

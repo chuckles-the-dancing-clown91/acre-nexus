@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { withCoiOverride } from "@/lib/vendors";
 import type { TicketDetail } from "@/lib/types";
 import { partner, type LinkedVendor } from "@/lib/parts";
 import { Badge, Button, Card } from "@/components/ui";
@@ -47,11 +48,15 @@ export function DispatchCard({
     }
     setBusy(true);
     try {
-      await partner.dispatch(ticket.id, {
-        counterparty_id: vendorId,
-        requested_for: when ? `${when}:00` : undefined,
-        note: note.trim() || undefined,
-      });
+      const sentTo = await withCoiOverride((reason) =>
+        partner.dispatch(ticket.id, {
+          counterparty_id: vendorId,
+          requested_for: when ? `${when}:00` : undefined,
+          note: note.trim() || undefined,
+          coi_override_reason: reason,
+        })
+      );
+      if (!sentTo) return;
       toast.success("Sent to the vendor.");
       reload();
     } catch (err) {

@@ -77,6 +77,8 @@ pub const CALENDAR_SCAN_INTERVAL_SECS: &str = "calendar.scan_interval_secs";
 pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
 /// Automatic notices to residents (rent, inspections) and staff (lease expiry, warranties).
 pub const REMINDERS_ENABLED: &str = "reminders.enabled";
+/// Only send a vendor out with current liability insurance (or a reason).
+pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 /// Days before the rent day that residents hear rent is due (0 = off).
 pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
 /// Tell residents the day after rent was due and is still unpaid.
@@ -427,6 +429,16 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: COMPLIANCE_REQUIRE_COI,
+        label: "Require vendor insurance to dispatch",
+        description: "A vendor without current general liability insurance on \
+                      file can only be assigned a work order with a reason, which \
+                      is recorded in the audit trail.",
+        group: "Vendors",
+        kind: SettingKind::Bool,
+        default: || json!(false),
     },
     SettingDef {
         key: REMINDERS_ENABLED,

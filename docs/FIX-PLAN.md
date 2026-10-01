@@ -82,8 +82,8 @@ group, and Settings → Schedule in the console. Covered by
 
 | ID | Fix | Size | Status |
 |----|-----|------|--------|
-| F11 | Vendor W-9: TIN (encrypted), classification, the 1099 reads it | M | ☐ |
-| F12 | Vendor COI with expiry, requests before it lapses, dispatch warning | M | ☐ |
+| F11 | Vendor W-9: TIN (encrypted), classification, the 1099 reads it | M | ☑ |
+| F12 | Vendor COI with expiry, requests before it lapses, dispatch warning | M | ☑ |
 | F13 | Vendor portal: invite, assigned work orders, status, photos, bills | L | ☐ |
 
 - **F11.** `tax_1099.rs` exports `tin: None`. Add W-9 fields to the counterparty
@@ -94,6 +94,22 @@ group, and Settings → Schedule in the console. Covered by
   workers' comp limits, expiry, document). The resident-reminders job asks the
   vendor 30 and 7 days before expiry. Dispatching a work order to a vendor with no
   current COI needs an override reason (audited).
+- **Shipped (F11, F12).** Migration 060 adds `vendor_tax_profile` and
+  `vendor_insurance`. Rules live in `vendor_compliance.rs`, routes in
+  `routes/vendors`: `GET /entities/<id>/compliance`, `PUT /entities/<id>/w9`,
+  `POST /entities/<id>/insurance`, `DELETE /vendor-insurance/<id>` and
+  `GET /compliance/vendors`. The TIN is checked for SSN and EIN shape, sealed
+  with the PII key, and only the last four come back; the audit trail never holds
+  it. The 1099 screen shows the last four and the W-9 legal name and counts who is
+  missing a W-9; the CSV or PDF export carries the full number and each download
+  is audited (`report.1099_export`). The reminders job emails the vendor 30 and 7
+  days before a policy ends and tells staff, once each, skipping a policy already
+  replaced. The dispatch gate is the setting `compliance.require_coi` (off by
+  default so existing flows keep working): with it on, assigning, creating or
+  dispatching a work order to a vendor with no current general liability cover
+  answers 409 until a reason is given, and the reason is audited
+  (`vendor.coi_override`). The console has a Tax and insurance card on contractor
+  pages and asks for the reason when the gate stops a dispatch.
 - **F13.** `/vendor` portal on the existing invite and login: the vendor's work
   orders, accept, schedule, on the way, done with photos, and a bill into accounts
   payable. Alpha vendors keep the partner link.

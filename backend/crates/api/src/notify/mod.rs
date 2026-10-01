@@ -328,6 +328,22 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "Warranty on {asset} at {place} ends {date}.",
     },
     DefaultTemplate {
+        key: "coi_expiring",
+        subject: "Your insurance certificate ends {date}",
+        body: "Hi {recipient},\n\nOur records show your {kind} policy with {carrier} ends on \
+               {date}. Please send us the renewed certificate so we can keep sending you \
+               work.\n\nThank you,\n{company}",
+        sms: "{company}: your {kind} insurance with {carrier} ends {date}. Please send the \
+              renewed certificate.",
+    },
+    DefaultTemplate {
+        key: "vendor_coi_expiring",
+        subject: "{vendor}'s insurance ends {date}",
+        body: "Hi {recipient},\n\n{vendor}'s {kind} policy with {carrier} ends on {date}. \
+               We've asked them for the renewed certificate.\n\n— {company}",
+        sms: "{vendor}'s {kind} insurance ends {date}.",
+    },
+    DefaultTemplate {
         key: "manager_digest",
         subject: "Morning summary: {headline}",
         body: "Good morning {recipient},\n\n{summary}\n\nOpen the console: {console_url}\n\n— {company}",

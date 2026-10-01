@@ -974,6 +974,8 @@ export interface CreateTicketInput {
 }
 
 export interface UpdateTicketInput {
+  /** Why to send a vendor without current insurance (when that is required). */
+  coi_override_reason?: string;
   title?: string;
   description?: string;
   category?: string;

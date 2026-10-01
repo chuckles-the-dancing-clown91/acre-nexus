@@ -126,6 +126,8 @@ pub use super::user_role::Entity as UserRole;
 pub use super::user_totp::Entity as UserTotp;
 pub use super::vehicle::Entity as Vehicle;
 pub use super::vendor_bill::Entity as VendorBill;
+pub use super::vendor_insurance::Entity as VendorInsurance;
+pub use super::vendor_tax_profile::Entity as VendorTaxProfile;
 pub use super::webhook_delivery::Entity as WebhookDelivery;
 pub use super::webhook_subscription::Entity as WebhookSubscription;
 pub use super::work_shift::Entity as WorkShift;
