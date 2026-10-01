@@ -73,17 +73,23 @@
     var els = document.querySelectorAll("[data-vantedge]");
     for (var i = 0; i < els.length; i++) mount(els[i]);
     // A widget named on the script tag itself mounts right after it.
-    if (script.getAttribute("data-vantedge") && !script.getAttribute("data-vantedge-mounted")) {
+    if (
+      script.getAttribute("data-vantedge") &&
+      !script.getAttribute("data-vantedge-mounted")
+    ) {
       var holder = document.createElement("div");
-      ["vantedge", "tenant", "listing", "map", "accent", "mode"].forEach(function (k) {
-        var v = script.getAttribute("data-" + k);
-        if (v) holder.setAttribute("data-" + k, v);
-      });
+      ["vantedge", "tenant", "listing", "map", "accent", "mode"].forEach(
+        function (k) {
+          var v = script.getAttribute("data-" + k);
+          if (v) holder.setAttribute("data-" + k, v);
+        }
+      );
       script.setAttribute("data-vantedge-mounted", "1");
       script.parentNode.insertBefore(holder, script.nextSibling);
       mount(holder);
     }
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run);
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", run);
   else run();
 })();

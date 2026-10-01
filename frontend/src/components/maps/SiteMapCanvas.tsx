@@ -5,7 +5,13 @@
 // in the browser only (MapLibre needs a window).
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
+
+// The worker files are copied into public/ at dev and build time (see
+// scripts/copy-maplibre-worker.mjs); the bundle can't find them on its own.
+if (typeof window !== "undefined") {
+  maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+}
 import { useEffect, useRef, useState } from "react";
 import {
   TerraDraw,
