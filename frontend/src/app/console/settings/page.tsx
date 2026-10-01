@@ -59,6 +59,14 @@ export default function SettingsPage() {
             Single sign-on
           </Link>
         )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/website"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Website widgets
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}

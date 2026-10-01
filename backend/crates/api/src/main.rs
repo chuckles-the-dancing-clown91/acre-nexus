@@ -34,6 +34,7 @@ mod db;
 mod deals;
 mod deposits;
 mod dto;
+mod embed;
 mod enrichment;
 mod error;
 mod esign;

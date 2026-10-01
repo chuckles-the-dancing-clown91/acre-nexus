@@ -40,7 +40,7 @@ export interface Autofill {
 }
 
 export const tours = {
-  search: (f: ListingSearch) => {
+  search: (f: ListingSearch, tenant: string = DEFAULT_TENANT) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(f)) {
       if (v === undefined || v === "" || v === false) continue;
@@ -48,22 +48,25 @@ export const tours = {
     }
     const s = p.toString();
     return request<Listing[]>(`/public/listings${s ? `?${s}` : ""}`, {
-      tenant: DEFAULT_TENANT,
+      tenant,
     });
   },
-  request: (body: {
-    listing_id?: string;
-    name: string;
-    email: string;
-    phone?: string;
-    preferred_times?: string;
-    message?: string;
-    consent: boolean;
-    website?: string;
-  }) =>
+  request: (
+    body: {
+      listing_id?: string;
+      name: string;
+      email: string;
+      phone?: string;
+      preferred_times?: string;
+      message?: string;
+      consent: boolean;
+      website?: string;
+    },
+    tenant: string = DEFAULT_TENANT
+  ) =>
     request<{ ok: boolean }>("/public/tour-requests", {
       method: "POST",
-      tenant: DEFAULT_TENANT,
+      tenant,
       body,
     }),
   list: (status?: string) =>

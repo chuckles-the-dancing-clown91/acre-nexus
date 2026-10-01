@@ -44,6 +44,7 @@ impl PlatformModule for LeasingModule {
             public::tours::list_tours,
             public::tours::update_tour,
             crate::routes::business::public_reviews,
+            crate::routes::business::embed_config,
             crate::routes::sitemaps::public_maps,
             crate::routes::sitemaps::public_map,
             crate::routes::sitemaps::public_plan,

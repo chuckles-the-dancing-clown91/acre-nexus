@@ -299,6 +299,9 @@ Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
 - **Site maps.** Apartment layouts and campgrounds on a custom map.
 - **Tenant search and tours.** Filters, sort, tour requests.
 - **Autofill review.** Suggested property values from the record, applied on a click.
+- **Alpha single sign-on and website widgets.** Signed assertions open Alpha from
+  Vantedge and the reverse; listings, tour form, reviews and site maps embed on a
+  client's own site. See `docs/SSO-AND-EMBEDS.md`.
 
 ## Phase 3 — Reminders that run themselves ☐
 

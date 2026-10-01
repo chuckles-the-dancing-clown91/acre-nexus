@@ -10,7 +10,13 @@ import { Button } from "@/components/ui";
 const field =
   "w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent";
 
-export function TourForm({ listingId }: { listingId: string }) {
+export function TourForm({
+  listingId,
+  tenant,
+}: {
+  listingId?: string;
+  tenant?: string;
+}) {
   const [f, setF] = useState({
     name: "",
     email: "",
@@ -28,16 +34,19 @@ export function TourForm({ listingId }: { listingId: string }) {
     setState("busy");
     setError(null);
     try {
-      await tours.request({
-        listing_id: listingId,
-        name: f.name,
-        email: f.email,
-        phone: f.phone || undefined,
-        preferred_times: f.preferred_times || undefined,
-        message: f.message || undefined,
-        consent: f.consent,
-        website: f.website || undefined,
-      });
+      await tours.request(
+        {
+          listing_id: listingId,
+          name: f.name,
+          email: f.email,
+          phone: f.phone || undefined,
+          preferred_times: f.preferred_times || undefined,
+          message: f.message || undefined,
+          consent: f.consent,
+          website: f.website || undefined,
+        },
+        tenant
+      );
       setState("sent");
     } catch (err) {
       setError((err as Error).message);

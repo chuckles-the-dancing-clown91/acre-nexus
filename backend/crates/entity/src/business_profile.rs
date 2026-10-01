@@ -32,6 +32,10 @@ pub struct Model {
     pub max_reviews: i32,
     /// How long fetched reviews stay cached.
     pub refresh_minutes: i32,
+    /// Widgets may be embedded on the client's own website.
+    pub embed_enabled: bool,
+    /// Sites allowed to show the widgets, one `https://host` per line.
+    pub embed_origins: Option<String>,
     pub updated_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

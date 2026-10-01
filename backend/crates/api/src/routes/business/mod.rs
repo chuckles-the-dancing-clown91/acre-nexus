@@ -43,6 +43,9 @@ pub struct BusinessDto {
     pub min_rating: i32,
     pub max_reviews: i32,
     pub refresh_minutes: i32,
+    pub embed_enabled: bool,
+    /// One `https://host` per line.
+    pub embed_origins: Option<String>,
     /// A Google Maps key is stored (the workspace's or the platform's).
     pub google_key_set: bool,
     /// Google is really called; otherwise sample data answers.
@@ -71,6 +74,9 @@ pub struct BusinessReq {
     pub min_rating: Option<i32>,
     pub max_reviews: Option<i32>,
     pub refresh_minutes: Option<i32>,
+    pub embed_enabled: Option<bool>,
+    /// One `https://host` per line; an empty string clears the list.
+    pub embed_origins: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -140,6 +146,8 @@ async fn dto(
             min_rating: p.min_rating,
             max_reviews: p.max_reviews,
             refresh_minutes: p.refresh_minutes,
+            embed_enabled: p.embed_enabled,
+            embed_origins: p.embed_origins,
             google_key_set: key_set,
             google_live: live,
             updated_at: Some(p.updated_at.to_rfc3339()),
@@ -164,6 +172,8 @@ async fn dto(
             min_rating: 4,
             max_reviews: 5,
             refresh_minutes: 360,
+            embed_enabled: true,
+            embed_origins: None,
             google_key_set: key_set,
             google_live: live,
             updated_at: None,
@@ -224,6 +234,8 @@ pub async fn save_profile(
             min_rating: 4,
             max_reviews: 5,
             refresh_minutes: 360,
+            embed_enabled: true,
+            embed_origins: None,
             updated_by: None,
             created_at: now.into(),
             updated_at: now.into(),
@@ -287,6 +299,14 @@ pub async fn save_profile(
             ));
         }
         after.refresh_minutes = v;
+    }
+    if let Some(v) = b.embed_enabled {
+        after.embed_enabled = v;
+    }
+    if b.embed_origins.is_some() {
+        after.embed_origins =
+            crate::embed::normalize_origins(b.embed_origins.as_deref().unwrap_or(""))
+                .map_err(ApiError::BadRequest)?;
     }
     after.updated_by = Some(user.user_id);
     after.updated_at = now.into();
@@ -418,5 +438,38 @@ pub async fn public_reviews(
             .filter(|r| r.rating >= p.min_rating && !r.text.is_empty())
             .take(p.max_reviews.max(1) as usize)
             .collect(),
+    }))
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct EmbedConfig {
+    /// Widgets may be embedded at all.
+    pub enabled: bool,
+    /// Sites that may show them; empty means any site.
+    pub allowed_origins: Vec<String>,
+    pub business: String,
+}
+
+/// `GET /public/embed-config` — whether this workspace's widgets may be
+/// embedded, and where. The widget pages read it to decide whether to show.
+#[rocket_okapi::openapi(tag = "Public Website")]
+#[get("/public/embed-config")]
+pub async fn embed_config(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    tenant: PublicTenant,
+) -> ApiResult<Json<EmbedConfig>> {
+    let p = load(&db, tenant.tenant_id).await?;
+    Ok(Json(match p {
+        Some(p) => EmbedConfig {
+            enabled: p.embed_enabled,
+            allowed_origins: crate::embed::origins(p.embed_origins.as_deref()),
+            business: p.business_name.unwrap_or_default(),
+        },
+        None => EmbedConfig {
+            enabled: true,
+            allowed_origins: vec![],
+            business: String::new(),
+        },
     }))
 }

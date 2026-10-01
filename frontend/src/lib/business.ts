@@ -22,6 +22,8 @@ export interface Business {
   min_rating: number;
   max_reviews: number;
   refresh_minutes: number;
+  embed_enabled: boolean;
+  embed_origins: string | null;
   google_key_set: boolean;
   google_live: boolean;
   updated_at: string | null;
@@ -93,6 +95,12 @@ export const business = {
       `/business-profile/google/place${refresh ? "?refresh=true" : ""}`,
       { auth: true }
     ),
-  publicReviews: () =>
-    request<PublicReviews>("/public/reviews", { tenant: DEFAULT_TENANT }),
+  publicReviews: (tenant: string = DEFAULT_TENANT) =>
+    request<PublicReviews>("/public/reviews", { tenant }),
+  embedConfig: (tenant: string = DEFAULT_TENANT) =>
+    request<{
+      enabled: boolean;
+      allowed_origins: string[];
+      business: string;
+    }>("/public/embed-config", { tenant }),
 };

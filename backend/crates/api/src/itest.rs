@@ -101,6 +101,7 @@ async fn integration_suite() {
     site_maps_apartment_and_campground(&c).await;
     public_search_tours_and_autofill(&c).await;
     alpha_single_sign_on(&c).await;
+    embed_settings(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3820,4 +3821,61 @@ async fn alpha_single_sign_on(c: &Ctx) {
     for want in ["sso.enable", "auth.sso_login", "sso.launch", "sso.disable"] {
         assert!(acts.contains(&want), "missing {want}: {acts:?}");
     }
+}
+
+/// Website embeds: the allowed sites are normalised and validated, and the
+/// public config says whether and where the widgets may be shown.
+async fn embed_settings(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(c, Some(nw), false, &["integrations:manage"]);
+    let put = |body: serde_json::Value| {
+        let admin = admin.clone();
+        async move { send_json(c, Method::Put, "/business-profile", &admin, body).await }
+    };
+    async fn cfg(c: &Ctx, slug: &'static str) -> serde_json::Value {
+        let resp = c
+            .client
+            .get("/public/embed-config")
+            .header(Header::new("X-Tenant", slug))
+            .dispatch()
+            .await;
+        resp.into_json::<serde_json::Value>().await.unwrap()
+    }
+    // Default: on, any site.
+    let before = cfg(c, "northwind").await;
+    assert_eq!(before["enabled"], true);
+
+    for bad in [
+        "*.example.com",
+        "https://example.com/page",
+        "http://example.com",
+    ] {
+        let (st, _) = put(serde_json::json!({ "embed_origins": bad })).await;
+        assert_eq!(st, Status::BadRequest, "{bad}");
+    }
+    let (st, p) =
+        put(serde_json::json!({ "embed_origins": "Example.com\nhttps://www.example.com/" })).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(
+        p["embed_origins"],
+        "https://example.com\nhttps://www.example.com"
+    );
+    let on = cfg(c, "northwind").await;
+    assert_eq!(
+        on["allowed_origins"],
+        serde_json::json!(["https://example.com", "https://www.example.com"])
+    );
+
+    let (st, _) = put(serde_json::json!({ "embed_enabled": false })).await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(cfg(c, "northwind").await["enabled"], false);
+    // Another workspace is unaffected.
+    let other = cfg(c, "cascade").await;
+    assert_eq!(other["enabled"], true);
+    assert!(other["allowed_origins"].as_array().unwrap().is_empty());
+
+    // Put it back for the tests that follow.
+    let (st, _) = put(serde_json::json!({ "embed_enabled": true, "embed_origins": "" })).await;
+    assert_eq!(st, Status::Ok);
 }

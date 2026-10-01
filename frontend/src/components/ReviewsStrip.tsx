@@ -7,14 +7,14 @@ import { useEffect, useState } from "react";
 import { business, type PublicReviews } from "@/lib/business";
 import { Stars } from "@/components/Stars";
 
-export function ReviewsStrip() {
+export function ReviewsStrip({ tenant }: { tenant?: string }) {
   const [data, setData] = useState<PublicReviews | null>(null);
   useEffect(() => {
     business
-      .publicReviews()
+      .publicReviews(tenant)
       .then(setData)
       .catch(() => setData(null));
-  }, []);
+  }, [tenant]);
 
   if (!data || data.rating === null || data.count === 0) return null;
   return (

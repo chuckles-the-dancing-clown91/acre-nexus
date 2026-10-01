@@ -207,12 +207,10 @@ export const siteMaps = {
       `/public/site-maps${property_id ? `?property_id=${property_id}` : ""}`,
       { tenant: DEFAULT_TENANT }
     ),
-  publicGet: (id: string) =>
-    request<SiteMap>(`/public/site-maps/${id}`, { tenant: DEFAULT_TENANT }),
-  publicPlan: (id: string) =>
-    request<{ url: string }>(`/public/site-maps/${id}/plan`, {
-      tenant: DEFAULT_TENANT,
-    }),
+  publicGet: (id: string, tenant: string = DEFAULT_TENANT) =>
+    request<SiteMap>(`/public/site-maps/${id}`, { tenant }),
+  publicPlan: (id: string, tenant: string = DEFAULT_TENANT) =>
+    request<{ url: string }>(`/public/site-maps/${id}/plan`, { tenant }),
 };
 
 /** Four corners for a plan image: `widthM` wide, rotated, centred on a point. */
