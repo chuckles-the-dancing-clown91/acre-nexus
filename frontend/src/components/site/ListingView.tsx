@@ -13,6 +13,62 @@ import { useAuth } from "@/lib/auth";
 
 /** The listing page's interactive body. The server renders it with the
  *  listing already loaded, so search engines see the whole page. */
+/** The hero picture with thumbnails to switch it, or the brand gradient when
+ * there are no photos yet. */
+function Gallery({ listing }: { listing: Listing }) {
+  const photos = listing.photos ?? [];
+  const [shown, setShown] = useState(0);
+  const hero = photos[shown];
+  return (
+    <div className="mb-3">
+      <figure
+        className="relative aspect-video overflow-hidden rounded-[20px] shadow-acre-lg"
+        style={{ background: gradFor(0) }}
+      >
+        {hero && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={hero.url}
+            alt={hero.alt}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+        <div className="absolute left-4 top-4">
+          <Badge tone={statusTone(listing.status)}>{listing.status}</Badge>
+        </div>
+        {hero?.caption && (
+          <figcaption className="absolute inset-x-0 bottom-0 bg-black/45 px-4 py-2 text-sm text-white">
+            {hero.caption}
+          </figcaption>
+        )}
+      </figure>
+      {photos.length > 1 && (
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {photos.map((p, i) => (
+            <button
+              key={p.url}
+              onClick={() => setShown(i)}
+              aria-label={`Show photo ${i + 1}: ${p.alt}`}
+              aria-pressed={i === shown}
+              className={`h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 ${
+                i === shown ? "border-accent" : "border-transparent"
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.url}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ListingView({ listing }: { listing: Listing }) {
   return (
     <>
@@ -28,16 +84,7 @@ export function ListingView({ listing }: { listing: Listing }) {
         {listing && (
           <div className="grid gap-7 md:grid-cols-[1.6fr_1fr]">
             <div>
-              <div
-                className="relative mb-3 aspect-video rounded-[20px] shadow-acre-lg"
-                style={{ background: gradFor(0) }}
-              >
-                <div className="absolute left-4 top-4">
-                  <Badge tone={statusTone(listing.status)}>
-                    {listing.status}
-                  </Badge>
-                </div>
-              </div>
+              <Gallery listing={listing} />
               <h1 className="mb-1 font-display text-3xl font-extrabold tracking-tight">
                 {listing.title}
               </h1>

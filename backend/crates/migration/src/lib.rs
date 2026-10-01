@@ -66,6 +66,7 @@ mod m20240101_000058_seo;
 mod m20240101_000059_notice_log;
 mod m20240101_000060_vendor_compliance;
 mod m20240101_000061_text_tools;
+mod m20240101_000062_listing_photos;
 
 pub struct Migrator;
 
@@ -134,6 +135,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000059_notice_log::Migration),
             Box::new(m20240101_000060_vendor_compliance::Migration),
             Box::new(m20240101_000061_text_tools::Migration),
+            Box::new(m20240101_000062_listing_photos::Migration),
         ]
     }
 }

@@ -398,10 +398,11 @@ linking an unknown number to a person by hand, and missed-call text-back.
   photos filed to the resident and the ticket, quiet hours (8 AM–9 PM) for anything
   not urgent, and separate marketing consent.
 
-## 14. Listing media, map search and listing feeds ☐
+## 14. Listing media, map search and listing feeds ◐
 
-**Today.** Listings have no photos, so the public site, share images and
-structured data have no real picture. Search has filters but no map, no saved
+**Today.** Listing photos shipped (fix plan F18): ordered, captioned, alt text
+required, feeding the listing page, cards, share image and JSON-LD. Resized
+variants are still to do. Search has filters but no map, no saved
 searches and no alerts. "Syndication" in the code is the investor waterfall; there
 is no Zillow or Apartments.com feed.
 

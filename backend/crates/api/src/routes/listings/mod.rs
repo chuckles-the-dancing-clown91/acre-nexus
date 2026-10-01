@@ -7,6 +7,7 @@
 pub mod create;
 pub mod dto;
 pub mod list;
+pub mod photos;
 pub mod update;
 
 /// Listing statuses the console may set (the pipeline sets `Pending`/`Leased`

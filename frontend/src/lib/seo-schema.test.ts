@@ -87,6 +87,26 @@ describe("structured data", () => {
     expect(l.datePosted).toBe("2026-09-01T10:00:00+00:00");
     expect(g[1]["@type"]).toBe("BreadcrumbList");
   });
+  it("carries the photos, hero first, and none when there are none", () => {
+    const withPhotos = {
+      ...listing,
+      photos: [
+        { url: "https://api.example/p/1", alt: "Porch", caption: null },
+        { url: "https://api.example/p/2", alt: "Kitchen", caption: null },
+      ],
+    };
+    const l = listingJsonLd(withPhotos, site, "https://h.example")[
+      "@graph"
+    ][0] as Record<string, any>;
+    expect(l.image).toEqual([
+      "https://api.example/p/1",
+      "https://api.example/p/2",
+    ]);
+    const none = listingJsonLd(listing, site, "https://h.example")[
+      "@graph"
+    ][0] as Record<string, any>;
+    expect(none.image).toBeUndefined();
+  });
   it("marks a leased home as no longer available", () => {
     const l = listingJsonLd(
       { ...listing, status: "Leased" },

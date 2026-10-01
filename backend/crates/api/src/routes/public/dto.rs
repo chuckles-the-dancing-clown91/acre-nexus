@@ -22,6 +22,16 @@ pub struct ListingResp {
     pub appliances: Vec<PublicAppliance>,
     /// The upkeep the home gets on a schedule (filters, servicing, sweeps).
     pub upkeep: Vec<PublicUpkeep>,
+    /// Pictures in order; the first is the hero.
+    pub photos: Vec<PublicPhoto>,
+}
+
+#[derive(Serialize, schemars::JsonSchema, Clone)]
+pub struct PublicPhoto {
+    /// A stable public address that redirects to the image.
+    pub url: String,
+    pub alt: String,
+    pub caption: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema, Clone)]
@@ -77,6 +87,7 @@ impl From<entity::listing::Model> for ListingResp {
             listed_at: l.created_at.to_rfc3339(),
             appliances: Vec::new(),
             upkeep: Vec::new(),
+            photos: Vec::new(),
         }
     }
 }

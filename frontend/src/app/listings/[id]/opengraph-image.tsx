@@ -23,6 +23,9 @@ export default async function Image({
     publicGet<PublicTheme>("/public/theme", tenant),
   ]);
   const accent = theme?.accent_color || theme?.primary_color || "#0e7c86";
+  // The hero photo, when there is one, sits behind a dark wash so the text
+  // stays readable.
+  const hero = listing?.photos?.[0]?.url;
   // Every element with more than one child needs `display: flex` here.
   return new ImageResponse(
     <div
@@ -36,8 +39,39 @@ export default async function Image({
         color: "white",
         padding: 64,
         fontFamily: "sans-serif",
+        position: "relative",
       }}
     >
+      {hero && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={hero}
+          alt=""
+          width={1200}
+          height={630}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 1200,
+            height: 630,
+            objectFit: "cover",
+          }}
+        />
+      )}
+      {hero && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 1200,
+            height: 630,
+            background:
+              "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.7) 100%)",
+          }}
+        />
+      )}
       <div style={{ display: "flex", fontSize: 34, opacity: 0.9 }}>
         {site.company_name}
       </div>

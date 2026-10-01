@@ -54,6 +54,12 @@ impl PlatformModule for LeasingModule {
             listings::list::list,
             listings::create::create,
             listings::update::update,
+            listings::photos::list,
+            listings::photos::add,
+            listings::photos::update,
+            listings::photos::reorder,
+            listings::photos::remove,
+            listings::photos::public_photo,
             // CRM leads (the #46 seed; inbound leasing email lands here) +
             // the manual-entry, tour-scheduling, and convert-to-application doors
             leads::list::list_leads,

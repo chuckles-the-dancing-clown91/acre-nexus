@@ -68,5 +68,11 @@ pub async fn listing_detail(
             })
             .collect();
     }
+    crate::routes::listings::photos::attach_public(
+        &db,
+        tenant.tenant_id,
+        std::slice::from_mut(&mut resp),
+    )
+    .await?;
     Ok(Json(resp))
 }

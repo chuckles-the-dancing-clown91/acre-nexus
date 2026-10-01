@@ -88,6 +88,7 @@ mod tests {
             listed_at: String::new(),
             appliances: vec![],
             upkeep: vec![],
+            photos: vec![],
         }
     }
 

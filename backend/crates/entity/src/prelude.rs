@@ -58,6 +58,7 @@ pub use super::ledger_entry::Entity as LedgerEntry;
 pub use super::ledger_txn::Entity as LedgerTxn;
 pub use super::lien::Entity as Lien;
 pub use super::listing::Entity as Listing;
+pub use super::listing_photo::Entity as ListingPhoto;
 pub use super::llc::Entity as Llc;
 pub use super::maintenance_plan::Entity as MaintenancePlan;
 pub use super::maintenance_ticket::Entity as MaintenanceTicket;

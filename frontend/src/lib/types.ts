@@ -15,6 +15,14 @@ export interface Listing {
   description: string;
   /** ISO time it was listed. */
   listed_at?: string;
+  /** Pictures in order; the first is the hero. */
+  photos?: ListingPhoto[];
+}
+
+export interface ListingPhoto {
+  url: string;
+  alt: string;
+  caption: string | null;
 }
 
 export interface PublicTheme {

@@ -120,6 +120,7 @@ async fn integration_suite() {
     batch_a_limits_jobs_and_reminders(&c).await;
     batch_b_vendor_compliance(&c).await;
     batch_c_texts(&c).await;
+    batch_d_listing_photos(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -4878,4 +4879,210 @@ async fn batch_c_texts(c: &Ctx) {
     )
     .await
     .unwrap();
+}
+
+async fn batch_d_listing_photos(c: &Ctx) {
+    use rocket::http::{Header, Method};
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let admin = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "listing:read",
+            "listing:write",
+            "document:read",
+            "document:manage",
+            "property:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+    let (st, l) = post_json(
+        c,
+        &format!("/properties/{pid}/listings"),
+        &admin,
+        serde_json::json!({ "title": "Photo test home", "rent_cents": 210000, "is_public": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{l}");
+    let lid = l["id"].as_str().unwrap().to_string();
+
+    // Upload through the documents flow, filed on the listing.
+    let upload =
+        |owner_type: &'static str, owner_id: String, name: &'static str, mime: &'static str| {
+            let admin = admin.clone();
+            async move {
+                let (st, reg) = post_json(
+                    c,
+                    "/documents",
+                    &admin,
+                    serde_json::json!({ "owner_type": owner_type, "owner_id": owner_id,
+                    "filename": name, "mime_type": mime, "size_bytes": 4 }),
+                )
+                .await;
+                assert_eq!(st, Status::Ok, "{reg}");
+                let url = reg["upload_url"].as_str().unwrap();
+                let path = &url[url.find("/storage/local/").unwrap()..];
+                let resp = c
+                    .client
+                    .put(path.to_string())
+                    .body(vec![0xFF, 0xD8, 0xFF, 0xD9])
+                    .dispatch()
+                    .await;
+                assert!(resp.status().code < 300, "{}", resp.status());
+                reg["document"]["id"].as_str().unwrap().to_string()
+            }
+        };
+    let kitchen = upload("listing", lid.clone(), "kitchen.jpg", "image/jpeg").await;
+    let porch = upload("listing", lid.clone(), "porch.jpg", "image/jpeg").await;
+    let notes = upload("listing", lid.clone(), "notes.txt", "text/plain").await;
+    let elsewhere = upload("property", pid.to_string(), "roof.jpg", "image/jpeg").await;
+
+    let add = |doc: String, alt: &'static str| {
+        let admin = admin.clone();
+        let lid = lid.clone();
+        async move {
+            post_json(
+                c,
+                &format!("/listings/{lid}/photos"),
+                &admin,
+                serde_json::json!({ "document_id": doc, "alt_text": alt }),
+            )
+            .await
+        }
+    };
+    let (st, _) = add(kitchen.clone(), "  ").await;
+    assert_eq!(st, Status::BadRequest, "alt text is required");
+    let (st, _) = add(notes, "Notes").await;
+    assert_eq!(st, Status::BadRequest, "only images");
+    let (st, _) = add(elsewhere, "Roof").await;
+    assert_eq!(st, Status::BadRequest, "only this listing's uploads");
+    let (st, _) = add(kitchen.clone(), "Bright kitchen with a gas range").await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = add(kitchen.clone(), "again").await;
+    assert_eq!(st, Status::Conflict);
+    let (st, list) = add(porch, "Shaded front porch").await;
+    assert_eq!(st, Status::Ok, "{list}");
+    let ids: Vec<String> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids.len(), 2);
+    assert!(list[0]["preview_url"]
+        .as_str()
+        .unwrap()
+        .contains("/storage/local/"));
+
+    // The porch becomes the hero.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/listings/{lid}/photos/order"),
+        &admin,
+        serde_json::json!({ "ids": [ids[1]] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "every photo, once");
+    let (st, list) = send_json(
+        c,
+        Method::Put,
+        &format!("/listings/{lid}/photos/order"),
+        &admin,
+        serde_json::json!({ "ids": [ids[1], ids[0]] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(list[0]["alt_text"], "Shaded front porch");
+
+    // The public page carries them in order, and the image link works.
+    let resp = c
+        .client
+        .get(format!("/public/listings/{lid}"))
+        .header(Header::new("X-Tenant", "northwind"))
+        .dispatch()
+        .await;
+    let pl = resp.into_json::<serde_json::Value>().await.unwrap();
+    assert_eq!(pl["photos"][0]["alt"], "Shaded front porch");
+    let hero = pl["photos"][0]["url"].as_str().unwrap().to_string();
+    assert!(hero.ends_with(&format!("/public/listing-photos/{}", ids[1])));
+    let resp = c
+        .client
+        .get(format!("/public/listing-photos/{}", ids[1]))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::TemporaryRedirect);
+    assert!(resp
+        .headers()
+        .get_one("Location")
+        .unwrap_or("")
+        .contains("/storage/local/"));
+    let resp = c
+        .client
+        .get("/public/listings")
+        .header(Header::new("X-Tenant", "northwind"))
+        .dispatch()
+        .await;
+    let all = resp.into_json::<serde_json::Value>().await.unwrap();
+    let card = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == lid.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(card["photos"].as_array().unwrap().len(), 2);
+
+    // Other workspaces see nothing; an unpublished listing's photos stop.
+    let other = mint(c, Some(cascade), false, &["listing:read", "listing:write"]);
+    let (st, _) = get_json(c, &format!("/listings/{lid}/photos"), &other).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/listing-photos/{}", ids[0]),
+        &other,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/listings/{lid}"),
+        &admin,
+        serde_json::json!({ "is_public": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let resp = c
+        .client
+        .get(format!("/public/listing-photos/{}", ids[1]))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::NotFound);
+
+    // Edit and remove.
+    let (st, list) = send_json(
+        c,
+        Method::Patch,
+        &format!("/listing-photos/{}", ids[0]),
+        &admin,
+        serde_json::json!({ "caption": "Remodeled 2025" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(list[1]["caption"], "Remodeled 2025");
+    let (st, list) = send_json(
+        c,
+        Method::Delete,
+        &format!("/listing-photos/{}", ids[0]),
+        &admin,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(list.as_array().unwrap().len(), 1);
 }

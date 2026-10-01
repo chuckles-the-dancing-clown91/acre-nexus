@@ -158,10 +158,24 @@ group, and Settings → Schedule in the console. Covered by
 
 | ID | Fix | Size | Status |
 |----|-----|------|--------|
-| F18 | Listing photos feeding the page, share image and structured data | M | ☐ |
+| F18 | Listing photos feeding the page, share image and structured data | M | ☑ |
 | F19 | Owner portal and spend approvals | L | ☐ |
 | F20 | Operations dashboard and portfolio map | L | ☐ |
 | F21 | Language on people and Spanish message templates | L | ☐ |
-| F22 | Camera barcode fallback (zxing) for browsers without BarcodeDetector | S | ☐ |
+| F22 | Camera barcode fallback (zxing) for browsers without BarcodeDetector | S | ☑ |
 
 Details for these follow `ROADMAP-NEXT.md` areas 12, 14, 15 and 16.
+
+- **Shipped (F18).** Migration 062 adds `listing_photo` (alt text required,
+  caption, position). Photos upload through the documents flow with
+  `owner_type = listing`, then `POST /listings/<id>/photos` attaches them (images
+  only, this listing's uploads only, up to 30); `PATCH` and `DELETE
+  /listing-photos/<id>`, `PUT /listings/<id>/photos/order`. Public listings carry
+  `photos` hero first, each with a stable `/public/listing-photos/<id>` address
+  that redirects to a 15-minute signed link and stops working once the listing
+  is hidden or leased. The listing page shows a gallery with captions, cards show
+  the hero, JSON-LD lists the images and the share image puts the hero behind
+  the rent. Resized variants are not built yet; images are served as uploaded.
+- **Shipped (F22).** The stock page's camera scanner loads `@zxing/browser` on
+  demand when the browser has no `BarcodeDetector`. Checked in headless Chromium
+  on Linux, which has none, with a fake camera showing an EAN-13.

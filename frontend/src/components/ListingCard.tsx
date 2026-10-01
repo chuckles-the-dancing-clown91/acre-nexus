@@ -21,10 +21,19 @@ export function ListingCard({
         className="relative aspect-[3/2.1]"
         style={{ background: gradFor(index) }}
       >
+        {listing.photos?.[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={listing.photos[0].url}
+            alt={listing.photos[0].alt}
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <div className="absolute left-3 top-3">
           <Badge tone={statusTone(listing.status)}>{listing.status}</Badge>
         </div>
-        <div className="absolute bottom-3 left-4 font-display text-2xl font-extrabold text-white">
+        <div className="absolute bottom-3 left-4 font-display text-2xl font-extrabold text-white [text-shadow:0_1px_6px_rgb(0_0_0/0.45)]">
           {listing.rent_label}
           <span className="text-sm font-semibold opacity-85">/mo</span>
         </div>

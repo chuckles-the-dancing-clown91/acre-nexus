@@ -75,6 +75,7 @@ pub mod ledger_entry;
 pub mod ledger_txn;
 pub mod lien;
 pub mod listing;
+pub mod listing_photo;
 pub mod llc;
 pub mod maintenance_plan;
 pub mod maintenance_ticket;

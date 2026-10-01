@@ -78,6 +78,7 @@ export function listingJsonLd(l: Listing, site: SiteInfo, origin: string) {
         name: l.title,
         description: truncate(l.description, 500),
         ...(l.listed_at ? { datePosted: l.listed_at } : {}),
+        ...(l.photos?.length ? { image: l.photos.map((p) => p.url) } : {}),
         about: {
           "@type": "Accommodation",
           name: l.title,

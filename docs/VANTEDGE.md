@@ -250,7 +250,8 @@ other as vendor and client.
 
 **Inventory** ☑
 - Barcode / UPC / SKU lookup (`GET /inventory/lookup?code=`); **scan-in** with
-  the camera (BarcodeDetector, where the browser has it) or a scanner gun; receive /
+  the camera (BarcodeDetector where the browser has it, zxing elsewhere) or a
+  scanner gun; receive /
   use / count movements with a landed, **weighted-average unit cost** spread
   across a receipt (tax + shipping); a Friday reorder list by vendor; use on a
   work order from the tech's phone.
@@ -275,12 +276,12 @@ other as vendor and client.
   webhook events — any vendor system can use them, not only Alpha.
 - Screens: *Findings & parts* and *Vendor (Alpha)* on the work order,
   `/console/maintenance/closeout`, `/console/maintenance/stock` (camera
-  scanning through `BarcodeDetector`, scanner-gun input, receiving, counts,
+  scanning through `BarcodeDetector` or zxing, scanner-gun input, receiving, counts,
   the ledger, the reorder list), `/console/maintenance/assets/{id}`, the
   property's Maintenance tab (spend by category, appliances, routines), and
-  the Alpha link card on a contractor. Still to do in this phase: the
-  camera-scan fallback for browsers without `BarcodeDetector` (zxing), and
-  ordering from Amazon / Home Depot directly from close-out.
+  the Alpha link card on a contractor. Browsers without `BarcodeDetector`
+  (Safari, Firefox, desktop Linux) load the zxing decoder on demand. Still to
+  do in this phase: ordering from Amazon / Home Depot directly from close-out.
 
 ## Phase 2D — Audit, turns, issues, maps, reviews and search ◐
 

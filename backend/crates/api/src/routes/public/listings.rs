@@ -56,6 +56,7 @@ pub async fn listings(
         },
     );
     found.truncate(PUBLIC_LIMIT);
+    crate::routes::listings::photos::attach_public(&db, tenant.tenant_id, &mut found).await?;
     Ok(Json(found))
 }
 
