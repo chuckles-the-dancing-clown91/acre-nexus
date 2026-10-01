@@ -27,10 +27,13 @@ company.
   - routes with no property data (sign-in, their own profile, notifications,
     the module list);
   - list routes that narrow their own results by reach: `/properties`,
-    `/portfolio/summary`, `/portfolio/llcs`, `/search`, `/tickets`, `/leases`;
+    `/portfolio/summary`, `/portfolio/llcs`, `/search`, `/tickets`, `/leases`,
+    `/issue-templates` (and generating from one), `/maintenance-plans`;
   - routes addressed by one property, ticket, lease or unit within reach
     (`/properties/<id>/…`, `/tickets/<id>/…`, `/leases/<id>/…`,
-    `/units/<id>/…`). Out of reach answers **404**, the same as another
+    `/units/<id>/…`), or by a record that hangs off one (`/parts/<id>`,
+    `/ticket-lines/<id>`, `/ticket-quotes/<id>`, `/maintenance-plans/<id>`).
+    Out of reach answers **404**, the same as another
     company's data.
 
   Everything else answers **403**. A new route is closed to scoped people until

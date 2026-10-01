@@ -5,13 +5,7 @@ import { cookies, headers } from "next/headers";
 import type { PublicTheme } from "@/lib/types";
 import type { ResolveResult } from "@/lib/api";
 import { DEFAULT_ACCENT } from "./accent";
-import {
-  HUD_COOKIE,
-  normalizeAudience,
-  type Audience,
-  type Brand,
-  type Gate,
-} from "./themes";
+import { HUD_COOKIE, normalizeAudience, type Brand, type Gate } from "./themes";
 
 const API =
   process.env.API_INTERNAL_URL ??

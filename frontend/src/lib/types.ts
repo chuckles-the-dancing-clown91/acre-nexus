@@ -819,6 +819,8 @@ export interface MaintenancePlan {
   next_due_date: string;
   active: boolean;
   last_ticket_id: string | null;
+  /** The job kit each routine work order starts with. */
+  issue_template_id?: string | null;
   created_at: string;
 }
 
@@ -831,6 +833,8 @@ export interface TicketComment {
   visibility: "public" | "internal";
   author_name: string | null;
   body: string;
+  /** Photos and files attached to the note. */
+  document_ids?: string[];
   created_at: string;
 }
 

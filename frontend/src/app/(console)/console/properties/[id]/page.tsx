@@ -38,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 
-const OPEN = new Set(["open", "in_progress", "on_hold", "scheduled", "new"]);
+const OPEN = new Set(["open", "triage", "scheduled", "in_progress", "on_hold"]);
 
 const rise = (i: number) => ({
   initial: { opacity: 0, y: 10 },

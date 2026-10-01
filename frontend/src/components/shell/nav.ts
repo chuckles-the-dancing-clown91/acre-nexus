@@ -43,6 +43,8 @@ const REACH_AWARE = new Set([
   "/console/properties",
   "/console/leases",
   "/console/maintenance",
+  "/console/maintenance/schedule",
+  "/console/maintenance/kits",
   "/console/my-time",
 ]);
 
