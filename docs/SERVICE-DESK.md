@@ -39,6 +39,26 @@ A maintenance plan (`/maintenance-plans`) repeats on a cadence and, when due,
 opens a work order. With `issue_template_id` set, that work order starts with
 the kit's tasks and parts.
 
+## Sending a task to a vendor
+
+The send button on a task offers contractors, plus any other counterparty that
+lists trades or is linked to a partner system, the ones covering the task's
+trade first. The insurance rule applies.
+
+- **Linked to Alpha** (or another partner): the task becomes a job on their
+  board, titled "<task> — <work order>", with the work order's details, the
+  note, and access notes. Their progress comes back signed: started moves the
+  task to doing, finished marks it done and adds their price as a labor line,
+  cancelled hands the task back to be sent again. On a work order with tasks,
+  the vendor's job moves an untouched work order to scheduled or in progress,
+  and resolves it only when every task is done. A work order goes to Alpha
+  once; Alpha keys jobs by the work order.
+- **Everyone else** gets the task by email.
+
+Checked against a running Alpha: link (ping), send, job created with the right
+client, property and notes, then scheduled, started and completed callbacks
+back on the work order.
+
 ## Who sees what
 
 Property managers, leasing agents and maintenance see and work only their

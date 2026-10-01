@@ -558,6 +558,7 @@ pub async fn dispatch_task(
                     Some(n) => format!("{task_line}\n{n}"),
                     None => task_line.clone(),
                 }),
+                title: Some(format!("{} — {}", existing.title, t.title)),
             },
             Some(user.user_id),
         )
@@ -1088,7 +1089,9 @@ pub async fn add_expense(
 // ---------------------------------------------------------------------------
 
 /// `GET /tickets/<id>/vendors?trade=` — vendors who can take work on this
-/// work order, the ones covering `trade` first.
+/// work order, the ones covering `trade` first: contractors, plus any other
+/// counterparty that lists trades or is linked to a partner system (a
+/// vendor running Alpha, say).
 #[rocket_okapi::openapi(tag = "Service Desk")]
 #[get("/tickets/<id>/vendors?<trade>")]
 pub async fn vendors(
@@ -1106,13 +1109,15 @@ pub async fn vendors(
         .filter(|t| !t.is_empty());
     let rows = Counterparty::find()
         .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
-        .filter(entity::counterparty::Column::Kind.eq("contractor"))
         .order_by_asc(entity::counterparty::Column::Name)
         .all(&db)
         .await?;
     let mut out = vec![];
     for c in rows {
         let trades: Vec<String> = serde_json::from_value(c.trades.clone()).unwrap_or_default();
+        if c.kind != "contractor" && trades.is_empty() && c.partner_kind.is_none() {
+            continue;
+        }
         let matches = want.as_ref().is_some_and(|w| trades.iter().any(|t| t == w));
         out.push(VendorOption {
             coi_current: crate::vendor_compliance::coi_current(&db, scope.tenant_id, c.id, today)

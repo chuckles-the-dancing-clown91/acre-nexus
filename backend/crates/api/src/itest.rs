@@ -2265,6 +2265,77 @@ async fn alpha_vendor_link(c: &Ctx) {
     );
     assert_eq!(t["lines"].as_array().unwrap().len(), 1);
 
+    // One task of a bigger work order (no access notes) goes to them: the job
+    // is that task, and their progress moves that task, not the work order.
+    let (_, t2) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &office,
+        serde_json::json!({ "title": "Unit turn", "category": "general", "priority": "normal" }),
+    )
+    .await;
+    let tid2 = t2["id"].as_str().unwrap().to_string();
+    for (title, trade) in [("Wash the stairs", "exterior"), ("Repaint", "paint")] {
+        let (st, v) = post_json(
+            c,
+            &format!("/tickets/{tid2}/tasks"),
+            &office,
+            serde_json::json!({ "title": title, "trade": trade, "needs_contractor": true }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{v}");
+    }
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid2}/tasks"), &office).await;
+    let wash = tasks[0]["id"].as_str().unwrap().to_string();
+    let (st, v) = post_json(
+        c,
+        &format!("/tickets/{tid2}/tasks/{wash}/dispatch"),
+        &office,
+        serde_json::json!({ "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let spec = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::Kind.eq(crate::partner::DISPATCH_KIND))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|j| j.payload["ticket_id"] == tid2.as_str())
+        .expect("queued");
+    assert_eq!(spec.payload["title"], "Wash the stairs — Unit turn");
+    for _ in 0..3 {
+        run_due_jobs(&c.db).await.unwrap();
+    }
+    for (event, status) in [
+        ("job.started", "in_progress"),
+        ("job.completed", "complete"),
+    ] {
+        let (body, sig) = call(
+            event,
+            serde_json::json!({ "id": 4242, "external_ref": tid2, "status": status,
+                "service": "Exterior wash", "price": "245.00" }),
+        );
+        let resp = c
+            .client
+            .post("/webhooks/alpha?tenant=northwind")
+            .header(ContentType::JSON)
+            .header(Header::new("X-Acre-Signature", sig))
+            .body(body)
+            .dispatch()
+            .await;
+        assert_eq!(resp.status(), Status::Ok);
+        for _ in 0..3 {
+            run_due_jobs(&c.db).await.unwrap();
+        }
+    }
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid2}/tasks"), &office).await;
+    assert_eq!(tasks[0]["status"], "done", "{tasks}");
+    assert_eq!(tasks[1]["status"], "todo", "{tasks}");
+    let (_, t2) = get_json(c, &format!("/tickets/{tid2}"), &office).await;
+    assert_eq!(t2["status"], "in_progress", "the repaint is still to do");
+    assert_eq!(t2["cost_cents"], 24500, "{t2}");
+
     // The vendor API sees the ticket and can post progress on another one.
     let token = insert_api_token(c, nw, &["maintenance:read", "maintenance:manage"]).await;
     let (st, v) = get_json(c, &format!("/api/v1/tickets/{tid}"), &token).await;
@@ -5387,6 +5458,29 @@ async fn service_desk(c: &Ctx) {
     let (_, options) = get_json(c, &format!("/tickets/{tid}/vendors?trade=plumbing"), &staff).await;
     assert_eq!(options[0]["id"], vid.as_str(), "matching trade first");
     assert_eq!(options[0]["matches"], true);
+    // A "vendor" that lists trades is offered too; a supplier with none isn't.
+    let mut made = vec![];
+    for (name, trades) in [
+        ("Desert Wash Co", serde_json::json!(["exterior"])),
+        ("Supply Barn", serde_json::json!([])),
+    ] {
+        let (st, v) = post_json(
+            c,
+            "/entities",
+            &staff,
+            serde_json::json!({ "kind": "vendor", "name": name, "trades": trades }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{v}");
+        made.push(v["id"].clone());
+    }
+    let (_, options) = get_json(c, &format!("/tickets/{tid}/vendors?trade=exterior"), &staff).await;
+    assert_eq!(options[0]["id"], made[0]);
+    assert!(!options
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|o| o["id"] == made[1]));
     let task_id = valve["id"].as_str().unwrap();
     let (st, after) = post_json(
         c,
