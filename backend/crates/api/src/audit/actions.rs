@@ -398,3 +398,7 @@ pub const PROCESS_FINISH: &str = "process.finish";
 pub const PROCESS_CANCEL: &str = "process.cancel";
 pub const PROCESS_STEP_UPDATE: &str = "process.step_update";
 pub const PROCESS_TEMPLATE_SAVE: &str = "process.template_save";
+
+// ---- Issue catalog ----
+pub const ISSUE_TEMPLATE_SAVE: &str = "issue_template.save";
+pub const ISSUE_GENERATE: &str = "issue.generate_ticket";

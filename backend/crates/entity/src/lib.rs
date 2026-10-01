@@ -62,6 +62,7 @@ pub mod inspection_item;
 pub mod inventory_item;
 pub mod inventory_movement;
 pub mod investor_commitment;
+pub mod issue_template;
 pub mod lead;
 pub mod lease;
 pub mod lease_charge;

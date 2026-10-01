@@ -45,6 +45,7 @@ pub use super::inspection_item::Entity as InspectionItem;
 pub use super::inventory_item::Entity as InventoryItem;
 pub use super::inventory_movement::Entity as InventoryMovement;
 pub use super::investor_commitment::Entity as InvestorCommitment;
+pub use super::issue_template::Entity as IssueTemplate;
 pub use super::lead::Entity as Lead;
 pub use super::lease::Entity as Lease;
 pub use super::lease_charge::Entity as LeaseCharge;

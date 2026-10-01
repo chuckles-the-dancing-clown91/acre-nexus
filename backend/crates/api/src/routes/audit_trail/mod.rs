@@ -119,10 +119,11 @@ async fn run(
     if let Some(t) = &f.target_type {
         // "process" covers a turn and its steps.
         cond = if t == "process" {
-            cond.add(
-                entity::audit_log::Column::TargetType
-                    .is_in(["process", "process_step", "process_template"]),
-            )
+            cond.add(entity::audit_log::Column::TargetType.is_in([
+                "process",
+                "process_step",
+                "process_template",
+            ]))
         } else {
             cond.add(entity::audit_log::Column::TargetType.eq(t.clone()))
         };

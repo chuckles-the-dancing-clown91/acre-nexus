@@ -96,6 +96,7 @@ async fn integration_suite() {
     alpha_vendor_link(&c).await;
     audit_trail_who_changed_what(&c).await;
     turnover_step_logic(&c).await;
+    issue_catalog_generates_ticket_and_shopping_list(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -2819,4 +2820,145 @@ async fn turnover_step_logic(c: &Ctx) {
     for want in ["process.start", "process.step_update", "process.finish"] {
         assert!(actions.contains(&want), "missing {want} in {actions:?}");
     }
+}
+
+/// Issue catalog: pick an issue, generate the ticket, get the shopping list
+/// split into what is on the shelf and what to buy.
+async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let mgr = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "maintenance:manage",
+            "maintenance:read",
+            "audit:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+
+    // The starter set appears on first use.
+    let (st, issues) = get_json(c, "/issue-templates", &mgr).await;
+    assert_eq!(st, Status::Ok, "{issues}");
+    let faucet = issues
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["name"] == "Leaking faucet")
+        .expect("starter issue")
+        .clone();
+    assert!(issues.as_array().unwrap().len() >= 10);
+
+    // One of its parts is on the shelf; the other is not.
+    let (st, item) = post_json(
+        c,
+        "/inventory",
+        &mgr,
+        serde_json::json!({ "name": "Faucet cartridge", "quantity": 5, "unit_cost_cents": 1800 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{item}");
+
+    let (st, out) = post_json(
+        c,
+        &format!(
+            "/issue-templates/{}/generate",
+            faucet["id"].as_str().unwrap()
+        ),
+        &mgr,
+        serde_json::json!({ "property_id": pid, "note": "Drips every few seconds" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{out}");
+    assert_eq!(out["ticket"]["category"], "plumbing");
+    assert!(out["ticket"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("Drips every few seconds"));
+    assert!(out["ticket"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("Replace cartridge"));
+    let from_stock: Vec<&str> = out["parts"]["from_stock"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    let to_buy: Vec<&str> = out["parts"]["to_buy"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(from_stock, vec!["Faucet cartridge"]);
+    assert_eq!(to_buy, vec!["Supply line"]);
+
+    // Editing the catalog: add an issue, retire it, and validate input.
+    let (st, mine) = post_json(
+        c,
+        "/issue-templates",
+        &mgr,
+        serde_json::json!({ "name": "Gate latch broken", "category": "structural",
+            "checklist": ["Replace latch"], "parts": [{ "name": "Gate latch", "quantity": 1 }] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    let (st, _) = post_json(
+        c,
+        "/issue-templates",
+        &mgr,
+        serde_json::json!({ "name": "Bad", "category": "nonsense" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/issue-templates/{}", mine["id"].as_str().unwrap()),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/issue-templates/{}/generate", mine["id"].as_str().unwrap()),
+        &mgr,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // Another workspace has its own catalog and cannot reach ours.
+    let other = mint(
+        c,
+        Some(cascade),
+        false,
+        &["maintenance:manage", "maintenance:read"],
+    );
+    let (st, _) = post_json(
+        c,
+        &format!(
+            "/issue-templates/{}/generate",
+            faucet["id"].as_str().unwrap()
+        ),
+        &other,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // The generated ticket is on the property's history.
+    let (st, hist) = get_json(c, &format!("/properties/{pid}/history?limit=100"), &mgr).await;
+    assert_eq!(st, Status::Ok);
+    assert!(hist["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["action"] == "issue.generate_ticket"));
 }
