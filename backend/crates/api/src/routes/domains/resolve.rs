@@ -54,7 +54,7 @@ pub async fn resolve(
         .await?;
     let (company_name, primary_color, accent_color) = match theme {
         Some(t) => (t.company_name, t.primary_color, t.accent_color),
-        None => (tenant.name.clone(), "#F5451F".into(), "#F5451F".into()),
+        None => (tenant.name.clone(), "#0E7C86".into(), "#0E7C86".into()),
     };
 
     Ok(Json(ResolveResp {

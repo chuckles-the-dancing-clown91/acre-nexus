@@ -1,4 +1,4 @@
-# Acre Nexus — Roadmap
+# Vantedge (formerly Acre Nexus) — Roadmap
 
 How we get from today's foundation to the v1 GA described in
 [`PRODUCT.md`](./PRODUCT.md). Phases are ordered by **dependency and value**, not

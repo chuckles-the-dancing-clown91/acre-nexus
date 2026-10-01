@@ -12,6 +12,9 @@ pub struct CounterpartyDto {
     pub website: Option<String>,
     pub address: Option<String>,
     pub notes: Option<String>,
+    /// Linked partner system (`alpha`), when this vendor runs one.
+    pub partner_kind: Option<String>,
+    pub partner_status: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -28,6 +31,8 @@ impl From<entity::counterparty::Model> for CounterpartyDto {
             website: c.website,
             address: c.address,
             notes: c.notes,
+            partner_kind: c.partner_kind,
+            partner_status: c.partner_status,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }

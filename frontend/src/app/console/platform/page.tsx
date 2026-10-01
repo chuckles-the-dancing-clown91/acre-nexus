@@ -25,8 +25,8 @@ export default function PlatformPage() {
     return (
       <Card className="p-6">
         <p className="text-ink-2">
-          This is the platform (Acre HQ) admin — staff only. Client workspaces
-          can&apos;t see it.
+          This is the platform (Vantedge HQ) admin — staff only. Client
+          workspaces can&apos;t see it.
         </p>
       </Card>
     );
@@ -39,7 +39,7 @@ export default function PlatformPage() {
           Platform admin
         </h1>
         <p className="text-ink-3">
-          Acre HQ — every client company on the platform.
+          Vantedge HQ — every client company on the platform.
         </p>
       </div>
 

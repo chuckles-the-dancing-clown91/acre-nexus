@@ -65,7 +65,7 @@ impl OutboundClient {
 pub fn build_http_client() -> Result<reqwest::Client, ProviderError> {
     let mut builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
-        .user_agent("acre-nexus-integrations/0.1");
+        .user_agent("vantedge-integrations/0.1");
 
     for cert in proxy_ca_certificates() {
         builder = builder.add_root_certificate(cert);

@@ -13,8 +13,8 @@ export default function BrandingPage() {
   // Editable fields.
   const [companyName, setCompanyName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
-  const [primary, setPrimary] = useState("#f5451f");
-  const [accent, setAccent] = useState("#f5451f");
+  const [primary, setPrimary] = useState("#0e7c86");
+  const [accent, setAccent] = useState("#0e7c86");
   const [mode, setMode] = useState("light");
 
   useEffect(() => {
@@ -24,8 +24,8 @@ export default function BrandingPage() {
         setTheme(t);
         setCompanyName(t.company_name);
         setLogoUrl(t.logo_url ?? "");
-        setPrimary(t.primary_color || "#f5451f");
-        setAccent(t.accent_color || "#f5451f");
+        setPrimary(t.primary_color || "#0e7c86");
+        setAccent(t.accent_color || "#0e7c86");
         setMode(t.default_mode || "light");
       })
       .catch((e) => setError(e.message));

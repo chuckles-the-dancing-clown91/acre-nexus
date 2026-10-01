@@ -242,7 +242,7 @@ async fn notify_breaches(
 
 /// Open tickets for every active plan whose due date arrived, advancing the
 /// plan past today.
-async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<u32> {
+pub async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<u32> {
     let today = Utc::now().date_naive();
     let plans = MaintenancePlan::find()
         .filter(entity::maintenance_plan::Column::TenantId.eq(tenant_id))
@@ -273,6 +273,18 @@ async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<
             None,
         )
         .await?;
+
+        // A routine on an appliance: link the ticket to it and pre-list the
+        // parts that fit (air filters, belts…) as potential parts.
+        if let Some(asset_id) = plan.asset_id {
+            let mut tam: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
+            tam.asset_id = Set(Some(asset_id));
+            tam.update(db).await?;
+            crate::routes::maintenance::parts::add_potential_from_asset(
+                db, tenant_id, ticket.id, asset_id, None,
+            )
+            .await?;
+        }
 
         let next = advance_due(&plan.next_due_date, plan.cadence_days, today);
         let plan_id = plan.id;
@@ -455,6 +467,10 @@ pub async fn open_ticket(
         resolved_at: Set(None),
         sla_response_due_at: Set(response_due.map(Into::into)),
         sla_resolve_due_at: Set(resolve_due.map(Into::into)),
+        partner_counterparty_id: Set(None),
+        partner_job_id: Set(None),
+        partner_status: Set(None),
+        partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

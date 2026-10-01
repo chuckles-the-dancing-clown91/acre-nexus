@@ -1,4 +1,4 @@
-//! Database migrations for the Acre platform.
+//! Database migrations for the Vantedge platform.
 //!
 //! Run with the `migration` binary (`cargo run -p migration -- up`) or
 //! programmatically via [`Migrator`] at server boot.
@@ -47,6 +47,13 @@ mod m20240101_000039_syndication;
 mod m20240101_000040_hoa;
 mod m20240101_000041_leasing_crm_renewals;
 mod m20240101_000042_federated_auth;
+mod m20240101_000043_password_tokens;
+mod m20240101_000044_sms_threads;
+mod m20240101_000045_workforce;
+mod m20240101_000046_crm;
+mod m20240101_000047_property_geo;
+mod m20240101_000048_parts;
+mod m20240101_000049_partner_link;
 
 pub struct Migrator;
 
@@ -96,6 +103,13 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000040_hoa::Migration),
             Box::new(m20240101_000041_leasing_crm_renewals::Migration),
             Box::new(m20240101_000042_federated_auth::Migration),
+            Box::new(m20240101_000043_password_tokens::Migration),
+            Box::new(m20240101_000044_sms_threads::Migration),
+            Box::new(m20240101_000045_workforce::Migration),
+            Box::new(m20240101_000046_crm::Migration),
+            Box::new(m20240101_000047_property_geo::Migration),
+            Box::new(m20240101_000048_parts::Migration),
+            Box::new(m20240101_000049_partner_link::Migration),
         ]
     }
 }

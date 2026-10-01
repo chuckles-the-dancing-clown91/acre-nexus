@@ -4,6 +4,8 @@
 // an "Invite member" dialog. Tenant is implied by the current JWT.
 
 import { useState } from "react";
+import { toast } from "sonner";
+import { iam, type Member } from "@/lib/api";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -45,7 +47,7 @@ export default function MembersPage() {
       {error && <p className="text-bad">{error.message}</p>}
 
       <Card className="overflow-hidden">
-        <div className="grid grid-cols-[1.4fr_1.4fr_.9fr_.5fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
+        <div className="grid grid-cols-[1.3fr_1.4fr_.9fr_1fr] gap-4 border-b border-line px-5 py-3 text-xs font-bold uppercase tracking-wide text-ink-3">
           <span>Name</span>
           <span>Email</span>
           <span>Persona</span>
@@ -55,7 +57,7 @@ export default function MembersPage() {
           {members?.map((m) => (
             <div
               key={m.membership_id}
-              className="grid grid-cols-[1.4fr_1.4fr_.9fr_.5fr] items-center gap-4 px-5 py-3.5"
+              className="grid grid-cols-[1.3fr_1.4fr_.9fr_1fr] items-center gap-4 px-5 py-3.5"
             >
               <div className="min-w-0 truncate font-semibold">{m.name}</div>
               <span className="truncate text-sm text-ink-2">{m.email}</span>
@@ -63,8 +65,13 @@ export default function MembersPage() {
                 {m.profile_type}
                 {m.title && <span className="text-ink-3"> · {m.title}</span>}
               </span>
-              <span className="flex justify-end">
-                <Badge tone={statusTone(m.status)}>{m.status}</Badge>
+              <span className="flex flex-wrap items-center justify-end gap-2">
+                {m.account_status === "invited" ? (
+                  <Badge tone="warn">hasn&apos;t set password</Badge>
+                ) : (
+                  <Badge tone={statusTone(m.status)}>{m.status}</Badge>
+                )}
+                {canManage && <LoginLinkButton member={m} />}
               </span>
             </div>
           ))}
@@ -79,6 +86,39 @@ export default function MembersPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Resend the link a member uses to choose (or reset) their password. */
+function LoginLinkButton({ member }: { member: Member }) {
+  const [busy, setBusy] = useState(false);
+  const invited = member.account_status === "invited";
+  async function send() {
+    setBusy(true);
+    try {
+      const res = await iam.sendLoginLink(member.membership_id);
+      toast.success(
+        res.purpose === "invite"
+          ? `Sent ${member.name} a new link to set their password`
+          : `Sent ${member.name} a password reset link`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send the link");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={send}
+      disabled={busy}
+      className="rounded-lg border border-line px-2 py-1 text-xs font-semibold text-ink-2 hover:border-accent disabled:opacity-50"
+      title={
+        invited ? "Resend their invite link" : "Send a password reset link"
+      }
+    >
+      {busy ? "Sending…" : invited ? "Resend invite" : "Reset link"}
+    </button>
   );
 }
 

@@ -38,6 +38,13 @@ pub struct Model {
     pub acquired_on: Option<String>,
     /// Hero photo shown top-left on the property profile (object-store / CDN URL).
     pub image_url: Option<String>,
+    /// Two-letter state; empty when unknown.
+    pub state: String,
+    pub postal_code: String,
+    /// `none` | `stored` | `placeholder` | `failed` — the fetched street photo.
+    pub photo_status: String,
+    pub photo_attempted_at: Option<DateTimeWithTimeZone>,
+    pub photo_error: Option<String>,
     pub created_at: DateTimeWithTimeZone,
 }
 

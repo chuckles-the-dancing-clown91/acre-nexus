@@ -1,7 +1,7 @@
 "use client";
 
 // Header dropdown that lets a user switch between the workspaces they belong to
-// (Acre HQ / platform plus any client tenants). Hidden when there is only one
+// (Vantedge HQ / platform plus any client tenants). Hidden when there is only one
 // workspace — there is nothing to switch to.
 
 import { useState } from "react";

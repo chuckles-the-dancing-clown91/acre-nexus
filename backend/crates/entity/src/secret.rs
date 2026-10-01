@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    /// `NULL` = platform-wide secret (Acre HQ); otherwise tenant-scoped.
+    /// `NULL` = platform-wide secret (Vantedge HQ); otherwise tenant-scoped.
     pub tenant_id: Option<Uuid>,
     /// Dotted credential key, e.g. `stripe.api_key` or `webhook.stripe.secret`.
     pub key: String,

@@ -37,6 +37,7 @@ mod enrichment;
 mod error;
 mod esign;
 mod finance;
+mod geo;
 mod guards;
 mod helpdesk;
 mod leasedoc;
@@ -48,10 +49,13 @@ mod modules;
 mod notify;
 mod oauth;
 mod openapi;
+mod partner;
+mod password_links;
 mod payables;
 mod payments;
 mod payouts;
 mod pdf;
+mod pdfdoc;
 mod pii;
 mod providers;
 mod ratelimit;
@@ -70,11 +74,13 @@ mod state;
 mod storage;
 mod syndication;
 mod tenancy;
+mod texts;
 mod tokens;
 mod totp;
 mod underwriting;
 mod webhooks_out;
 mod workflow;
+mod workforce;
 
 #[cfg(test)]
 mod itest;
@@ -141,6 +147,8 @@ async fn rocket() -> _ {
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
+    workforce::ensure_recurring_jobs(&db).await;
+    geo::ensure_recurring_jobs(&db).await;
     saas::ensure_recurring_jobs(&db).await;
 
     let state = AppState { db, config };
@@ -195,7 +203,7 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
 
     // Top-level API metadata (set after merging so module fragments don't clobber it).
     spec.info = Info {
-        title: "Acre Nexus API".to_owned(),
+        title: "Vantedge API".to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         description: Some(
             "Multi-tenant property-management & investment platform API.\n\n\

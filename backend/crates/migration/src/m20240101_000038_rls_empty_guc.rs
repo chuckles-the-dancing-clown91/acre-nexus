@@ -9,7 +9,7 @@
 //!
 //! Migration `000015`'s predicate keyed the cross-tenant plane on
 //! `current_setting(...) IS NULL`. That branch never matches `''`, so a
-//! platform-plane request (staff at Acre HQ, login, background jobs — which set
+//! platform-plane request (staff at Vantedge HQ, login, background jobs — which set
 //! *no* tenant) landing on a reused connection would be denied **all** tenant
 //! rows once the app connects as a role actually subject to RLS (the intended
 //! production shape). This recreates the policy with

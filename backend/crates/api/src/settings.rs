@@ -84,6 +84,30 @@ pub const HELPDESK_SCAN_INTERVAL_SECS: &str = "helpdesk.scan_interval_secs";
 /// Auto-open a make-ready ticket when a move-out inspection completes.
 pub const HELPDESK_AUTO_TURNOVER: &str = "helpdesk.auto_turnover";
 
+// ---- Team, time & costing (the back office) ----
+/// IANA time zone that decides which workday an hour belongs to.
+pub const WORKFORCE_TIMEZONE: &str = "workforce.timezone";
+/// `weekly` (FLSA, 1.5× over 40) or `california` (daily 8/12 + seventh day).
+pub const WORKFORCE_OVERTIME_RULE: &str = "workforce.overtime_rule";
+/// Employer payroll taxes / workers' comp / benefits, basis points of pay.
+pub const WORKFORCE_LABOR_BURDEN_BPS: &str = "workforce.labor_burden_bps";
+/// Overhead spread per labor hour, in cents (0 = gross only).
+pub const WORKFORCE_OVERHEAD_PER_HOUR_CENTS: &str = "workforce.overhead_per_hour_cents";
+/// Gross margin target, basis points; work under it is flagged.
+pub const WORKFORCE_TARGET_MARGIN_BPS: &str = "workforce.target_margin_bps";
+/// Mileage rate in mills ($0.001) per mile — the IRS standard rate.
+pub const WORKFORCE_MILEAGE_RATE_MILLS: &str = "workforce.mileage_rate_mills";
+/// Markup on parts and billable expenses charged to owners, basis points.
+pub const WORKFORCE_MAINTENANCE_MARKUP_BPS: &str = "workforce.maintenance_markup_bps";
+/// Hours after which a clock-in still running is closed as a missed punch.
+pub const WORKFORCE_MISSED_PUNCH_HOURS: &str = "workforce.missed_punch_hours";
+/// Record where the phone is at clock-in / clock-out (never in between).
+pub const WORKFORCE_CLOCK_LOCATION: &str = "workforce.clock_location";
+/// The Gusto company payroll hours are pushed to.
+pub const PAYROLL_GUSTO_COMPANY_UUID: &str = "payroll.gusto_company_uuid";
+/// How far from the property counts as "away", in metres.
+pub const WORKFORCE_CLOCK_RADIUS_M: &str = "workforce.clock_location_radius_m";
+
 /// The value type of a setting (drives validation + the UI control).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingKind {
@@ -421,6 +445,108 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Helpdesk",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: WORKFORCE_TIMEZONE,
+        label: "Time zone",
+        description: "The workday an hour belongs to (and so daily overtime) is \
+                      decided in this time zone, e.g. America/Los_Angeles.",
+        group: "Team & payroll",
+        kind: SettingKind::Text,
+        default: || json!("America/Los_Angeles"),
+    },
+    SettingDef {
+        key: WORKFORCE_OVERTIME_RULE,
+        label: "Overtime rule",
+        description: "\"weekly\": 1.5× over 40 hours in a Monday–Sunday week. \
+                      \"california\": also 1.5× over 8 and 2× over 12 hours in a day, \
+                      plus the seventh-consecutive-day rule (Labor Code §510).",
+        group: "Team & payroll",
+        kind: SettingKind::Text,
+        default: || json!("weekly"),
+    },
+    SettingDef {
+        key: WORKFORCE_LABOR_BURDEN_BPS,
+        label: "Labor burden (basis points)",
+        description: "Added to employees' pay in work-order costs: employer payroll \
+                      taxes, workers' comp, benefits. 1500 = 15%. Not applied to 1099 \
+                      contractors.",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: WORKFORCE_OVERHEAD_PER_HOUR_CENTS,
+        label: "Overhead per labor hour (cents)",
+        description: "Office, insurance, trucks and software spread over labor hours, \
+                      for a net figure. 0 = gross only.",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: WORKFORCE_TARGET_MARGIN_BPS,
+        label: "Target margin (basis points)",
+        description: "In-house work whose gross margin falls under this is flagged, \
+                      with the bill rate that would reach it. 5000 = 50%.",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(5000),
+    },
+    SettingDef {
+        key: WORKFORCE_MILEAGE_RATE_MILLS,
+        label: "Mileage rate (tenths of a cent per mile)",
+        description: "Prices mileage trips and own-vehicle reimbursements — the IRS \
+                      standard rate. 700 = $0.70 a mile.",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(700),
+    },
+    SettingDef {
+        key: WORKFORCE_MAINTENANCE_MARKUP_BPS,
+        label: "Markup on parts & expenses billed to owners (basis points)",
+        description: "Added to parts and billable expenses when in-house work is \
+                      billed to the owner. 1000 = 10%. Labor bills at each person's \
+                      bill rate.",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(0),
+    },
+    SettingDef {
+        key: WORKFORCE_MISSED_PUNCH_HOURS,
+        label: "Missed punch after (hours)",
+        description: "A clock-in still running this long is closed at the best guess \
+                      and held for the office to confirm before payroll (4–24).",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(12),
+    },
+    SettingDef {
+        key: WORKFORCE_CLOCK_LOCATION,
+        label: "Record clock location",
+        description: "Note where the phone is when someone clocks in or out — only \
+                      then, never in between. Nothing is blocked; far-away punches \
+                      are flagged.",
+        group: "Team & payroll",
+        kind: SettingKind::Bool,
+        default: || json!(false),
+    },
+    SettingDef {
+        key: WORKFORCE_CLOCK_RADIUS_M,
+        label: "Clock location radius (metres)",
+        description: "How far from the property counts as away (50–5000).",
+        group: "Team & payroll",
+        kind: SettingKind::Int,
+        default: || json!(400),
+    },
+    SettingDef {
+        key: PAYROLL_GUSTO_COMPANY_UUID,
+        label: "Gusto company ID",
+        description: "Where approved hours are pushed for payroll. The access token \
+                      goes in Integrations → credentials as gusto.access_token.",
+        group: "Team & payroll",
+        kind: SettingKind::Text,
+        default: || json!(""),
     },
 ];
 

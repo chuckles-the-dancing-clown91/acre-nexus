@@ -15,15 +15,18 @@ pub mod api_tokens;
 pub mod applications;
 pub mod assignments;
 pub mod auth;
+pub mod backoffice;
 pub mod banking;
 pub mod billing;
 pub mod cap_table;
+pub mod crm;
 pub mod deals;
 pub mod documents;
 pub mod domains;
 pub mod entities;
 pub mod esign;
 pub mod fees;
+pub mod geo;
 pub mod hoa;
 pub mod iam;
 pub mod integrations;
@@ -39,6 +42,7 @@ pub mod modules;
 pub mod mortgages;
 pub mod notifications;
 pub mod onboarding;
+pub mod partner;
 pub mod payables;
 pub mod payments;
 pub mod payouts;
@@ -56,7 +60,9 @@ pub mod reports;
 pub mod search;
 pub mod settings;
 pub mod syndication;
+pub mod team;
 pub mod tenant_history;
+pub mod texts;
 pub mod theme;
 pub mod title;
 pub mod vehicles;
@@ -83,6 +89,10 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // auth
         auth::login::login,
         auth::refresh::refresh,
+        auth::password::forgot,
+        auth::password::link_info,
+        auth::password::set_password,
+        auth::password::change_password,
         auth::me::me,
         auth::logout::logout,
         auth::workspaces::workspaces,
@@ -146,6 +156,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // IAM — tenant member management (client admins)
         iam::list_members::list_members,
         iam::invite_member::invite_member,
+        iam::list_members::send_login_link,
         // Self-service profile (renter portal / any signed-in user)
         iam::self_profile::my_profile,
         iam::self_profile::update_my_profile,

@@ -125,6 +125,12 @@ pub async fn create_asset(
         serial_number: Set(clean(b.serial_number)),
         install_date: Set(install_date),
         warranty_expires: Set(warranty_expires),
+        location: Set(clean(b.location)),
+        purchased_on: Set(valid_date("purchased_on", &b.purchased_on)?),
+        purchase_price_cents: Set(b.purchase_price_cents.filter(|c| *c >= 0)),
+        expected_life_years: Set(b.expected_life_years.filter(|y| *y > 0)),
+        warranty_provider: Set(clean(b.warranty_provider)),
+        warranty_notes: Set(clean(b.warranty_notes)),
         notes: Set(clean(b.notes)),
         status: Set("active".into()),
         created_by: Set(Some(user.user_id)),
@@ -205,6 +211,24 @@ pub async fn update_asset(
             return Err(ApiError::BadRequest("status must be active|retired".into()));
         }
         am.status = Set(v);
+    }
+    if let Some(v) = b.location {
+        am.location = Set(clean(Some(v)));
+    }
+    if b.purchased_on.is_some() {
+        am.purchased_on = Set(valid_date("purchased_on", &b.purchased_on)?);
+    }
+    if let Some(v) = b.purchase_price_cents {
+        am.purchase_price_cents = Set(Some(v).filter(|c| *c >= 0));
+    }
+    if let Some(v) = b.expected_life_years {
+        am.expected_life_years = Set(Some(v).filter(|y| *y > 0));
+    }
+    if let Some(v) = b.warranty_provider {
+        am.warranty_provider = Set(clean(Some(v)));
+    }
+    if let Some(v) = b.warranty_notes {
+        am.warranty_notes = Set(clean(Some(v)));
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;

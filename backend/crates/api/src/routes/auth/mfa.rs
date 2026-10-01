@@ -15,7 +15,7 @@ use rocket::serde::json::Json;
 use rocket::{get, post, State};
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 
-const ISSUER: &str = "Acre Nexus";
+const ISSUER: &str = "Vantedge";
 
 fn now_secs() -> u64 {
     Utc::now().timestamp().max(0) as u64

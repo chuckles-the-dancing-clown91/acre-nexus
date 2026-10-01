@@ -1,5 +1,5 @@
 //! A **user** is a human login. Platform staff have `tenant_id = NULL` and
-//! `is_platform_staff = true` (they belong to "Acre HQ" and can see every tenant);
+//! `is_platform_staff = true` (they belong to "Vantedge HQ" and can see every tenant);
 //! client users belong to exactly one tenant.
 
 use sea_orm::entity::prelude::*;

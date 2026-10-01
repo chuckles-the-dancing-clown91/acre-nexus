@@ -26,6 +26,12 @@ pub struct Model {
     pub install_date: Option<String>,
     /// ISO date the manufacturer/extended warranty lapses.
     pub warranty_expires: Option<String>,
+    pub location: Option<String>,
+    pub purchased_on: Option<String>,
+    pub purchase_price_cents: Option<i64>,
+    pub expected_life_years: Option<i32>,
+    pub warranty_provider: Option<String>,
+    pub warranty_notes: Option<String>,
     pub notes: Option<String>,
     /// `active` | `retired`.
     pub status: String,

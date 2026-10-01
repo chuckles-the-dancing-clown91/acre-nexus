@@ -74,7 +74,7 @@ async fn build_view(
         .one(db)
         .await?
         .map(|t| t.company_name)
-        .unwrap_or_else(|| "Acre Nexus".into());
+        .unwrap_or_else(|| "Vantedge".into());
     // Voided envelopes hide the document text — the link is dead.
     let document_body = if envelope.status == "voided" {
         None

@@ -1,4 +1,4 @@
-//! **SaaS platform billing** (roadmap Phase 8) — Acre HQ billing its client
+//! **SaaS platform billing** (roadmap Phase 8) — Vantedge HQ billing its client
 //! workspaces for their subscription:
 //!
 //! * `platform_invoice` — one bill per tenant per billing month (plan base fee

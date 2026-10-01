@@ -21,6 +21,7 @@
 pub mod bank;
 pub mod client;
 pub mod dns;
+pub mod gusto;
 pub mod payments;
 pub mod screening;
 pub mod webhook;

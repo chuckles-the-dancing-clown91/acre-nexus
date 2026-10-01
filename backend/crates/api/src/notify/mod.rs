@@ -130,6 +130,69 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    // ---- The back office ----
+    DefaultTemplate {
+        key: "missed_punch",
+        subject: "You didn't clock out on {when}",
+        body: "Hi {recipient},\n\nYour time from {when} was still running, so it was closed \
+               at our best guess and held for the office. Open your hours and tell us when \
+               you really finished.\n\n— {company}",
+        sms: "{company}: you didn't clock out on {when} — tell us when you finished in your hours.",
+    },
+    DefaultTemplate {
+        key: "time_unapproved",
+        subject: "{count} time entries are waiting for approval",
+        body: "Hi {recipient},\n\n{count} time entries from before this week still need \
+               approving ({missed} missed punches among them): {people}. Approve them on the \
+               timesheets page so payroll and owner billing can use them.\n\n— {company}",
+        sms: "{count} time entries from before this week need approving ({missed} missed punches).",
+    },
+    DefaultTemplate {
+        key: "time_off_submitted",
+        subject: "Time off request from {employee}",
+        body: "Hi {recipient},\n\n{employee} asked for {kind} from {starts_on} to {ends_on}. \
+               Review it on the team schedule.\n\n— {company}",
+        sms: "{employee} asked for {kind} {starts_on}–{ends_on}.",
+    },
+    DefaultTemplate {
+        key: "time_off_reviewed",
+        subject: "Your time off was {decision}",
+        body: "Hi {recipient},\n\nYour {kind} from {starts_on} to {ends_on} was {decision}.\
+               {note}\n\n— {company}",
+        sms: "{company}: your {kind} {starts_on}–{ends_on} was {decision}.",
+    },
+    // ---- Two-way texts ----
+    DefaultTemplate {
+        key: "direct_text",
+        subject: "Message from {company}",
+        body: "{text}",
+        sms: "{text}",
+    },
+    DefaultTemplate {
+        key: "text_received",
+        subject: "New text from {sender}",
+        body: "Hi {recipient},\n\n{sender} texted: \"{preview}\"\n\nReply from the Texts inbox \
+               in the console.\n\n— {company}",
+        sms: "Text from {sender}: {preview}",
+    },
+    // ---- Password links (set your password / forgot password) ----
+    DefaultTemplate {
+        key: "account_invite",
+        subject: "{company} set up an account for you",
+        body: "Hi {name},\n\n{company} has set up an account for you. Choose your password \
+               here to sign in:\n\n{link}\n\nThe link works once and expires in 7 days.\n\n\
+               — {company}",
+        sms: "{company} set up an account for you. Choose your password: {link}",
+    },
+    DefaultTemplate {
+        key: "password_reset",
+        subject: "Reset your {company} password",
+        body: "Hi {name},\n\nSomeone asked to reset the password for this account. If it was \
+               you, choose a new one here:\n\n{link}\n\nThe link works once and expires in \
+               24 hours. If it wasn't you, ignore this email — your password hasn't changed.\
+               \n\n— {company}",
+        sms: "{company}: reset your password here (expires in 24 hours): {link}",
+    },
     DefaultTemplate {
         key: "test_notification",
         subject: "Test notification from {company}",
@@ -432,7 +495,7 @@ async fn tenant_context(db: &impl ConnectionTrait, tenant_id: Uuid) -> (String, 
     let company = theme
         .as_ref()
         .map(|t| t.company_name.clone())
-        .unwrap_or_else(|| "Acre Nexus".to_string());
+        .unwrap_or_else(|| "Vantedge".to_string());
     let overrides = theme
         .map(|t| t.notification_templates)
         .unwrap_or_else(|| json!({}));
@@ -586,6 +649,31 @@ pub async fn handle_job(
         },
     };
 
+    // STOP always wins: a number that texted STOP gets nothing until START.
+    let sms_message_id = job
+        .payload
+        .get("sms_message_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok());
+    if channel == "sms" && crate::texts::is_opted_out(db, job.tenant_id, &to).await {
+        if let Some(mid) = sms_message_id {
+            let _ = crate::texts::set_message_status(
+                db,
+                mid,
+                "blocked",
+                None,
+                Some("this number texted STOP".into()),
+            )
+            .await;
+        }
+        return JobOutcome::completed(json!({
+            "skipped": true,
+            "reason": "opted_out",
+            "channel": "sms",
+            "template": template,
+        }));
+    }
+
     // Idempotency: has this natural trigger already sent (or is it in flight on
     // another job)?
     let idem = idempotency_key(&job.payload, template, channel);
@@ -657,6 +745,49 @@ pub async fn handle_job(
             None => providers::run(&SimulatedEmail, &ctx, job, &req).await,
         },
     };
+
+    // File every text in its conversation so the office sees the whole thread.
+    if channel == "sms" {
+        let (status, provider_id, error) = match &outcome {
+            Ok(resp) => ("sent", Some(resp.provider_message_id.clone()), None),
+            Err(o) if o.status == "failed" => ("failed", None, o.error.clone()),
+            // A retry is still in flight — record it once it settles.
+            Err(_) => ("", None, None),
+        };
+        if !status.is_empty() {
+            let filed = match sms_message_id {
+                Some(mid) => crate::texts::set_message_status(db, mid, status, provider_id, error)
+                    .await
+                    .map(|_| ()),
+                None => {
+                    // Sign-in links never sit in the shared inbox.
+                    let body = if template == "account_invite" || template == "password_reset" {
+                        "(sign-in link sent — hidden)".to_string()
+                    } else {
+                        rendered.body.clone()
+                    };
+                    crate::texts::record_outbound(
+                        db,
+                        job.tenant_id,
+                        crate::texts::Outbound {
+                            to: &to,
+                            body: &body,
+                            status,
+                            provider_message_id: provider_id,
+                            template_key: Some(template.to_string()),
+                            sent_by_user_id: None,
+                            error,
+                        },
+                    )
+                    .await
+                    .map(|_| ())
+                }
+            };
+            if let Err(e) = filed {
+                tracing::warn!("couldn't file the text in its thread: {e}");
+            }
+        }
+    }
 
     match outcome {
         Ok(resp) => {

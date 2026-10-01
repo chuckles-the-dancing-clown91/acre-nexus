@@ -14,6 +14,8 @@ pub struct Model {
     pub tenant_id: Uuid,
     pub property_id: Uuid,
     pub unit_id: Option<Uuid>,
+    /// The appliance this routine work is about, when it's about one.
+    pub asset_id: Option<Uuid>,
     pub title: String,
     pub description: Option<String>,
     /// Ticket category the plan generates.

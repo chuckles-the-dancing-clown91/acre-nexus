@@ -44,6 +44,10 @@ impl PlatformModule for EnrichmentModule {
             property_intel::get_intel::get_intel,
             property_intel::enrich::enrich,
             property_intel::list_enrichment::list_enrichment,
+            // addresses + street photos (Vantedge phase 2C)
+            crate::routes::geo::suggest,
+            crate::routes::geo::status,
+            crate::routes::geo::fetch_photo,
         ]
     }
 
@@ -51,6 +55,12 @@ impl PlatformModule for EnrichmentModule {
         let db = ctx.db;
         let job = ctx.job;
 
+        if job.kind == crate::geo::SCAN_KIND {
+            return Some(crate::geo::handle_scan_job(db, job).await);
+        }
+        if job.kind == crate::geo::FETCH_KIND {
+            return Some(crate::geo::handle_fetch_job(db, job).await);
+        }
         // Orchestrator: fan out into one child job per requested source.
         if job.kind == enrichment::ORCHESTRATOR_KIND {
             return Some(orchestrate(db, job).await);

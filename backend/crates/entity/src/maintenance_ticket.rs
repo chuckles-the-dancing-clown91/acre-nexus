@@ -57,6 +57,11 @@ pub struct Model {
     /// re-stamped on priority change while the target is still open).
     pub sla_response_due_at: Option<DateTimeWithTimeZone>,
     pub sla_resolve_due_at: Option<DateTimeWithTimeZone>,
+    /// Sent to a vendor's own system (Alpha): who, their job id and status.
+    pub partner_counterparty_id: Option<Uuid>,
+    pub partner_job_id: Option<String>,
+    pub partner_status: Option<String>,
+    pub partner_synced_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

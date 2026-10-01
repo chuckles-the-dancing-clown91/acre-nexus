@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Acre — Property Management OS",
+  title: "Vantedge — See every angle. Stay a step ahead.",
   description:
     "Multi-tenant property-management platform: public listings, landlord console, and a token-based vendor API.",
 };

@@ -23,6 +23,16 @@ pub const AUTH_MFA_ENABLE: &str = "auth.mfa_enable";
 pub const AUTH_MFA_DISABLE: &str = "auth.mfa_disable";
 /// A login step-up (TOTP second factor) was completed.
 pub const AUTH_MFA_VERIFY: &str = "auth.mfa_verify";
+/// "Forgot your password?" — a reset (or fresh invite) link was requested.
+pub const AUTH_PASSWORD_RESET_REQUEST: &str = "auth.password_reset_request";
+/// A password was chosen from a reset link.
+pub const AUTH_PASSWORD_RESET: &str = "auth.password_reset";
+/// An invited person chose their password (the account became active).
+pub const AUTH_INVITE_ACCEPT: &str = "auth.invite_accept";
+/// A signed-in user changed their password.
+pub const AUTH_PASSWORD_CHANGE: &str = "auth.password_change";
+/// The office sent a member a fresh login link.
+pub const AUTH_LOGIN_LINK_SEND: &str = "auth.login_link_send";
 
 // ---- Properties / portfolio ----
 pub const PROPERTY_CREATE: &str = "property.create";
@@ -33,6 +43,8 @@ pub const PROPERTY_ENRICH: &str = "property.enrich";
 /// that *enqueued* the job — this is the actual data mutation.
 pub const PROPERTY_ENRICHMENT_RUN: &str = "property.enrichment_run";
 pub const PROPERTY_ONBOARD: &str = "property.onboard";
+/// A street photo was fetched (or a placeholder drawn) for a property.
+pub const PROPERTY_PHOTO: &str = "property.photo";
 pub const LLC_CREATE: &str = "llc.create";
 
 // ---- Investing: entities, financing, workflow ----
@@ -170,6 +182,48 @@ pub const DOCUMENT_DOWNLOAD: &str = "document.download";
 pub const DOCUMENT_UPDATE: &str = "document.update";
 pub const DOCUMENT_DELETE: &str = "document.delete";
 pub const NOTIFICATION_SEND: &str = "notification.send";
+
+// ---- Two-way texts ----
+/// A text arrived from a resident (or anyone) at the workspace's number.
+pub const SMS_RECEIVE: &str = "sms.receive";
+/// A staff member sent a text from the console.
+pub const SMS_SEND: &str = "sms.send";
+/// A number texted STOP — no more texts go to it.
+pub const SMS_OPT_OUT: &str = "sms.opt_out";
+/// A stopped number texted START — texts may go to it again.
+pub const SMS_OPT_IN: &str = "sms.opt_in";
+// ---- The back office ----
+pub const TIME_CLOCK_IN: &str = "time.clock_in";
+pub const TIME_CLOCK_OUT: &str = "time.clock_out";
+pub const TIME_ENTRY_CREATE: &str = "time.entry_create";
+pub const TIME_ENTRY_UPDATE: &str = "time.entry_update";
+pub const TIME_ENTRY_DELETE: &str = "time.entry_delete";
+pub const TIME_APPROVE: &str = "time.approve";
+/// A clock-in left running was closed automatically and held for review.
+pub const TIME_MISSED_PUNCH: &str = "time.missed_punch";
+/// The office settled a missed punch (confirmed or corrected the finish).
+pub const TIME_RESOLVE: &str = "time.resolve";
+pub const EMPLOYEE_UPSERT: &str = "employee.upsert";
+pub const SHIFT_CREATE: &str = "shift.create";
+pub const SHIFT_UPDATE: &str = "shift.update";
+pub const SHIFT_DELETE: &str = "shift.delete";
+pub const TIME_OFF_REQUEST: &str = "time_off.request";
+pub const TIME_OFF_REVIEW: &str = "time_off.review";
+pub const TIME_OFF_CANCEL: &str = "time_off.cancel";
+pub const EXPENSE_CREATE: &str = "expense.create";
+pub const EXPENSE_UPDATE: &str = "expense.update";
+pub const EXPENSE_DELETE: &str = "expense.delete";
+pub const EXPENSE_REIMBURSE: &str = "expense.reimburse";
+pub const CRM_NOTE_ADD: &str = "crm.note_add";
+/// Approved hours pushed into a Gusto payroll.
+pub const PAYROLL_GUSTO_PUSH: &str = "payroll.gusto_push";
+pub const OWNER_LEAD_CREATE: &str = "owner_lead.create";
+/// A won owner lead became an owner.
+pub const OWNER_LEAD_CONVERT: &str = "owner_lead.convert";
+/// In-house work (hours, parts, expenses) billed to the owner as an AP bill.
+pub const OWNER_BILL_CREATE: &str = "owner_bill.create";
+/// A thread was marked done / reopened.
+pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 /// Staff triggered a test delivery (provider test or own-device push test).
 pub const NOTIFICATION_TEST: &str = "notification.test";
 /// Inbox entries marked read (self-service; count in metadata).
@@ -324,6 +378,13 @@ pub const TICKET_LINE_REMOVE: &str = "ticket_line.remove";
 pub const INVENTORY_CREATE: &str = "inventory_item.create";
 pub const INVENTORY_UPDATE: &str = "inventory_item.update";
 pub const TICKET_REVIEW: &str = "ticket.review";
+pub const TICKET_FINDING: &str = "ticket.finding";
+pub const TICKET_PARTS_LIST: &str = "ticket.parts_list";
+pub const PART_DECIDE: &str = "ticket_part.decide";
+pub const STOCK_RECEIVE: &str = "inventory.receive";
+pub const PARTNER_LINK: &str = "partner.link";
+pub const PARTNER_UNLINK: &str = "partner.unlink";
+pub const TICKET_DISPATCH: &str = "ticket.dispatch";
 
 // ---- SaaS platform billing (Phase 8) ----
 pub const PLATFORM_BILLING_RUN: &str = "platform_billing.run";

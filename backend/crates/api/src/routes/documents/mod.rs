@@ -26,12 +26,16 @@ pub const OWNER_TYPES: &[&str] = &[
     "rehab_project",
     "rehab_draw",
     "tenant",
+    "expense",
 ];
 
 /// Filing buckets for the documents tab. Free-form is tolerated (the column is
 /// nullable text), but the upload/patch paths normalise to this catalog.
 pub const CATEGORIES: &[&str] = &[
     "insurance",
+    "warranty",
+    "manual",
+    "receipt",
     "loan",
     "title",
     "tax",

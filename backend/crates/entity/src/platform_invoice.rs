@@ -1,4 +1,4 @@
-//! A **platform (SaaS) invoice** — Acre HQ billing a client workspace for its
+//! A **platform (SaaS) invoice** — Vantedge HQ billing a client workspace for its
 //! subscription (roadmap Phase 8). Distinct from the resident-facing rent
 //! billing in [`crate::lease_payment`]: this is the *platform's* revenue, one
 //! invoice per tenant per billing month, priced from the tenant's plan plus a

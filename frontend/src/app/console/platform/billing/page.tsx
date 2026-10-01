@@ -1,6 +1,6 @@
 "use client";
 
-// SaaS billing — platform plane (roadmap Phase 8). Acre HQ's billing console:
+// SaaS billing — platform plane (roadmap Phase 8). Vantedge HQ's billing console:
 // MRR + per-workspace usage, plan management, an on-demand billing run, and the
 // cross-tenant invoice ledger with settle / void actions. Staff-only.
 

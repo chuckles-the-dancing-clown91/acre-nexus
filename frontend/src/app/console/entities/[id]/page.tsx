@@ -11,6 +11,7 @@ import type { CounterpartyDetail } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { PartnerLinkCard } from "@/components/PartnerLinkCard";
 
 /** Turn a snake/lower key into a human label, e.g. `property_manager` → `Property manager`. */
 function humanize(key: string): string {
@@ -107,6 +108,12 @@ export default function EntityDetailPage() {
           <Row k="Notes" v={detail.notes ?? "—"} />
         </dl>
       </Card>
+
+      {(detail.kind === "contractor" ||
+        detail.kind === "property_manager" ||
+        detail.partner_kind) && (
+        <PartnerLinkCard counterpartyId={detail.id} manage={canManage} />
+      )}
 
       <Card className="p-5">
         <h2 className="mb-4 font-display text-lg font-bold">Notes log</h2>

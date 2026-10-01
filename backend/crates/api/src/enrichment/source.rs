@@ -26,6 +26,8 @@ pub const ORCHESTRATOR_KIND: &str = "enrich_property";
 /// module manifest.
 pub const JOB_KINDS: &[&str] = &[
     ORCHESTRATOR_KIND,
+    crate::geo::SCAN_KIND,
+    crate::geo::FETCH_KIND,
     "enrich_geocode",
     "enrich_parcel",
     "enrich_tax",

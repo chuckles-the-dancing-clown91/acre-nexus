@@ -1,7 +1,7 @@
 //! A **platform staff** row places a [`crate::user`] on the **platform plane** —
 //! Acre employees who administer the platform itself. Platform staff are *never*
 //! tenant members; they enter a tenant only via an audited, time-boxed
-//! [`crate::impersonation_session`]. Not tenant-scoped (belongs to "Acre HQ").
+//! [`crate::impersonation_session`]. Not tenant-scoped (belongs to "Vantedge HQ").
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};

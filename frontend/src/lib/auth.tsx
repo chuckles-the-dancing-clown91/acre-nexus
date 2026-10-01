@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Switch the active workspace (Acre HQ when `tenantId` is null). Mints a fresh
+   * Switch the active workspace (Vantedge HQ when `tenantId` is null). Mints a fresh
    * access token in place (refresh token unchanged), updates the user, and clears
    * cached query data so every page refetches for the new workspace.
    */

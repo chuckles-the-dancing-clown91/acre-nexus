@@ -153,7 +153,7 @@ pub fn invoice_table(inv: &InvoiceDto) -> crate::routes::reports::ReportTable {
         })
         .collect();
     crate::routes::reports::ReportTable {
-        title: format!("Acre Nexus invoice — {}", period_label(&inv.period)),
+        title: format!("Vantedge invoice — {}", period_label(&inv.period)),
         subtitle: Some(format!(
             "{} plan · {} units · {} · due {}",
             saas::plan_for(&inv.plan).name,

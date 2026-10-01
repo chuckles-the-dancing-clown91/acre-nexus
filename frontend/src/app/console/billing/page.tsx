@@ -3,7 +3,7 @@
 // SaaS billing — workspace self-serve (roadmap Phase 8). A workspace views its
 // subscription (plan, live unit meter, and the charge estimated for the period
 // in progress), compares plans, and downloads its platform invoices. Read-only:
-// plan changes are handled by Acre HQ. Gated by `billing:read`.
+// plan changes are handled by Vantedge HQ. Gated by `billing:read`.
 
 import { useEffect, useState } from "react";
 import { api, type BillingSubscription, type PlatformInvoice } from "@/lib/api";
@@ -81,7 +81,7 @@ export default function BillingPage() {
           Billing &amp; subscription
         </h1>
         <p className="text-ink-3">
-          Your Acre Nexus plan, usage, and platform invoices.
+          Your Vantedge plan, usage, and platform invoices.
         </p>
       </div>
 
@@ -175,7 +175,7 @@ export default function BillingPage() {
               ))}
             </div>
             <p className="mt-2 text-xs text-ink-3">
-              To change plans, contact your Acre account manager.
+              To change plans, contact your Vantedge account manager.
             </p>
           </div>
 

@@ -568,7 +568,9 @@ export function useInviteMember() {
     mutationFn: (body) => iam.inviteMember(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.members });
-      toast.success("Member invited");
+      toast.success(
+        "Member invited — we sent them a link to set their password"
+      );
     },
     onError: notifyError("Couldn't invite member"),
   });

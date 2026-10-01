@@ -8,6 +8,7 @@ import { api, DEFAULT_TENANT, isMfaChallenge } from "@/lib/api";
 import type { MfaChallenge } from "@/lib/api";
 import { Button, Card } from "@/components/ui";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Brand } from "@/components/Brand";
 
 const DEMO_ACCOUNTS = [
   { label: "Avery Stone — Platform staff", email: "avery@acrehq.com" },
@@ -101,15 +102,7 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
       <Card className="w-full max-w-md p-8">
-        <div className="mb-6 flex items-center gap-2.5">
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-[9px] font-display text-lg font-extrabold text-on-accent"
-            style={{ background: "var(--accent)" }}
-          >
-            A
-          </span>
-          <span className="font-display text-xl font-bold">Acre Console</span>
-        </div>
+        <Brand label="Console" slogan className="mb-6" />
 
         {challenge ? (
           /* ---- MFA step-up ---- */
@@ -236,6 +229,12 @@ export default function LoginPage() {
               <Button type="submit" disabled={busy} className="w-full">
                 {busy ? "Signing in…" : "Sign in"}
               </Button>
+              <Link
+                href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+                className="block text-center text-sm font-semibold text-ink-3 hover:text-ink"
+              >
+                Forgot your password?
+              </Link>
             </form>
 
             <div className="mt-6 border-t border-line pt-4">

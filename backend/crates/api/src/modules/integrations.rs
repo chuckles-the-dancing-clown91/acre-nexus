@@ -12,7 +12,7 @@
 
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::{documents, integrations, notifications};
+use crate::routes::{documents, integrations, notifications, texts};
 use crate::storage::ObjectStore;
 use entity::prelude::Document;
 use rocket::Route;
@@ -84,6 +84,9 @@ impl PlatformModule for IntegrationsModule {
             notifications::push::test_push,
             // inbound webhooks (signature-verified, queue-backed)
             integrations::webhook::receive,
+            // two-way texts: Twilio inbound + delivery status (signature-verified)
+            texts::twilio::inbound,
+            texts::twilio::status,
             // document service
             documents::upload::upload,
             documents::list::list,
@@ -120,6 +123,9 @@ impl PlatformModule for IntegrationsModule {
                     return Some(outcome);
                 }
                 if let Some(outcome) = crate::mail::handle_webhook_event(ctx.db, ctx.job).await {
+                    return Some(outcome);
+                }
+                if let Some(outcome) = crate::partner::handle_webhook_event(ctx.db, ctx.job).await {
                     return Some(outcome);
                 }
                 let provider = ctx

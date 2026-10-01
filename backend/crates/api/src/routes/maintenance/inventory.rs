@@ -140,6 +140,9 @@ pub async fn create_inventory(
         property_id: Set(b.property_id),
         name: Set(name),
         sku: Set(clean(b.sku)),
+        barcode: Set(clean(b.barcode)),
+        unit: Set(clean(b.unit).unwrap_or_else(|| "ea".into())),
+        vendor: Set(clean(b.vendor)),
         category: Set(category),
         quantity: Set(quantity),
         unit_cost_cents: Set(b.unit_cost_cents.filter(|c| *c >= 0)),
@@ -247,6 +250,15 @@ pub async fn update_inventory(
             ));
         }
         am.status = Set(v);
+    }
+    if let Some(v) = b.barcode {
+        am.barcode = Set(clean(Some(v)));
+    }
+    if let Some(v) = clean(b.unit) {
+        am.unit = Set(v);
+    }
+    if let Some(v) = b.vendor {
+        am.vendor = Set(clean(Some(v)));
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;

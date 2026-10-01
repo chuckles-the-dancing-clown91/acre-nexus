@@ -39,6 +39,9 @@ pub const EVENTS: &[(&str, Permission)] = &[
     ("application.created", Permission::ApplicationRead),
     ("payment.recorded", Permission::PaymentRead),
     ("maintenance_ticket.created", Permission::MaintenanceRead),
+    ("maintenance_ticket.assigned", Permission::MaintenanceRead),
+    ("maintenance_ticket.updated", Permission::MaintenanceRead),
+    ("maintenance_ticket.resolved", Permission::MaintenanceRead),
 ];
 
 /// The scope required to receive `event_type`, if it exists.

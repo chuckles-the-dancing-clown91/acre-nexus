@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * shadcn/ui Button. Lives in its own file (the legacy primitive Button still
  * lives in `components/ui/index.tsx`); import this one explicitly via
  * `import { Button } from "@/components/ui/button"`. Colours come from the
- * shadcn token bridge, so it inherits the Acre brand.
+ * shadcn token bridge, so it inherits the Vantedge brand.
  */
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",

@@ -220,8 +220,8 @@ mod tests {
 
     #[test]
     fn otpauth_uri_shape() {
-        let uri = otpauth_uri("Acre Nexus", "jordan@northwind.com", "ABCDEF");
-        assert!(uri.starts_with("otpauth://totp/Acre%20Nexus:jordan%40northwind.com?"));
+        let uri = otpauth_uri("Vantedge", "jordan@northwind.com", "ABCDEF");
+        assert!(uri.starts_with("otpauth://totp/Vantedge:jordan%40northwind.com?"));
         assert!(uri.contains("secret=ABCDEF"));
         assert!(uri.contains("algorithm=SHA1"));
         assert!(uri.contains("digits=6"));

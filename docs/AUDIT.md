@@ -54,7 +54,8 @@ below):
 
 | Area | Actions |
 |------|---------|
-| Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.switch_workspace` |
+| Auth | `auth.login`, `auth.logout`, `auth.refresh`, `auth.switch_workspace`, `auth.password_reset_request`, `auth.password_reset`, `auth.invite_accept`, `auth.password_change`, `auth.login_link_send` |
+| Texts | `sms.receive`, `sms.send`, `sms.opt_out`, `sms.opt_in`, `sms.thread_update` |
 | Properties | `property.create`, `property.update`, `property.onboard`, `property.enrich`, `property.enrichment_run`, `llc.create` |
 | Leasing | `application.submit` (public), `application.screened` (pipeline), `application.advance`, `application.convert`, `application.reuse`, `listing.create`, `listing.update`, `listing.sync` (pipeline), `lease.activate` (pipeline) |
 | E-signature | `esign.send`, `esign.view`, `esign.sign`, `esign.decline`, `esign.remind`, `esign.complete`, `esign.void` (staff **and** the in-person-signing auto-void) |

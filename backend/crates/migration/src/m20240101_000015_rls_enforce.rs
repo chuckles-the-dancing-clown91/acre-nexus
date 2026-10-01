@@ -19,7 +19,7 @@
 //!
 //! Contract with the app: [`api::db::RequestDb`] runs each request in a
 //! transaction and sets `app.tenant_id` via `set_config(_, _, true)` (`SET
-//! LOCAL`). When it is unset (platform staff at Acre HQ, login, background jobs)
+//! LOCAL`). When it is unset (platform staff at Vantedge HQ, login, background jobs)
 //! the policy's `IS NULL` branch allows all rows — the intentional cross-tenant
 //! plane.
 

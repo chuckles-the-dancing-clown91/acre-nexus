@@ -26,7 +26,7 @@ impl PlatformModule for MaintenanceModule {
                           assignable to members or contractors, with a comment timeline, \
                           SLA tracking, contractor quotes, and preventive plans.",
             permissions: &[Permission::MaintenanceRead, Permission::MaintenanceManage],
-            job_kinds: &[crate::helpdesk::SCAN_KIND],
+            job_kinds: &[crate::helpdesk::SCAN_KIND, crate::partner::DISPATCH_KIND],
             default_enabled: true,
             preview: false,
         }
@@ -65,6 +65,37 @@ impl PlatformModule for MaintenanceModule {
             maintenance::plans::list_plans,
             maintenance::plans::create_plan,
             maintenance::plans::update_plan,
+            // phase 2C: appliances, findings, the parts loop and close-out
+            maintenance::parts::asset_parts,
+            maintenance::parts::asset_history,
+            maintenance::parts::put_asset_part,
+            maintenance::parts::delete_asset_part,
+            maintenance::parts::asset_work_order,
+            maintenance::parts::add_finding,
+            maintenance::parts::list_findings,
+            maintenance::parts::list_parts,
+            maintenance::parts::create_part,
+            maintenance::parts::update_part,
+            maintenance::parts::delete_part,
+            maintenance::parts::generate_list,
+            maintenance::parts::parts_list_pdf,
+            maintenance::parts::closeout,
+            maintenance::parts::decide,
+            maintenance::parts::receive,
+            maintenance::parts::use_part,
+            // stock: scan-in, receiving, counts, the ledger, reorder
+            maintenance::stock::lookup,
+            maintenance::stock::receive,
+            maintenance::stock::count,
+            maintenance::stock::movements,
+            maintenance::stock::reorder,
+            // Alpha ↔ Vantedge: link a vendor, send them work
+            crate::routes::partner::get_link,
+            crate::routes::partner::link,
+            crate::routes::partner::unlink,
+            crate::routes::partner::rotate_secret,
+            crate::routes::partner::linked_vendors,
+            crate::routes::partner::dispatch,
         ]
     }
 
@@ -72,6 +103,9 @@ impl PlatformModule for MaintenanceModule {
         match ctx.job.kind.as_str() {
             k if k == crate::helpdesk::SCAN_KIND => {
                 Some(crate::helpdesk::handle_scan_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::partner::DISPATCH_KIND => {
+                Some(crate::partner::handle_dispatch_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }

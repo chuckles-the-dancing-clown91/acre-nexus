@@ -4,7 +4,7 @@
 
 use super::{ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
-use crate::routes::entities;
+use crate::routes::{crm, entities};
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
 use rocket_okapi::openapi_get_routes_spec;
@@ -27,6 +27,21 @@ impl PlatformModule for EntitiesModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
+            // CRM: owners as clients, the timeline, follow-ups, owner leads
+            crm::list_notes,
+            crm::add_note,
+            crm::update_note,
+            crm::delete_note,
+            crm::follow_ups,
+            crm::owners,
+            crm::create_owner,
+            crm::update_owner,
+            crm::list_leads,
+            crm::create_lead,
+            crm::update_lead,
+            crm::convert_lead,
+            crm::pipeline,
+            crm::proposal,
             entities::list::list,
             entities::create::create,
             entities::get::get,

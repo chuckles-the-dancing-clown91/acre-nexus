@@ -7,7 +7,10 @@ use crate::auth::hash_password;
 use crate::rbac::{PERMISSION_CATALOG, PROFILE_TYPES, SYSTEM_ROLES};
 use chrono::{Datelike, Utc};
 use entity::prelude::*;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    Set,
+};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -68,7 +71,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // ---- users, profiles, memberships ----
     let pw = hash_password(DEMO_PASSWORD)?;
 
-    // Acre HQ (platform staff).
+    // Vantedge HQ (platform staff).
     let avery = seed_user(db, None, "avery@acrehq.com", "Avery Stone", &pw, true).await?;
     seed_membership(
         db,
@@ -183,7 +186,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .await?;
 
     // ---- themes ----
-    seed_theme(db, northwind, "Northwind Property Group", "#F5451F").await?;
+    seed_theme(db, northwind, "Northwind Property Group", "#0E7C86").await?;
     seed_theme(db, cascade, "Cascade Living LLC", "#1C7C53").await?;
 
     // ---- white-label domains (subdomain + a verified custom domain for Northwind) ----
@@ -646,6 +649,9 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     )
     .await?;
 
+    // ---- the back office: a technician with a week of hours, receipts, a lead ----
+    seed_back_office(db, northwind, maple_court, &role_ids, &pw).await?;
+
     // ---- demo documents on Maple Court (insurance / loan / title / lease) ----
     // The recorded deed and the original signed lease need wet-ink originals, so
     // they carry a physical storage location.
@@ -791,6 +797,12 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
             serial_number: Set(None),
             install_date: Set(Some("2024-05-01".into())),
             warranty_expires: Set(warranty.map(str::to_string)),
+            location: Set(None),
+            purchased_on: Set(None),
+            purchase_price_cents: Set(None),
+            expected_life_years: Set(None),
+            warranty_provider: Set(None),
+            warranty_notes: Set(None),
             notes: Set(None),
             status: Set("active".into()),
             created_by: Set(Some(jordan)),
@@ -838,6 +850,9 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
             property_id: Set(None),
             name: Set(name.into()),
             sku: Set(sku.map(str::to_string)),
+            barcode: Set(None),
+            unit: Set("ea".into()),
+            vendor: Set(None),
             category: Set(category.into()),
             quantity: Set(qty),
             unit_cost_cents: Set(unit_cost),
@@ -890,6 +905,10 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         resolved_at: Set(None),
         sla_response_due_at: Set(Some((now + chrono::Duration::hours(24)).into())),
         sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(168)).into())),
+        partner_counterparty_id: Set(None),
+        partner_job_id: Set(None),
+        partner_status: Set(None),
+        partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -1664,6 +1683,11 @@ async fn seed_rehab(
         website: Set(None),
         address: Set(None),
         notes: Set(None),
+        partner_kind: Set(None),
+        partner_base_url: Set(None),
+        partner_linked_at: Set(None),
+        partner_status: Set(None),
+        partner_error: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -2092,6 +2116,10 @@ async fn seed_ticket(
         }),
         sla_response_due_at: Set(Some((now + chrono::Duration::hours(8)).into())),
         sla_resolve_due_at: Set(Some((now + chrono::Duration::hours(72)).into())),
+        partner_counterparty_id: Set(None),
+        partner_job_id: Set(None),
+        partner_status: Set(None),
+        partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -2183,6 +2211,11 @@ async fn seed_counterparty(
         website: Set(None),
         address: Set(None),
         notes: Set(None),
+        partner_kind: Set(None),
+        partner_base_url: Set(None),
+        partner_linked_at: Set(None),
+        partner_status: Set(None),
+        partner_error: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -2310,6 +2343,41 @@ async fn ensure_catalogs(db: &DatabaseConnection) -> anyhow::Result<()> {
             }
             .insert(db)
             .await?;
+        }
+    }
+    // Built-in roles gain any permission the code now grants them (new
+    // features' permissions reach existing workspaces). Only ever adds.
+    for sr in SYSTEM_ROLES {
+        let Some(role) = entity::role::Entity::find()
+            .filter(entity::role::Column::Key.eq(sr.key))
+            .filter(entity::role::Column::IsSystem.eq(true))
+            .one(db)
+            .await?
+        else {
+            continue;
+        };
+        let have: std::collections::HashSet<String> = entity::role_permission::Entity::find()
+            .filter(entity::role_permission::Column::RoleId.eq(role.id))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|rp| rp.permission)
+            .collect();
+        for p in sr.permissions {
+            if !have.contains(p.as_str()) {
+                entity::role_permission::ActiveModel {
+                    id: sea_orm::ActiveValue::NotSet,
+                    role_id: Set(role.id),
+                    permission: Set(p.as_str().into()),
+                }
+                .insert(db)
+                .await?;
+                tracing::info!(
+                    role = sr.key,
+                    permission = p.as_str(),
+                    "seed: granted new permission"
+                );
+            }
         }
     }
     for t in PROFILE_TYPES {
@@ -2687,6 +2755,11 @@ async fn seed_property(
         purchase_price_cents: Set(None),
         acquired_on: Set(None),
         image_url: Set(None),
+        state: Set(String::new()),
+        postal_code: Set(String::new()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         created_at: Set(Utc::now().into()),
     }
     .insert(db)
@@ -2703,6 +2776,11 @@ async fn seed_property_image(
     entity::property::ActiveModel {
         id: Set(property_id),
         image_url: Set(Some(url.into())),
+        state: Set(String::new()),
+        postal_code: Set(String::new()),
+        photo_status: Set("none".into()),
+        photo_attempted_at: Set(None),
+        photo_error: Set(None),
         ..Default::default()
     }
     .update(db)
@@ -2805,6 +2883,264 @@ async fn seed_listing(
         description: Set(description.into()),
         is_public: Set(true),
         created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+/// Demo back office for Northwind: Rosa (a maintenance technician) with a
+/// profile, last week's approved hours on the HVAC work order, an open day this
+/// week, a billable receipt and a trip; plus an owner lead with a follow-up.
+async fn seed_back_office(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    pw: &str,
+) -> anyhow::Result<()> {
+    use chrono::{Duration, TimeZone};
+    let rosa = seed_user(
+        db,
+        Some(tenant_id),
+        "rosa@northwind.com",
+        "Rosa Diaz",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        rosa,
+        "tenant",
+        Some(tenant_id),
+        "maintenance",
+        Some("Maintenance tech"),
+    )
+    .await?;
+    let now = Utc::now();
+    entity::employee_profile::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        user_id: Set(rosa),
+        title: Set(Some("Maintenance tech".into())),
+        employment_type: Set("full_time".into()),
+        pay_rate_cents: Set(2_800),
+        bill_rate_cents: Set(7_500),
+        hire_date: Set(Some("2025-03-03".into())),
+        end_date: Set(None),
+        weekly_hours_target: Set(40),
+        default_vehicle: Set("personal".into()),
+        mileage_reimbursed: Set(true),
+        emergency_contact_name: Set(Some("Luis Diaz".into())),
+        emergency_contact_phone: Set(Some("(760) 555-0188".into())),
+        calendar_color: Set("#0e7c86".into()),
+        notes: Set(Some("EPA 608 certified (HVAC).".into())),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    let hvac = MaintenanceTicket::find()
+        .filter(entity::maintenance_ticket::Column::TenantId.eq(tenant_id))
+        .filter(entity::maintenance_ticket::Column::Title.eq("Annual HVAC service"))
+        .one(db)
+        .await?
+        .map(|t| t.id);
+    let tz = chrono_tz::America::Los_Angeles;
+    let today = now.with_timezone(&tz).date_naive();
+    let monday = today - Duration::days(today.weekday().num_days_from_monday() as i64);
+    let at = |day: chrono::NaiveDate, h: u32, m: u32| {
+        tz.from_local_datetime(&day.and_hms_opt(h, m, 0).expect("time"))
+            .earliest()
+            .expect("local time")
+            .with_timezone(&Utc)
+    };
+    // Last week: three days on the HVAC work order (one of them long), approved.
+    let last = monday - Duration::days(7);
+    for (offset, start, end) in [
+        (0, (7, 30), (16, 0)),
+        (1, (7, 0), (17, 30)),
+        (2, (8, 0), (12, 0)),
+    ] {
+        let day = last + Duration::days(offset);
+        let (s, e) = (at(day, start.0, start.1), at(day, end.0, end.1));
+        entity::time_entry::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            user_id: Set(rosa),
+            kind: Set(if hvac.is_some() {
+                "work_order"
+            } else {
+                "property"
+            }
+            .into()),
+            maintenance_ticket_id: Set(hvac),
+            rehab_project_id: Set(None),
+            property_id: Set(Some(property_id)),
+            started_at: Set(s.into()),
+            ended_at: Set(Some(e.into())),
+            break_minutes: Set(30),
+            notes: Set(None),
+            pay_rate_cents: Set(Some(2_800)),
+            bill_rate_cents: Set(Some(7_500)),
+            approved_by: Set(None),
+            approved_at: Set(Some(e.into())),
+            missed_punch: Set(false),
+            missed_punch_reason: Set(None),
+            claimed_end: Set(None),
+            punch_note: Set(None),
+            resolved_by: Set(None),
+            resolved_at: Set(None),
+            in_lat: Set(None),
+            in_lng: Set(None),
+            in_distance_m: Set(None),
+            out_lat: Set(None),
+            out_lng: Set(None),
+            out_distance_m: Set(None),
+            billed_bill_id: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+    // This week so far: shop time Monday, waiting for approval (if Monday has passed).
+    if today > monday {
+        let (s, e) = (at(monday, 8, 0), at(monday, 15, 45));
+        entity::time_entry::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            user_id: Set(rosa),
+            kind: Set("shop".into()),
+            maintenance_ticket_id: Set(None),
+            rehab_project_id: Set(None),
+            property_id: Set(None),
+            started_at: Set(s.into()),
+            ended_at: Set(Some(e.into())),
+            break_minutes: Set(30),
+            notes: Set(Some("Restocked the van, filter inventory".into())),
+            pay_rate_cents: Set(Some(2_800)),
+            bill_rate_cents: Set(Some(7_500)),
+            approved_by: Set(None),
+            approved_at: Set(None),
+            missed_punch: Set(false),
+            missed_punch_reason: Set(None),
+            claimed_end: Set(None),
+            punch_note: Set(None),
+            resolved_by: Set(None),
+            resolved_at: Set(None),
+            in_lat: Set(None),
+            in_lng: Set(None),
+            in_distance_m: Set(None),
+            out_lat: Set(None),
+            out_lng: Set(None),
+            out_distance_m: Set(None),
+            billed_bill_id: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+    // A billable receipt and a trip on the HVAC job.
+    for (category, vendor, desc, amount, miles, billable) in [
+        (
+            "materials",
+            Some("Ferguson HVAC"),
+            "Filters and a capacitor",
+            8_640_i64,
+            None,
+            true,
+        ),
+        (
+            "mileage",
+            None,
+            "Shop to Maple Court and back",
+            0,
+            Some(2_460_i64),
+            false,
+        ),
+    ] {
+        entity::expense::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            incurred_on: Set(last.to_string()),
+            category: Set(category.into()),
+            vendor: Set(vendor.map(str::to_string)),
+            description: Set(desc.into()),
+            amount_cents: Set(match miles {
+                Some(h) => (h * 700 + 500) / 1_000,
+                None => amount,
+            }),
+            miles_hundredths: Set(miles),
+            mileage_rate_mills: Set(miles.map(|_| 700)),
+            tax_deductible: Set(true),
+            vehicle: Set(if miles.is_some() { "personal" } else { "none" }.into()),
+            reimbursable: Set(miles.is_some()),
+            reimbursed_at: Set(None),
+            billable_to_owner: Set(billable),
+            billed_bill_id: Set(None),
+            user_id: Set(Some(rosa)),
+            maintenance_ticket_id: Set(hvac),
+            rehab_project_id: Set(None),
+            property_id: Set(Some(property_id)),
+            asset_id: Set(None),
+            details: Set(json!({ "round_trip": miles.is_some() })),
+            recorded_by: Set(Some(rosa)),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+    }
+    // An owner lead in the pipeline, with a follow-up due today.
+    let lead = Uuid::new_v4();
+    entity::owner_lead::ActiveModel {
+        id: Set(lead),
+        tenant_id: Set(tenant_id),
+        name: Set("Grace Whitfield".into()),
+        company: Set(Some("Whitfield Rentals".into())),
+        email: Set(Some("grace@whitfieldrentals.example".into())),
+        phone: Set(Some("(760) 555-0144".into())),
+        address: Set(Some("Hesperia & Victorville".into())),
+        properties_count: Set(4),
+        doors: Set(9),
+        source: Set("referral".into()),
+        status: Set("contacted".into()),
+        lost_reason: Set(None),
+        monthly_rent_cents: Set(1_620_000),
+        fee_bps: Set(Some(800)),
+        notes: Set(Some(
+            "Self-managing today; tired of late-night calls.".into(),
+        )),
+        assigned_to: Set(None),
+        owner_id: Set(None),
+        won_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    entity::crm_note::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        subject_type: Set("owner_lead".into()),
+        subject_id: Set(lead),
+        property_id: Set(None),
+        kind: Set("call".into()),
+        body: Set(
+            "Walked through our owner statement and in-house maintenance rates. Send the proposal."
+                .into(),
+        ),
+        pinned: Set(false),
+        follow_up_on: Set(Some(today.to_string())),
+        follow_up_done_at: Set(None),
+        follow_up_done_by: Set(None),
+        author_id: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
     }
     .insert(db)
     .await?;

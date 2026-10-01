@@ -1,4 +1,4 @@
-// Typed API client for the Acre Rust backend.
+// Typed API client for the Vantedge Rust backend.
 //
 // Multi-tenancy: public requests carry the tenant via the `X-Tenant` header
 // (slug). Authenticated requests carry a JWT `Authorization: Bearer` token;
@@ -143,7 +143,10 @@ interface RequestOpts {
   auth?: boolean;
 }
 
-async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
+export async function request<T>(
+  path: string,
+  opts: RequestOpts = {}
+): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -226,6 +229,50 @@ export interface TotpSetupResult {
   otpauth_uri: string;
 }
 
+export interface TextThread {
+  id: string;
+  phone: string;
+  display_name: string | null;
+  lease_id: string | null;
+  status: "open" | "done";
+  unread_count: number;
+  last_preview: string | null;
+  last_message_at: string | null;
+  /** The number texted STOP (until it texts START). */
+  opted_out: boolean;
+}
+
+export interface TextMessage {
+  id: string;
+  direction: "in" | "out";
+  body: string;
+  status: "received" | "queued" | "sent" | "failed" | "blocked";
+  template_key: string | null;
+  sent_by: string | null;
+  media_count: number;
+  error: string | null;
+  created_at: string;
+}
+
+export interface TextThreadDetail {
+  thread: TextThread;
+  messages: TextMessage[];
+}
+
+export interface TextsStatus {
+  live: boolean;
+  provider_configured: boolean;
+  inbound_webhook_url: string;
+  status_webhook_url: string;
+  unread_threads: number;
+}
+
+export interface PasswordLinkInfo {
+  purpose: "invite" | "reset";
+  email: string;
+  name: string;
+}
+
 export interface MfaStatus {
   enabled: boolean;
 }
@@ -258,10 +305,72 @@ export const api = {
       body: { mfa_token: mfaToken, code },
     }),
   me: () => request<User>("/auth/me", { auth: true }),
-  /** Workspaces the current user can switch between (Acre HQ + tenants). */
+
+  // ---- two-way texts (console inbox) ----
+  textsStatus: () => request<TextsStatus>("/texts/status", { auth: true }),
+  textThreads: (status?: string) =>
+    request<TextThread[]>(
+      `/texts${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+      { auth: true }
+    ),
+  /** One conversation, oldest text first. Marks it read. */
+  textThread: (id: string) =>
+    request<TextThreadDetail>(`/texts/${id}`, { auth: true }),
+  replyText: (id: string, body: string) =>
+    request<TextThreadDetail>(`/texts/${id}/reply`, {
+      method: "POST",
+      auth: true,
+      body: { body },
+    }),
+  startText: (phone: string, body: string) =>
+    request<TextThreadDetail>("/texts", {
+      method: "POST",
+      auth: true,
+      body: { phone, body },
+    }),
+  updateTextThread: (id: string, status: "open" | "done") =>
+    request<TextThread>(`/texts/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { status },
+    }),
+  /** Test mode only: act as if `phone` texted `body` in. */
+  simulateText: (phone: string, body: string) =>
+    request<TextThreadDetail>("/texts/simulate", {
+      method: "POST",
+      auth: true,
+      body: { phone, body },
+    }),
+
+  // ---- passwords (invite / forgot / reset / change) ----
+  /** Email a reset link. Same answer whether or not the address has an account. */
+  passwordForgot: (email: string) =>
+    request<{ ok: boolean }>("/auth/password/forgot", {
+      method: "POST",
+      body: { email },
+    }),
+  /** Who a set-password link is for (404 once used or expired). */
+  passwordLink: (token: string) =>
+    request<PasswordLinkInfo>(
+      `/auth/password/link/${encodeURIComponent(token)}`
+    ),
+  /** Choose a password from an invite or reset link. */
+  passwordSet: (token: string, password: string) =>
+    request<{ ok: boolean; email: string }>("/auth/password/set", {
+      method: "POST",
+      body: { token, password },
+    }),
+  /** Change the signed-in user's password (signs out other devices). */
+  passwordChange: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>("/auth/password/change", {
+      method: "POST",
+      auth: true,
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
+  /** Workspaces the current user can switch between (Vantedge HQ + tenants). */
   workspaces: () => request<Workspace[]>("/auth/workspaces", { auth: true }),
   /**
-   * Switch the active workspace. `null` selects Acre HQ / platform. Returns a
+   * Switch the active workspace. `null` selects Vantedge HQ / platform. Returns a
    * fresh access token (refresh token unchanged) plus the updated user.
    */
   switchWorkspace: (tenantId: string | null) =>
@@ -599,6 +708,7 @@ export const api = {
   createMaintenancePlan: (body: {
     property_id: string;
     unit_id?: string;
+    asset_id?: string;
     title: string;
     description?: string;
     category?: string;
@@ -614,6 +724,7 @@ export const api = {
   updateMaintenancePlan: (
     id: string,
     body: {
+      asset_id?: string;
       title?: string;
       description?: string;
       category?: string;
@@ -1905,6 +2016,12 @@ export const iam = {
   members: () => request<Member[]>("/members", { auth: true }),
   inviteMember: (body: InviteMemberInput) =>
     request<Member>("/members", { method: "POST", auth: true, body }),
+  /** Send a member a fresh link to choose (or reset) their password. */
+  sendLoginLink: (membershipId: string) =>
+    request<{ ok: boolean; purpose: "invite" | "reset" }>(
+      `/members/${membershipId}/login-link`,
+      { method: "POST", auth: true }
+    ),
 };
 
 /**
@@ -2134,6 +2251,8 @@ export interface Member {
   profile_type: string;
   title: string | null;
   status: string;
+  /** The login itself: `invited` until they choose a password. */
+  account_status?: string;
 }
 
 export interface InviteMemberInput {

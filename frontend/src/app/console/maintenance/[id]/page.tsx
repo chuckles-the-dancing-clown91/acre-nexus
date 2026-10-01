@@ -21,6 +21,9 @@ import { logError } from "@/lib/log";
 import { toast } from "sonner";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 import { DocumentsCard } from "@/components/DocumentsCard";
+import { CostingCard } from "@/components/CostingCard";
+import { PartsCard } from "@/components/PartsCard";
+import { DispatchCard } from "@/components/DispatchCard";
 
 const STATUSES = [
   "open",
@@ -66,6 +69,7 @@ export default function TicketDetailPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [contractors, setContractors] = useState<Counterparty[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [comment, setComment] = useState("");
@@ -98,6 +102,10 @@ export default function TicketDetailPage() {
       .entities("contractor")
       .then(setContractors)
       .catch((e) => logError("failed to load contractors", e));
+    api
+      .inventory({ status: "active" })
+      .then(setInventory)
+      .catch((e) => logError("failed to load inventory", e));
   }, [load]);
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
@@ -496,8 +504,22 @@ export default function TicketDetailPage() {
         </Card>
       )}
 
+      {/* Send it to a vendor on Alpha */}
+      <DispatchCard ticket={ticket} manage={manage} reload={load} />
+
+      {/* Findings and the parts loop */}
+      <PartsCard
+        ticket={ticket}
+        items={inventory}
+        manage={manage}
+        reload={load}
+      />
+
       {/* Parts, labor & fees — totals drive the ticket cost */}
       <LinesCard ticket={ticket} manage={manage} busy={busy} run={run} />
+
+      {/* Job costing: bill the owner, profit vs. target */}
+      <CostingCard kind="work-orders" id={ticket.id} />
 
       {/* Contractor quotes */}
       <QuotesCard

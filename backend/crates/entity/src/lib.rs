@@ -9,7 +9,7 @@
 //! row-level-security policies (in the migration crate) provide defence in depth.
 //!
 //! Platform-level concepts (the `tenant` table itself, platform-staff `user`s)
-//! are not tenant-scoped — they belong to "Acre HQ".
+//! are not tenant-scoped — they belong to "Vantedge HQ".
 //!
 //! ## Money
 //! All monetary amounts are stored as **integer cents** (`i64`) to avoid
@@ -21,6 +21,7 @@ pub mod api_token;
 pub mod application;
 pub mod application_event;
 pub mod asset;
+pub mod asset_part;
 pub mod assignment;
 pub mod audit_log;
 pub mod background_job;
@@ -30,6 +31,7 @@ pub mod capital_call;
 pub mod capital_call_line;
 pub mod counterparty;
 pub mod counterparty_note;
+pub mod crm_note;
 pub mod deal;
 pub mod deal_event;
 pub mod deposit_deduction;
@@ -38,11 +40,13 @@ pub mod distribution;
 pub mod distribution_line;
 pub mod document;
 pub mod domain;
+pub mod employee_profile;
 pub mod enrichment_run;
 pub mod entity_ownership;
 pub mod esign_envelope;
 pub mod esign_event;
 pub mod esign_signer;
+pub mod expense;
 pub mod federated_identity;
 pub mod fee_schedule;
 pub mod financial_snapshot;
@@ -56,6 +60,7 @@ pub mod inbound_email;
 pub mod inspection;
 pub mod inspection_item;
 pub mod inventory_item;
+pub mod inventory_movement;
 pub mod investor_commitment;
 pub mod lead;
 pub mod lease;
@@ -79,8 +84,10 @@ pub mod notification;
 pub mod notification_provider;
 pub mod onboarding_workflow;
 pub mod owner;
+pub mod owner_lead;
 pub mod owner_payout;
 pub mod ownership;
+pub mod password_token;
 pub mod payment_method;
 pub mod permission;
 pub mod platform_invoice;
@@ -107,12 +114,17 @@ pub mod role_permission;
 pub mod screening_report;
 pub mod secret;
 pub mod setting;
+pub mod sms_message;
+pub mod sms_thread;
 pub mod tenant;
 pub mod tenant_module;
 pub mod theme;
 pub mod ticket_comment;
 pub mod ticket_line;
+pub mod ticket_part;
 pub mod ticket_quote;
+pub mod time_entry;
+pub mod time_off_request;
 pub mod unit;
 pub mod user;
 pub mod user_profile;
@@ -122,4 +134,5 @@ pub mod vehicle;
 pub mod vendor_bill;
 pub mod webhook_delivery;
 pub mod webhook_subscription;
+pub mod work_shift;
 pub mod workflow_event;

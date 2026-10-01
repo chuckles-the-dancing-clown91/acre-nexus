@@ -4,6 +4,7 @@
 // financing (mortgages), and a review/confirm step before calling
 // `api.onboardProperty`. Gated behind the "property:write" permission.
 
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
@@ -39,6 +40,8 @@ interface PropertyForm {
   name: string;
   address: string;
   city: string;
+  state: string;
+  postal_code: string;
   property_type: string;
   strategy: string;
   units: string;
@@ -67,6 +70,8 @@ const EMPTY_PROPERTY: PropertyForm = {
   name: "",
   address: "",
   city: "",
+  state: "",
+  postal_code: "",
   property_type: "",
   strategy: "",
   units: "",
@@ -335,6 +340,8 @@ export default function OnboardPropertyPage() {
       name: property.name.trim(),
       address: property.address.trim(),
       city: property.city.trim(),
+      state: property.state.trim() || undefined,
+      postal_code: property.postal_code.trim() || undefined,
       property_type: property.property_type,
       strategy: property.strategy,
       mortgages: mortgages
@@ -438,10 +445,18 @@ export default function OnboardPropertyPage() {
               onChange={(v) => setP({ name: v })}
               required
             />
-            <TextField
-              label="Address"
+            <AddressAutocomplete
               value={property.address}
               onChange={(v) => setP({ address: v })}
+              onPick={(place) =>
+                setP({
+                  address: place.address,
+                  city: place.city || property.city,
+                  state: place.state || property.state,
+                  postal_code: place.postal_code || property.postal_code,
+                  name: property.name || place.address,
+                })
+              }
               required
             />
             <TextField
@@ -449,6 +464,18 @@ export default function OnboardPropertyPage() {
               value={property.city}
               onChange={(v) => setP({ city: v })}
               required
+            />
+            <TextField
+              label="State"
+              value={property.state}
+              onChange={(v) => setP({ state: v.toUpperCase().slice(0, 2) })}
+              placeholder="CA"
+            />
+            <TextField
+              label="ZIP"
+              value={property.postal_code}
+              onChange={(v) => setP({ postal_code: v })}
+              placeholder="92345"
             />
             <SelectField
               label="Property type"
@@ -719,7 +746,10 @@ export default function OnboardPropertyPage() {
           <dl className="space-y-3 text-sm">
             <SummaryRow k="Name" v={property.name} />
             <SummaryRow k="Address" v={property.address} />
-            <SummaryRow k="City" v={property.city} />
+            <SummaryRow
+              k="City"
+              v={`${property.city}${property.state ? `, ${property.state}` : ""} ${property.postal_code}`.trim()}
+            />
             <SummaryRow
               k="Property type"
               v={humanize(property.property_type)}

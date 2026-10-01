@@ -83,6 +83,10 @@ pub async fn create_ticket(
         resolved_at: Set(None),
         sla_response_due_at: Set(response_due.map(Into::into)),
         sla_resolve_due_at: Set(resolve_due.map(Into::into)),
+        partner_counterparty_id: Set(None),
+        partner_job_id: Set(None),
+        partner_status: Set(None),
+        partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };

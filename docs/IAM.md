@@ -183,3 +183,26 @@ actor, action, target, workspace, and optional metadata.
 name resolved), gated by the `audit:read` permission (held by Acre admin,
 account-manager, and read-only roles). Ship this table to an external,
 append-only audit sink in production. Full design lives in **`docs/AUDIT.md`**.
+
+## Password links (Vantedge phase 1)
+
+Invited people used to be created with a random password and could never sign
+in. Now every invite and every "Forgot your password?" issues a one-time link to
+`{PUBLIC_APP_URL}/set-password?token=…` (`crate::password_links`):
+
+| Purpose | Sent when | Lifetime |
+| --- | --- | --- |
+| `invite` | `POST /members` creates a login (or re-invites one that never finished), `POST /members/<id>/login-link`, or forgot-password on an invited account | 7 days |
+| `reset` | `POST /auth/password/forgot`, or `POST /members/<id>/login-link` on an active account | 24 hours |
+
+- Only a SHA-256 hash is stored (`password_token`, no RLS — read before sign-in,
+  like `refresh_token`). A link works once; a newer link retires older ones.
+- Delivered as the `account_invite` / `password_reset` templates by email, plus a
+  text when the profile has a phone, through the workspace's own providers.
+- `GET /auth/password/link/<token>` tells the page who the link is for;
+  `POST /auth/password/set` sets the password (min 10 characters, not the email,
+  not a common one), activates an invited account, and revokes every refresh
+  token. `POST /auth/password/change` does the same for a signed-in user given
+  the current password.
+- Forgot-password answers `{ "ok": true }` whether or not the address exists.
+- All four public endpoints ride the tight `auth` rate-limit bucket.

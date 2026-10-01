@@ -1,6 +1,6 @@
 "use client";
 
-// Acre platform user directory: searchable table of every user across tenants,
+// Vantedge platform user directory: searchable table of every user across tenants,
 // with a "New user" dialog that can seed an initial membership + profile basics.
 
 import { useState } from "react";
@@ -26,7 +26,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-/** Platform-staff directory of every Acre user, with creation. */
+/** Platform-staff directory of every Vantedge user, with creation. */
 export default function PlatformUsersPage() {
   const { can, user } = useAuth();
   const [q, setQ] = useState("");
@@ -49,7 +49,7 @@ export default function PlatformUsersPage() {
             Users
           </h1>
           <p className="text-ink-3">
-            Every person across all client workspaces and Acre HQ.
+            Every person across all client workspaces and Vantedge HQ.
           </p>
         </div>
         {canManage && <NewUserDialog />}
