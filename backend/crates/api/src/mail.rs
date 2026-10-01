@@ -238,6 +238,7 @@ async fn thread_into_ticket(
         text.trim().to_string()
     };
     let comment = entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         ticket_id: Set(ticket.id),

@@ -29,6 +29,9 @@ pub async fn create(
         b.kind
     };
     let model = entity::counterparty::ActiveModel {
+        trades: Set(serde_json::json!(crate::servicedesk::clean_trades(
+            b.trades.clone().unwrap_or_default()
+        ))),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         kind: Set(kind),

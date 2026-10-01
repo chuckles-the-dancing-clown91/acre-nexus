@@ -311,6 +311,7 @@ pub async fn add_my_comment(
     }
 
     let saved = entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(ticket.id),

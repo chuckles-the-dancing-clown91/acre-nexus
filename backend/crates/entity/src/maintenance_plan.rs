@@ -29,6 +29,8 @@ pub struct Model {
     pub active: bool,
     /// The most recent auto-opened ticket.
     pub last_ticket_id: Option<Uuid>,
+    /// A job kit whose tasks and parts each routine work order starts with.
+    pub issue_template_id: Option<Uuid>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

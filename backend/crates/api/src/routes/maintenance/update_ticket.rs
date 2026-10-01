@@ -268,6 +268,7 @@ pub async fn update_ticket(
     // The waiting-on follow-up note lands as an internal comment.
     if let Some((label, note)) = &waiting_note {
         let comment = entity::ticket_comment::ActiveModel {
+            document_ids: Set(serde_json::json!([])),
             id: Set(Uuid::new_v4()),
             tenant_id: Set(scope.tenant_id),
             ticket_id: Set(saved.id),
@@ -286,6 +287,7 @@ pub async fn update_ticket(
     // Log the status transition on the ticket timeline (best-effort).
     if let Some(new_status) = &status_changed {
         let comment = entity::ticket_comment::ActiveModel {
+            document_ids: Set(serde_json::json!([])),
             id: Set(Uuid::new_v4()),
             tenant_id: Set(scope.tenant_id),
             ticket_id: Set(saved.id),

@@ -118,6 +118,7 @@ pub use super::ticket_comment::Entity as TicketComment;
 pub use super::ticket_line::Entity as TicketLine;
 pub use super::ticket_part::Entity as TicketPart;
 pub use super::ticket_quote::Entity as TicketQuote;
+pub use super::ticket_task::Entity as TicketTask;
 pub use super::time_entry::Entity as TimeEntry;
 pub use super::time_off_request::Entity as TimeOffRequest;
 pub use super::tour_request::Entity as TourRequest;

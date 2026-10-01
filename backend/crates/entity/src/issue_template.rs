@@ -21,6 +21,9 @@ pub struct Model {
     pub checklist: Json,
     /// JSON array of `{ name, quantity, inventory_item_id? }`.
     pub parts: Json,
+    /// JSON array of `{ title, trade, est_minutes, needs_contractor }`: the
+    /// work, line by line, that a work order from this kit starts with.
+    pub tasks: Json,
     pub active: bool,
     /// Created from the built-in starter set (kept editable).
     pub seeded: bool,

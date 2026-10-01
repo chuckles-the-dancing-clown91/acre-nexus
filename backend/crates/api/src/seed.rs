@@ -917,6 +917,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // The visibility split on its timeline: a public staff reply the
     // resident sees, and an internal note they don't.
     entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
@@ -934,6 +935,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .insert(db)
     .await?;
     entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
@@ -1504,8 +1506,77 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     }
 
     seed_reach(db, &role_ids, northwind, &pw).await?;
+    seed_vendor_trades(db, northwind).await?;
 
     tracing::info!("seed: complete");
+    Ok(())
+}
+
+/// Trades on the demo's contractors, plus a plumber and an electrician, so the
+/// service desk has someone to send each kind of task to.
+async fn seed_vendor_trades(db: &DatabaseConnection, tenant_id: Uuid) -> anyhow::Result<()> {
+    use entity::prelude::Counterparty;
+    for (name, trades) in [
+        (
+            "Birch & Co. General Contracting",
+            vec![
+                "general",
+                "demo",
+                "carpentry",
+                "drywall",
+                "paint",
+                "tile",
+                "flooring",
+            ],
+        ),
+        (
+            "Ridgeline Construction",
+            vec!["roofing", "exterior", "carpentry"],
+        ),
+    ] {
+        if let Some(c) = Counterparty::find()
+            .filter(entity::counterparty::Column::TenantId.eq(tenant_id))
+            .filter(entity::counterparty::Column::Name.eq(name))
+            .one(db)
+            .await?
+        {
+            let mut am: entity::counterparty::ActiveModel = c.into();
+            am.trades = Set(serde_json::json!(trades));
+            am.update(db).await?;
+        }
+    }
+    for (name, contact, email, phone, trades) in [
+        (
+            "Rapid Rooter Plumbing",
+            "Ana Flores",
+            "dispatch@rapidrooter.example",
+            "(503) 555-0142",
+            vec!["plumbing"],
+        ),
+        (
+            "Bright Spark Electric",
+            "Tom Becker",
+            "jobs@brightspark.example",
+            "(503) 555-0188",
+            vec!["electrical", "hvac"],
+        ),
+    ] {
+        let id = seed_counterparty(
+            db,
+            tenant_id,
+            "contractor",
+            name,
+            Some(contact),
+            Some(phone),
+        )
+        .await?;
+        if let Some(c) = Counterparty::find_by_id(id).one(db).await? {
+            let mut am: entity::counterparty::ActiveModel = c.into();
+            am.email = Set(Some(email.into()));
+            am.trades = Set(serde_json::json!(trades));
+            am.update(db).await?;
+        }
+    }
     Ok(())
 }
 
@@ -1576,7 +1647,7 @@ async fn seed_reach(
         db,
         Some(tenant_id),
         "sam@northwind.com",
-        "Sam Ortiz",
+        "Sam Okafor",
         pw,
         false,
     )
@@ -1591,13 +1662,13 @@ async fn seed_reach(
         Some("Property manager"),
     )
     .await?;
-    seed_profile(db, sam, "Sam", "Ortiz").await?;
+    seed_profile(db, sam, "Sam", "Okafor").await?;
     for p in &props[2..4] {
         assign(sam, "property", p.id, "property_manager").await?;
         // Assigning a property manager through the API names them on the
         // property; keep the demo consistent with that.
         let mut am: entity::property::ActiveModel = p.clone().into();
-        am.manager = Set("Sam Ortiz".into());
+        am.manager = Set("Sam Okafor".into());
         am.update(db).await?;
     }
     Ok(())
@@ -1769,6 +1840,7 @@ async fn seed_rehab(
 ) -> anyhow::Result<()> {
     let contractor = Uuid::new_v4();
     entity::counterparty::ActiveModel {
+        trades: Set(serde_json::json!([])),
         id: Set(contractor),
         tenant_id: Set(tenant_id),
         kind: Set("contractor".into()),
@@ -2298,6 +2370,7 @@ async fn seed_counterparty(
     let id = Uuid::new_v4();
     let now = Utc::now();
     entity::counterparty::ActiveModel {
+        trades: Set(serde_json::json!([])),
         id: Set(id),
         tenant_id: Set(tenant_id),
         kind: Set(kind.into()),

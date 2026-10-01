@@ -77,6 +77,7 @@ pub async fn onboard(
             (None, Some(name)) if !name.trim().is_empty() => {
                 let cid = Uuid::new_v4();
                 entity::counterparty::ActiveModel {
+                    trades: Set(serde_json::json!([])),
                     id: Set(cid),
                     tenant_id: Set(scope.tenant_id),
                     kind: Set("lender".into()),

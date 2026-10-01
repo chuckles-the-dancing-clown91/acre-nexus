@@ -55,6 +55,9 @@ pub async fn update(
     if let Some(v) = b.notes {
         am.notes = Set(Some(v));
     }
+    if let Some(v) = b.trades {
+        am.trades = Set(serde_json::json!(crate::servicedesk::clean_trades(v)));
+    }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
     crate::audit::record(

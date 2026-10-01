@@ -22,7 +22,10 @@
 //!   with [`Access::property_ids`].
 
 use crate::state::AppState;
-use entity::prelude::{Assignment, Lease, MaintenanceTicket, Membership, Property, Unit};
+use entity::prelude::{
+    Assignment, Lease, MaintenancePlan, MaintenanceTicket, Membership, Property, TicketLine,
+    TicketPart, TicketQuote, Unit,
+};
 use rocket::http::{Method, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter};
@@ -195,6 +198,13 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Get, "/search"),
     (Method::Get, "/tickets"),
     (Method::Get, "/leases"),
+    // The service desk: the kit catalog (company-wide, no property data), a
+    // work order from a kit and a routine on a property (the handlers check
+    // the property is in reach), and the schedule (narrowed by reach).
+    (Method::Get, "/issue-templates"),
+    (Method::Post, "/issue-templates/<id>/generate"),
+    (Method::Get, "/maintenance-plans"),
+    (Method::Post, "/maintenance-plans"),
 ];
 
 /// Property routes a scoped person may not use even on their own properties:
@@ -211,6 +221,11 @@ enum Target {
     Ticket,
     Lease,
     Unit,
+    /// Records that hang off a work order or a property.
+    TicketPart,
+    TicketLine,
+    TicketQuote,
+    Plan,
 }
 
 fn target(route: &str) -> Option<Target> {
@@ -224,6 +239,10 @@ fn target(route: &str) -> Option<Target> {
         ["tickets", "<id>"] => Some(Target::Ticket),
         ["leases", "<id>"] => Some(Target::Lease),
         ["units", "<id>"] => Some(Target::Unit),
+        ["parts", "<id>"] => Some(Target::TicketPart),
+        ["ticket-lines", "<id>"] => Some(Target::TicketLine),
+        ["ticket-quotes", "<id>"] => Some(Target::TicketQuote),
+        ["maintenance-plans", "<id>"] => Some(Target::Plan),
         _ => None,
     }
 }
@@ -263,6 +282,20 @@ fn classify(method: Method, route: &str) -> Result<Verdict, Target> {
     }
 }
 
+/// The property of the work order a child record belongs to.
+async fn ticket_property(
+    db: &sea_orm::DatabaseConnection,
+    ticket: Result<Option<Uuid>, DbErr>,
+) -> Result<Option<Uuid>, DbErr> {
+    match ticket? {
+        Some(t) => Ok(MaintenanceTicket::find_by_id(t)
+            .one(db)
+            .await?
+            .map(|t| t.property_id)),
+        None => Ok(None),
+    }
+}
+
 /// The central check, run before every data route.
 pub async fn gate(req: &Request<'_>) -> Verdict {
     let Some(access) = for_request(req).await else {
@@ -298,6 +331,40 @@ pub async fn gate(req: &Request<'_>) -> Verdict {
             .one(&state.db)
             .await
             .map(|u| u.map(|u| u.property_id)),
+        Target::TicketPart => {
+            ticket_property(
+                &state.db,
+                TicketPart::find_by_id(id)
+                    .one(&state.db)
+                    .await
+                    .map(|p| p.map(|p| p.ticket_id)),
+            )
+            .await
+        }
+        Target::TicketLine => {
+            ticket_property(
+                &state.db,
+                TicketLine::find_by_id(id)
+                    .one(&state.db)
+                    .await
+                    .map(|l| l.map(|l| l.ticket_id)),
+            )
+            .await
+        }
+        Target::TicketQuote => {
+            ticket_property(
+                &state.db,
+                TicketQuote::find_by_id(id)
+                    .one(&state.db)
+                    .await
+                    .map(|q| q.map(|q| q.ticket_id)),
+            )
+            .await
+        }
+        Target::Plan => MaintenancePlan::find_by_id(id)
+            .one(&state.db)
+            .await
+            .map(|p| p.map(|p| p.property_id)),
     };
     match property {
         Ok(Some(pid)) if access.sees(pid) => Verdict::Allow,
@@ -333,6 +400,10 @@ mod tests {
             Err(Target::Ticket) => "ticket",
             Err(Target::Lease) => "lease",
             Err(Target::Unit) => "unit",
+            Err(Target::TicketPart) => "part",
+            Err(Target::TicketLine) => "line",
+            Err(Target::TicketQuote) => "quote",
+            Err(Target::Plan) => "plan",
         }
     }
 
@@ -368,6 +439,23 @@ mod tests {
         );
         assert_eq!(verdict(Method::Get, "/finance/series"), "forbidden");
         assert_eq!(verdict(Method::Get, "/members"), "forbidden");
+        assert_eq!(verdict(Method::Get, "/issue-templates"), "allow");
+        assert_eq!(
+            verdict(Method::Post, "/issue-templates"),
+            "forbidden",
+            "the catalog is the company's"
+        );
+        assert_eq!(verdict(Method::Patch, "/parts/<id>"), "part");
+        assert_eq!(verdict(Method::Delete, "/ticket-lines/<id>"), "line");
+        assert_eq!(
+            verdict(Method::Post, "/ticket-quotes/<id>/approve"),
+            "quote"
+        );
+        assert_eq!(verdict(Method::Patch, "/maintenance-plans/<id>"), "plan");
+        assert_eq!(
+            verdict(Method::Post, "/tickets/<id>/tasks/<task_id>/dispatch"),
+            "ticket"
+        );
     }
 
     #[test]

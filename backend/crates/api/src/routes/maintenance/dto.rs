@@ -128,6 +128,8 @@ pub struct TicketCommentDto {
     /// Display name of the author.
     pub author_name: Option<String>,
     pub body: String,
+    /// Photos and files attached to the note.
+    pub document_ids: Vec<Uuid>,
     pub created_at: String,
 }
 
@@ -142,6 +144,7 @@ impl From<entity::ticket_comment::Model> for TicketCommentDto {
             visibility: c.visibility,
             author_name: c.author_name,
             body: c.body,
+            document_ids: serde_json::from_value(c.document_ids).unwrap_or_default(),
             created_at: c.created_at.to_rfc3339(),
         }
     }
@@ -224,6 +227,8 @@ pub struct MaintenancePlanDto {
     pub next_due_date: String,
     pub active: bool,
     pub last_ticket_id: Option<Uuid>,
+    /// The job kit each routine work order starts with.
+    pub issue_template_id: Option<Uuid>,
     pub created_at: String,
 }
 
@@ -242,6 +247,7 @@ impl From<entity::maintenance_plan::Model> for MaintenancePlanDto {
             next_due_date: p.next_due_date,
             active: p.active,
             last_ticket_id: p.last_ticket_id,
+            issue_template_id: p.issue_template_id,
             created_at: p.created_at.to_rfc3339(),
         }
     }
@@ -259,6 +265,8 @@ pub struct CreatePlanReq {
     pub cadence_days: i32,
     /// ISO date the first ticket opens.
     pub next_due_date: String,
+    /// A job kit whose tasks and parts each routine work order starts with.
+    pub issue_template_id: Option<Uuid>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -271,6 +279,8 @@ pub struct UpdatePlanReq {
     pub cadence_days: Option<i32>,
     pub next_due_date: Option<String>,
     pub active: Option<bool>,
+    /// A kit id, or `""` to stop using one.
+    pub issue_template_id: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -331,6 +341,9 @@ pub struct AddCommentReq {
     pub body: String,
     /// `public` (default — residents see it) | `internal` (staff-only note).
     pub visibility: Option<String>,
+    /// Photos or files already uploaded to this work order, shown with the note.
+    #[serde(default)]
+    pub document_ids: Vec<Uuid>,
 }
 
 /// The Maintenance tab for a property: open work orders split from resolved

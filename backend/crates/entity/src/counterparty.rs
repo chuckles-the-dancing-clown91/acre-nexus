@@ -26,6 +26,8 @@ pub struct Model {
     /// Linked partner system, e.g. `alpha` (Alpha Power Wash); the API key is
     /// in the vault under `partner.<id>.api_key`.
     pub partner_kind: Option<String>,
+    /// The trades this vendor covers (`plumbing`, `electrical`, …).
+    pub trades: Json,
     pub partner_base_url: Option<String>,
     /// Where the vendor's Alpha web app lives, for single sign-on.
     pub partner_web_url: Option<String>,

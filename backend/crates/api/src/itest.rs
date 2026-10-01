@@ -122,6 +122,7 @@ async fn integration_suite() {
     batch_c_texts(&c).await;
     batch_d_listing_photos(&c).await;
     property_reach(&c).await;
+    service_desk(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -5285,4 +5286,402 @@ async fn property_reach(c: &Ctx) {
         let (st, _) = get_json(c, &format!("/properties/{other}"), &pm).await;
         assert_eq!(st, Status::Ok, "the LLC's property is now in reach");
     }
+}
+
+/// The service desk: a kit opens a work order with tasks by trade and parts
+/// with costs; tasks go to vendors; photos ride on notes; receipts back up
+/// expenses; costs compare to the estimate; routines start from a kit; and
+/// a property manager can do all of it on their own properties only.
+async fn service_desk(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "member:manage",
+            "property:read",
+            "property:write",
+        ],
+    );
+    let props = property_ids(c, nw).await;
+    let (pid, other) = (props[0], props[1]);
+
+    // The catalog has the shower kit, with a plumber flagged.
+    let (st, kits) = get_json(c, "/issue-templates", &staff).await;
+    assert_eq!(st, Status::Ok, "{kits}");
+    let shower = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Shower replacement")
+        .expect("the shower kit")
+        .clone();
+    assert!(shower["tasks"].as_array().unwrap().len() >= 8);
+    assert!(shower["trades"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!("drywall")));
+    assert_eq!(shower["contractor_trades"], serde_json::json!(["plumbing"]));
+    assert!(shower["est_total_cents"].as_i64().unwrap() > 100_000);
+    let kit_id = shower["id"].as_str().unwrap().to_string();
+
+    // One click: the work order with its tasks and parts.
+    let (st, g) = post_json(
+        c,
+        &format!("/issue-templates/{kit_id}/generate"),
+        &staff,
+        serde_json::json!({ "property_id": pid, "note": "Tile cracked, water behind the wall" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{g}");
+    let tid = g["ticket"]["id"].as_str().unwrap().to_string();
+    assert!(
+        !g["ticket"]["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Checklist"),
+        "tasks are line items, not text"
+    );
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let tasks = tasks.as_array().unwrap().clone();
+    assert_eq!(tasks.len(), shower["tasks"].as_array().unwrap().len());
+    let valve = tasks
+        .iter()
+        .find(|t| t["trade"] == "plumbing" && t["needs_contractor"] == true)
+        .unwrap()
+        .clone();
+    assert!(valve["est_cost_cents"].as_i64().unwrap() > 0);
+    let (_, parts) = get_json(c, &format!("/tickets/{tid}/parts"), &staff).await;
+    assert!(parts
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["name"].as_str().unwrap().contains("valve")));
+    let (_, costs) = get_json(c, &format!("/tickets/{tid}/costs"), &staff).await;
+    assert!(
+        costs["est_parts_cents"].as_i64().unwrap() > 50_000,
+        "{costs}"
+    );
+    assert_eq!(costs["trades_needed"][0]["trade"], "plumbing");
+    assert_eq!(costs["trades_needed"][0]["covered"], false);
+
+    // A plumber, found by trade, gets the valve task by email.
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Desk Plumbing Co",
+            "email": "jobs@deskplumbing.example", "trades": ["plumbing", "nonsense"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["trades"], serde_json::json!(["plumbing"]));
+    let vid = v["id"].as_str().unwrap().to_string();
+    let (_, options) = get_json(c, &format!("/tickets/{tid}/vendors?trade=plumbing"), &staff).await;
+    assert_eq!(options[0]["id"], vid.as_str(), "matching trade first");
+    assert_eq!(options[0]["matches"], true);
+    let task_id = valve["id"].as_str().unwrap();
+    let (st, after) = post_json(
+        c,
+        &format!("/tickets/{tid}/tasks/{task_id}/dispatch"),
+        &staff,
+        serde_json::json!({ "entity_id": vid, "note": "Moen valve preferred" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{after}");
+    let sent = after
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"] == task_id)
+        .unwrap()
+        .clone();
+    assert_eq!(sent["assignee_name"], "Desk Plumbing Co");
+    assert!(sent["dispatched_at"].is_string());
+    let emails = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["to"] == "jobs@deskplumbing.example")
+        .count();
+    assert_eq!(emails, 1);
+    let (_, costs) = get_json(c, &format!("/tickets/{tid}/costs"), &staff).await;
+    assert_eq!(costs["trades_needed"][0]["open_tasks"], 3);
+    assert_eq!(
+        costs["trades_needed"][0]["covered"], false,
+        "two plumbing tasks still open"
+    );
+    for t in tasks
+        .iter()
+        .filter(|t| t["trade"] == "plumbing" && t["needs_contractor"] == true && t["id"] != task_id)
+    {
+        let (st, _) = send_json(
+            c,
+            Method::Patch,
+            &format!("/tickets/{tid}/tasks/{}", t["id"].as_str().unwrap()),
+            &staff,
+            serde_json::json!({ "assignee_entity_id": vid }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok);
+    }
+    let (_, costs) = get_json(c, &format!("/tickets/{tid}/costs"), &staff).await;
+    assert_eq!(costs["trades_needed"][0]["covered"], true);
+
+    // Tick a task off; add and remove one by hand.
+    let first = tasks[0]["id"].as_str().unwrap();
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{first}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert!(done[0]["done_at"].is_string());
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{first}"),
+        &staff,
+        serde_json::json!({ "status": "finished" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, added) = post_json(
+        c,
+        &format!("/tickets/{tid}/tasks"),
+        &staff,
+        serde_json::json!({ "title": "Replace bathroom fan", "trade": "electrical",
+            "est_minutes": 60, "needs_contractor": true }),
+    )
+    .await;
+    let fan = added.as_array().unwrap().last().unwrap().clone();
+    assert_eq!(fan["trade"], "electrical");
+    let (st, left) = send_json(
+        c,
+        Method::Delete,
+        &format!("/tickets/{tid}/tasks/{}", fan["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(left.as_array().unwrap().len(), tasks.len());
+
+    // A receipt, uploaded and attached to the purchase.
+    let upload = |kind: &'static str, name: &'static str, mime: &'static str| {
+        let staff = staff.clone();
+        let tid = tid.clone();
+        async move {
+            let (st, up) = post_json(
+                c,
+                &format!("/tickets/{tid}/uploads"),
+                &staff,
+                serde_json::json!({ "filename": name, "mime_type": mime, "size_bytes": 4, "kind": kind }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok, "{up}");
+            let url = up["upload_url"].as_str().unwrap();
+            let path = &url[url.find("/storage/local/").unwrap()..];
+            let resp = c
+                .client
+                .put(path.to_string())
+                .body(vec![0xFF, 0xD8, 0xFF, 0xD9])
+                .dispatch()
+                .await;
+            assert!(resp.status().code < 300);
+            up["file"]["id"].as_str().unwrap().to_string()
+        }
+    };
+    let receipt = upload("receipt", "home-depot.jpg", "image/jpeg").await;
+    let (st, e) = post_json(
+        c,
+        &format!("/tickets/{tid}/expenses"),
+        &staff,
+        serde_json::json!({ "description": "Valve, cement board, screws", "vendor": "Home Depot",
+            "amount_cents": 21_455, "receipt_document_ids": [receipt], "billable_to_owner": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{e}");
+    assert_eq!(e["receipt_document_ids"][0], receipt.as_str());
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/expenses"),
+        &staff,
+        serde_json::json!({ "description": "x", "amount_cents": 0 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, costs) = get_json(c, &format!("/tickets/{tid}/costs"), &staff).await;
+    assert_eq!(costs["expenses_cents"], 21_455);
+    assert_eq!(costs["receipts"], 1);
+    assert_eq!(costs["tasks_done"], 1);
+
+    // A photo on a note.
+    let photo = upload("photo", "wall-open.jpg", "image/jpeg").await;
+    let (st, note) = post_json(
+        c,
+        &format!("/tickets/{tid}/comments"),
+        &staff,
+        serde_json::json!({ "body": "Wall open, studs are fine", "visibility": "internal",
+            "document_ids": [photo] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{note}");
+    assert_eq!(note["document_ids"][0], photo.as_str());
+    let (_, files) = get_json(c, &format!("/tickets/{tid}/files"), &staff).await;
+    let kinds: Vec<_> = files
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["kind"].clone())
+        .collect();
+    assert!(
+        kinds.contains(&serde_json::json!("photo"))
+            && kinds.contains(&serde_json::json!("receipt"))
+    );
+    assert!(files[0]["url"]
+        .as_str()
+        .unwrap()
+        .contains("/storage/local/"));
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/uploads"),
+        &staff,
+        serde_json::json!({ "filename": "notes.pdf", "mime_type": "application/pdf", "kind": "photo" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "a photo has to be an image");
+
+    // A kit added to a work order that's already open.
+    let toilet = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Toilet replacement")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (st, more) = post_json(
+        c,
+        &format!("/tickets/{tid}/kits"),
+        &staff,
+        serde_json::json!({ "issue_template_id": toilet }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert!(more.as_array().unwrap().len() > tasks.len());
+
+    // A routine with a kit opens its work order with the kit's tasks.
+    let hvac = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "HVAC seasonal service")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let today = chrono::Utc::now().date_naive().to_string();
+    let (st, plan) = post_json(
+        c,
+        "/maintenance-plans",
+        &staff,
+        serde_json::json!({ "property_id": pid, "title": "Spring HVAC service", "cadence_days": 182,
+            "next_due_date": today, "issue_template_id": hvac }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{plan}");
+    crate::helpdesk::run_due_plans(&c.db, nw).await.unwrap();
+    let plan_row = entity::prelude::MaintenancePlan::find_by_id(
+        uuid::Uuid::parse_str(plan["id"].as_str().unwrap()).unwrap(),
+    )
+    .one(&c.db)
+    .await
+    .unwrap()
+    .unwrap();
+    let routine = plan_row
+        .last_ticket_id
+        .expect("the routine opened a work order");
+    let (_, rtasks) = get_json(c, &format!("/tickets/{routine}/tasks"), &staff).await;
+    assert_eq!(rtasks.as_array().unwrap().len(), 5);
+
+    // A property manager works their own property, and only that.
+    let (_, m) = post_json(
+        c,
+        "/members",
+        &staff,
+        serde_json::json!({ "email": "desk.pm@northwind.test", "name": "Desk PM",
+            "profile_type": "property_manager" }),
+    )
+    .await;
+    let pm_id = uuid::Uuid::parse_str(m["user_id"].as_str().unwrap()).unwrap();
+    post_json(
+        c,
+        &format!("/properties/{pid}/assignments"),
+        &staff,
+        serde_json::json!({ "user_id": pm_id, "relationship": "property_manager" }),
+    )
+    .await;
+    let pm = crate::auth::issue_access_token(
+        &c.config,
+        pm_id,
+        Some(nw),
+        false,
+        vec!["maintenance:read".into(), "maintenance:manage".into()],
+    )
+    .unwrap();
+    let (st, _) = get_json(c, "/issue-templates", &pm).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/issue-templates/{kit_id}/generate"),
+        &pm,
+        serde_json::json!({ "property_id": other }),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound, "not their property");
+    let (st, mine) = post_json(
+        c,
+        &format!("/issue-templates/{kit_id}/generate"),
+        &pm,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    let (st, _) = get_json(c, &format!("/tickets/{tid}/costs"), &pm).await;
+    assert_eq!(st, Status::Ok);
+    let (_, plans) = get_json(c, "/maintenance-plans", &pm).await;
+    assert!(plans
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|p| p["property_id"] == serde_json::json!(pid)));
+    let some_part = parts[0]["id"].as_str().unwrap();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{some_part}"),
+        &pm,
+        serde_json::json!({ "note": "picked up" }),
+    )
+    .await;
+    assert_ne!(
+        st,
+        Status::Forbidden,
+        "parts on their work order are theirs"
+    );
 }

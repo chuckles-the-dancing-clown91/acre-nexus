@@ -274,6 +274,17 @@ pub async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiRes
         )
         .await?;
 
+        // A routine with a job kit starts with the kit's tasks and parts.
+        if let Some(kit_id) = plan.issue_template_id {
+            if let Some(kit) = entity::prelude::IssueTemplate::find_by_id(kit_id)
+                .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
+                .one(db)
+                .await?
+            {
+                crate::servicedesk::apply_kit(db, tenant_id, ticket.id, &kit, None).await?;
+            }
+        }
+
         // A routine on an appliance: link the ticket to it and pre-list the
         // parts that fit (air filters, belts…) as potential parts.
         if let Some(asset_id) = plan.asset_id {
