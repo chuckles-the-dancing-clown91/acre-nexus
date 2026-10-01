@@ -102,6 +102,7 @@ async fn integration_suite() {
     public_search_tours_and_autofill(&c).await;
     alpha_single_sign_on(&c).await;
     embed_settings(&c).await;
+    seo_site_info(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3878,4 +3879,62 @@ async fn embed_settings(c: &Ctx) {
     // Put it back for the tests that follow.
     let (st, _) = put(serde_json::json!({ "embed_enabled": true, "embed_origins": "" })).await;
     assert_eq!(st, Status::Ok);
+}
+
+/// Search appearance: the public site info carries the business, the SEO
+/// fields validate, and an unknown host does not resolve.
+async fn seo_site_info(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(c, Some(nw), false, &["integrations:manage"]);
+    let put = |body: serde_json::Value| {
+        let admin = admin.clone();
+        async move { send_json(c, Method::Put, "/business-profile", &admin, body).await }
+    };
+    let (st, _) = put(serde_json::json!({ "seo_title": "x".repeat(71) })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = put(serde_json::json!({ "google_site_verification": "<script>" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, p) = put(serde_json::json!({
+        "business_name": "Northwind Rentals",
+        "seo_title": "Homes for rent in Portland | Northwind",
+        "seo_description": "Browse verified rentals managed by Northwind.",
+        "google_site_verification": "abc-123_XYZ",
+        "facebook_url": "https://facebook.com/northwind",
+    }))
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+
+    let get = |path: String| async move {
+        let resp = c
+            .client
+            .get(path)
+            .header(Header::new("X-Tenant", "northwind"))
+            .dispatch()
+            .await;
+        let st = resp.status();
+        (
+            st,
+            resp.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or_default(),
+        )
+    };
+    let (st, site) = get("/public/site".into()).await;
+    assert_eq!(st, Status::Ok, "{site}");
+    assert_eq!(site["slug"], "northwind");
+    assert_eq!(site["company_name"], "Northwind Rentals");
+    assert_eq!(site["seo_title"], "Homes for rent in Portland | Northwind");
+    assert_eq!(site["google_site_verification"], "abc-123_XYZ");
+    assert_eq!(
+        site["same_as"],
+        serde_json::json!(["https://facebook.com/northwind"])
+    );
+
+    // Listings carry when they were listed (for sitemaps).
+    let (_, ls) = get("/public/listings".into()).await;
+    assert!(ls[0]["listed_at"].as_str().unwrap().contains('T'));
+
+    let (st, _) = get("/public/resolve?host=nowhere.example".into()).await;
+    assert_eq!(st, Status::NotFound);
 }

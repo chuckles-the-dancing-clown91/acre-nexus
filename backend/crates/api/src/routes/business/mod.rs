@@ -46,6 +46,9 @@ pub struct BusinessDto {
     pub embed_enabled: bool,
     /// One `https://host` per line.
     pub embed_origins: Option<String>,
+    pub seo_title: Option<String>,
+    pub seo_description: Option<String>,
+    pub google_site_verification: Option<String>,
     /// A Google Maps key is stored (the workspace's or the platform's).
     pub google_key_set: bool,
     /// Google is really called; otherwise sample data answers.
@@ -77,6 +80,9 @@ pub struct BusinessReq {
     pub embed_enabled: Option<bool>,
     /// One `https://host` per line; an empty string clears the list.
     pub embed_origins: Option<String>,
+    pub seo_title: Option<String>,
+    pub seo_description: Option<String>,
+    pub google_site_verification: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -93,6 +99,15 @@ fn clean(v: &Option<String>) -> Option<String> {
     v.as_ref()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn limited(label: &str, v: &Option<String>, max: usize) -> Result<Option<String>, ApiError> {
+    match clean(v) {
+        Some(s) if s.chars().count() > max => Err(ApiError::BadRequest(format!(
+            "the {label} can be at most {max} characters"
+        ))),
+        other => Ok(other),
+    }
 }
 
 fn url(label: &str, v: &Option<String>) -> Result<Option<String>, ApiError> {
@@ -148,6 +163,9 @@ async fn dto(
             refresh_minutes: p.refresh_minutes,
             embed_enabled: p.embed_enabled,
             embed_origins: p.embed_origins,
+            seo_title: p.seo_title,
+            seo_description: p.seo_description,
+            google_site_verification: p.google_site_verification,
             google_key_set: key_set,
             google_live: live,
             updated_at: Some(p.updated_at.to_rfc3339()),
@@ -174,6 +192,9 @@ async fn dto(
             refresh_minutes: 360,
             embed_enabled: true,
             embed_origins: None,
+            seo_title: None,
+            seo_description: None,
+            google_site_verification: None,
             google_key_set: key_set,
             google_live: live,
             updated_at: None,
@@ -236,6 +257,9 @@ pub async fn save_profile(
             refresh_minutes: 360,
             embed_enabled: true,
             embed_origins: None,
+            seo_title: None,
+            seo_description: None,
+            google_site_verification: None,
             updated_by: None,
             created_at: now.into(),
             updated_at: now.into(),
@@ -307,6 +331,26 @@ pub async fn save_profile(
         after.embed_origins =
             crate::embed::normalize_origins(b.embed_origins.as_deref().unwrap_or(""))
                 .map_err(ApiError::BadRequest)?;
+    }
+    if b.seo_title.is_some() {
+        after.seo_title = limited("search title", &b.seo_title, 70)?;
+    }
+    if b.seo_description.is_some() {
+        after.seo_description = limited("search description", &b.seo_description, 200)?;
+    }
+    if b.google_site_verification.is_some() {
+        after.google_site_verification = clean(&b.google_site_verification);
+        if after.google_site_verification.as_deref().is_some_and(|t| {
+            t.len() > 100
+                || !t
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        }) {
+            return Err(ApiError::BadRequest(
+                "paste only the token from Search Console's meta tag (letters, numbers, - and _)"
+                    .into(),
+            ));
+        }
     }
     after.updated_by = Some(user.user_id);
     after.updated_at = now.into();
@@ -471,5 +515,77 @@ pub async fn embed_config(
             allowed_origins: vec![],
             business: String::new(),
         },
+    }))
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct SiteInfo {
+    pub slug: String,
+    pub company_name: String,
+    pub seo_title: Option<String>,
+    pub seo_description: Option<String>,
+    pub google_site_verification: Option<String>,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub hours: Option<String>,
+    pub website: Option<String>,
+    /// Profiles that are the same business elsewhere (`sameAs`).
+    pub same_as: Vec<String>,
+    pub logo_url: Option<String>,
+}
+
+/// `GET /public/site` — what the public site tells search engines about the
+/// business: names, contact details, profiles, and the home page's title and
+/// description.
+#[rocket_okapi::openapi(tag = "Public Website")]
+#[get("/public/site")]
+pub async fn public_site(
+    _state: &State<AppState>,
+    db: crate::db::RequestDb,
+    tenant: PublicTenant,
+) -> ApiResult<Json<SiteInfo>> {
+    let slug = entity::prelude::Tenant::find_by_id(tenant.tenant_id)
+        .one(&db)
+        .await?
+        .map(|t| t.slug)
+        .unwrap_or_default();
+    let theme = entity::prelude::Theme::find()
+        .filter(entity::theme::Column::TenantId.eq(tenant.tenant_id))
+        .one(&db)
+        .await?;
+    let p = load(&db, tenant.tenant_id).await?;
+    let company = p
+        .as_ref()
+        .and_then(|p| p.business_name.clone())
+        .or_else(|| theme.as_ref().map(|t| t.company_name.clone()))
+        .unwrap_or_default();
+    let same_as = p
+        .as_ref()
+        .map(|p| {
+            [
+                p.facebook_url.clone(),
+                p.instagram_url.clone(),
+                p.yelp_url.clone(),
+                p.nextdoor_url.clone(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
+        })
+        .unwrap_or_default();
+    Ok(Json(SiteInfo {
+        slug,
+        company_name: company,
+        seo_title: p.as_ref().and_then(|p| p.seo_title.clone()),
+        seo_description: p.as_ref().and_then(|p| p.seo_description.clone()),
+        google_site_verification: p.as_ref().and_then(|p| p.google_site_verification.clone()),
+        phone: p.as_ref().and_then(|p| p.phone.clone()),
+        email: p.as_ref().and_then(|p| p.email.clone()),
+        address: p.as_ref().and_then(|p| p.address.clone()),
+        hours: p.as_ref().and_then(|p| p.hours.clone()),
+        website: p.as_ref().and_then(|p| p.website.clone()),
+        same_as,
+        logo_url: theme.and_then(|t| t.logo_url),
     }))
 }

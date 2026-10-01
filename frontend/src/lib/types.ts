@@ -13,6 +13,8 @@ export interface Listing {
   status: string;
   available_on: string;
   description: string;
+  /** ISO time it was listed. */
+  listed_at?: string;
 }
 
 export interface PublicTheme {

@@ -62,6 +62,7 @@ mod m20240101_000054_site_maps;
 mod m20240101_000055_tour_requests;
 mod m20240101_000056_sso;
 mod m20240101_000057_embed;
+mod m20240101_000058_seo;
 
 pub struct Migrator;
 
@@ -126,6 +127,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000055_tour_requests::Migration),
             Box::new(m20240101_000056_sso::Migration),
             Box::new(m20240101_000057_embed::Migration),
+            Box::new(m20240101_000058_seo::Migration),
         ]
     }
 }

@@ -16,6 +16,8 @@ pub struct ListingResp {
     pub status: String,
     pub available_on: String,
     pub description: String,
+    /// When it was listed (ISO 8601), for sitemaps and structured data.
+    pub listed_at: String,
     /// What's in the home — marketing copy for the appliances on record.
     pub appliances: Vec<PublicAppliance>,
     /// The upkeep the home gets on a schedule (filters, servicing, sweeps).
@@ -72,6 +74,7 @@ impl From<entity::listing::Model> for ListingResp {
             status: l.status,
             available_on: l.available_on,
             description: l.description,
+            listed_at: l.created_at.to_rfc3339(),
             appliances: Vec::new(),
             upkeep: Vec::new(),
         }

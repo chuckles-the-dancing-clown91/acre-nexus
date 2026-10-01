@@ -1,310 +1,60 @@
-"use client";
+// The listing page, rendered on the server so search engines and link
+// previews get the whole thing: title, description, canonical link, Open
+// Graph card and schema.org markup.
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import { api, type MyProfileView } from "@/lib/api";
-import type { ApplyResponse, Listing } from "@/lib/types";
-import { SiteHeader } from "@/components/SiteHeader";
-import { Badge, Button, Card, statusTone } from "@/components/ui";
-import { Icon } from "@/components/Icon";
-import { TourForm } from "@/components/TourForm";
-import { gradFor } from "@/lib/gradients";
-import { useAuth } from "@/lib/auth";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { ListingView } from "@/components/site/ListingView";
+import { currentTenant, loadListing, loadSite, siteOrigin } from "@/lib/seo";
+import {
+  jsonLd,
+  listingDescription,
+  listingJsonLd,
+  listingTitle,
+} from "@/lib/seo-schema";
 
-export default function ListingDetailPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [error, setError] = useState<string | null>(null);
+type Props = { params: Promise<{ id: string }> };
 
-  useEffect(() => {
-    if (!id) return;
-    api
-      .publicListing(id)
-      .then(setListing)
-      .catch((e) => setError(e.message));
-  }, [id]);
-
-  return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto max-w-[1100px] px-6 py-8">
-        <Link
-          href="/"
-          className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-ink-2"
-        >
-          <Icon name="back" size={16} /> All listings
-        </Link>
-
-        {error && (
-          <p className="text-bad">Couldn&apos;t load listing: {error}</p>
-        )}
-
-        {listing && (
-          <div className="grid gap-7 md:grid-cols-[1.6fr_1fr]">
-            <div>
-              <div
-                className="relative mb-3 aspect-video rounded-[20px] shadow-acre-lg"
-                style={{ background: gradFor(0) }}
-              >
-                <div className="absolute left-4 top-4">
-                  <Badge tone={statusTone(listing.status)}>
-                    {listing.status}
-                  </Badge>
-                </div>
-              </div>
-              <h1 className="mb-1 font-display text-3xl font-extrabold tracking-tight">
-                {listing.title}
-              </h1>
-              <p className="mb-5 text-ink-3">
-                {listing.address} · {listing.city}
-              </p>
-              <div className="mb-6 flex gap-6 text-sm font-semibold text-ink-2">
-                <span>
-                  {listing.beds === 0 ? "Studio" : `${listing.beds} beds`}
-                </span>
-                <span>{listing.baths} baths</span>
-                <span>{listing.sqft.toLocaleString()} sqft</span>
-                <span>Available {listing.available_on}</span>
-              </div>
-              <p className="leading-relaxed text-ink-2">
-                {listing.description}
-              </p>
-            </div>
-
-            <div>
-              <Card className="sticky top-20 p-5">
-                <div className="font-display text-3xl font-extrabold">
-                  {listing.rent_label}
-                  <span className="text-base font-semibold text-ink-3">
-                    /mo
-                  </span>
-                </div>
-                <p className="mb-4 mt-1 text-sm text-ink-3">
-                  Apply once — screening runs automatically.
-                </p>
-                <ApplyForm listingId={listing.id} />
-              </Card>
-              <Card className="mt-4 p-5">
-                <TourForm listingId={listing.id} />
-              </Card>
-            </div>
-          </div>
-        )}
-      </main>
-    </>
-  );
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const tenant = await currentTenant();
+  const listing = await loadListing(tenant, id);
+  // A missing or unpublished home is not indexed.
+  if (!listing) return { title: "Home not found", robots: { index: false } };
+  const origin = await siteOrigin();
+  const url = `${origin}/listings/${listing.id}`;
+  const title = listingTitle(listing);
+  const description = listingDescription(listing);
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      url,
+      title,
+      description,
+      siteName: (await loadSite(tenant)).company_name,
+    },
+    twitter: { card: "summary_large_image", title, description },
+  };
 }
 
-function ApplyForm({ listingId }: { listingId: string }) {
-  // A signed-in user applies through their account (the renter-portal door):
-  // white glove — everything auto-fills from their profile (name, phone,
-  // pets, income, vehicles), so the form is a single move-in date.
-  const { user } = useAuth();
-  const [profile, setProfile] = useState<MyProfileView | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<ApplyResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    applicant_name: "",
-    email: "",
-    phone: "",
-    income: "",
-    move_in: "",
-  });
-  // FCRA §604(b): screening may only run with the applicant's authorization.
-  const [consent, setConsent] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      api
-        .myProfile()
-        .then(setProfile)
-        .catch(() => setProfile(null));
-    }
-  }, [user]);
-
-  const update =
-    (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (user) {
-        // Only the move-in date travels — the rest comes from the profile.
-        const app = await api.myApply({
-          listing_id: listingId,
-          move_in: form.move_in || undefined,
-          screening_consent: consent,
-        });
-        setResult({
-          application_id: app.id,
-          status: app.status,
-          screening_job_id: "",
-          message:
-            app.status === "Approved"
-              ? "Welcome back — your recent application was reused and pre-approved."
-              : "Application received — screening in progress. Track it under My applications.",
-        });
-      } else {
-        const res = await api.apply({
-          listing_id: listingId,
-          applicant_name: form.applicant_name,
-          email: form.email,
-          phone: form.phone,
-          annual_income_cents: form.income ? Number(form.income) * 100 : 0,
-          move_in: form.move_in,
-          screening_consent: consent,
-        });
-        setResult(res);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Submission failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (result) {
-    return (
-      <div className="rounded-xl border border-good-soft bg-good-soft p-4 text-good">
-        <div className="mb-1 flex items-center gap-2 font-bold">
-          <Icon name="check" size={18} /> Application received
-        </div>
-        <p className="text-sm">{result.message}</p>
-        {user && (
-          <Link
-            href="/account/applications"
-            className="mt-2 inline-block text-sm font-semibold underline"
-          >
-            View my applications
-          </Link>
-        )}
-      </div>
-    );
-  }
-
-  const field =
-    "w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm outline-none focus:border-accent";
-
-  // White glove for signed-in users: everything comes from the profile.
-  if (user) {
-    const p = profile?.profile;
-    return (
-      <form onSubmit={submit} className="space-y-3">
-        <div className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
-          <p className="mb-2 font-semibold">
-            Applying as {profile?.name ?? user.name}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge tone="neutral">{user.email}</Badge>
-            {p?.phone && <Badge tone="neutral">{p.phone}</Badge>}
-            {p?.annual_income_cents != null && (
-              <Badge tone="neutral">
-                ${Math.round(p.annual_income_cents / 100).toLocaleString()}/yr
-              </Badge>
-            )}
-            <Badge tone={p?.has_pet ? "warn" : "neutral"}>
-              {p?.has_pet ? `pets: ${p.pet_details ?? "yes"}` : "no pets"}
-            </Badge>
-            {p?.is_military && <Badge tone="info">military</Badge>}
-            <Badge tone="neutral">
-              {profile?.vehicles.length ?? 0} vehicle
-              {(profile?.vehicles.length ?? 0) === 1 ? "" : "s"}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-ink-3">
-            Pulled from{" "}
-            <Link href="/account/profile" className="underline">
-              your profile
-            </Link>{" "}
-            — update it there and re-apply anywhere with one click.
-          </p>
-        </div>
-        <input
-          placeholder="Desired move-in (e.g. Aug 1)"
-          className={field}
-          value={form.move_in}
-          onChange={update("move_in")}
-        />
-        <label className="flex items-start gap-2 text-xs text-ink-3">
-          <input
-            required
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>
-            I authorize a consumer report — credit, criminal, and eviction
-            history — for this application (Fair Credit Reporting Act).
-          </span>
-        </label>
-        {error && <p className="text-sm text-bad">{error}</p>}
-        <Button type="submit" disabled={submitting} className="w-full">
-          {submitting ? "Submitting…" : "Apply with my profile"}
-        </Button>
-      </form>
-    );
-  }
-
+export default async function ListingPage({ params }: Props) {
+  const { id } = await params;
+  const tenant = await currentTenant();
+  const listing = await loadListing(tenant, id);
+  if (!listing) notFound();
+  const [site, origin] = await Promise.all([loadSite(tenant), siteOrigin()]);
   return (
-    <form onSubmit={submit} className="space-y-2.5">
-      <input
-        required
-        placeholder="Full name"
-        className={field}
-        value={form.applicant_name}
-        onChange={update("applicant_name")}
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLd(listingJsonLd(listing, site, origin)),
+        }}
       />
-      <input
-        required
-        type="email"
-        placeholder="Email"
-        className={field}
-        value={form.email}
-        onChange={update("email")}
-      />
-      <input
-        placeholder="Phone"
-        className={field}
-        value={form.phone}
-        onChange={update("phone")}
-      />
-      <input
-        type="number"
-        placeholder="Annual income (USD)"
-        className={field}
-        value={form.income}
-        onChange={update("income")}
-      />
-      <input
-        placeholder="Desired move-in (e.g. Aug 1)"
-        className={field}
-        value={form.move_in}
-        onChange={update("move_in")}
-      />
-      <label className="flex items-start gap-2 text-xs text-ink-3">
-        <input
-          required
-          type="checkbox"
-          checked={consent}
-          onChange={(e) => setConsent(e.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          I authorize a consumer report — credit, criminal, and eviction history
-          — for this application (Fair Credit Reporting Act).
-        </span>
-      </label>
-      {error && <p className="text-sm text-bad">{error}</p>}
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Submitting…" : "Apply now"}
-      </Button>
-    </form>
+      <ListingView listing={listing} />
+    </>
   );
 }

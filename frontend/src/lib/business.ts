@@ -24,6 +24,9 @@ export interface Business {
   refresh_minutes: number;
   embed_enabled: boolean;
   embed_origins: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  google_site_verification: string | null;
   google_key_set: boolean;
   google_live: boolean;
   updated_at: string | null;

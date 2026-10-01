@@ -67,6 +67,14 @@ export default function SettingsPage() {
             Website widgets
           </Link>
         )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/search"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Search appearance
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}

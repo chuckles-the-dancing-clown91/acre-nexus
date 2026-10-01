@@ -36,6 +36,12 @@ pub struct Model {
     pub embed_enabled: bool,
     /// Sites allowed to show the widgets, one `https://host` per line.
     pub embed_origins: Option<String>,
+    /// The home page's search title (about 60 characters).
+    pub seo_title: Option<String>,
+    /// The home page's search description (about 155 characters).
+    pub seo_description: Option<String>,
+    /// Google Search Console's site verification token.
+    pub google_site_verification: Option<String>,
     pub updated_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

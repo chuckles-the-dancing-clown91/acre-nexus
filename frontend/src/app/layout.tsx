@@ -1,12 +1,28 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { currentTenant, loadSite, siteOrigin } from "@/lib/seo";
+import { homeDescription, homeTitle } from "@/lib/seo-schema";
 
-export const metadata: Metadata = {
-  title: "Vantedge — See every angle. Stay a step ahead.",
-  description:
-    "Multi-tenant property-management platform: public listings, landlord console, and a token-based vendor API.",
-};
+// Per-workspace defaults: the site's own name and origin, so every page
+// inherits a title template, the canonical base and the Search Console tag.
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await currentTenant();
+  const [site, origin] = await Promise.all([loadSite(tenant), siteOrigin()]);
+  return {
+    metadataBase: new URL(origin),
+    title: {
+      default: homeTitle(site),
+      template: `%s | ${site.company_name}`,
+    },
+    description: homeDescription(site, 0),
+    applicationName: site.company_name,
+    verification: site.google_site_verification
+      ? { google: site.google_site_verification }
+      : undefined,
+    openGraph: { siteName: site.company_name, type: "website" },
+  };
+}
 
 export default function RootLayout({
   children,

@@ -85,6 +85,7 @@ mod tests {
             status: "Available".into(),
             available_on: on.into(),
             description: String::new(),
+            listed_at: String::new(),
             appliances: vec![],
             upkeep: vec![],
         }

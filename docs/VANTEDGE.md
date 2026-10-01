@@ -302,6 +302,8 @@ Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
 - **Alpha single sign-on and website widgets.** Signed assertions open Alpha from
   Vantedge and the reverse; listings, tour form, reviews and site maps embed on a
   client's own site. See `docs/SSO-AND-EMBEDS.md`.
+- **Search.** The public site is server-rendered with per-page metadata, schema.org
+  markup, share images, a sitemap and robots rules. See `docs/SEO.md`.
 
 ## Phase 3 — Reminders that run themselves ☐
 
