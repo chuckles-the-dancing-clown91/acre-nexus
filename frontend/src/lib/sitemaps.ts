@@ -1,6 +1,6 @@
 // Site maps: a property laid out on a map (roadmap area 1).
 
-import { request } from "@/lib/api";
+import { DEFAULT_TENANT, request } from "@/lib/api";
 
 export type Geometry =
   | { type: "Point"; coordinates: [number, number] }
@@ -205,11 +205,14 @@ export const siteMaps = {
   publicList: (property_id?: string) =>
     request<SiteMap[]>(
       `/public/site-maps${property_id ? `?property_id=${property_id}` : ""}`,
-      {}
+      { tenant: DEFAULT_TENANT }
     ),
-  publicGet: (id: string) => request<SiteMap>(`/public/site-maps/${id}`, {}),
+  publicGet: (id: string) =>
+    request<SiteMap>(`/public/site-maps/${id}`, { tenant: DEFAULT_TENANT }),
   publicPlan: (id: string) =>
-    request<{ url: string }>(`/public/site-maps/${id}/plan`, {}),
+    request<{ url: string }>(`/public/site-maps/${id}/plan`, {
+      tenant: DEFAULT_TENANT,
+    }),
 };
 
 /** Four corners for a plan image: `widthM` wide, rotated, centred on a point. */

@@ -116,6 +116,7 @@ pub use super::ticket_part::Entity as TicketPart;
 pub use super::ticket_quote::Entity as TicketQuote;
 pub use super::time_entry::Entity as TimeEntry;
 pub use super::time_off_request::Entity as TimeOffRequest;
+pub use super::tour_request::Entity as TourRequest;
 pub use super::unit::Entity as Unit;
 pub use super::user::Entity as User;
 pub use super::user_profile::Entity as UserProfile;

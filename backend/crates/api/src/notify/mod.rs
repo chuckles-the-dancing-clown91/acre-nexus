@@ -130,6 +130,13 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    DefaultTemplate {
+        key: "tour_requested",
+        subject: "Tour request: {name} for {home}",
+        body: "Hi {recipient},\n\n{name} asked to tour {home}. Preferred times: {times}. \
+               Reach them at {contact}. Open Tours in the console to follow up.\n\n— {company}",
+        sms: "Tour request from {name} for {home}. Contact {contact}.",
+    },
     // ---- The back office ----
     DefaultTemplate {
         key: "missed_punch",

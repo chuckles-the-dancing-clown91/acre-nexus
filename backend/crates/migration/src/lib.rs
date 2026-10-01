@@ -59,6 +59,7 @@ mod m20240101_000051_processes;
 mod m20240101_000052_issue_catalog;
 mod m20240101_000053_business_profile;
 mod m20240101_000054_site_maps;
+mod m20240101_000055_tour_requests;
 
 pub struct Migrator;
 
@@ -120,6 +121,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000052_issue_catalog::Migration),
             Box::new(m20240101_000053_business_profile::Migration),
             Box::new(m20240101_000054_site_maps::Migration),
+            Box::new(m20240101_000055_tour_requests::Migration),
         ]
     }
 }

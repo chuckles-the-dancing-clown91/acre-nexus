@@ -282,6 +282,24 @@ other as vendor and client.
   camera-scan fallback for browsers without `BarcodeDetector` (zxing), and
   ordering from Amazon / Home Depot directly from close-out.
 
+## Phase 2D — Audit, turns, issues, maps, reviews and search ◐
+
+Shipped on top of Phase 2C (details and what is left in `docs/ROADMAP-NEXT.md`):
+
+- **Audit trail.** Every change to a property, unit, lease, listing, ticket,
+  appliance, turn, map and profile records who, what and the before and after,
+  tied to the property. Support edits by Vantedge staff are flagged. A property
+  History tab, a workspace audit page and a CSV export.
+- **Turnover step logic.** A step engine with dependencies, gates, photo
+  requirements and work-order linking; the default 13-step turn starts when a
+  move-out inspection completes.
+- **Issue catalog.** Pick an issue, generate the ticket and the shopping list.
+- **Business profile and Google reviews.** Settings for the client, editable by
+  Vantedge support on a call; a reviews strip on the public site.
+- **Site maps.** Apartment layouts and campgrounds on a custom map.
+- **Tenant search and tours.** Filters, sort, tour requests.
+- **Autofill review.** Suggested property values from the record, applied on a click.
+
 ## Phase 3 — Reminders that run themselves ☐
 
 Everything Alpha's scheduler does, translated to rentals. All on the existing

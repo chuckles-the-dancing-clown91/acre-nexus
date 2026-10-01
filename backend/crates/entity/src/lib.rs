@@ -133,6 +133,7 @@ pub mod ticket_part;
 pub mod ticket_quote;
 pub mod time_entry;
 pub mod time_off_request;
+pub mod tour_request;
 pub mod unit;
 pub mod user;
 pub mod user_profile;

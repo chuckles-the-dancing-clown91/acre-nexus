@@ -25,6 +25,7 @@ mod accounting;
 mod app_workflow;
 mod audit;
 mod auth;
+mod autofill;
 mod bankfeed;
 mod billing;
 mod config;

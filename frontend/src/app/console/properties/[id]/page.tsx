@@ -28,6 +28,7 @@ import { Badge, Button, Card, StatTile, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { AssetsCard } from "@/components/AssetsCard";
 import { PropertyHistoryTab } from "@/components/PropertyHistoryTab";
+import { AutofillCard } from "@/components/AutofillCard";
 import { AssignmentsCard } from "@/components/AssignmentsCard";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { useAuth } from "@/lib/auth";
@@ -380,6 +381,10 @@ export default function PropertyProfilePage() {
           </button>
         ))}
       </div>
+
+      {tab === "overview" && can("property:write") && (
+        <AutofillCard propertyId={id} />
+      )}
 
       {tab === "overview" && (
         <OverviewTab

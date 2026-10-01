@@ -14,12 +14,12 @@ map and on the autofill work already done.
 | # | Area | Status |
 |---|------|--------|
 | 1 | Audit trail: who changed what on which property | ☑ |
-| 2 | Business profile, Google reviews and integrations (client + Vantedge staff) | ☐ |
-| 3 | Turnover with step logic | ☐ |
-| 4 | Issue catalog → generate ticket → parts → shopping list | ☐ |
-| 5 | Site maps: apartment layouts and campgrounds | ☐ |
-| 6 | Tenant home search | ☐ |
-| 7 | House onboarding with autofill | ☐ |
+| 2 | Business profile, Google reviews and integrations (client + Vantedge staff) | ☑ |
+| 3 | Turnover with step logic | ☑ |
+| 4 | Issue catalog → generate ticket → parts → shopping list | ☑ |
+| 5 | Site maps: apartment layouts and campgrounds | ☑ |
+| 6 | Tenant home search | ◐ |
+| 7 | House onboarding with autofill | ◐ |
 | 8 | Campground reservations (follows the map) | ☐ |
 
 ---
@@ -58,7 +58,7 @@ edits and creations are covered; later areas write to it as they land.
   before→after, a "Vantedge support" badge), and a filterable audit page.
 - Retention: a `audit.retention_days` setting (default: keep) with a nightly job.
 
-## 2. Business profile, Google reviews and integrations ☐
+## 2. Business profile, Google reviews and integrations ☑
 
 **Today.** Alpha has the whole thing: business name/phone/email/address/website,
 a Google Business Profile search-and-pick, a review link, review asks after a
@@ -85,7 +85,7 @@ already impersonate a workspace (`POST /platform/impersonate`, with a reason, a
   every edit is stamped `support` in the audit trail (area 1) and visible to the
   customer in their own history.
 
-## 3. Turnover with step logic ☐
+## 3. Turnover with step logic ☑
 
 **Today.** Completing a move-out inspection opens one make-ready ticket and sets
 the unit to `make_ready`. That ticket is the whole turn. There is **no checklist,
@@ -109,7 +109,7 @@ no sequence, no vendor order, no target date, and no "ready to lease" gate**.
 - UI: a turn board per property and a "Turns" page: progress bars, blocked steps,
   who is holding things up, the days-vacant clock.
 
-## 4. Issue catalog → generate ticket → parts → shopping list ☐
+## 4. Issue catalog → generate ticket → parts → shopping list ☑
 
 **Today.** A resident or employee opens a ticket with a free-text title and one of
 six hard-coded categories. There is **no catalog of common issues** and nothing
@@ -130,7 +130,7 @@ stock all exist and work once a ticket has parts.)
 - Learning loop: the parts actually *used* on resolved tickets of an issue type
   adjust that type's suggested parts (shown as "usually also needs…").
 
-## 5. Site maps: apartment layouts and campgrounds ☐
+## 5. Site maps: apartment layouts and campgrounds ☑
 
 **Today.** Nothing: there is **no building/floor/site/amenity entity, no geometry
 field beyond one lat/lng point, no campsite concept, and no map library** in the
@@ -179,7 +179,7 @@ Overpass.)
   area and length readouts, a legend, GeoJSON import/export, print to PDF.
 - Public: published maps appear on the listing page and in search (area 6).
 
-## 6. Tenant home search ☐
+## 6. Tenant home search ◐
 
 **Today.** `GET /public/listings` takes **no filters** and returns every public
 listing; the page is a grid. There is no search, sort, map, gallery, saved search,
@@ -203,7 +203,7 @@ with alerts, tours without phone tag, and commute time.
 6. Favourites and compare (local first, account later).
 7. Commute-time filter (a routing provider call, cached).
 
-## 7. House onboarding with autofill ☐
+## 7. House onboarding with autofill ◐
 
 **Today.** A three-step wizard with address autocomplete; the property, loans,
 assignments and an enrichment job are created in one call. But enrichment is
@@ -246,3 +246,32 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
 - Anything that calls a paid service is sandbox-first (`LIVE_PROVIDERS`).
 - Each area ships with an integration test that walks it end to end, and a
   screenshot review in a browser.
+
+## What shipped, and what is left
+
+- **2 Business profile and Google reviews** ☑. One profile per workspace, Google
+  place search and details (Places API New), display rules, a public reviews
+  strip. Only the place id is stored. Without a live key, sample data answers and
+  is marked. Vantedge support and account-manager roles can edit it; edits are
+  flagged as support changes. Left: Facebook, Yelp and Nextdoor review pulls.
+- **3 Turnover** ☑. A reusable step engine (templates, runs, dependency-driven
+  readiness, required-step gate with audited override, photo-required steps,
+  work orders that complete their step, unit-vacant gate, days vacant and cost).
+  A completed move-out inspection starts the turn. Left: onboarding and site-turn
+  templates on the same engine, due-date reminders.
+- **4 Issue catalog** ☑. Starter set per workspace, editable. Generate opens the
+  ticket, lists the usual parts tied to stock by name, and builds the shopping
+  list. Left: learn parts from closed tickets, per-appliance issue suggestions.
+- **5 Site maps** ☑. Apartments and campgrounds on satellite, streets, an
+  uploaded plan, or a blank grid; units linked to unit records and coloured by
+  status; campsite attributes; GeoJSON export and import with OSM tags; publish.
+  Left: public map page on the listing, print to PDF, snapping.
+- **6 Tenant home search** ◐. Filters and sort on the API and home page, and
+  tour requests (public form, honeypot, consent, console triage, staff
+  notification). Left: map view, gallery, saved searches and alerts, favourites,
+  commute filter, calendar hold for a tour.
+- **7 House onboarding with autofill** ◐. The property record's type, beds,
+  baths and square feet are proposed and applied only when ticked, with an audit
+  entry. Left: year built and lot from a live parcel provider, utilities and
+  schools, and proposing a rent from comparables.
+- **8 Campground reservations** ☐. Follows the map.

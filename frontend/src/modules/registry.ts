@@ -302,6 +302,12 @@ export const MODULES: ModuleDef[] = [
         icon: "mail",
         permission: "application:read",
       },
+      {
+        href: "/console/tours",
+        label: "Tours",
+        icon: "calendar",
+        permission: "application:read",
+      },
     ],
   },
   {

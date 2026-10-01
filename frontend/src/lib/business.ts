@@ -1,6 +1,6 @@
 // The business profile and its Google reviews (roadmap area 5).
 
-import { request } from "@/lib/api";
+import { DEFAULT_TENANT, request } from "@/lib/api";
 
 export interface Business {
   business_name: string | null;
@@ -93,5 +93,6 @@ export const business = {
       `/business-profile/google/place${refresh ? "?refresh=true" : ""}`,
       { auth: true }
     ),
-  publicReviews: () => request<PublicReviews>("/public/reviews", {}),
+  publicReviews: () =>
+    request<PublicReviews>("/public/reviews", { tenant: DEFAULT_TENANT }),
 };

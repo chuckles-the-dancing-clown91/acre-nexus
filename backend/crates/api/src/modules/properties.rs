@@ -37,6 +37,8 @@ impl PlatformModule for PropertiesModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
+            crate::routes::properties::autofill::get_autofill,
+            crate::routes::properties::autofill::apply_autofill,
             crate::routes::sitemaps::list_maps,
             crate::routes::sitemaps::create_map,
             crate::routes::sitemaps::get_map,

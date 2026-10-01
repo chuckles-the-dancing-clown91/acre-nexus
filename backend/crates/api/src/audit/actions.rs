@@ -411,3 +411,9 @@ pub const SITE_MAP_CREATE: &str = "site_map.create";
 pub const SITE_MAP_UPDATE: &str = "site_map.update";
 pub const SITE_MAP_DELETE: &str = "site_map.delete";
 pub const SITE_MAP_DRAW: &str = "site_map.draw";
+
+// ---- Tour requests ----
+pub const TOUR_REQUEST_UPDATE: &str = "tour_request.update";
+
+// ---- Autofill ----
+pub const PROPERTY_AUTOFILL: &str = "property.autofill_apply";

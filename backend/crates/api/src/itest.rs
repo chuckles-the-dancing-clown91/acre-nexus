@@ -99,6 +99,7 @@ async fn integration_suite() {
     issue_catalog_generates_ticket_and_shopping_list(&c).await;
     business_profile_and_google_reviews(&c).await;
     site_maps_apartment_and_campground(&c).await;
+    public_search_tours_and_autofill(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3384,4 +3385,222 @@ async fn bad_attrs(c: &Ctx, token: &str, map_id: &str) -> Status {
     )
     .await
     .0
+}
+
+/// Public search and tour requests, then autofill review on a property.
+async fn public_search_tours_and_autofill(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let get_pub = |path: String| async move {
+        let resp = c
+            .client
+            .get(path)
+            .header(Header::new("X-Tenant", "northwind"))
+            .dispatch()
+            .await;
+        let st = resp.status();
+        (
+            st,
+            resp.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or_default(),
+        )
+    };
+
+    // Search: the full list, then narrowed and sorted.
+    let (st, all) = get_pub("/public/listings".into()).await;
+    assert_eq!(st, Status::Ok);
+    let all = all.as_array().unwrap().clone();
+    assert!(!all.is_empty(), "the demo has public listings");
+    let (_, cheap_first) = get_pub("/public/listings?sort=price_asc".into()).await;
+    let rents: Vec<i64> = cheap_first
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["rent_cents"].as_i64().unwrap())
+        .collect();
+    assert!(rents.windows(2).all(|w| w[0] <= w[1]), "{rents:?}");
+    let top = *rents.last().unwrap();
+    let (_, under) = get_pub(format!("/public/listings?max_rent={}", top / 100 - 1)).await;
+    assert!(under.as_array().unwrap().len() < all.len());
+    let (_, none) = get_pub("/public/listings?q=zzzz-no-such-place".into()).await;
+    assert!(none.as_array().unwrap().is_empty());
+
+    // A tour request: validation, honeypot, then a real one.
+    let listing_id = all[0]["id"].as_str().unwrap().to_string();
+    let post_pub = |body: serde_json::Value| async move {
+        let resp = c
+            .client
+            .post("/public/tour-requests")
+            .header(ContentType::JSON)
+            .header(Header::new("X-Tenant", "northwind"))
+            .body(body.to_string())
+            .dispatch()
+            .await;
+        resp.status()
+    };
+    let ok = serde_json::json!({ "listing_id": listing_id, "name": "Pat Prospect",
+        "email": "pat@example.com", "phone": "555-0111",
+        "preferred_times": "Sat morning", "consent": true });
+    assert_eq!(
+        post_pub(serde_json::json!({ "name": "x", "email": "nope", "consent": true })).await,
+        Status::BadRequest
+    );
+    assert_eq!(
+        post_pub(serde_json::json!({ "name": "x", "email": "a@b.co", "consent": false })).await,
+        Status::BadRequest
+    );
+    let mut bot = ok.clone();
+    bot["website"] = "http://spam.example".into();
+    assert_eq!(post_pub(bot).await, Status::Ok);
+    assert_eq!(post_pub(ok).await, Status::Ok);
+
+    let lead = mint(
+        c,
+        Some(nw),
+        false,
+        &["application:read", "application:write"],
+    );
+    let (st, tours) = get_json(c, "/tour-requests", &lead).await;
+    assert_eq!(st, Status::Ok, "{tours}");
+    let tours = tours.as_array().unwrap();
+    assert_eq!(tours.len(), 1, "the honeypot request was not stored");
+    assert_eq!(tours[0]["name"], "Pat Prospect");
+    assert_eq!(tours[0]["status"], "new");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tour-requests/{}", tours[0]["id"].as_str().unwrap()),
+        &lead,
+        serde_json::json!({ "status": "scheduled", "note": "Saturday 10am" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, sched) = get_json(c, "/tour-requests?status=scheduled", &lead).await;
+    assert_eq!(sched.as_array().unwrap().len(), 1);
+    let other = mint(c, Some(cascade), false, &["application:read"]);
+    let (_, theirs) = get_json(c, "/tour-requests", &other).await;
+    assert!(theirs.as_array().unwrap().is_empty());
+    let nobody = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/tour-requests", &nobody).await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Autofill: a one-unit house whose record says something different.
+    let mgr = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:manage",
+            "audit:read",
+        ],
+    );
+    let (st, p) = post_json(
+        c,
+        "/properties",
+        &mgr,
+        serde_json::json!({ "name": "Autofill House", "address": "9 Fill St", "city": "Boise",
+            "units": 1, "occupied_units": 0, "monthly_rent_cents": 0, "property_type": "multi_family" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    let pid = p["id"].as_str().unwrap().to_string();
+    let puid = uuid::Uuid::parse_str(&pid).unwrap();
+    let (_, unit) = post_json(
+        c,
+        &format!("/properties/{pid}/units"),
+        &mgr,
+        serde_json::json!({ "unit_number": "1", "beds": 2, "status": "vacant" }),
+    )
+    .await;
+    assert!(unit["id"].is_string(), "{unit}");
+
+    // Before the record is fetched there is nothing to propose.
+    let (st, none) = get_json(c, &format!("/properties/{pid}/autofill"), &mgr).await;
+    assert_eq!(st, Status::Ok, "{none}");
+    // Make sure the detail row says what we want (the job may or may not have run).
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let existing = entity::prelude::PropertyDetail::find()
+        .filter(entity::property_detail::Column::PropertyId.eq(puid))
+        .one(&c.db)
+        .await
+        .unwrap();
+    let now = chrono::Utc::now();
+    match existing {
+        Some(d) => {
+            let mut am: entity::property_detail::ActiveModel = d.into();
+            am.property_type = Set(Some("Single Family Residence".into()));
+            am.beds = Set(Some(3));
+            am.baths = Set(Some(2.5));
+            am.sqft = Set(Some(1400));
+            am.last_enriched_at = Set(Some(now.into()));
+            am.update(&c.db).await.unwrap();
+        }
+        None => {
+            entity::property_detail::ActiveModel {
+                property_id: Set(puid),
+                tenant_id: Set(nw),
+                property_type: Set(Some("Single Family Residence".into())),
+                beds: Set(Some(3)),
+                baths: Set(Some(2.5)),
+                sqft: Set(Some(1400)),
+                last_enriched_at: Set(Some(now.into())),
+                created_at: Set(now.into()),
+                updated_at: Set(now.into()),
+                ..Default::default()
+            }
+            .insert(&c.db)
+            .await
+            .unwrap();
+        }
+    }
+    let (st, ps) = get_json(c, &format!("/properties/{pid}/autofill"), &mgr).await;
+    assert_eq!(st, Status::Ok, "{ps}");
+    let fields: Vec<&str> = ps["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["field"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        fields,
+        vec!["property_type", "unit_beds", "unit_baths", "unit_sqft"],
+        "{ps}"
+    );
+
+    // Apply the type and square footage only; the rest stay proposed.
+    let (st, after) = post_json(
+        c,
+        &format!("/properties/{pid}/autofill/apply"),
+        &mgr,
+        serde_json::json!({ "fields": ["property_type", "unit_sqft"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{after}");
+    let left: Vec<&str> = after["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["field"].as_str().unwrap())
+        .collect();
+    assert_eq!(left, vec!["unit_beds", "unit_baths"]);
+    let (_, prop) = get_json(c, &format!("/properties/{pid}"), &mgr).await;
+    assert_eq!(prop["property_type"], "single_family");
+    let (st, _) = post_json(
+        c,
+        &format!("/properties/{pid}/autofill/apply"),
+        &mgr,
+        serde_json::json!({ "fields": ["nonsense"] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, hist) = get_json(c, &format!("/properties/{pid}/history?limit=50"), &mgr).await;
+    assert!(hist["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["action"] == "property.autofill_apply"));
 }

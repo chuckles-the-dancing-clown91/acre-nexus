@@ -7,3 +7,5 @@ pub mod dto;
 pub mod listing_detail;
 pub mod listings;
 pub mod public_theme;
+pub mod search;
+pub mod tours;

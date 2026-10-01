@@ -7,18 +7,28 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { ListingCard } from "@/components/ListingCard";
 import { Icon } from "@/components/Icon";
 import { ReviewsStrip } from "@/components/ReviewsStrip";
+import { ListingFilters } from "@/components/ListingFilters";
+import { tours, type ListingSearch } from "@/lib/tours";
 import { BrandMark, BRAND_NAME, BRAND_SLOGAN } from "@/components/Brand";
 
 export default function HomePage() {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState<ListingSearch>({});
 
+  // Typing waits a beat so every keystroke is not a request.
   useEffect(() => {
-    api
-      .publicListings()
-      .then(setListings)
-      .catch((e) => setError(e.message));
-  }, []);
+    const t = setTimeout(() => {
+      tours
+        .search(search)
+        .then((l) => {
+          setListings(l);
+          setError(null);
+        })
+        .catch((e) => setError(e.message));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   return (
     <>
@@ -80,6 +90,8 @@ export default function HomePage() {
               </span>
             )}
           </div>
+
+          <ListingFilters value={search} onChange={setSearch} />
 
           {error && (
             <div className="rounded-2xl border border-bad-soft bg-bad-soft p-6 text-bad">

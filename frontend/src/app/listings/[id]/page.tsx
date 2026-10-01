@@ -8,6 +8,7 @@ import type { ApplyResponse, Listing } from "@/lib/types";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { TourForm } from "@/components/TourForm";
 import { gradFor } from "@/lib/gradients";
 import { useAuth } from "@/lib/auth";
 
@@ -84,6 +85,9 @@ export default function ListingDetailPage() {
                   Apply once — screening runs automatically.
                 </p>
                 <ApplyForm listingId={listing.id} />
+              </Card>
+              <Card className="mt-4 p-5">
+                <TourForm listingId={listing.id} />
               </Card>
             </div>
           </div>
