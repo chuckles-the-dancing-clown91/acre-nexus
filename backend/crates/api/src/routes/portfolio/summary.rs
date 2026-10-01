@@ -20,12 +20,16 @@ pub async fn summary(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
 ) -> ApiResult<Json<PortfolioSummary>> {
     user.require(Permission::PropertyRead)?;
-    let props = Property::find()
+    let props: Vec<_> = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .all(&db)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|p| access.sees(p.id))
+        .collect();
 
     let count = props.len() as i64;
     let units: i64 = props.iter().map(|p| p.units as i64).sum();
@@ -61,7 +65,10 @@ pub async fn summary(
                 .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id))
                 .filter(entity::maintenance_ticket::Column::Status.is_in(OPEN_STATUSES.to_vec()))
                 .all(&db)
-                .await?;
+                .await?
+                .into_iter()
+                .filter(|t| access.sees(t.property_id))
+                .collect::<Vec<_>>();
             let urgent = tickets.iter().filter(|t| t.priority == "urgent").count() as i64;
             (Some(tickets.len() as i64), Some(urgent))
         } else {
@@ -74,7 +81,10 @@ pub async fn summary(
                 .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
                 .filter(entity::lease::Column::BalanceCents.gt(0))
                 .all(&db)
-                .await?;
+                .await?
+                .into_iter()
+                .filter(|l| access.sees(l.property_id))
+                .collect::<Vec<_>>();
             let total: i64 = leases.iter().map(|l| l.balance_cents).sum();
             (Some(leases.len() as i64), Some(total), Some(usd(total)))
         } else {
@@ -82,12 +92,32 @@ pub async fn summary(
         };
 
     let pending_applications = if user.grants.has_key(Permission::ApplicationRead.as_str()) {
+        // Applications reach a property through their listing.
+        let listing_property: std::collections::HashMap<uuid::Uuid, Option<uuid::Uuid>> =
+            if access.is_scoped() {
+                entity::prelude::Listing::find()
+                    .filter(entity::listing::Column::TenantId.eq(scope.tenant_id))
+                    .all(&db)
+                    .await?
+                    .into_iter()
+                    .map(|l| (l.id, l.property_id))
+                    .collect()
+            } else {
+                Default::default()
+            };
         let n = Application::find()
             .filter(entity::application::Column::TenantId.eq(scope.tenant_id))
             .filter(entity::application::Column::Status.eq("Screening"))
             .all(&db)
             .await?
-            .len() as i64;
+            .into_iter()
+            .filter(|a| {
+                !access.is_scoped()
+                    || a.listing_id
+                        .and_then(|l| listing_property.get(&l).copied().flatten())
+                        .is_some_and(|p| access.sees(p))
+            })
+            .count() as i64;
         Some(n)
     } else {
         None
@@ -103,6 +133,15 @@ pub async fn summary(
                 .await?;
             let mut upcoming = 0i64;
             let mut overdue = 0i64;
+            // Scoped people see the reminders on their own properties.
+            let reminders: Vec<_> = reminders
+                .into_iter()
+                .filter(|r| {
+                    !access.is_scoped()
+                        || r.subject_type == "property"
+                            && r.subject_id.is_some_and(|p| access.sees(p))
+                })
+                .collect();
             for r in &reminders {
                 match crate::reminders::days_until(&r.due_date, today) {
                     Some(d) if d < 0 => overdue += 1,

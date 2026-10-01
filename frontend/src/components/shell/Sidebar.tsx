@@ -19,7 +19,7 @@ import { useUiStore } from "@/lib/store";
 import { activeMembership, activeWorkspace } from "@/lib/workspaces";
 import { humanizeKey } from "@/lib/iam";
 import { cn } from "@/lib/utils";
-import { BrandLogo, VantedgeMark } from "@/components/brand";
+import { BrandLogo, VantedgeTile } from "@/components/brand";
 import { Icon } from "@/components/ui/icon";
 import { Kbd, Tooltip } from "@/components/ui/misc";
 import {
@@ -225,26 +225,49 @@ function NavRow({
 
 function WorkspaceHeader({ collapsed }: { collapsed: boolean }) {
   const { user, switchWorkspace } = useAuth();
-  const { brand } = useTheme();
+  const { brand, gate } = useTheme();
   if (!user) return null;
   const workspace = activeWorkspace(user);
   const membership = activeMembership(user);
   const platform = workspace?.kind === "platform";
+  const role = membership ? humanizeKey(membership.profile_type) : "";
   const persona = membership
-    ? [humanizeKey(membership.profile_type), membership.title]
+    ? [
+        role,
+        // A title that just repeats the role adds nothing.
+        membership.title?.toLowerCase() === role.toLowerCase()
+          ? null
+          : membership.title,
+      ]
         .filter(Boolean)
         .join(" · ")
     : user.is_platform_staff
       ? "Platform staff"
       : "Workspace";
   const switchable = user.workspaces.length > 1;
+  // Field roles see their own properties only; say so under their name.
+  const reachLine =
+    user.reach?.scope === "properties"
+      ? ` · ${user.reach.property_ids.length} ${
+          user.reach.property_ids.length === 1 ? "property" : "properties"
+        }`
+      : "";
 
+  // HQ is always Vantedge. A client workspace wears the client's logo only on
+  // the client's own domain; on Vantedge's hosts it is a monogram of its name.
   const logo = platform ? (
-    <span className="flex size-9 shrink-0 items-center justify-center rounded-[30%] bg-accent text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_6px_20px_-8px_var(--accent)]">
-      <VantedgeMark size={18} />
-    </span>
-  ) : (
+    <VantedgeTile size={36} />
+  ) : gate.branded ? (
     <BrandLogo brand={brand} size={36} />
+  ) : (
+    <BrandLogo
+      brand={{
+        ...brand,
+        logo_url: null,
+        company_name: workspace?.name ?? brand.company_name,
+      }}
+      size={36}
+    />
   );
 
   const body = (
@@ -262,6 +285,7 @@ function WorkspaceHeader({ collapsed }: { collapsed: boolean }) {
           </span>
           <span className="block truncate text-[11px] text-fg-3">
             {persona}
+            {reachLine}
           </span>
         </span>
       )}

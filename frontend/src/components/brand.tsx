@@ -82,6 +82,46 @@ export function BrandLogo({
   );
 }
 
+/** The Vantedge tile: the mark on the accent, the size of a workspace logo. */
+export function VantedgeTile({
+  size = 36,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      style={{ width: size, height: size }}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-[30%] bg-accent text-accent-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.35),0_6px_20px_-8px_var(--accent)]",
+        className
+      )}
+    >
+      <VantedgeMark size={Math.round(size / 2)} />
+    </span>
+  );
+}
+
+/** The gate's identity: the client's logo on their own domain, else Vantedge. */
+export function GateLogo({
+  brand,
+  branded,
+  size = 36,
+  className,
+}: {
+  brand: Brand;
+  branded: boolean;
+  size?: number;
+  className?: string;
+}) {
+  return branded ? (
+    <BrandLogo brand={brand} size={size} className={className} />
+  ) : (
+    <VantedgeTile size={size} className={className} />
+  );
+}
+
 export function PoweredBy({ className }: { className?: string }) {
   return (
     <span

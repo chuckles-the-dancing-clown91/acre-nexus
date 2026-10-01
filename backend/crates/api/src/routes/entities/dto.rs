@@ -15,6 +15,8 @@ pub struct CounterpartyDto {
     /// Linked partner system (`alpha`), when this vendor runs one.
     pub partner_kind: Option<String>,
     pub partner_status: Option<String>,
+    /// The trades this vendor covers (`plumbing`, `electrical`, …).
+    pub trades: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -33,6 +35,7 @@ impl From<entity::counterparty::Model> for CounterpartyDto {
             notes: c.notes,
             partner_kind: c.partner_kind,
             partner_status: c.partner_status,
+            trades: serde_json::from_value(c.trades).unwrap_or_default(),
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -78,6 +81,8 @@ pub struct CreateCounterpartyReq {
     pub website: Option<String>,
     pub address: Option<String>,
     pub notes: Option<String>,
+    /// The trades this vendor covers.
+    pub trades: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -90,6 +95,8 @@ pub struct UpdateCounterpartyReq {
     pub website: Option<String>,
     pub address: Option<String>,
     pub notes: Option<String>,
+    /// The trades this vendor covers.
+    pub trades: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

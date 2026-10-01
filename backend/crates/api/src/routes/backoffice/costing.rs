@@ -391,6 +391,7 @@ pub(crate) async fn in_house_vendor(
     }
     let now = Utc::now();
     Ok(entity::counterparty::ActiveModel {
+        trades: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         kind: Set(IN_HOUSE_KIND.into()),

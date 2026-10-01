@@ -27,7 +27,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::modules::JobOutcome;
 use crate::providers::{err, Provider, ProviderCtx, ProviderError};
 use chrono::Utc;
-use entity::prelude::{Counterparty, MaintenanceTicket, Property, Tenant};
+use entity::prelude::{Counterparty, MaintenanceTicket, Property, Tenant, TicketTask};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     Set,
@@ -373,6 +373,10 @@ pub struct DispatchSpec {
     /// e.g. `driveway`, `house-wash` — Alpha's price key; else its first service.
     pub service_key: Option<String>,
     pub note: Option<String>,
+    /// What the vendor's job is called, when it's one task on the work order
+    /// rather than the whole of it.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// Queue the send. The vendor becomes the ticket's assignee right away; the
@@ -453,6 +457,7 @@ async fn add_note(
     author: Option<String>,
 ) {
     let c = entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         ticket_id: Set(ticket_id),
@@ -468,7 +473,15 @@ async fn add_note(
     }
 }
 
-/// The work order as Alpha wants it (`PartnerJobIn`).
+/// Text for one of Alpha's string fields: never null (Alpha's `PartnerJobIn`
+/// takes strings, "" for none) and within its length.
+fn text(v: Option<&str>, max: usize) -> String {
+    v.map(str::trim).unwrap_or("").chars().take(max).collect()
+}
+
+/// The work order as Alpha wants it (`PartnerJobIn`, in Alpha's
+/// `config/api/schemas.py`): strings are "" rather than null and kept within
+/// Alpha's limits, or Alpha answers 422.
 pub fn job_request(
     t: &entity::maintenance_ticket::Model,
     p: &entity::property::Model,
@@ -482,21 +495,26 @@ pub fn job_request(
         }
         details.push_str(n.trim());
     }
+    let title = spec
+        .title
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(&t.title);
     json!({
         "external_ref": t.id,
-        "title": t.title,
-        "details": details,
-        "service_key": spec.service_key.clone().unwrap_or_default(),
-        "service_title": t.category,
+        "title": text(Some(title), 200),
+        "details": text(Some(&details), 4000),
+        "service_key": text(spec.service_key.as_deref(), 60),
+        "service_title": text(Some(&t.category), 120),
         "requested_for": spec.requested_for.clone().or_else(|| t.due_date.clone().map(|d| format!("{d}T09:00:00"))),
-        "client_name": tenant_name,
-        "property_label": p.name,
-        "address": p.address,
-        "city": p.city,
-        "state": p.state,
-        "postal_code": p.postal_code,
-        "access_notes": t.access_notes,
-        "site_contact_name": t.reporter,
+        "client_name": text(Some(tenant_name), 200),
+        "property_label": text(Some(&p.name), 200),
+        "address": text(Some(&p.address), 300),
+        "city": text(Some(&p.city), 120),
+        "state": text(Some(&p.state), 2),
+        "postal_code": text(Some(&p.postal_code), 12),
+        "access_notes": text(t.access_notes.as_deref(), 2000),
+        "site_contact_name": text(t.reporter.as_deref(), 120),
     })
 }
 
@@ -663,7 +681,7 @@ pub fn apply_event(event: &str, job: &Value) -> (Option<&'static str>, String) {
                 if when.is_empty() {
                     "a date to be confirmed".to_string()
                 } else {
-                    when.replace('T', " ")
+                    when_label(&when)
                 },
                 if crew.is_empty() {
                     String::new()
@@ -704,6 +722,54 @@ pub fn apply_event(event: &str, job: &Value) -> (Option<&'static str>, String) {
             },
         ),
         _ => (None, format!("Vendor update: {}", s("status"))),
+    }
+}
+
+/// Alpha's ISO time as people read it: "Wed Jan 2, 9:00 AM" in the time
+/// Alpha gave ("UTC" said when that's what it is).
+fn when_label(iso: &str) -> String {
+    match chrono::DateTime::parse_from_rfc3339(iso) {
+        Ok(d) => format!(
+            "{}{}",
+            d.format("%a %b %-d, %-I:%M %p"),
+            if d.offset().local_minus_utc() == 0 {
+                " UTC"
+            } else {
+                ""
+            }
+        ),
+        Err(_) => iso.replace('T', " "),
+    }
+}
+
+/// What one Alpha event does to a task that was sent to the vendor:
+/// `(new status, give it back)`. Started → doing, finished → done, cancelled →
+/// back to the desk to send again. Finished or skipped tasks stay put.
+pub fn task_move(event: &str, current: &str) -> Option<(&'static str, bool)> {
+    if current == "done" || current == "skipped" {
+        return None;
+    }
+    match event {
+        "job.started" if current == "todo" => Some(("doing", false)),
+        "job.completed" => Some(("done", false)),
+        "job.cancelled" => Some(("todo", true)),
+        _ => None,
+    }
+}
+
+/// Whether an Alpha event's status should move the work order. Without tasks
+/// the job is the work order. With tasks the vendor has one part of it: it
+/// moves an untouched work order along, and resolves it only when every task
+/// is finished.
+pub fn ticket_moves(next: &str, current: &str, has_tasks: bool, all_closed: bool) -> bool {
+    if !has_tasks {
+        return true;
+    }
+    match next {
+        "resolved" => all_closed,
+        "scheduled" => matches!(current, "open" | "triage"),
+        "in_progress" => matches!(current, "open" | "triage" | "scheduled"),
+        _ => false,
     }
 }
 
@@ -774,6 +840,38 @@ pub async fn handle_webhook_event(
     };
     let (next_status, note) = apply_event(&name, &aj);
     let now = Utc::now();
+    // Work sent from a task: the vendor's progress moves their tasks, and the
+    // work order as a whole only resolves once every task is finished.
+    let mut tasks = TicketTask::find()
+        .filter(entity::ticket_task::Column::TicketId.eq(t.id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+    for task in tasks.iter_mut().filter(|x| {
+        x.dispatched_at.is_some()
+            && x.assignee_entity_id.is_some()
+            && x.assignee_entity_id == t.partner_counterparty_id
+    }) {
+        let Some((status, clear)) = task_move(&name, &task.status) else {
+            continue;
+        };
+        let mut tam: entity::ticket_task::ActiveModel = task.clone().into();
+        tam.status = Set(status.into());
+        tam.done_at = Set((status == "done").then_some(now.into()));
+        if clear {
+            tam.dispatched_at = Set(None);
+            tam.assignee_entity_id = Set(None);
+        }
+        tam.updated_at = Set(now.into());
+        if let Ok(saved) = tam.update(db).await {
+            *task = saved;
+        }
+    }
+    let all_closed = tasks
+        .iter()
+        .all(|x| x.status == "done" || x.status == "skipped");
+    let next_status =
+        next_status.filter(|s| ticket_moves(s, &t.status, !tasks.is_empty(), all_closed));
     let alpha_status = aj
         .get("status")
         .and_then(|s| s.as_str())
@@ -912,6 +1010,11 @@ mod tests {
         );
         assert_eq!(s, Some("scheduled"));
         assert!(note.contains("Carlos"), "{note}");
+        assert!(note.contains("Wed Jan 2, 9:00 AM"), "{note}");
+        assert_eq!(
+            when_label("2026-10-03T20:02:17.688710+00:00"),
+            "Sat Oct 3, 8:02 PM UTC"
+        );
         let (s, note) = apply_event(
             "job.completed",
             &json!({ "price": "189.50", "report_note": "Rinsed twice.", "photos": [{ "url": "https://alpha.example/m/1.jpg" }] }),
@@ -926,6 +1029,31 @@ mod tests {
             Some("in_progress")
         );
         assert_eq!(apply_event("job.photo", &json!({})).0, None);
+    }
+
+    #[test]
+    fn a_vendor_on_one_task_moves_that_task() {
+        assert_eq!(task_move("job.started", "todo"), Some(("doing", false)));
+        assert_eq!(task_move("job.started", "doing"), None);
+        assert_eq!(task_move("job.completed", "doing"), Some(("done", false)));
+        assert_eq!(task_move("job.cancelled", "doing"), Some(("todo", true)));
+        assert_eq!(task_move("job.completed", "skipped"), None);
+        assert_eq!(task_move("job.photo", "todo"), None);
+        // The work order resolves only when everything is done.
+        assert!(!ticket_moves("resolved", "in_progress", true, false));
+        assert!(ticket_moves("resolved", "in_progress", true, true));
+        assert!(ticket_moves("resolved", "scheduled", false, false));
+        assert!(ticket_moves("scheduled", "open", true, false));
+        assert!(!ticket_moves("scheduled", "in_progress", true, false));
+        assert!(!ticket_moves("open", "in_progress", true, false));
+    }
+
+    #[test]
+    fn alpha_text_is_never_null_and_fits() {
+        assert_eq!(text(None, 10), "");
+        assert_eq!(text(Some("  Gate 4411 "), 2000), "Gate 4411");
+        assert_eq!(text(Some("California"), 2), "Ca");
+        assert_eq!(text(Some("é".repeat(5).as_str()), 3), "ééé");
     }
 
     #[test]

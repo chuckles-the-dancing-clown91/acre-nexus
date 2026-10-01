@@ -9,10 +9,12 @@
 //! * **Public website visitors** — resolved from the `X-Tenant` header or
 //!   `?tenant=<slug>` query param (no auth).
 
+pub mod access;
 pub mod helpers;
 pub mod public;
 pub mod resolve;
 pub mod scope;
 
+pub use access::Access;
 pub use public::PublicTenant;
 pub use scope::TenantScope;

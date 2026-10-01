@@ -4,7 +4,7 @@
 // a hero with the workspace brand over a glass city, and the form card.
 
 import { Ambient } from "@/components/ambient";
-import { BrandLogo, PoweredBy, PRODUCT_SLOGAN } from "@/components/brand";
+import { GateLogo, PoweredBy, PRODUCT_SLOGAN } from "@/components/brand";
 import { IsoScene } from "@/components/iso/IsoScene";
 import type { IsoBlock } from "@/components/iso/geometry";
 import { Panel } from "@/components/ui/panel";
@@ -115,14 +115,14 @@ const HERO_CITY: IsoBlock[] = [
 ];
 
 export function AuthFrame({ children }: { children: React.ReactNode }) {
-  const { brand } = useTheme();
+  const { brand, gate } = useTheme();
   return (
     <main className="relative grid min-h-dvh lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <Ambient />
 
       <section className="relative hidden flex-col justify-between overflow-hidden px-12 py-10 lg:flex">
         <div className="flex items-center gap-3">
-          <BrandLogo brand={brand} size={36} />
+          <GateLogo brand={brand} branded={gate.branded} size={36} />
           <div className="leading-tight">
             <div className="font-display text-[15px] font-semibold text-fg">
               {brand.company_name}
@@ -146,20 +146,22 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
           <p className="mt-3 text-[15px] text-fg-2">
             Properties, residents, maintenance and money in one live view.
           </p>
-          <PoweredBy className="mt-8" />
+          {gate.branded && <PoweredBy className="mt-8" />}
         </div>
       </section>
 
       <section className="flex items-center justify-center px-5 py-10 sm:px-8">
         <div className="w-full max-w-[400px]">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <BrandLogo brand={brand} size={34} />
+            <GateLogo brand={brand} branded={gate.branded} size={34} />
             <div className="font-display text-[15px] font-semibold text-fg">
               {brand.company_name}
             </div>
           </div>
           <Panel className="p-7 sm:p-8">{children}</Panel>
-          <PoweredBy className="mt-6 flex justify-center lg:hidden" />
+          {gate.branded && (
+            <PoweredBy className="mt-6 flex justify-center lg:hidden" />
+          )}
         </div>
       </section>
     </main>

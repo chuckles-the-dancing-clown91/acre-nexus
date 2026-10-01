@@ -42,8 +42,23 @@ pub async fn add_comment(
         }
     };
     let text = b.body.trim().to_string();
-    if text.is_empty() {
+    if text.is_empty() && b.document_ids.is_empty() {
         return Err(ApiError::BadRequest("comment body is required".into()));
+    }
+    // Attached photos must be files on this work order.
+    if !b.document_ids.is_empty() {
+        let found = entity::prelude::Document::find()
+            .filter(entity::document::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::document::Column::OwnerType.eq("maintenance_ticket"))
+            .filter(entity::document::Column::OwnerId.eq(tid))
+            .filter(entity::document::Column::Id.is_in(b.document_ids.clone()))
+            .all(&db)
+            .await?;
+        if found.len() != b.document_ids.len() {
+            return Err(ApiError::BadRequest(
+                "attach photos uploaded to this work order".into(),
+            ));
+        }
     }
 
     // A staff comment is the first response when none is recorded yet.
@@ -62,6 +77,7 @@ pub async fn add_comment(
     });
 
     let model = entity::ticket_comment::ActiveModel {
+        document_ids: Set(serde_json::json!(b.document_ids)),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(tid),

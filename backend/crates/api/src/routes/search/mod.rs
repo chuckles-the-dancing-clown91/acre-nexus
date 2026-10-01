@@ -64,6 +64,7 @@ pub async fn search(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     q: Option<String>,
 ) -> ApiResult<Json<SearchResp>> {
     crate::modules::require_enabled(&state.db, scope.tenant_id, "search").await?;
@@ -80,10 +81,13 @@ pub async fn search(
     let mut hits: Vec<SearchHit> = Vec::new();
 
     // Properties (also used to resolve lease/ticket property names).
-    let properties = Property::find()
+    let properties: Vec<_> = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .all(&db)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|p| access.sees(p.id))
+        .collect();
     let prop_name: HashMap<Uuid, String> =
         properties.iter().map(|p| (p.id, p.name.clone())).collect();
 
@@ -115,6 +119,7 @@ pub async fn search(
             .await?;
         let matched = leases
             .iter()
+            .filter(|l| access.sees(l.property_id))
             .filter(|l| {
                 hit(&l.tenant_name, &ql) || l.tenant_email.as_deref().is_some_and(|e| hit(e, &ql))
             })
@@ -136,7 +141,8 @@ pub async fn search(
     }
 
     // Counterparties (entities registry).
-    if can(Permission::EntityRead) {
+    // Contacts and LLCs are company-wide records.
+    if can(Permission::EntityRead) && !access.is_scoped() {
         let rows = Counterparty::find()
             .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
             .all(&db)
@@ -172,6 +178,7 @@ pub async fn search(
             .await?;
         let matched = rows
             .iter()
+            .filter(|t| access.sees(t.property_id))
             .filter(|t| hit(&t.title, &ql) || t.description.as_deref().is_some_and(|d| hit(d, &ql)))
             .map(|t| {
                 let prop = prop_name.get(&t.property_id).cloned().unwrap_or_default();
@@ -191,7 +198,7 @@ pub async fn search(
     }
 
     // LLCs (holding entities).
-    if can(Permission::PropertyRead) {
+    if can(Permission::PropertyRead) && !access.is_scoped() {
         let rows = Llc::find()
             .filter(entity::llc::Column::TenantId.eq(scope.tenant_id))
             .all(&db)

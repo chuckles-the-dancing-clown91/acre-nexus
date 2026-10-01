@@ -4,6 +4,10 @@
 // `GET /public/resolve` (admin app, owner portal, renter portal, or the public
 // site) picks the surface, and each surface has a theme. The staff console is
 // always Obsidian; the gate pages (login etc.) follow the host's audience.
+//
+// Branding follows the host too. A client's own verified domain wears the
+// client's name, logo and colour. Vantedge's hosts (and localhost) wear
+// Vantedge, so HQ and back-office work never carries a client's name.
 
 export type ThemeName = "obsidian" | "daylight";
 
@@ -33,6 +37,8 @@ export interface Gate {
   tenant: string;
   audience: Audience;
   brand: Brand;
+  /** True on a client's own domain: the brand is the client's, not Vantedge's. */
+  branded: boolean;
 }
 
 /** Cookie holding the console's HUD-intensity preference (`1` = on). */

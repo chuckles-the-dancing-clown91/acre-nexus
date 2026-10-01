@@ -18,6 +18,19 @@ export function useHasTenantScope(): boolean {
   );
 }
 
+/**
+ * Whether the user sees the whole company or only their assigned properties.
+ * The server enforces this; the console uses it to show only what works.
+ */
+export function useReach(): { scoped: boolean; propertyIds: string[] } {
+  const { user } = useAuth();
+  const reach = user?.reach;
+  return {
+    scoped: reach?.scope === "properties",
+    propertyIds: reach?.property_ids ?? [],
+  };
+}
+
 export function useActingTenant() {
   const queryClient = useQueryClient();
   const acting = useUiStore((s) => s.actingTenant);

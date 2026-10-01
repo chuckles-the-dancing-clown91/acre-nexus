@@ -135,6 +135,7 @@ pub mod ticket_comment;
 pub mod ticket_line;
 pub mod ticket_part;
 pub mod ticket_quote;
+pub mod ticket_task;
 pub mod time_entry;
 pub mod time_off_request;
 pub mod tour_request;

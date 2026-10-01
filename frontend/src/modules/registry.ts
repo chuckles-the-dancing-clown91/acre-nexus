@@ -50,7 +50,7 @@ export const NAV_GROUPS: { key: NavGroupKey; label: string }[] = [
 export const MODULES: ModuleDef[] = [
   {
     key: "properties",
-    label: "Property Management",
+    label: "Properties & Portfolio",
     description: "Portfolio, property profiles, and LLC holding entities.",
     group: "property",
     defaultEnabled: true,
@@ -253,15 +253,28 @@ export const MODULES: ModuleDef[] = [
   },
   {
     key: "maintenance",
-    label: "Maintenance & Work Orders",
-    description: "Maintenance tickets assignable to staff or contractors.",
+    label: "Service Desk",
+    description:
+      "Work orders from job kits (tasks by trade, parts and estimates), vendors, photos, receipts, and the routine maintenance schedule.",
     group: "property",
     defaultEnabled: true,
     nav: [
       {
         href: "/console/maintenance",
-        label: "Maintenance",
+        label: "Service desk",
         icon: "wrench",
+        permission: "maintenance:read",
+      },
+      {
+        href: "/console/maintenance/schedule",
+        label: "Schedule",
+        icon: "calendar",
+        permission: "maintenance:read",
+      },
+      {
+        href: "/console/maintenance/kits",
+        label: "Job kits",
+        icon: "clipboard",
         permission: "maintenance:read",
       },
       {

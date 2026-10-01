@@ -20,6 +20,19 @@ fn valid_date(d: &str) -> Result<(), ApiError> {
         .map_err(|_| ApiError::BadRequest("dates must be YYYY-MM-DD".into()))
 }
 
+async fn kit_exists(
+    db: &impl sea_orm::ConnectionTrait,
+    tenant_id: Uuid,
+    id: Uuid,
+) -> Result<(), ApiError> {
+    entity::prelude::IssueTemplate::find_by_id(id)
+        .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
+        .one(db)
+        .await?
+        .map(|_| ())
+        .ok_or_else(|| ApiError::NotFound("kit not found".into()))
+}
+
 fn valid_cadence(days: i32) -> Result<(), ApiError> {
     if (1..=3660).contains(&days) {
         Ok(())
@@ -39,10 +52,15 @@ pub async fn list_plans(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
 ) -> ApiResult<Json<Vec<MaintenancePlanDto>>> {
     user.require(Permission::MaintenanceRead)?;
-    let rows = MaintenancePlan::find()
-        .filter(entity::maintenance_plan::Column::TenantId.eq(scope.tenant_id))
+    let mut q = MaintenancePlan::find()
+        .filter(entity::maintenance_plan::Column::TenantId.eq(scope.tenant_id));
+    if let Some(ids) = access.property_ids() {
+        q = q.filter(entity::maintenance_plan::Column::PropertyId.is_in(ids));
+    }
+    let rows = q
         .order_by_asc(entity::maintenance_plan::Column::NextDueDate)
         .all(&db)
         .await?;
@@ -59,10 +77,17 @@ pub async fn create_plan(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     body: Json<CreatePlanReq>,
 ) -> ApiResult<Json<MaintenancePlanDto>> {
     user.require(Permission::MaintenanceManage)?;
     let b = body.into_inner();
+    if !access.sees(b.property_id) {
+        return Err(ApiError::NotFound("property not found".into()));
+    }
+    if let Some(k) = b.issue_template_id {
+        kit_exists(&db, scope.tenant_id, k).await?;
+    }
     let title = b.title.trim().to_string();
     if title.is_empty() {
         return Err(ApiError::BadRequest("title is required".into()));
@@ -77,6 +102,7 @@ pub async fn create_plan(
 
     let now = Utc::now();
     let saved = entity::maintenance_plan::ActiveModel {
+        issue_template_id: Set(b.issue_template_id),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         property_id: Set(b.property_id),
@@ -170,6 +196,18 @@ pub async fn update_plan(
     }
     if let Some(v) = b.asset_id {
         am.asset_id = Set(Some(v));
+    }
+    if let Some(raw) = b.issue_template_id {
+        let kit = match raw.trim() {
+            "" => None,
+            k => {
+                let k = Uuid::parse_str(k)
+                    .map_err(|_| ApiError::BadRequest("invalid kit id".into()))?;
+                kit_exists(&db, scope.tenant_id, k).await?;
+                Some(k)
+            }
+        };
+        am.issue_template_id = Set(kit);
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;

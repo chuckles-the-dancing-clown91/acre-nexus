@@ -13,12 +13,14 @@ use uuid::Uuid;
 /// `GET /tickets?<status>&<property_id>&<priority>` — list the active tenant's
 /// maintenance tickets, optionally filtered, newest-first.
 #[rocket_okapi::openapi(tag = "Maintenance")]
+#[allow(clippy::too_many_arguments)]
 #[get("/tickets?<status>&<property_id>&<priority>")]
 pub async fn list_tickets(
     _state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     status: Option<String>,
     property_id: Option<String>,
     priority: Option<String>,
@@ -26,6 +28,9 @@ pub async fn list_tickets(
     user.require(Permission::MaintenanceRead)?;
     let mut q = MaintenanceTicket::find()
         .filter(entity::maintenance_ticket::Column::TenantId.eq(scope.tenant_id));
+    if let Some(ids) = access.property_ids() {
+        q = q.filter(entity::maintenance_ticket::Column::PropertyId.is_in(ids));
+    }
     if let Some(s) = status.filter(|s| !s.is_empty()) {
         q = q.filter(entity::maintenance_ticket::Column::Status.eq(s));
     }

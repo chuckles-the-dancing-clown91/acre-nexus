@@ -76,6 +76,7 @@ mod scheduler;
 mod screening;
 mod secrets;
 mod seed;
+mod servicedesk;
 mod settings;
 mod sitemap;
 mod sso;

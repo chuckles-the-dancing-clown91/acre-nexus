@@ -5,7 +5,7 @@ describe("module registry", () => {
   it("looks up a module by key", () => {
     const mod = moduleByKey("properties");
     expect(mod).toBeDefined();
-    expect(mod?.label).toBe("Property Management");
+    expect(mod?.label).toBe("Properties & Portfolio");
   });
 
   it("returns undefined for an unknown key", () => {

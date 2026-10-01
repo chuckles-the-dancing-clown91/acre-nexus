@@ -93,6 +93,7 @@ header_only_guard!(HostHeader);
 header_only_guard!(ClientIp);
 header_only_guard!(UserAgent);
 header_only_guard!(RequestDb);
+header_only_guard!(crate::tenancy::Access);
 
 impl OpenApiResponderInner for ApiError {
     fn responses(_gen: &mut OpenApiGenerator) -> Result<Responses> {

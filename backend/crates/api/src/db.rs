@@ -153,6 +153,11 @@ impl<'r> FromRequest<'r> for RequestDb {
             Some(s) => s,
             None => return Outcome::Error((Status::InternalServerError, ())),
         };
+        // Property-level reach: a property-scoped person only gets routes that
+        // are reach-aware, and only for properties within reach.
+        if let Some(status) = crate::tenancy::access::gate(req).await.refusal() {
+            return Outcome::Error((status, ()));
+        }
         let tenant = resolve_request_tenant(req, state).await;
         let conn = state.db.clone();
         let db = req

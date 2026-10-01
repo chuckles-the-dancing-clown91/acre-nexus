@@ -18,11 +18,15 @@ pub async fn list_leases(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     status: Option<String>,
     property_id: Option<String>,
 ) -> ApiResult<Json<Vec<LeaseDto>>> {
     user.require(Permission::LeaseRead)?;
     let mut query = Lease::find().filter(entity::lease::Column::TenantId.eq(scope.tenant_id));
+    if let Some(ids) = access.property_ids() {
+        query = query.filter(entity::lease::Column::PropertyId.is_in(ids));
+    }
     if let Some(s) = status.filter(|s| !s.is_empty()) {
         query = query.filter(entity::lease::Column::Status.eq(s));
     }

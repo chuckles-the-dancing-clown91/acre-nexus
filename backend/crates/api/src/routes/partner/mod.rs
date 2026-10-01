@@ -200,6 +200,7 @@ pub async fn dispatch(
             requested_for: b.requested_for,
             service_key: b.service_key,
             note: b.note,
+            title: None,
         },
         Some(user.user_id),
     )

@@ -1,5 +1,7 @@
-//! The **issue catalog**: pick a common problem, click generate, and get a
-//! work order with its checklist and a shopping list built from inventory.
+//! The **issue catalog** (job kits): pick a common problem or job, click
+//! generate, and get a work order with its tasks (by trade, flagged when a
+//! contractor is needed), its parts with typical costs, and a shopping list
+//! built from inventory. See [`crate::servicedesk`].
 //! A starter set is created the first time a workspace opens the catalog and
 //! stays editable.
 
@@ -10,10 +12,11 @@ use crate::audit::change::{self, Ctx};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::rbac::Permission;
+use crate::servicedesk::{clean_tasks, rates, task_cost, trades_of, KitTask, Rates};
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use chrono::Utc;
-use entity::prelude::{Asset, InventoryItem, IssueTemplate, Property, Unit};
+use entity::prelude::{Asset, IssueTemplate, Property, Unit};
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
 use sea_orm::{
@@ -233,6 +236,9 @@ pub struct IssuePart {
     pub name: String,
     pub quantity: i32,
     pub inventory_item_id: Option<Uuid>,
+    /// Typical cost each, for estimates (stock items use their own cost).
+    #[serde(default)]
+    pub unit_cost_cents: Option<i64>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -246,12 +252,47 @@ pub struct IssueDto {
     pub est_minutes: Option<i32>,
     pub checklist: Vec<String>,
     pub parts: Vec<IssuePart>,
+    /// The work, line by line.
+    pub tasks: Vec<KitTask>,
+    /// Trades the tasks call for, in order.
+    pub trades: Vec<String>,
+    /// Trades that need a contractor.
+    pub contractor_trades: Vec<String>,
+    pub est_labor_cents: i64,
+    pub est_parts_cents: i64,
+    pub est_total_cents: i64,
+    pub est_total_label: String,
     pub active: bool,
 }
 
-impl From<entity::issue_template::Model> for IssueDto {
-    fn from(m: entity::issue_template::Model) -> Self {
+impl IssueDto {
+    pub fn from_model(m: entity::issue_template::Model, rates: Rates) -> Self {
+        let tasks: Vec<KitTask> =
+            clean_tasks(serde_json::from_value(m.tasks.clone()).unwrap_or_default());
+        let parts: Vec<IssuePart> = serde_json::from_value(m.parts.clone()).unwrap_or_default();
+        let est_labor_cents: i64 = tasks
+            .iter()
+            .filter_map(|t| task_cost(t.est_minutes, t.needs_contractor, rates))
+            .sum();
+        let est_parts_cents: i64 = parts
+            .iter()
+            .map(|p| p.unit_cost_cents.unwrap_or(0) * p.quantity.max(1) as i64)
+            .sum();
+        let contractor_trades = trades_of(
+            &tasks
+                .iter()
+                .filter(|t| t.needs_contractor)
+                .cloned()
+                .collect::<Vec<_>>(),
+        );
         IssueDto {
+            trades: trades_of(&tasks),
+            contractor_trades,
+            est_labor_cents,
+            est_parts_cents,
+            est_total_cents: est_labor_cents + est_parts_cents,
+            est_total_label: crate::dto::usd(est_labor_cents + est_parts_cents),
+            tasks,
             id: m.id,
             name: m.name,
             area: m.area,
@@ -260,7 +301,7 @@ impl From<entity::issue_template::Model> for IssueDto {
             description: m.description,
             est_minutes: m.est_minutes,
             checklist: serde_json::from_value(m.checklist).unwrap_or_default(),
-            parts: serde_json::from_value(m.parts).unwrap_or_default(),
+            parts,
             active: m.active,
         }
     }
@@ -276,6 +317,7 @@ pub struct IssueReq {
     pub est_minutes: Option<i32>,
     pub checklist: Option<Vec<String>>,
     pub parts: Option<Vec<IssuePart>>,
+    pub tasks: Option<Vec<KitTask>>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -326,6 +368,7 @@ fn parts_json(parts: Option<Vec<IssuePart>>) -> serde_json::Value {
             name: p.name.trim().to_string(),
             quantity: p.quantity.max(1),
             inventory_item_id: p.inventory_item_id,
+            unit_cost_cents: p.unit_cost_cents.filter(|c| *c >= 0),
         })
         .collect();
     json!(p)
@@ -347,9 +390,11 @@ async fn ensure_starters(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResul
                 name: n.to_string(),
                 quantity: *q,
                 inventory_item_id: None,
+                unit_cost_cents: None,
             })
             .collect();
         entity::issue_template::ActiveModel {
+            tasks: Set(serde_json::json!([])),
             id: Set(Uuid::new_v4()),
             tenant_id: Set(tenant_id),
             name: Set(name.to_string()),
@@ -386,6 +431,8 @@ pub async fn list_issues(
 ) -> ApiResult<Json<Vec<IssueDto>>> {
     user.require(Permission::MaintenanceRead)?;
     ensure_starters(&db, scope.tenant_id).await?;
+    crate::servicedesk::ensure_kits(&db, scope.tenant_id).await?;
+    let rates = rates(&db, scope.tenant_id).await;
     let rows = IssueTemplate::find()
         .filter(entity::issue_template::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::issue_template::Column::Active.eq(true))
@@ -393,7 +440,11 @@ pub async fn list_issues(
         .order_by_asc(entity::issue_template::Column::Name)
         .all(&db)
         .await?;
-    Ok(Json(rows.into_iter().map(IssueDto::from).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|m| IssueDto::from_model(m, rates))
+            .collect(),
+    ))
 }
 
 /// `POST /issue-templates` — add an issue to the catalog.
@@ -411,6 +462,7 @@ pub async fn create_issue(
     let (category, priority) = check(&b)?;
     let now = Utc::now();
     let saved = entity::issue_template::ActiveModel {
+        tasks: Set(json!(clean_tasks(b.tasks.clone().unwrap_or_default()))),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         name: Set(b.name.trim().to_string()),
@@ -444,7 +496,10 @@ pub async fn create_issue(
         &format!("Issue: {}", saved.name),
     )
     .await;
-    Ok(Json(IssueDto::from(saved)))
+    Ok(Json(IssueDto::from_model(
+        saved,
+        rates(&db, scope.tenant_id).await,
+    )))
 }
 
 /// `PUT /issue-templates/<id>` — edit an issue.
@@ -478,6 +533,9 @@ pub async fn update_issue(
         .filter(|c| !c.is_empty())
         .collect::<Vec<_>>()));
     am.parts = Set(parts_json(b.parts));
+    if let Some(t) = b.tasks {
+        am.tasks = Set(json!(clean_tasks(t)));
+    }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
     change::change(
@@ -492,7 +550,10 @@ pub async fn update_issue(
         &saved,
     )
     .await;
-    Ok(Json(IssueDto::from(saved)))
+    Ok(Json(IssueDto::from_model(
+        saved,
+        rates(&db, scope.tenant_id).await,
+    )))
 }
 
 /// `DELETE /issue-templates/<id>` — retire an issue (kept for history).
@@ -550,11 +611,15 @@ pub async fn generate_ticket(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     id: &str,
     body: Json<GenerateReq>,
 ) -> ApiResult<Json<Generated>> {
     user.require(Permission::MaintenanceManage)?;
     let issue = find(&db, scope.tenant_id, id).await?;
+    if !access.sees(body.property_id) {
+        return Err(ApiError::NotFound("property not found".into()));
+    }
     if !issue.active {
         return Err(ApiError::Conflict("this issue has been retired".into()));
     }
@@ -589,6 +654,8 @@ pub async fn generate_ticket(
 
     let checklist: Vec<String> =
         serde_json::from_value(issue.checklist.clone()).unwrap_or_default();
+    // A kit with tasks puts them on the work order as line items; an older
+    // entry's checklist still lands in the description.
     let mut description = issue.description.clone().unwrap_or_default();
     if let Some(n) = clean(b.note) {
         if !description.is_empty() {
@@ -596,7 +663,8 @@ pub async fn generate_ticket(
         }
         description.push_str(&format!("Reported: {n}"));
     }
-    if !checklist.is_empty() {
+    let has_tasks = issue.tasks.as_array().is_some_and(|t| !t.is_empty());
+    if !checklist.is_empty() && !has_tasks {
         if !description.is_empty() {
             description.push_str("\n\n");
         }
@@ -636,35 +704,9 @@ pub async fn generate_ticket(
         ticket = am.update(&db).await?;
     }
 
-    // The usual parts, tied to real stock where the name (or id) matches.
-    let stock = InventoryItem::find()
-        .filter(entity::inventory_item::Column::TenantId.eq(scope.tenant_id))
-        .all(&db)
+    // The kit's tasks and parts, parts tied to real stock where they match.
+    crate::servicedesk::apply_kit(&db, scope.tenant_id, ticket.id, &issue, Some(user.user_id))
         .await?;
-    let wanted: Vec<IssuePart> = serde_json::from_value(issue.parts.clone()).unwrap_or_default();
-    for p in wanted {
-        let item = p
-            .inventory_item_id
-            .and_then(|i| stock.iter().find(|s| s.id == i))
-            .or_else(|| {
-                stock
-                    .iter()
-                    .find(|s| s.name.trim().eq_ignore_ascii_case(p.name.trim()))
-            });
-        parts::add_part(
-            &db,
-            scope.tenant_id,
-            ticket.id,
-            item.map(|i| i.id),
-            item.map(|i| i.name.as_str()).unwrap_or(&p.name),
-            p.quantity,
-            "needed",
-            "plan",
-            None,
-            Some(user.user_id),
-        )
-        .await?;
-    }
     let list = parts::generate(&db, scope.tenant_id, &ticket).await?;
 
     change::created(

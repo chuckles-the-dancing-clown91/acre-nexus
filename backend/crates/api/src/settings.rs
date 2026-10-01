@@ -81,6 +81,10 @@ pub const REMINDERS_ENABLED: &str = "reminders.enabled";
 pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 /// Text (or email) the resident for a 1–5 rating when their repair resolves.
 pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
+/// In-house labor rate for work-order estimates, cents per hour.
+pub const MAINTENANCE_LABOR_RATE: &str = "maintenance.labor_rate_cents";
+/// Contractor labor rate for work-order estimates, cents per hour.
+pub const MAINTENANCE_CONTRACTOR_RATE: &str = "maintenance.contractor_rate_cents";
 /// Answer a resident's repair-sounding text with a prefilled request link.
 pub const TEXTS_REPAIR_LINKS: &str = "texts.repair_links";
 /// Hold automatic texts overnight.
@@ -451,6 +455,24 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Vendors",
         kind: SettingKind::Bool,
         default: || json!(false),
+    },
+    SettingDef {
+        key: MAINTENANCE_LABOR_RATE,
+        label: "In-house labor rate (estimates)",
+        description: "Cents per hour used to estimate tasks your team does, \
+                      e.g. 7500 for $75/hr.",
+        group: "Maintenance",
+        kind: SettingKind::Int,
+        default: || json!(7_500),
+    },
+    SettingDef {
+        key: MAINTENANCE_CONTRACTOR_RATE,
+        label: "Contractor labor rate (estimates)",
+        description: "Cents per hour used to estimate tasks that need a \
+                      contractor, e.g. 12500 for $125/hr.",
+        group: "Maintenance",
+        kind: SettingKind::Int,
+        default: || json!(12_500),
     },
     SettingDef {
         key: MAINTENANCE_ASK_RATING,
