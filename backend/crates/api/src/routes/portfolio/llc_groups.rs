@@ -18,6 +18,7 @@ pub async fn llc_groups(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
 ) -> ApiResult<Json<Vec<LlcGroup>>> {
     user.require(Permission::PropertyRead)?;
     let llcs = Llc::find()
@@ -25,10 +26,13 @@ pub async fn llc_groups(
         .order_by_asc(entity::llc::Column::Name)
         .all(&db)
         .await?;
-    let props = Property::find()
+    let props: Vec<_> = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .all(&db)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|p| access.sees(p.id))
+        .collect();
 
     let groups = llcs
         .into_iter()
@@ -55,6 +59,9 @@ pub async fn llc_groups(
                     .collect(),
             }
         })
+        // Someone with property-level reach sees only the LLCs holding their
+        // properties.
+        .filter(|g: &LlcGroup| !access.is_scoped() || g.property_count > 0)
         .collect();
 
     Ok(Json(groups))

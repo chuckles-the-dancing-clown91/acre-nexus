@@ -127,6 +127,12 @@ pub(crate) async fn build_user_resp(
 ) -> Result<UserResp, ApiError> {
     let memberships = load_memberships(db, user.id).await?;
     let workspaces = workspaces_from(&memberships, user.is_platform_staff);
+    let reach = match active_tenant {
+        Some(t) => crate::tenancy::access::compute(db, user.id, t, user.is_platform_staff)
+            .await?
+            .into(),
+        None => crate::tenancy::Access::company().into(),
+    };
     Ok(UserResp {
         id: user.id,
         email: user.email.clone(),
@@ -137,6 +143,7 @@ pub(crate) async fn build_user_resp(
         permissions: perms,
         memberships,
         workspaces,
+        reach,
     })
 }
 

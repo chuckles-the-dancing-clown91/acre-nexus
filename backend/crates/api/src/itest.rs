@@ -121,6 +121,7 @@ async fn integration_suite() {
     batch_b_vendor_compliance(&c).await;
     batch_c_texts(&c).await;
     batch_d_listing_photos(&c).await;
+    property_reach(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -5085,4 +5086,203 @@ async fn batch_d_listing_photos(c: &Ctx) {
     .await;
     assert_eq!(st, Status::Ok);
     assert_eq!(list.as_array().unwrap().len(), 1);
+}
+
+/// A property manager sees only the properties assigned to them; the company
+/// owner sees everything.
+async fn property_reach(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let owner = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "member:manage",
+            "entity:manage",
+            "property:read",
+            "property:write",
+            "maintenance:read",
+            "maintenance:manage",
+            "lease:read",
+        ],
+    );
+    let props = property_ids(c, nw).await;
+    assert!(props.len() >= 2, "seed has several properties");
+    let (mine, other) = (props[0], props[1]);
+
+    // A new property manager, assigned to one property.
+    let (st, m) = post_json(
+        c,
+        "/members",
+        &owner,
+        serde_json::json!({ "email": "pat.reach@northwind.test", "name": "Pat Reach",
+            "profile_type": "property_manager" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{m}");
+    let pat = uuid::Uuid::parse_str(m["user_id"].as_str().unwrap()).unwrap();
+    let (st, a) = post_json(
+        c,
+        &format!("/properties/{mine}/assignments"),
+        &owner,
+        serde_json::json!({ "user_id": pat, "relationship": "property_manager" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    let perms: Vec<String> = [
+        "property:read",
+        "property:write",
+        "maintenance:read",
+        "maintenance:manage",
+        "lease:read",
+        "ledger:read",
+        "member:manage",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let pm = crate::auth::issue_access_token(&c.config, pat, Some(nw), false, perms).unwrap();
+
+    // /auth/me says so.
+    let (st, me) = get_json(c, "/auth/me", &pm).await;
+    assert_eq!(st, Status::Ok, "{me}");
+    assert_eq!(me["reach"]["scope"], "properties");
+    assert_eq!(me["reach"]["property_ids"], serde_json::json!([mine]));
+
+    // Lists narrow to the assigned property.
+    let (_, list) = get_json(c, "/properties", &pm).await;
+    let ids: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].clone())
+        .collect();
+    assert_eq!(ids, vec![serde_json::json!(mine)]);
+    let (_, all) = get_json(c, "/properties", &owner).await;
+    assert!(
+        all.as_array().unwrap().len() >= 2,
+        "the owner sees the company"
+    );
+    let (_, s) = get_json(c, "/portfolio/summary", &pm).await;
+    assert_eq!(s["properties"], 1);
+    for path in ["/tickets", "/leases"] {
+        let (st, rows) = get_json(c, path, &pm).await;
+        assert_eq!(st, Status::Ok, "{path}");
+        assert!(
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .all(|r| r["property_id"] == serde_json::json!(mine)),
+            "{path} stays on the assigned property"
+        );
+    }
+    let (_, groups) = get_json(c, "/portfolio/llcs", &pm).await;
+    for g in groups.as_array().unwrap() {
+        for p in g["properties"].as_array().unwrap() {
+            assert_eq!(p["id"], serde_json::json!(mine));
+        }
+    }
+
+    // One property: theirs opens, another company property is not found.
+    let (st, _) = get_json(c, &format!("/properties/{mine}"), &pm).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = get_json(c, &format!("/properties/{other}"), &pm).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = get_json(c, &format!("/properties/{other}/tickets"), &pm).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{other}"),
+        &pm,
+        serde_json::json!({ "notes": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // A ticket on someone else's property is out of reach too.
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{other}/tickets"),
+        &owner,
+        serde_json::json!({ "title": "Out of reach" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap();
+    let (st, _) = get_json(c, &format!("/tickets/{tid}"), &pm).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = get_json(c, &format!("/tickets/{tid}"), &owner).await;
+    assert_eq!(st, Status::Ok);
+
+    // Company-only actions and areas not yet reach-aware are closed.
+    let (st, _) = post_json(
+        c,
+        &format!("/properties/{mine}/assignments"),
+        &pm,
+        serde_json::json!({ "user_id": pat, "relationship": "maintenance" }),
+    )
+    .await;
+    assert_eq!(
+        st,
+        Status::Forbidden,
+        "who is assigned where stays with the company"
+    );
+    let (st, _) = get_json(c, "/payments", &pm).await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = get_json(c, "/members", &pm).await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Search only finds what's in reach.
+    let other_name = entity::prelude::Property::find_by_id(other)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .name;
+    let (st, found) = get_json(
+        c,
+        &format!(
+            "/search?q={}",
+            other_name
+                .bytes()
+                .map(|b| if b.is_ascii_alphanumeric() {
+                    (b as char).to_string()
+                } else {
+                    format!("%{b:02X}")
+                })
+                .collect::<String>()
+        ),
+        &pm,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{found}");
+    assert!(
+        !found["hits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|h| h["id"] == serde_json::json!(other.to_string())),
+        "{found}"
+    );
+
+    // An LLC assignment brings in that LLC's properties.
+    if let Some(llc) = entity::prelude::Property::find_by_id(other)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .and_then(|p| p.llc_id)
+    {
+        let (st, _) = post_json(
+            c,
+            &format!("/entities/{llc}/assignments"),
+            &owner,
+            serde_json::json!({ "user_id": pat, "relationship": "property_manager" }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok);
+        let (st, _) = get_json(c, &format!("/properties/{other}"), &pm).await;
+        assert_eq!(st, Status::Ok, "the LLC's property is now in reach");
+    }
 }

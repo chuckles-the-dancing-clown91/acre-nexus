@@ -31,6 +31,31 @@ pub struct UserResp {
     pub memberships: Vec<MembershipSummary>,
     /// Workspaces the user can switch into (drives the workspace switcher).
     pub workspaces: Vec<WorkspaceSummary>,
+    /// How much of the active workspace the user sees.
+    pub reach: ReachDto,
+}
+
+/// The properties someone sees in the active workspace.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct ReachDto {
+    /// `company` (every property) or `properties` (only `property_ids`).
+    pub scope: String,
+    pub property_ids: Vec<Uuid>,
+}
+
+impl From<crate::tenancy::Access> for ReachDto {
+    fn from(a: crate::tenancy::Access) -> Self {
+        match a.property_ids() {
+            None => ReachDto {
+                scope: "company".into(),
+                property_ids: vec![],
+            },
+            Some(ids) => ReachDto {
+                scope: "properties".into(),
+                property_ids: ids,
+            },
+        }
+    }
 }
 
 /// One of a user's personas, with the owning workspace resolved for display.

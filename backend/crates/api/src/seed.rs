@@ -9,7 +9,7 @@ use chrono::{Datelike, Utc};
 use entity::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    Set,
+    QueryOrder, Set,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -1503,7 +1503,98 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         }
     }
 
+    seed_reach(db, &role_ids, northwind, &pw).await?;
+
     tracing::info!("seed: complete");
+    Ok(())
+}
+
+/// Property-level reach for the demo's field roles: Lee owns through Maple
+/// Holdings, Rosa looks after two buildings, and Sam manages two others.
+async fn seed_reach(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    tenant_id: Uuid,
+    pw: &str,
+) -> anyhow::Result<()> {
+    use entity::prelude::{Llc, Property, User};
+    let user = |email: &'static str| async move {
+        User::find()
+            .filter(entity::user::Column::Email.eq(email))
+            .one(db)
+            .await
+    };
+    let assign = |user_id: Uuid,
+                  subject_type: &'static str,
+                  subject_id: Uuid,
+                  rel: &'static str| async move {
+        let now = Utc::now();
+        entity::assignment::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            tenant_id: Set(tenant_id),
+            subject_type: Set(subject_type.into()),
+            subject_id: Set(subject_id),
+            user_id: Set(user_id),
+            relationship: Set(rel.into()),
+            role_id: Set(None),
+            is_primary: Set(true),
+            title: Set(None),
+            notes: Set(None),
+            assigned_by: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await
+    };
+    let props = Property::find()
+        .filter(entity::property::Column::TenantId.eq(tenant_id))
+        .order_by_asc(entity::property::Column::Name)
+        .all(db)
+        .await?;
+    if props.len() < 4 {
+        return Ok(());
+    }
+
+    if let (Some(lee), Some(maple)) = (
+        user("lee@northwind.com").await?,
+        Llc::find()
+            .filter(entity::llc::Column::TenantId.eq(tenant_id))
+            .filter(entity::llc::Column::Name.eq("Maple Holdings LLC"))
+            .one(db)
+            .await?,
+    ) {
+        assign(lee.id, "entity", maple.id, "landlord").await?;
+    }
+    if let Some(rosa) = user("rosa@northwind.com").await? {
+        for p in &props[..2] {
+            assign(rosa.id, "property", p.id, "maintenance").await?;
+        }
+    }
+
+    let sam = seed_user(
+        db,
+        Some(tenant_id),
+        "sam@northwind.com",
+        "Sam Ortiz",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        sam,
+        "tenant",
+        Some(tenant_id),
+        "property_manager",
+        Some("Property manager"),
+    )
+    .await?;
+    seed_profile(db, sam, "Sam", "Ortiz").await?;
+    for p in &props[2..4] {
+        assign(sam, "property", p.id, "property_manager").await?;
+    }
     Ok(())
 }
 
