@@ -120,6 +120,8 @@ pub mod role_permission;
 pub mod screening_report;
 pub mod secret;
 pub mod setting;
+pub mod site_feature;
+pub mod site_map;
 pub mod sms_message;
 pub mod sms_thread;
 pub mod tenant;

@@ -103,6 +103,8 @@ pub use super::role_permission::Entity as RolePermission;
 pub use super::screening_report::Entity as ScreeningReport;
 pub use super::secret::Entity as Secret;
 pub use super::setting::Entity as Setting;
+pub use super::site_feature::Entity as SiteFeature;
+pub use super::site_map::Entity as SiteMap;
 pub use super::sms_message::Entity as SmsMessage;
 pub use super::sms_thread::Entity as SmsThread;
 pub use super::tenant::Entity as Tenant;

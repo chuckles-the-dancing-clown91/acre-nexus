@@ -27,6 +27,7 @@ pub const OWNER_TYPES: &[&str] = &[
     "rehab_draw",
     "tenant",
     "expense",
+    "site_map",
     "process_step",
 ];
 

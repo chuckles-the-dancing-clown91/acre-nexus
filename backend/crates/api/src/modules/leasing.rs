@@ -41,6 +41,9 @@ impl PlatformModule for LeasingModule {
             public::listing_detail::listing_detail,
             public::public_theme::public_theme,
             crate::routes::business::public_reviews,
+            crate::routes::sitemaps::public_maps,
+            crate::routes::sitemaps::public_map,
+            crate::routes::sitemaps::public_plan,
             public::apply::apply,
             // console listing management
             listings::list::list,

@@ -62,6 +62,7 @@ pub mod rentals;
 pub mod reports;
 pub mod search;
 pub mod settings;
+pub mod sitemaps;
 pub mod syndication;
 pub mod team;
 pub mod tenant_history;

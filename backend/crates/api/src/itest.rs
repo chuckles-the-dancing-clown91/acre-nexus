@@ -98,6 +98,7 @@ async fn integration_suite() {
     turnover_step_logic(&c).await;
     issue_catalog_generates_ticket_and_shopping_list(&c).await;
     business_profile_and_google_reviews(&c).await;
+    site_maps_apartment_and_campground(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3104,4 +3105,283 @@ async fn business_profile_and_google_reviews(c: &Ctx) {
         .any(|ch| ch["field"] == "phone" && ch["to"] != "555-0199"));
     // Contact details are masked in the trail, never shown in full.
     assert!(events.iter().any(|e| e["support"] == false));
+}
+
+/// Site maps: an apartment layout with units linked to unit records, a
+/// campground with sites, bulk saves, GeoJSON round trip with OSM tags,
+/// publishing, and workspace isolation.
+async fn site_maps_apartment_and_campground(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let cascade = tenant_id(c, "cascade").await;
+    let mgr = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:manage",
+            "audit:read",
+        ],
+    );
+    let pid = property_ids(c, nw).await[0];
+    let sq = |lng: f64, lat: f64| {
+        serde_json::json!({ "type": "Polygon", "coordinates": [[
+            [lng, lat], [lng + 0.0001, lat], [lng + 0.0001, lat + 0.0001],
+            [lng, lat + 0.0001], [lng, lat]]] })
+    };
+
+    // An apartment map with two units drawn and linked.
+    let (st, u1) = post_json(
+        c,
+        &format!("/properties/{pid}/units"),
+        &mgr,
+        serde_json::json!({ "unit_number": "MAP-1", "status": "vacant", "market_rent_cents": 120000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{u1}");
+    let (_, u2) = post_json(
+        c,
+        &format!("/properties/{pid}/units"),
+        &mgr,
+        serde_json::json!({ "unit_number": "MAP-2", "status": "occupied" }),
+    )
+    .await;
+    let (st, m) = post_json(
+        c,
+        "/site-maps",
+        &mgr,
+        serde_json::json!({ "property_id": pid, "name": "Complex layout", "kind": "apartment",
+            "center_lng": -117.3, "center_lat": 34.4 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{m}");
+    let mid = m["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        "/site-maps",
+        &mgr,
+        serde_json::json!({ "property_id": pid, "name": "x", "kind": "castle" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    let (st, m) = send_json(
+        c,
+        Method::Put,
+        &format!("/site-maps/{mid}/features"),
+        &mgr,
+        serde_json::json!({ "features": [
+            { "kind": "building", "name": "Building A", "geometry": sq(-117.3, 34.4) },
+            { "kind": "unit", "name": "MAP-1", "geometry": sq(-117.3, 34.4001), "unit_id": u1["id"] },
+            { "kind": "unit", "name": "MAP-2", "geometry": sq(-117.3, 34.4002), "unit_id": u2["id"] },
+        ]}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{m}");
+    assert_eq!(m["stats"]["units"], 2);
+    assert_eq!(m["stats"]["units_available"], 1);
+    let feats = m["features"].as_array().unwrap();
+    assert!(feats[1]["area_m2"].as_f64().unwrap() > 100.0);
+    assert_eq!(feats[1]["unit"]["status"], "vacant");
+
+    // Validation: a point cannot be a unit; a unit is drawn once; a foreign unit is refused.
+    let bad = |features: serde_json::Value| {
+        let mgr = mgr.clone();
+        let mid = mid.clone();
+        async move {
+            send_json(
+                c,
+                Method::Put,
+                &format!("/site-maps/{mid}/features"),
+                &mgr,
+                serde_json::json!({ "features": features }),
+            )
+            .await
+            .0
+        }
+    };
+    assert_eq!(
+        bad(serde_json::json!([{ "kind": "unit", "geometry": { "type": "Point", "coordinates": [0, 0] } }])).await,
+        Status::BadRequest
+    );
+    assert_eq!(
+        bad(serde_json::json!([
+            { "kind": "unit", "geometry": sq(0.0, 0.0), "unit_id": u1["id"] },
+            { "kind": "unit", "geometry": sq(1.0, 1.0), "unit_id": u1["id"] }]))
+        .await,
+        Status::BadRequest
+    );
+    assert_eq!(
+        bad(serde_json::json!([{ "kind": "unit", "geometry": sq(0.0, 0.0), "unit_id": uuid::Uuid::new_v4() }])).await,
+        Status::BadRequest
+    );
+
+    // A campground: sites with attributes, a road and an amenity.
+    let (st, camp) = post_json(
+        c,
+        "/site-maps",
+        &mgr,
+        serde_json::json!({ "property_id": pid, "name": "Pine Ridge", "kind": "campground", "base_layer": "grid" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    let cid = camp["id"].as_str().unwrap().to_string();
+    let site = |name: &str, lng: f64| {
+        serde_json::json!({ "kind": "site", "name": name,
+            "geometry": { "type": "Point", "coordinates": [lng, 34.5] },
+            "attrs": { "site_type": "rv", "power_amps": 50, "water": true, "max_length_ft": 40,
+                       "pull_through": true, "rate_cents_night": 4500 } })
+    };
+    let (st, camp) = send_json(
+        c,
+        Method::Put,
+        &format!("/site-maps/{cid}/features"),
+        &mgr,
+        serde_json::json!({ "features": [
+            site("A1", -117.30), site("A2", -117.299),
+            { "kind": "road", "name": "Loop", "geometry": { "type": "LineString", "coordinates": [[-117.3, 34.5], [-117.299, 34.5]] } },
+            { "kind": "amenity", "name": "Showers", "geometry": { "type": "Point", "coordinates": [-117.3, 34.501] },
+              "attrs": { "amenity": "bath_house" } },
+        ]}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    assert_eq!(camp["stats"]["sites"], 2);
+    assert!(camp["features"][2]["length_m"].as_f64().unwrap() > 50.0);
+    assert_eq!(
+        bad_attrs(c, &mgr, &cid).await,
+        Status::BadRequest,
+        "site_type must be known"
+    );
+
+    // Export carries OSM tags; importing it into a fresh map reproduces the sites.
+    let (st, gj) = get_json(c, &format!("/site-maps/{cid}/export.geojson"), &mgr).await;
+    assert_eq!(st, Status::Ok);
+    let first = &gj["features"][0]["properties"];
+    assert_eq!(first["tourism"], "camp_pitch");
+    assert_eq!(first["power_supply:amperage"], 50);
+    let (_, copy) = post_json(
+        c,
+        "/site-maps",
+        &mgr,
+        serde_json::json!({ "property_id": pid, "name": "Copy", "kind": "campground" }),
+    )
+    .await;
+    let (st, copy) = post_json(
+        c,
+        &format!("/site-maps/{}/import", copy["id"].as_str().unwrap()),
+        &mgr,
+        serde_json::json!({ "geojson": gj }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{copy}");
+    assert_eq!(copy["stats"]["sites"], 2);
+    assert_eq!(copy["features"].as_array().unwrap().len(), 4);
+    // Raw OSM: a pitch is understood, a bakery is skipped.
+    let (st, osm) = post_json(
+        c,
+        &format!("/site-maps/{}/import", copy["id"].as_str().unwrap()),
+        &mgr,
+        serde_json::json!({ "replace": true, "geojson": { "type": "FeatureCollection", "features": [
+            { "type": "Feature", "properties": { "tourism": "camp_pitch", "name": "P1", "capacity": "4" },
+              "geometry": { "type": "Point", "coordinates": [-117.3, 34.5] } },
+            { "type": "Feature", "properties": { "shop": "bakery" },
+              "geometry": { "type": "Point", "coordinates": [-117.3, 34.5] } } ] } }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{osm}");
+    assert_eq!(osm["features"].as_array().unwrap().len(), 1);
+    assert_eq!(osm["features"][0]["attrs"]["max_guests"], 4.0);
+
+    // Publishing: private until published; the public view hides internal ids.
+    let public = |path: String| async move {
+        let resp = c
+            .client
+            .get(path)
+            .header(Header::new("X-Tenant", "northwind"))
+            .dispatch()
+            .await;
+        let st = resp.status();
+        (
+            st,
+            resp.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or_default(),
+        )
+    };
+    let (st, _) = public(format!("/public/site-maps/{mid}")).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/site-maps/{mid}"),
+        &mgr,
+        serde_json::json!({ "published": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, pm) = public(format!("/public/site-maps/{mid}")).await;
+    assert_eq!(st, Status::Ok, "{pm}");
+    let pf = pm["features"].as_array().unwrap();
+    assert!(pf.iter().all(|f| f["unit_id"].is_null()));
+    let statuses: Vec<&str> = pf
+        .iter()
+        .filter_map(|f| f["unit"]["status"].as_str())
+        .collect();
+    assert!(
+        statuses.contains(&"vacant") && statuses.contains(&"unavailable"),
+        "{statuses:?}"
+    );
+    let (_, list) = public(format!("/public/site-maps?property_id={pid}")).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    // Another workspace cannot see or edit them.
+    let other = mint(
+        c,
+        Some(cascade),
+        false,
+        &["property:read", "property:write"],
+    );
+    let (st, _) = get_json(c, &format!("/site-maps/{mid}"), &other).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, l) = get_json(c, "/site-maps", &other).await;
+    assert_eq!(st, Status::Ok);
+    assert!(l.as_array().unwrap().is_empty());
+
+    // The drawing is in the property's history.
+    let (_, hist) = get_json(c, &format!("/properties/{pid}/history?limit=100"), &mgr).await;
+    let h = hist["events"].as_array().unwrap();
+    assert!(h.iter().any(
+        |e| e["action"] == "site_map.draw" && e["summary"].as_str().unwrap().contains("added")
+    ));
+    assert!(h.iter().any(|e| e["action"] == "site_map.create"));
+
+    // Delete.
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/site-maps/{cid}"),
+        &mgr,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = get_json(c, &format!("/site-maps/{cid}"), &mgr).await;
+    assert_eq!(st, Status::NotFound);
+}
+
+async fn bad_attrs(c: &Ctx, token: &str, map_id: &str) -> Status {
+    send_json(
+        c,
+        rocket::http::Method::Put,
+        &format!("/site-maps/{map_id}/features"),
+        token,
+        serde_json::json!({ "features": [{ "kind": "site",
+            "geometry": { "type": "Point", "coordinates": [0, 0] },
+            "attrs": { "site_type": "yurt" } }] }),
+    )
+    .await
+    .0
 }

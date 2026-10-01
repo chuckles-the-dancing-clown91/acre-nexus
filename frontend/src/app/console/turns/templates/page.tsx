@@ -166,7 +166,7 @@ export default function TemplatesPage() {
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3">
                     <span>Waits on:</span>
                     {steps
-                      .filter((o) => o.key !== s.key)
+                      .filter((_, j) => j < i)
                       .map((o) => (
                         <label key={o.key} className="flex items-center gap-1">
                           <input

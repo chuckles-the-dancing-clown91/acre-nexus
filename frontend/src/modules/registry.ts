@@ -52,6 +52,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:write",
       },
       {
+        href: "/console/maps",
+        label: "Site maps",
+        icon: "map",
+        permission: "property:read",
+      },
+      {
         href: "/console/workflows",
         label: "Workflows",
         icon: "chart",

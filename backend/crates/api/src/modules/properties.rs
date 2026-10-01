@@ -37,6 +37,15 @@ impl PlatformModule for PropertiesModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
+            crate::routes::sitemaps::list_maps,
+            crate::routes::sitemaps::create_map,
+            crate::routes::sitemaps::get_map,
+            crate::routes::sitemaps::update_map,
+            crate::routes::sitemaps::delete_map,
+            crate::routes::sitemaps::save_features,
+            crate::routes::sitemaps::export_geojson,
+            crate::routes::sitemaps::import_geojson,
+            crate::routes::sitemaps::plan,
             properties::list::list,
             properties::create::create,
             properties::profile::profile,

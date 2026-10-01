@@ -405,3 +405,9 @@ pub const ISSUE_GENERATE: &str = "issue.generate_ticket";
 
 // ---- Business profile ----
 pub const BUSINESS_PROFILE_SAVE: &str = "business_profile.save";
+
+// ---- Site maps ----
+pub const SITE_MAP_CREATE: &str = "site_map.create";
+pub const SITE_MAP_UPDATE: &str = "site_map.update";
+pub const SITE_MAP_DELETE: &str = "site_map.delete";
+pub const SITE_MAP_DRAW: &str = "site_map.draw";

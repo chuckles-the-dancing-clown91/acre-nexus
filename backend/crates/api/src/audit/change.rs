@@ -238,6 +238,30 @@ pub async fn created(
     .await;
 }
 
+/// Record an event with a plain-language summary (bulk edits, imports).
+#[allow(clippy::too_many_arguments)]
+pub async fn noted(
+    db: &impl ConnectionTrait,
+    ctx: Ctx,
+    action: &str,
+    target_type: &str,
+    target_id: Uuid,
+    property_id: Option<Uuid>,
+    label: &str,
+    summary: &str,
+) {
+    write(
+        db,
+        ctx,
+        action,
+        target_type,
+        target_id.to_string(),
+        property_id,
+        json!({ "label": label, "summary": summary, "changes": [] }),
+    )
+    .await;
+}
+
 /// Record that something was removed or retired, with a reason when there is one.
 #[allow(dead_code, clippy::too_many_arguments)]
 pub async fn removed(

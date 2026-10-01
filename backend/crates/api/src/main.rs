@@ -72,6 +72,7 @@ mod screening;
 mod secrets;
 mod seed;
 mod settings;
+mod sitemap;
 mod state;
 mod storage;
 mod syndication;
