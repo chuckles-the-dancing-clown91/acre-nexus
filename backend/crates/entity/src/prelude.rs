@@ -107,6 +107,7 @@ pub use super::site_feature::Entity as SiteFeature;
 pub use super::site_map::Entity as SiteMap;
 pub use super::sms_message::Entity as SmsMessage;
 pub use super::sms_thread::Entity as SmsThread;
+pub use super::sso_assertion::Entity as SsoAssertion;
 pub use super::tenant::Entity as Tenant;
 pub use super::tenant_module::Entity as TenantModule;
 pub use super::theme::Entity as Theme;

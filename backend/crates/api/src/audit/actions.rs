@@ -417,3 +417,10 @@ pub const TOUR_REQUEST_UPDATE: &str = "tour_request.update";
 
 // ---- Autofill ----
 pub const PROPERTY_AUTOFILL: &str = "property.autofill_apply";
+
+// ---- Single sign-on ----
+pub const SSO_ENABLE: &str = "sso.enable";
+pub const SSO_ROTATE: &str = "sso.rotate";
+pub const SSO_DISABLE: &str = "sso.disable";
+pub const SSO_LAUNCH: &str = "sso.launch";
+pub const SSO_LOGIN: &str = "auth.sso_login";

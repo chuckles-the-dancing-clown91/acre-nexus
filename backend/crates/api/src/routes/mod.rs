@@ -63,6 +63,7 @@ pub mod reports;
 pub mod search;
 pub mod settings;
 pub mod sitemaps;
+pub mod sso;
 pub mod syndication;
 pub mod team;
 pub mod tenant_history;
@@ -105,6 +106,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::oauth::start,
         auth::oauth::sandbox,
         auth::oauth::callback,
+        sso::sign_in,
         // MFA (TOTP)
         auth::mfa::setup,
         auth::mfa::confirm,

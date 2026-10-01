@@ -41,6 +41,7 @@ pub async fn create(
         notes: Set(b.notes),
         partner_kind: Set(None),
         partner_base_url: Set(None),
+        partner_web_url: Set(None),
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),

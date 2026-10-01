@@ -100,6 +100,7 @@ async fn integration_suite() {
     business_profile_and_google_reviews(&c).await;
     site_maps_apartment_and_campground(&c).await;
     public_search_tours_and_autofill(&c).await;
+    alpha_single_sign_on(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -3603,4 +3604,220 @@ async fn public_search_tours_and_autofill(c: &Ctx) {
         .unwrap()
         .iter()
         .any(|e| e["action"] == "property.autofill_apply"));
+}
+
+/// Alpha single sign-on: off by default, a signed assertion signs the right
+/// person in once, and everything else is refused the same way.
+async fn alpha_single_sign_on(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(
+        c,
+        Some(nw),
+        false,
+        &["integrations:manage", "maintenance:read", "audit:read"],
+    );
+    let now = chrono::Utc::now().timestamp();
+    let assertion = |secret: &str, email: &str, tenant: &str, ttl: i64| {
+        let cl = crate::sso::claims("alpha", "vantedge", email, tenant, None, now, ttl);
+        crate::sso::sign(secret, &cl).unwrap()
+    };
+    let try_in = |token: String| async move {
+        let resp = c
+            .client
+            .post("/auth/sso/alpha")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({ "token": token }).to_string())
+            .dispatch()
+            .await;
+        let st = resp.status();
+        (
+            st,
+            resp.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or_default(),
+        )
+    };
+
+    // Off by default.
+    let (st, s) = get_json(c, "/sso/alpha", &admin).await;
+    assert_eq!(st, Status::Ok, "{s}");
+    assert_eq!(s["enabled"], false);
+    let (st, _) = try_in(assertion("guess", "jordan@northwind.com", "northwind", 60)).await;
+    assert_eq!(st, Status::Unauthorized);
+
+    // Turn it on; the secret shows once.
+    let nobody = mint(c, Some(nw), false, &["maintenance:read"]);
+    let (st, _) = post_json(c, "/sso/alpha/enable", &nobody, serde_json::json!({})).await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, on) = post_json(c, "/sso/alpha/enable", &admin, serde_json::json!({})).await;
+    assert_eq!(st, Status::Ok, "{on}");
+    let secret = on["secret"].as_str().unwrap().to_string();
+    assert_eq!(on["enabled"], true);
+    assert_eq!(on["tenant"], "northwind");
+    let (st, _) = post_json(c, "/sso/alpha/enable", &admin, serde_json::json!({})).await;
+    assert_eq!(st, Status::Conflict, "rotating is explicit");
+    let (_, again) = get_json(c, "/sso/alpha", &admin).await;
+    assert!(
+        again.get("secret").is_none(),
+        "the secret is not shown again"
+    );
+
+    // A good assertion signs Jordan in, once.
+    let good = assertion(&secret, "Jordan@Northwind.com", "northwind", 60);
+    let (st, r) = try_in(good.clone()).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["outcome"], "session", "{r}");
+    assert!(r["session"]["access_token"].is_string() || r["session"].is_object());
+    let (st, _) = try_in(good).await;
+    assert_eq!(st, Status::Unauthorized, "a token works once");
+
+    // Everything else is the same 401.
+    for (label, t) in [
+        (
+            "wrong secret",
+            assertion("wrong", "jordan@northwind.com", "northwind", 60),
+        ),
+        (
+            "unknown person",
+            assertion(&secret, "nobody@nowhere.example", "northwind", 60),
+        ),
+        (
+            "a member of another workspace",
+            assertion(&secret, "priya@cascade.com", "northwind", 60),
+        ),
+        (
+            "another workspace",
+            assertion(&secret, "jordan@northwind.com", "cascade", 60),
+        ),
+        ("junk", "not.a.token".to_string()),
+    ] {
+        let (st, _) = try_in(t).await;
+        assert_eq!(st, Status::Unauthorized, "{label}");
+    }
+    let mut long = crate::sso::claims(
+        "alpha",
+        "vantedge",
+        "jordan@northwind.com",
+        "northwind",
+        None,
+        now,
+        60,
+    );
+    long.exp = now + 3600;
+    let (st, _) = try_in(crate::sso::sign(&secret, &long).unwrap()).await;
+    assert_eq!(st, Status::Unauthorized, "too long-lived");
+
+    // Launch: needs a linked vendor and the web address, and a real person.
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let jordan = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("jordan@northwind.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let admin = crate::auth::issue_access_token(
+        &c.config,
+        jordan.id,
+        Some(nw),
+        false,
+        vec![
+            "integrations:manage".into(),
+            "maintenance:read".into(),
+            "audit:read".into(),
+        ],
+    )
+    .unwrap();
+    let cp = entity::prelude::Counterparty::find()
+        .filter(entity::counterparty::Column::TenantId.eq(nw))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("a vendor exists");
+    let (st, _) = post_json(
+        c,
+        "/sso/alpha/launch",
+        &admin,
+        serde_json::json!({ "counterparty_id": cp.id, "web_url": "https://alpha.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "not linked yet");
+    let mut am: entity::counterparty::ActiveModel = cp.clone().into();
+    am.partner_kind = Set(Some("alpha".into()));
+    am.update(&c.db).await.unwrap();
+    let (st, _) = post_json(
+        c,
+        "/sso/alpha/launch",
+        &admin,
+        serde_json::json!({ "counterparty_id": cp.id }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "needs the web address");
+    let (st, _) = post_json(
+        c,
+        "/sso/alpha/launch",
+        &admin,
+        serde_json::json!({ "counterparty_id": cp.id, "web_url": "javascript:x" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, l) = post_json(
+        c,
+        "/sso/alpha/launch",
+        &admin,
+        serde_json::json!({ "counterparty_id": cp.id, "web_url": "https://alpha.example/", "next": "/portal/admin/jobs" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{l}");
+    let url = l["url"].as_str().unwrap();
+    assert!(
+        url.starts_with("https://alpha.example/sso/vantedge?token="),
+        "{url}"
+    );
+    assert!(url.ends_with("&next=/portal/admin/jobs"), "{url}");
+    // The token in the link verifies with the shared secret, for Alpha.
+    let tok = url
+        .split("token=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap();
+    let cl = crate::sso::verify(tok, &secret, "vantedge", "alpha", now).unwrap();
+    assert_eq!(cl.tenant, "northwind");
+    assert_eq!(cl.next.as_deref(), Some("/portal/admin/jobs"));
+    // Remembered for next time.
+    let (st, _) = post_json(
+        c,
+        "/sso/alpha/launch",
+        &admin,
+        serde_json::json!({ "counterparty_id": cp.id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // Turn it off: the same kind of token stops working.
+    let (st, off) = send_json(
+        c,
+        Method::Delete,
+        "/sso/alpha",
+        &admin,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(off["enabled"], false);
+    let (st, _) = try_in(assertion(&secret, "jordan@northwind.com", "northwind", 60)).await;
+    assert_eq!(st, Status::Unauthorized);
+
+    let (_, trail) = get_json(c, "/audit/events?limit=100", &admin).await;
+    let acts: Vec<&str> = trail["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["action"].as_str())
+        .collect();
+    for want in ["sso.enable", "auth.sso_login", "sso.launch", "sso.disable"] {
+        assert!(acts.contains(&want), "missing {want}: {acts:?}");
+    }
 }

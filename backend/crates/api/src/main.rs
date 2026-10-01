@@ -74,6 +74,7 @@ mod secrets;
 mod seed;
 mod settings;
 mod sitemap;
+mod sso;
 mod state;
 mod storage;
 mod syndication;

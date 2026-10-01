@@ -124,6 +124,7 @@ pub mod site_feature;
 pub mod site_map;
 pub mod sms_message;
 pub mod sms_thread;
+pub mod sso_assertion;
 pub mod tenant;
 pub mod tenant_module;
 pub mod theme;

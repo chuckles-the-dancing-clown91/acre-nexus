@@ -56,6 +56,11 @@ impl PlatformModule for IntegrationsModule {
             // secrets: write-only credential vault
             integrations::list_secrets::list_secrets,
             integrations::set_secret::set_secret,
+            // Alpha single sign-on
+            crate::routes::sso::get_status,
+            crate::routes::sso::enable,
+            crate::routes::sso::disable,
+            crate::routes::sso::launch,
             // business profile + Google reviews
             crate::routes::business::get_profile,
             crate::routes::business::save_profile,

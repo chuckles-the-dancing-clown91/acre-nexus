@@ -51,6 +51,14 @@ export default function SettingsPage() {
             Business profile and Google reviews
           </Link>
         )}
+        {can("integrations:manage") && (
+          <Link
+            href="/console/settings/sso"
+            className="ml-2 mt-3 inline-block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-ink hover:border-accent"
+          >
+            Single sign-on
+          </Link>
+        )}
       </div>
 
       {error && <p className="text-bad">{error.message}</p>}
