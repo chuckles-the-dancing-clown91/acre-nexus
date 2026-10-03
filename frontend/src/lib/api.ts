@@ -1601,11 +1601,11 @@ export const api = {
     }),
   myTicket: (id: string) =>
     request<MyTicketDetail>(`/my/tickets/${id}`, { auth: true }),
-  addMyTicketComment: (id: string, body: string) =>
+  addMyTicketComment: (id: string, body: string, documentIds: string[] = []) =>
     request<TicketComment>(`/my/tickets/${id}/comments`, {
       method: "POST",
       auth: true,
-      body: { body },
+      body: { body, document_ids: documentIds },
     }),
   /** Register a photo against the resident's request, then PUT the bytes to
    *  the signed URL (same two-step contract as the staff document service). */
@@ -3920,6 +3920,19 @@ export interface CreateMyTicketInput {
 export interface MyTicketDetail extends MaintenanceTicket {
   comments: TicketComment[];
   documents: DocumentEntry[];
+  /** Photos and videos on the request, with a link to view each. */
+  files: MyTicketFile[];
+}
+
+export interface MyTicketFile {
+  id: string;
+  filename: string;
+  mime_type: string;
+  kind: "photo" | "video" | "document";
+  url: string | null;
+  /** The resident added it (vs. staff sharing it in an update). */
+  mine: boolean;
+  created_at: string;
 }
 
 export interface ThreadMessage {
