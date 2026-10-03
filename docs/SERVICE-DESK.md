@@ -21,11 +21,26 @@ adds a kit to a work order that's already open.
 Estimates use two settings: `maintenance.labor_rate_cents` (in-house, default
 $75/hr) and `maintenance.contractor_rate_cents` (default $125/hr).
 
-Starter kits are added once per workspace: shower replacement, toilet
-replacement, water heater replacement, drywall patch and paint, unit turn
-repaint, HVAC seasonal service. After that the catalog is the workspace's;
-renamed, changed or retired kits stay that way. Kits are seeded server-side
-in `api/src/servicedesk.rs`.
+Kits are jobs to do, not symptoms: "Replace dishwasher", "Replace
+thermostat", "Run a new circuit", "Snake a drain", "Rekey locks". A symptom
+("AC not blowing cold") can have many causes, so a work order without a kit
+starts from the reported problem, and the job is added once someone has
+looked at it.
+
+The catalog ships 26 kits, each with a stable key (`replace-dishwasher`,
+`service-hvac`, …), listed in `api/src/kit_catalog.rs`. New catalog kits
+reach every workspace as they're added; a kit the workspace renamed, changed
+or retired stays that way. The old symptom starters are retired from the
+catalog; work orders and routines made from them keep what they have.
+
+### Where to buy a part
+
+A part on a kit or a work order can carry a product link. The store is read
+from the link (Home Depot, Lowe's, Amazon, Walmart, Menards, Ace, Grainger,
+SupplyHouse, Ferguson, RepairClinic, AppliancePartsPros, PartSelect, Build.com,
+Zoro), and the work order shows "Buy at Home Depot". A part with no link shows
+searches at Home Depot, Lowe's and Amazon instead. Links must be `http(s)`.
+`PATCH /parts/<id>` with `url` sets or clears one.
 
 Managers build and change kits at `/console/maintenance/kits/new` and
 `/console/maintenance/kits/<id>` (`POST`/`PUT`/`DELETE /issue-templates`):
@@ -38,6 +53,34 @@ only a checklist opens with the checklist as tasks.
 A maintenance plan (`/maintenance-plans`) repeats on a cadence and, when due,
 opens a work order. With `issue_template_id` set, that work order starts with
 the kit's tasks and parts.
+
+## Action buttons
+
+The work order has one-press updates (`GET /ticket-actions`,
+`POST /tickets/<id>/actions`). Each posts a note on the ticket and moves the
+status when the step implies it:
+
+| Button | Note | Resident sees it | Status |
+| --- | --- | --- | --- |
+| On my way | On my way. | yes | |
+| Arrived | Arrived on site. | yes | in progress |
+| Diagnosed | Diagnosed: *what you found* (required) | yes | |
+| Need access | Couldn't get in. We need access to finish this. | yes | on hold, waiting on the resident |
+| Waiting on parts | Waiting on parts. | yes | on hold, waiting on parts |
+| Parts are in | Parts are in; back on it. | yes | in progress |
+| Waiting on vendor | Waiting on the vendor. | staff only | on hold, waiting on the vendor |
+| Needs a return visit | Needs a return visit. | staff only | scheduled, with a follow-up date |
+| Work complete | Work complete. | yes | resolved |
+
+Starting, finishing, skipping or reopening a task leaves a staff-only note
+("Done: Install the new dishwasher"). Notes from buttons are marked as updates;
+replies from the resident are marked as theirs.
+
+## Photos and video
+
+Staff and residents attach photos (up to 25 MB) and videos (up to 100 MB) to
+a work order and its notes. Residents see their own files and anything staff
+shared in a public note.
 
 ## Sending a task to a vendor
 
