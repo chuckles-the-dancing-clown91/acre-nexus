@@ -63,6 +63,7 @@ mod payouts;
 mod pdf;
 mod pdfdoc;
 mod pii;
+mod portals;
 mod process;
 mod providers;
 mod ratelimit;

@@ -358,6 +358,7 @@ async fn property_for(
 
 /// The unit a row names on a property, made if it's new. No unit column (or
 /// a blank one) means the whole property, as with a single-family home.
+#[allow(clippy::too_many_arguments)]
 async fn unit_for(
     db: &impl ConnectionTrait,
     ctx: &Ctx<'_>,

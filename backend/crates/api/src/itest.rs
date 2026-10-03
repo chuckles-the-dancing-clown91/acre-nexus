@@ -124,6 +124,7 @@ async fn integration_suite() {
     property_reach(&c).await;
     service_desk(&c).await;
     imports_and_exports(&c).await;
+    listing_syndication(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -6159,4 +6160,197 @@ Total,,,,,,\"2,600.00\",,,,\n";
     ] {
         c.db.execute_unprepared(&sql).await.unwrap();
     }
+}
+
+/// Listing syndication: each portal reads a feed from a secret URL. A channel
+/// is off until turned on (with someone for renters to reach), only listings
+/// complete enough for the portals go out, every pull is logged, and a new
+/// URL retires the old one.
+async fn listing_syndication(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["listing:read", "listing:write"]);
+    let (st, s) = get_json(c, "/syndication", &staff).await;
+    assert_eq!(st, Status::Ok, "{s}");
+    let keys: Vec<&str> = s["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, vec!["zillow", "mits"]);
+    assert_eq!(s["channels"][0]["enabled"], false);
+    let maple = s["listings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["title"] == "The Maple Court")
+        .expect("seeded listing")
+        .clone();
+    assert_eq!(maple["ready"], false);
+    assert_eq!(maple["state"], "OR");
+    assert_eq!(maple["city"], "Portland", "the state comes off the city");
+    assert!(
+        maple["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["message"].as_str().unwrap().contains("photo")),
+        "{maple}"
+    );
+    let url = s["channels"][0]["feed_url"].as_str().unwrap().to_string();
+    let path = url
+        .split_once("/feeds/")
+        .map(|(_, p)| format!("/feeds/{p}"))
+        .unwrap();
+    let pull = |p: String| async move {
+        let r = c
+            .client
+            .get(p)
+            .header(Header::new("User-Agent", "ZillowFeedBot/1.0"))
+            .dispatch()
+            .await;
+        let st = r.status();
+        (st, r.into_string().await.unwrap_or_default())
+    };
+    assert_eq!(
+        pull(path.clone()).await.0,
+        Status::NotFound,
+        "off until turned on"
+    );
+
+    // A photo makes Maple Court ready.
+    let lid = uuid::Uuid::parse_str(maple["id"].as_str().unwrap()).unwrap();
+    let photo = entity::listing_photo::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        listing_id: Set(lid),
+        document_id: Set(uuid::Uuid::new_v4()),
+        alt_text: Set("Living room".into()),
+        caption: Set(None),
+        position: Set(0),
+        created_by: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        updated_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+
+    // Turning it on needs someone to reach.
+    let (st, on) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &staff,
+        serde_json::json!({ "enabled": true, "contact_email": "leasing@northwind.example", "contact_phone": "(503) 555-0100" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{on}");
+    assert_eq!(on["enabled"], true);
+    assert!(on["listings"].as_u64().unwrap() >= 1, "{on}");
+    let (st, xml) = pull(path.clone()).await;
+    assert_eq!(st, Status::Ok, "{xml}");
+    assert!(xml.contains("<hotPadsItems version=\"2.1\">"), "{xml}");
+    assert!(xml.contains("<name>The Maple Court</name>"));
+    assert!(xml.contains("<price>1850</price>"));
+    assert!(xml.contains("<zip>97214</zip>") && xml.contains("<state>OR</state>"));
+    assert!(xml.contains("<contactEmail>leasing@northwind.example</contactEmail>"));
+    assert!(xml.contains(&format!("/public/listing-photos/{}", photo.id)));
+    assert!(!xml.contains("Leased"), "only ready listings");
+    let (_, s) = get_json(c, "/syndication", &staff).await;
+    assert_eq!(s["channels"][0]["pull_count"], 1);
+    assert_eq!(s["channels"][0]["last_pull_agent"], "ZillowFeedBot/1.0");
+    assert_eq!(
+        s["channels"][0]["pulls"][0]["listings"],
+        s["channels"][0]["listings"]
+    );
+
+    // Turned off for the portals: gone from the feed.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/listings/{lid}"),
+        &staff,
+        serde_json::json!({ "syndicate": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, xml) = pull(path.clone()).await;
+    assert!(!xml.contains("The Maple Court"));
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/listings/{lid}"),
+        &staff,
+        serde_json::json!({ "syndicate": true }),
+    )
+    .await;
+
+    // The MITS feed, previewed while it's off.
+    let r = c
+        .client
+        .get("/syndication/mits/preview")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(r.status(), Status::Ok);
+    let mits = r.into_string().await.unwrap();
+    assert!(
+        mits.contains("<PhysicalProperty") && mits.contains("The Maple Court"),
+        "{mits}"
+    );
+    let wrong = path.replace("/feeds/zillow/", "/feeds/mits/");
+    assert_eq!(
+        pull(wrong).await.0,
+        Status::NotFound,
+        "a token belongs to its channel"
+    );
+
+    // A new URL retires the old one.
+    let (st, rot) = post_json(
+        c,
+        "/syndication/zillow/rotate",
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let fresh = rot["feed_url"].as_str().unwrap();
+    assert_ne!(fresh, url);
+    assert_eq!(pull(path).await.0, Status::NotFound);
+    let fresh_path = fresh
+        .split_once("/feeds/")
+        .map(|(_, p)| format!("/feeds/{p}"))
+        .unwrap();
+    assert_eq!(pull(fresh_path).await.0, Status::Ok);
+
+    // Leasing agents can't turn channels on; scoped people don't see it.
+    let reader = mint(c, Some(nw), false, &["listing:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &reader,
+        serde_json::json!({ "enabled": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Leave Northwind as it was.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &staff,
+        serde_json::json!({ "enabled": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    entity::prelude::ListingPhoto::delete_many()
+        .filter(entity::listing_photo::Column::Id.eq(photo.id))
+        .exec(&c.db)
+        .await
+        .unwrap();
 }

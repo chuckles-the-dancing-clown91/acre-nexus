@@ -51,6 +51,7 @@ pub mod payables;
 pub mod payments;
 pub mod payouts;
 pub mod platform;
+pub mod portals;
 pub mod portfolio;
 pub mod portfolios;
 pub mod process;
