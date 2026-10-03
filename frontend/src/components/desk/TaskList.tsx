@@ -5,11 +5,21 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, HardHat, PackagePlus, Plus, Send, Trash2 } from "lucide-react";
+import {
+  Check,
+  HardHat,
+  Mail,
+  PackagePlus,
+  Plus,
+  Send,
+  Trash2,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import {
   desk,
+  loadLabel,
   minutesLabel,
   tradeLabel,
   TRADES,
@@ -33,11 +43,14 @@ const field =
 
 export function TaskList({
   ticketId,
+  propertyId,
   tasks,
   manage,
   onChange,
 }: {
   ticketId: string;
+  /** For offering the people on this property first. */
+  propertyId?: string;
   tasks: Task[];
   manage: boolean;
   onChange: () => void;
@@ -48,7 +61,13 @@ export function TaskList({
   const [minutes, setMinutes] = useState("");
   const [contractor, setContractor] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [dispatching, setDispatching] = useState<Task | null>(null);
+  const [dispatching, setDispatching] = useState<Task[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const techs = useQuery({
+    queryKey: ["techs", propertyId ?? "all"],
+    queryFn: () => desk.techs(propertyId),
+    enabled: manage,
+  });
   const [kitOpen, setKitOpen] = useState(false);
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
@@ -99,6 +118,24 @@ export function TaskList({
           )
         }
       />
+      {manage && picked.length > 0 && (
+        <div className="mx-5 mt-3 flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-[13px]">
+          <span className="font-medium text-fg">{picked.length} selected</span>
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() =>
+              setDispatching(tasks.filter((t) => picked.includes(t.id)))
+            }
+          >
+            <Send />
+            Send to a vendor
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
+            Clear
+          </Button>
+        </div>
+      )}
       {counted > 0 && (
         <div className="mx-5 mt-3 h-1.5 overflow-hidden rounded-full bg-fill">
           <div
@@ -121,6 +158,21 @@ export function TaskList({
         <ul className="divide-y divide-line">
           {tasks.map((t) => (
             <li key={t.id} className="flex items-center gap-3 px-3 py-2.5">
+              {manage && t.status !== "done" && t.status !== "skipped" && (
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${t.title}`}
+                  checked={picked.includes(t.id)}
+                  onChange={(e) =>
+                    setPicked((p) =>
+                      e.target.checked
+                        ? [...p, t.id]
+                        : p.filter((x) => x !== t.id)
+                    )
+                  }
+                  className="size-4 shrink-0 accent-[var(--accent)]"
+                />
+              )}
               <button
                 type="button"
                 disabled={!manage || busy}
@@ -160,12 +212,30 @@ export function TaskList({
                   ) : null}
                   {t.est_cost_label && <span>{t.est_cost_label}</span>}
                   {t.assignee_name && (
-                    <span className="text-fg-2">
+                    <span className="inline-flex items-center gap-1 text-fg-2">
+                      {t.dispatch_via === "email" ? (
+                        <Mail className="size-3" />
+                      ) : (
+                        <HardHat className="size-3" />
+                      )}
                       {t.dispatched_at ? "Sent to " : "Vendor: "}
                       {t.assignee_name}
+                      {t.dispatch_via === "partner" && " (their board)"}
+                      {t.dispatch_via === "email" && " (email)"}
+                    </span>
+                  )}
+                  {t.assignee_user_name && (
+                    <span className="inline-flex items-center gap-1 text-fg-2">
+                      <User className="size-3" />
+                      {t.assignee_user_name}
                     </span>
                   )}
                 </div>
+                {t.dispatch_note && (
+                  <div className="truncate text-xs text-fg-4">
+                    Note: {t.dispatch_note}
+                  </div>
+                )}
               </div>
               {t.needs_contractor && (
                 <HardHat
@@ -181,11 +251,33 @@ export function TaskList({
                 />
               )}
               <Badge>{tradeLabel(t.trade)}</Badge>
+              {manage && !t.needs_contractor && !t.assignee_entity_id && (
+                <select
+                  aria-label={`Who does ${t.title}`}
+                  value={t.assignee_user_id ?? ""}
+                  disabled={busy}
+                  onChange={(e) =>
+                    run(() =>
+                      desk.updateTask(ticketId, t.id, {
+                        assignee_user_id: e.target.value,
+                      })
+                    )
+                  }
+                  className="hidden max-w-[9rem] rounded-lg border border-line bg-surface px-2 py-1 text-xs text-fg-2 sm:block"
+                >
+                  <option value="">Unassigned</option>
+                  {techs.data?.map((p) => (
+                    <option key={p.user_id} value={p.user_id}>
+                      {p.name} ({loadLabel(p)})
+                    </option>
+                  ))}
+                </select>
+              )}
               {manage && (
                 <>
                   <button
                     type="button"
-                    onClick={() => setDispatching(t)}
+                    onClick={() => setDispatching([t])}
                     disabled={busy}
                     aria-label={`Send ${t.title} to a vendor`}
                     className="rounded-lg p-1.5 text-fg-3 transition hover:bg-fill-2 hover:text-accent"
@@ -282,10 +374,11 @@ export function TaskList({
       {dispatching && (
         <DispatchDialog
           ticketId={ticketId}
-          task={dispatching}
+          tasks={dispatching}
           onClose={() => setDispatching(null)}
           onSent={() => {
             setDispatching(null);
+            setPicked([]);
             onChange();
           }}
         />
@@ -307,20 +400,26 @@ export function TaskList({
 /** Choose a vendor for a task (those covering its trade first) and send it. */
 function DispatchDialog({
   ticketId,
-  task,
+  tasks,
   onClose,
   onSent,
 }: {
   ticketId: string;
-  task: Task;
+  tasks: Task[];
   onClose: () => void;
   onSent: () => void;
 }) {
+  const task = tasks[0];
+  // Vendors are matched on the trade most of the tasks share.
+  const trades = [...new Set(tasks.map((t) => t.trade))];
+  const trade = trades.length === 1 ? task.trade : undefined;
   const vendors = useQuery({
-    queryKey: ["vendors", ticketId, task.trade],
-    queryFn: () => desk.vendors(ticketId, task.trade),
+    queryKey: ["vendors", ticketId, trade ?? "any"],
+    queryFn: () => desk.vendors(ticketId, trade),
   });
-  const [vendorId, setVendorId] = useState(task.assignee_entity_id ?? "");
+  const [vendorId, setVendorId] = useState(
+    tasks.length === 1 ? (task.assignee_entity_id ?? "") : ""
+  );
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -328,7 +427,8 @@ function DispatchDialog({
     if (!vendorId) return;
     setBusy(true);
     const go = (reason?: string) =>
-      desk.dispatchTask(ticketId, task.id, {
+      desk.dispatchTasks(ticketId, {
+        task_ids: tasks.map((t) => t.id),
         entity_id: vendorId,
         note: note.trim() || undefined,
         coi_override_reason: reason,
@@ -362,9 +462,23 @@ function DispatchDialog({
           Send to a vendor
         </DialogTitle>
         <DialogDescription className="mt-1 text-[13px] text-fg-3">
-          {task.title} · {tradeLabel(task.trade)}. Linked vendors get it in
-          their own job board; everyone else by email.
+          {tasks.length === 1
+            ? `${task.title} · ${tradeLabel(task.trade)}.`
+            : `${tasks.length} tasks, sent as one job.`}{" "}
+          Linked vendors get it on their own job board; everyone else by email.
         </DialogDescription>
+        {tasks.length > 1 && (
+          <ul className="mt-3 space-y-0.5 rounded-xl border border-line bg-fill/40 px-3 py-2 text-xs text-fg-2">
+            {tasks.map((t) => (
+              <li key={t.id} className="flex justify-between gap-2">
+                <span className="truncate">{t.title}</span>
+                <span className="shrink-0 text-fg-3">
+                  {tradeLabel(t.trade)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="mt-4 max-h-64 space-y-1.5 overflow-y-auto">
           {vendors.data?.length === 0 && (
             <p className="text-[13px] text-fg-3">
@@ -397,7 +511,9 @@ function DispatchDialog({
                   {v.trades.map(tradeLabel).join(", ") || "No trades listed"}
                 </div>
               </div>
-              {v.matches && <Badge tone="good">{tradeLabel(task.trade)}</Badge>}
+              {v.matches && trade && (
+                <Badge tone="good">{tradeLabel(trade)}</Badge>
+              )}
               {v.linked && <Badge tone="info">Linked</Badge>}
               {!v.coi_current && <Badge tone="warn">No COI</Badge>}
             </label>

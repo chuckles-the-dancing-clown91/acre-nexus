@@ -15,6 +15,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { desk, dollars, money, tradeLabel } from "@/lib/servicedesk";
 import { Expenses } from "@/components/desk/Expenses";
+import { Assign } from "@/components/desk/Assign";
 import { Media, Notes } from "@/components/desk/Notes";
 import { Parts } from "@/components/desk/Parts";
 import { TicketActions } from "@/components/desk/TicketActions";
@@ -85,10 +86,18 @@ export default function WorkOrderPage() {
   });
 
   const refresh = useCallback(() => {
-    for (const k of ["ticket", "tasks", "costs", "files", "expenses"]) {
+    for (const k of [
+      "ticket",
+      "tasks",
+      "costs",
+      "files",
+      "expenses",
+    ]) {
       void qc.invalidateQueries({ queryKey: [k, id] });
     }
     void qc.invalidateQueries({ queryKey: ["tickets"] });
+    void qc.invalidateQueries({ queryKey: ["techs"] });
+    void qc.invalidateQueries({ queryKey: ["my-queue"] });
   }, [qc, id]);
 
   if (ticket.error) {
@@ -221,6 +230,12 @@ export default function WorkOrderPage() {
         )}
       </motion.header>
 
+      {t && (
+        <motion.div {...rise(1)}>
+          <Assign ticket={t} manage={manage} onChange={refresh} />
+        </motion.div>
+      )}
+
       {t && manage && (
         <motion.div {...rise(1)}>
           <TicketActions ticketId={id} status={t.status} onChange={refresh} />
@@ -296,6 +311,7 @@ export default function WorkOrderPage() {
           {tasks.data ? (
             <TaskList
               ticketId={id}
+              propertyId={t?.property_id}
               tasks={tasks.data}
               manage={manage}
               onChange={refresh}

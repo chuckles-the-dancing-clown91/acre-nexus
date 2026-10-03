@@ -756,6 +756,12 @@ export interface MaintenanceTicket {
   status: string;
   assignee_user_id: string | null;
   assignee_entity_id: string | null;
+  /** Who has it: the teammate's or the vendor's name (on lists). */
+  assignee_name?: string | null;
+  assignee_kind?: "tech" | "vendor" | null;
+  /** Tasks on the work order and how many are finished (on lists). */
+  tasks_total?: number;
+  tasks_done?: number;
   reporter: string | null;
   /** Where in the home (e.g. "Kitchen"). */
   location: string | null;
@@ -1019,6 +1025,8 @@ export interface UpdateTicketInput {
   priority?: string;
   status?: string;
   assignee_user_id?: string;
+  /** Take the work order off whoever on the team has it. */
+  clear_assignee_user?: boolean;
   assignee_entity_id?: string;
   reporter?: string;
   location?: string;

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   draftFrom,
+  inQueueView,
+  loadLabel,
+  roleLabel,
   draftToReq,
   draftTotals,
   emptyDraft,
@@ -169,5 +172,43 @@ describe("looksLikeUrl", () => {
     expect(looksLikeUrl("javascript:alert(1)")).toBe(false);
     expect(looksLikeUrl("homedepot.com/p/1")).toBe(false);
     expect(looksLikeUrl("https://x.com/a b")).toBe(false);
+  });
+});
+
+describe("queue views", () => {
+  const t = (over: Partial<Parameters<typeof inQueueView>[0]> = {}) => ({
+    status: "open",
+    priority: "normal",
+    waiting_on: null,
+    assignee_user_id: null,
+    assignee_entity_id: null,
+    ...over,
+  });
+  it("splits work by who has it and how it stands", () => {
+    expect(inQueueView(t(), "unassigned", "me")).toBe(true);
+    expect(inQueueView(t({ assignee_user_id: "me" }), "mine", "me")).toBe(true);
+    expect(inQueueView(t({ assignee_user_id: "you" }), "mine", "me")).toBe(
+      false
+    );
+    expect(inQueueView(t({ assignee_user_id: "me" }), "unassigned", "me")).toBe(
+      false
+    );
+    expect(
+      inQueueView(t({ assignee_entity_id: "v" }), "unassigned", "me")
+    ).toBe(false);
+    expect(inQueueView(t(), "mine", null)).toBe(false);
+  });
+  it("keeps closed work out of the open views", () => {
+    expect(inQueueView(t({ status: "resolved" }), "open", "me")).toBe(false);
+    expect(inQueueView(t({ status: "resolved" }), "done", "me")).toBe(true);
+    expect(inQueueView(t({ priority: "high" }), "urgent", "me")).toBe(true);
+    expect(inQueueView(t({ status: "on_hold" }), "waiting", "me")).toBe(true);
+  });
+  it("says what a teammate has", () => {
+    expect(loadLabel({ open_tickets: 0, open_tasks: 0 })).toBe("free");
+    expect(loadLabel({ open_tickets: 1, open_tasks: 3 })).toBe(
+      "1 work order, 3 tasks"
+    );
+    expect(roleLabel("property_manager")).toBe("Property manager");
   });
 });

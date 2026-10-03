@@ -73,10 +73,100 @@ export interface Task {
   est_cost_label: string | null;
   needs_contractor: boolean;
   assignee_entity_id: string | null;
+  /** The vendor's name. */
   assignee_name: string | null;
+  /** A person on the team doing it. */
+  assignee_user_id: string | null;
+  assignee_user_name: string | null;
   status: "todo" | "doing" | "done" | "skipped";
   done_at: string | null;
   dispatched_at: string | null;
+  /** How it reached the vendor: their own board, or by email. */
+  dispatch_via: "partner" | "email" | null;
+  dispatch_note: string | null;
+}
+
+/** A teammate who can be given work, with what they already have. */
+export interface Tech {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  title: string | null;
+  open_tickets: number;
+  open_tasks: number;
+  /** Assigned to the property asked about. */
+  on_property: boolean;
+}
+
+/** One of the caller's own tasks, with the work order it belongs to. */
+export interface QueueTask {
+  task_id: string;
+  ticket_id: string;
+  title: string;
+  trade: string;
+  est_minutes: number | null;
+  status: "todo" | "doing";
+  ticket_title: string;
+  property_id: string;
+  property_name: string;
+  location: string | null;
+  priority: string;
+  due_date: string | null;
+  ticket_status: string;
+  waiting_on: string | null;
+}
+
+/** "Maintenance" → "maintenance"; "property_manager" → "Property manager". */
+export function roleLabel(r: string): string {
+  const s = r.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** "3 open" or "free": what a teammate already has. */
+export function loadLabel(
+  t: Pick<Tech, "open_tickets" | "open_tasks">
+): string {
+  const parts = [
+    t.open_tickets &&
+      `${t.open_tickets} work ${t.open_tickets === 1 ? "order" : "orders"}`,
+    t.open_tasks && `${t.open_tasks} ${t.open_tasks === 1 ? "task" : "tasks"}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "free";
+}
+
+/** The queue views, and which work orders each shows. */
+export type QueueView =
+  "mine" | "open" | "unassigned" | "urgent" | "waiting" | "done";
+
+const OPEN_STATUSES = ["open", "triage", "scheduled", "in_progress", "on_hold"];
+
+export function inQueueView(
+  t: {
+    status: string;
+    priority: string;
+    waiting_on: string | null;
+    assignee_user_id: string | null;
+    assignee_entity_id: string | null;
+  },
+  view: QueueView,
+  me: string | null
+): boolean {
+  const open = OPEN_STATUSES.includes(t.status);
+  switch (view) {
+    case "mine":
+      return open && !!me && t.assignee_user_id === me;
+    case "open":
+      return open;
+    case "unassigned":
+      return open && !t.assignee_user_id && !t.assignee_entity_id;
+    case "urgent":
+      return open && (t.priority === "urgent" || t.priority === "high");
+    case "waiting":
+      return t.status === "on_hold" || !!t.waiting_on;
+    case "done":
+      return !open;
+  }
 }
 
 export interface TradeNeed {
@@ -420,9 +510,27 @@ export const desk = {
       needs_contractor: boolean;
       status: Task["status"];
       assignee_entity_id: string;
+      /** A teammate's user id, or "" to clear. */
+      assignee_user_id: string;
       position: number;
     }>
   ) => patch<Task[]>(`/tickets/${ticketId}/tasks/${taskId}`, body),
+  techs: (propertyId?: string) =>
+    request<Tech[]>(
+      `/ticket-techs${propertyId ? `?property_id=${propertyId}` : ""}`,
+      { auth: true }
+    ),
+  queue: () => request<{ tasks: QueueTask[] }>("/ticket-queue", { auth: true }),
+  /** Several tasks to one vendor, as one job. */
+  dispatchTasks: (
+    ticketId: string,
+    body: {
+      task_ids: string[];
+      entity_id: string;
+      note?: string;
+      coi_override_reason?: string;
+    }
+  ) => post<Task[]>(`/tickets/${ticketId}/dispatch-tasks`, body),
   removeTask: (ticketId: string, taskId: string) =>
     request<Task[]>(`/tickets/${ticketId}/tasks/${taskId}`, {
       method: "DELETE",
