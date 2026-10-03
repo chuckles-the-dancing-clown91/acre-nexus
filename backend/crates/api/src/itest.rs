@@ -128,6 +128,7 @@ async fn integration_suite() {
     maintenance_actions_and_resident(&c).await;
     property_profile_records(&c).await;
     desk_queues_and_vendor_batches(&c).await;
+    appointments_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7261,4 +7262,268 @@ async fn property_story_and_timeline(c: &Ctx) {
         .iter()
         .filter(|e| e["kind"] == "lease")
         .all(|e| e["monthly"] == true && e["amount_label"].as_str().unwrap().ends_with("/mo")));
+}
+
+/// Appointments: offered windows reach the resident, who picks one in the
+/// portal; the work order follows; reminders go once; the public link lets
+/// anyone pick or decline with another time; staff confirm by phone.
+async fn appointments_flow(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded resident");
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+
+    // Taylor reports something; staff offer two windows.
+    let (st, t) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Bathroom fan rattles", "category": "electrical" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let day = |n: i64, h: u32| {
+        (chrono::Utc::now() + chrono::Duration::days(n))
+            .date_naive()
+            .and_hms_opt(h, 0, 0)
+            .unwrap()
+            .and_utc()
+            .to_rfc3339()
+    };
+    let (st, e) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "ticket_id": tid, "windows": [] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    let (st, a) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "ticket_id": tid, "windows": [
+            { "start": day(2, 16) },
+            { "start": day(3, 17), "end": day(3, 19) }
+        ] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["status"], "proposed");
+    assert_eq!(a["with_email"], "taylor@example.com");
+    assert_eq!(a["kind"], "repair");
+    assert_eq!(a["windows"].as_array().unwrap().len(), 2);
+    assert!(a["link"].as_str().unwrap().contains("/book/"));
+    let aid = a["id"].as_str().unwrap().to_string();
+    // The two-hour default filled the first window's end.
+    let w0 = &a["windows"][0];
+    let s0 = chrono::DateTime::parse_from_rfc3339(w0["start"].as_str().unwrap()).unwrap();
+    let e0 = chrono::DateTime::parse_from_rfc3339(w0["end"].as_str().unwrap()).unwrap();
+    assert_eq!((e0 - s0).num_minutes(), 120);
+    // Taylor got the offer by email and text.
+    let offers = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "appointment_offered")
+        .count();
+    assert!(offers >= 1, "an offer went out");
+
+    // In the portal, Taylor sees it on the request and picks the second window.
+    let (st, mine) = get_json(c, "/my/appointments", &res).await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert!(mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["id"] == aid.as_str()));
+    let (st, picked) = post_json(
+        c,
+        &format!("/my/appointments/{aid}/pick"),
+        &res,
+        serde_json::json!({ "window": 1 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{picked}");
+    assert_eq!(picked["status"], "confirmed");
+    assert_eq!(picked["confirmed_by"], "resident");
+    assert!(picked["when_words"].as_str().unwrap().contains(" to "));
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert_eq!(detail["status"], "scheduled");
+    assert!(detail["due_date"].is_string());
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "appointment_confirmed"
+            && m["visibility"] == "public"
+            && m["body"].as_str().unwrap().starts_with("Scheduled: ")));
+    let (st, _) = post_json(
+        c,
+        &format!("/my/appointments/{aid}/pick"),
+        &res,
+        serde_json::json!({ "window": 9 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // It shows on the calendar for that day, and the person going is on it.
+    let (_, cal) = get_json(c, "/appointments?status=confirmed", &staff).await;
+    assert!(cal
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["id"] == aid.as_str()));
+
+    // Reminders: two leads reached at once send once and are remembered.
+    let starts = chrono::DateTime::parse_from_rfc3339(picked["starts_at"].as_str().unwrap())
+        .unwrap()
+        .to_utc();
+    let before = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "appointment_reminder")
+        .count();
+    let n = crate::appointments::remind_due(&c.db, nw, starts - chrono::Duration::minutes(90))
+        .await
+        .unwrap();
+    assert_eq!(n, 1, "one appointment reminded");
+    let n2 = crate::appointments::remind_due(&c.db, nw, starts - chrono::Duration::minutes(60))
+        .await
+        .unwrap();
+    assert_eq!(n2, 0, "not twice");
+    let after = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "appointment_reminder")
+        .count();
+    assert!(after > before, "a reminder went out");
+
+    // Staff can mark the visit done; a second offer on the same work order
+    // replaces the first, and the public link works without signing in.
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("/appointments/{aid}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(done["status"], "done");
+    let (st, a2) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "ticket_id": tid, "windows": [{ "start": day(5, 16) }], "note": "Return visit for the new motor" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a2}");
+    let link = a2["link"].as_str().unwrap().to_string();
+    let token = link.rsplit('/').next().unwrap().to_string();
+    let aid2 = a2["id"].as_str().unwrap().to_string();
+    let resp = c
+        .client
+        .get(format!("/public/book/{token}"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let view: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(view["title"], "Bathroom fan rattles");
+    assert_eq!(view["status"], "proposed");
+    assert!(view["company"].as_str().unwrap().contains("Northwind"));
+    let resp = c.client.get("/public/book/nope").dispatch().await;
+    assert_eq!(resp.status(), Status::NotFound);
+    // None of those work; Taylor asks for another time. Staff hear.
+    let resp = c
+        .client
+        .post(format!("/public/book/{token}/decline"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "propose": { "start": day(6, 18) }, "reason": "Working late that day" }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let declined: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(declined["status"], "declined");
+    let (_, got) = get_json(c, &format!("/appointments/{aid2}"), &staff).await;
+    assert!(got["proposed_words"].is_string(), "{got}");
+    assert_eq!(got["outcome_note"], "Working late that day");
+    let heard = entity::prelude::Notification::find()
+        .filter(entity::notification::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .any(|n| n.template_key == "appointment_declined");
+    assert!(heard, "staff were told");
+    // A declined link can't be picked again.
+    let resp = c
+        .client
+        .post(format!("/public/book/{token}"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "window": 0 }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Conflict);
+    // Staff confirm the asked-for time by phone; marked done needs confirmed.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/appointments/{aid2}"),
+        &staff,
+        serde_json::json!({ "status": "no_show" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, e) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "ticket_id": tid, "windows": [{ "start": day(6, 18) }] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{e}");
+    let aid3 = e["id"].as_str().unwrap().to_string();
+    let (st, fixed) = send_json(
+        c,
+        Method::Patch,
+        &format!("/appointments/{aid3}"),
+        &staff,
+        serde_json::json!({ "confirm": { "start": day(6, 18) } }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{fixed}");
+    assert_eq!(fixed["confirmed_by"], "staff");
+    // Someone outside the property's reach doesn't see it.
+    let other_tenant = tenant_id(c, "cascade").await;
+    let outsider = mint(
+        c,
+        Some(other_tenant),
+        false,
+        &["maintenance:read", "maintenance:manage"],
+    );
+    let (st, _) = get_json(c, &format!("/appointments/{aid3}"), &outsider).await;
+    assert_eq!(st, Status::NotFound);
 }

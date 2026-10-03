@@ -4,6 +4,7 @@ pub use super::action_item::Entity as ActionItem;
 pub use super::api_token::Entity as ApiToken;
 pub use super::application::Entity as Application;
 pub use super::application_event::Entity as ApplicationEvent;
+pub use super::appointment::Entity as Appointment;
 pub use super::asset::Entity as Asset;
 pub use super::asset_part::Entity as AssetPart;
 pub use super::assignment::Entity as Assignment;

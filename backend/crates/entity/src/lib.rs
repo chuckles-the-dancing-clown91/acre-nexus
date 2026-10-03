@@ -21,6 +21,7 @@ pub mod action_item;
 pub mod api_token;
 pub mod application;
 pub mod application_event;
+pub mod appointment;
 pub mod asset;
 pub mod asset_part;
 pub mod assignment;

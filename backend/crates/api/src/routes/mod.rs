@@ -13,6 +13,7 @@
 pub mod accounting;
 pub mod api_tokens;
 pub mod applications;
+pub mod appointments;
 pub mod assignments;
 pub mod audit_trail;
 pub mod auth;

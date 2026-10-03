@@ -23,6 +23,7 @@ extern crate rocket;
 
 mod accounting;
 mod app_workflow;
+mod appointments;
 mod audit;
 mod auth;
 mod autofill;
@@ -161,6 +162,7 @@ async fn rocket() -> _ {
     scheduler::spawn(db.clone());
     billing::ensure_recurring_jobs(&db).await;
     reminders::ensure_recurring_jobs(&db).await;
+    appointments::ensure_recurring_jobs(&db).await;
     resident_reminders::ensure_recurring_jobs(&db).await;
     helpdesk::ensure_recurring_jobs(&db).await;
     workforce::ensure_recurring_jobs(&db).await;

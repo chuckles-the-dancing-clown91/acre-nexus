@@ -79,6 +79,10 @@ pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
 pub const REMINDERS_ENABLED: &str = "reminders.enabled";
 /// Only send a vendor out with current liability insurance (or a reason).
 pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
+/// Hours before a confirmed visit to remind everyone (comma-separated).
+pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
+/// How long an offered window is when staff give only a start time.
+pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
 /// Text (or email) the resident for a 1–5 rating when their repair resolves.
 pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
 /// In-house labor rate for work-order estimates, cents per hour.
@@ -417,6 +421,23 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Payments",
         kind: SettingKind::Int,
         default: || json!(800),
+    },
+    SettingDef {
+        key: APPOINTMENT_REMINDER_HOURS,
+        label: "Appointment reminders (hours before)",
+        description: "Comma-separated hours before a confirmed visit at which the \
+                      resident (and the person going) are reminded, e.g. \"24,2\".",
+        group: "Calendar",
+        kind: SettingKind::Text,
+        default: || json!("24,2"),
+    },
+    SettingDef {
+        key: APPOINTMENT_WINDOW_MINUTES,
+        label: "Default visit window (minutes)",
+        description: "How long an offered time window is when only a start time is given.",
+        group: "Calendar",
+        kind: SettingKind::Int,
+        default: || json!(120),
     },
     SettingDef {
         key: CALENDAR_DEFAULT_LEAD_DAYS,

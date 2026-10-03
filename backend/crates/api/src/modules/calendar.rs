@@ -28,6 +28,7 @@ impl PlatformModule for CalendarModule {
                 crate::reminders::SCAN_KIND,
                 crate::resident_reminders::KIND,
                 crate::resident_reminders::DIGEST_KIND,
+                crate::appointments::REMINDER_KIND,
             ],
             default_enabled: true,
             preview: false,
@@ -40,6 +41,16 @@ impl PlatformModule for CalendarModule {
             reminders::create::create_reminder,
             reminders::update::update_reminder,
             reminders::delete::delete_reminder,
+            crate::routes::appointments::list_appointments,
+            crate::routes::appointments::create_appointment,
+            crate::routes::appointments::get_appointment,
+            crate::routes::appointments::update_appointment,
+            crate::routes::appointments::public_view,
+            crate::routes::appointments::public_pick,
+            crate::routes::appointments::public_decline,
+            crate::routes::appointments::my_appointments,
+            crate::routes::appointments::my_pick,
+            crate::routes::appointments::my_decline,
         ]
     }
 
@@ -53,6 +64,9 @@ impl PlatformModule for CalendarModule {
             }
             k if k == crate::resident_reminders::DIGEST_KIND => {
                 Some(crate::resident_reminders::handle_digest_job(ctx.db, ctx.job).await)
+            }
+            k if k == crate::appointments::REMINDER_KIND => {
+                Some(crate::appointments::handle_reminder_job(ctx.db, ctx.job).await)
             }
             _ => None,
         }

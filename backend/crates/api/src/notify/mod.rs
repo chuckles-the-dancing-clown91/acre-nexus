@@ -130,6 +130,48 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
     },
+    // ---- Appointments ----
+    DefaultTemplate {
+        key: "appointment_offered",
+        subject: "Pick a time: {title}",
+        body: "Hi {name},\n\nWe'd like to come by for: {title} at {property}.\n\n\
+               Times we can do: {windows}.\n\nPick one here: {link}\n\nIf none of \
+               those work, the same link lets you suggest another time.\n\n— {company}",
+        sms: "{company}: pick a time for {title}. {windows}. {link}",
+    },
+    DefaultTemplate {
+        key: "appointment_confirmed",
+        subject: "Confirmed: {title}, {when}",
+        body: "Hi {name},\n\nYou're set for {when}: {title} at {property}. We'll \
+               remind you before.\n\n— {company}",
+        sms: "{company}: confirmed {when} for {title}.",
+    },
+    DefaultTemplate {
+        key: "appointment_confirmed_staff",
+        subject: "Scheduled: {title}, {when}",
+        body: "Hi {recipient},\n\n{name} picked {when} for {title} at {property}.\n\n— {company}",
+        sms: "{name} picked {when} for {title}.",
+    },
+    DefaultTemplate {
+        key: "appointment_declined",
+        subject: "Needs a new time: {title}",
+        body: "Hi {recipient},\n\n{name} can't make any of the times offered for {title} \
+               at {property}.{asked} {reason}\n\nOffer new times from the work order.\n\n— {company}",
+        sms: "{name} can't make the offered times for {title}.{asked}",
+    },
+    DefaultTemplate {
+        key: "appointment_reminder",
+        subject: "Reminder: {title}, {when}",
+        body: "Hi {name},\n\nA reminder that we're coming by {in}: {when}, for {title} \
+               at {property}.\n\n— {company}",
+        sms: "{company}: reminder, {title} {in}: {when}.",
+    },
+    DefaultTemplate {
+        key: "appointment_reminder_staff",
+        subject: "Up {in}: {title}, {when}",
+        body: "Hi {recipient},\n\n{title} at {property} with {name} is {in}: {when}.\n\n— {company}",
+        sms: "{title} at {property} is {in}: {when}.",
+    },
     DefaultTemplate {
         key: "tour_requested",
         subject: "Tour request: {name} for {home}",
