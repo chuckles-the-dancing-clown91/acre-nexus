@@ -34,7 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # IANA time zones — the workday an hour belongs to (daily overtime) is local.
 chrono-tz = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 argon2 = "0.5"
 rand = "0.8"
 sha2 = "0.10"
