@@ -24,6 +24,13 @@ pub struct TicketDto {
     pub status: String,
     pub assignee_user_id: Option<Uuid>,
     pub assignee_entity_id: Option<Uuid>,
+    /// Who has it: the teammate's or the vendor's name. Filled on lists.
+    pub assignee_name: Option<String>,
+    /// `tech` | `vendor` when someone has it.
+    pub assignee_kind: Option<String>,
+    /// Tasks on the work order and how many are finished. Filled on lists.
+    pub tasks_total: i64,
+    pub tasks_done: i64,
     pub reporter: Option<String>,
     /// Where in the home (e.g. "Kitchen").
     pub location: Option<String>,
@@ -95,6 +102,10 @@ impl From<entity::maintenance_ticket::Model> for TicketDto {
             status: t.status,
             assignee_user_id: t.assignee_user_id,
             assignee_entity_id: t.assignee_entity_id,
+            assignee_name: None,
+            assignee_kind: None,
+            tasks_total: 0,
+            tasks_done: 0,
             reporter: t.reporter,
             location: t.location,
             access_notes: t.access_notes,
@@ -130,6 +141,9 @@ pub struct TicketCommentDto {
     pub body: String,
     /// Photos and files attached to the note.
     pub document_ids: Vec<Uuid>,
+    /// What recorded it: a button (`on_my_way`, `task_done`, …), or
+    /// `resident_comment` when the resident wrote it in the portal.
+    pub action: Option<String>,
     pub created_at: String,
 }
 
@@ -145,6 +159,7 @@ impl From<entity::ticket_comment::Model> for TicketCommentDto {
             author_name: c.author_name,
             body: c.body,
             document_ids: serde_json::from_value(c.document_ids).unwrap_or_default(),
+            action: c.action,
             created_at: c.created_at.to_rfc3339(),
         }
     }
@@ -308,8 +323,11 @@ pub struct CreateTicketReq {
     pub coi_override_reason: Option<String>,
 }
 
-#[derive(Deserialize, schemars::JsonSchema)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 pub struct UpdateTicketReq {
+    /// Take the work order off whoever on the team has it.
+    #[serde(default)]
+    pub clear_assignee_user: bool,
     pub title: Option<String>,
     pub description: Option<String>,
     pub category: Option<String>,

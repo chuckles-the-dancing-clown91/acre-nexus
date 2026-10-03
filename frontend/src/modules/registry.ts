@@ -449,6 +449,23 @@ export const MODULES: ModuleDef[] = [
     nav: [],
   },
   {
+    key: "data",
+    label: "Import & Export",
+    description:
+      "Bring properties, units, tenants and leases, owners and vendors over from AppFolio, Buildium, Yardi Breeze, Rent Manager, DoorLoop or a spreadsheet; download everything as CSV.",
+    group: "platform",
+    defaultEnabled: true,
+    preview: false,
+    nav: [
+      {
+        href: "/console/data",
+        label: "Import & export",
+        icon: "transfer",
+        permission: "data:export",
+      },
+    ],
+  },
+  {
     key: "reports",
     label: "Reports & Exports",
     description:

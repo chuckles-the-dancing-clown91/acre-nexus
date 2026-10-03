@@ -300,6 +300,22 @@ pub const PERMISSION_CATALOG: &[PermissionMeta] = &[
         scope: "tenant",
     },
     PermissionMeta {
+        key: "data:import",
+        category: "Settings",
+        label: "Import data",
+        description: "Bring in properties, units, tenants and leases, owners and \
+                      vendors from another tool's export, and undo an import.",
+        scope: "tenant",
+    },
+    PermissionMeta {
+        key: "data:export",
+        category: "Settings",
+        label: "Export data",
+        description: "Download the workspace's properties, units, leases, owners, \
+                      vendors, work orders and ledger as CSV files.",
+        scope: "tenant",
+    },
+    PermissionMeta {
         key: "integrations:manage",
         category: "Settings",
         label: "Manage integrations",

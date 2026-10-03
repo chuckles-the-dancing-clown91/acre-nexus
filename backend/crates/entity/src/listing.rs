@@ -26,6 +26,11 @@ pub struct Model {
     pub description: String,
     pub is_public: bool,
     pub created_at: DateTimeWithTimeZone,
+    /// Two-letter state, for the portals (falls back to the property's).
+    pub state: String,
+    pub postal_code: String,
+    /// Sent to the rental portals when syndication is on (default yes).
+    pub syndicate: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

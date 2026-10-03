@@ -28,6 +28,11 @@ pub struct Model {
     pub done_by: Option<Uuid>,
     /// When the vendor was sent this task.
     pub dispatched_at: Option<DateTimeWithTimeZone>,
+    /// A person on the team doing the task.
+    pub assignee_user_id: Option<Uuid>,
+    /// `partner` | `email`: how the task reached the vendor.
+    pub dispatch_via: Option<String>,
+    pub dispatch_note: Option<String>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

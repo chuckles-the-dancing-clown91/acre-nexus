@@ -21,6 +21,17 @@ pub struct Model {
     pub grades: Option<String>,
     pub source: String,
     pub created_at: DateTimeWithTimeZone,
+    /// The property is in this school's attendance zone.
+    pub assigned: bool,
+    pub zone_name: Option<String>,
+    /// When someone confirmed the zone with the district.
+    pub zone_verified_on: Option<String>,
+    pub address: Option<String>,
+    pub phone: Option<String>,
+    pub website: Option<String>,
+    pub enrollment: Option<i32>,
+    pub notes: Option<String>,
+    pub updated_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

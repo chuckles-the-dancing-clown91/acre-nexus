@@ -161,6 +161,7 @@ pub async fn update_ticket(
             (None, None) => String::new(),
         };
         entity::ticket_comment::ActiveModel {
+            action: Set(None),
             document_ids: Set(serde_json::json!([])),
             id: Set(uuid::Uuid::new_v4()),
             tenant_id: Set(principal.tenant_id),

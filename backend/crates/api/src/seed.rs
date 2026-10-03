@@ -917,6 +917,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // The visibility split on its timeline: a public staff reply the
     // resident sees, and an internal note they don't.
     entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
@@ -935,6 +936,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .insert(db)
     .await?;
     entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
@@ -3054,6 +3056,16 @@ async fn seed_listing(
         description: Set(description.into()),
         is_public: Set(true),
         created_at: Set(Utc::now().into()),
+        // "Portland, OR" → OR; the demo ZIPs are the cities' main ones.
+        state: Set(city.rsplit(", ").next().unwrap_or("").to_string()),
+        postal_code: Set(match city {
+            c if c.starts_with("Portland") => "97214",
+            c if c.starts_with("Beaverton") => "97005",
+            c if c.starts_with("Lake Oswego") => "97034",
+            _ => "",
+        }
+        .into()),
+        syndicate: Set(true),
     }
     .insert(db)
     .await?;

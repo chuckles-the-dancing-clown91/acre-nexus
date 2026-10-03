@@ -50,6 +50,10 @@ p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
 # Field-level PII encryption at rest (SSN / government IDs).
 aes-gcm = "0.10"
 base64 = "0.22"
+# Reading other tools' CSV exports (quoted fields, embedded newlines) and
+# bundling the workspace export into one download.
+csv = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 thiserror = "1"
 anyhow = "1"
 dotenvy = "0.15"

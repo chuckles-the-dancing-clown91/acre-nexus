@@ -68,6 +68,11 @@ mod m20240101_000060_vendor_compliance;
 mod m20240101_000061_text_tools;
 mod m20240101_000062_listing_photos;
 mod m20240101_000063_service_desk;
+mod m20240101_000064_imports_and_syndication;
+mod m20240101_000065_maintenance_actions;
+mod m20240101_000066_property_profile;
+mod m20240101_000067_desk_queues;
+mod m20240101_000068_property_story;
 
 pub struct Migrator;
 
@@ -138,6 +143,11 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000061_text_tools::Migration),
             Box::new(m20240101_000062_listing_photos::Migration),
             Box::new(m20240101_000063_service_desk::Migration),
+            Box::new(m20240101_000064_imports_and_syndication::Migration),
+            Box::new(m20240101_000065_maintenance_actions::Migration),
+            Box::new(m20240101_000066_property_profile::Migration),
+            Box::new(m20240101_000067_desk_queues::Migration),
+            Box::new(m20240101_000068_property_story::Migration),
         ]
     }
 }

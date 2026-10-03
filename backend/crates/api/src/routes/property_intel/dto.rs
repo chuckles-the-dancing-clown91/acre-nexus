@@ -38,6 +38,10 @@ pub struct PropertyDetailDto {
     pub flood_zone: Option<String>,
     pub walk_score: Option<i32>,
     pub last_enriched_at: Option<String>,
+    /// The property in the team's words.
+    pub description: Option<String>,
+    /// Feature groups (interior, exterior, construction, utilities, community).
+    pub features: serde_json::Value,
 }
 
 impl From<entity::property_detail::Model> for PropertyDetailDto {
@@ -70,6 +74,8 @@ impl From<entity::property_detail::Model> for PropertyDetailDto {
             flood_zone: d.flood_zone,
             walk_score: d.walk_score,
             last_enriched_at: d.last_enriched_at.map(|t| t.to_rfc3339()),
+            description: d.description,
+            features: d.features,
         }
     }
 }

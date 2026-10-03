@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { landingFor } from "@/lib/resident";
 import { api, isMfaChallenge, type MfaChallenge } from "@/lib/api";
 import { AuthFrame } from "@/components/gate/AuthFrame";
 import { MfaForm } from "@/components/gate/MfaForm";
@@ -63,7 +64,7 @@ export default function LoginPage() {
         setStep({ kind: "mfa", challenge: res });
         setBusy(false);
       } else {
-        router.push("/console");
+        router.push(landingFor(res.user, window.location.search));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
@@ -97,7 +98,7 @@ export default function LoginPage() {
               challenge={step.challenge}
               onVerified={(tokens) => {
                 establishSession(tokens);
-                router.push("/console");
+                router.push(landingFor(tokens.user, window.location.search));
               }}
               onBack={() => setStep({ kind: "password" })}
             />

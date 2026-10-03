@@ -34,25 +34,30 @@ download their statement.
 
 ### Maintenance requests (`/account/maintenance`)
 
-Mounted by the `maintenance` module:
+Residents land here after sign-in; the staff console sends them here too.
 
-- `GET /my/tickets` / `POST /my/tickets` — the resident's requests on their
-  lease; creating one validates category/priority, stamps the reporter,
-  captures the **location** (where in the home), **access notes**, and
-  **permission-to-enter**, emits the vendor webhook, and notifies
-  maintenance staff (`maintenance_request` template).
-- `GET /my/tickets/<id>` — the request plus its resident-visible timeline
-  (public replies with author names + status changes; staff-only internal
-  notes are filtered out) and attachments. A staff **public reply** emails
-  the resident (`maintenance_reply` template).
-- `POST /my/tickets/<id>/comments` — resident comment (staff notified).
-- `POST /my/tickets/<id>/photos` — two-step signed-URL upload of a photo
-  against the request (`owner_type = maintenance_ticket`).
-- Staff status changes and public replies reach the resident on every
-  direct channel — email + in-app inbox + web push (`notify_person`).
-- `POST /my/tickets/<id>/review` — once the request is resolved/closed the
-  resident rates the repair (1–5 stars + optional comment, once); staff see
-  the rating on the ticket and are notified.
+- The list shows open and done requests with their status in plain words
+  ("Received", "Waiting on parts", "Waiting on you", "Done").
+- **New request** asks what needs fixing, the kind of problem, where in the
+  home, more detail, permission to enter (with access notes), and whether
+  it's urgent. Photos and videos go with it (photos to 25 MB, videos to
+  100 MB).
+- Links from texts and emails open a request (`?ticket=<id>`) or a new one
+  already filled in (`?new=1&title=…&category=…&description=…`).
+- A request shows every public update from the team (including action
+  buttons like "On my way." and "Diagnosed: …"), the photos and videos on
+  it, a reply box that takes photos and video, and a star rating once it's
+  done.
+
+API: `GET|POST /my/tickets`, `GET /my/tickets/<id>` (with `files` and their
+view links), `POST /my/tickets/<id>/comments` (`document_ids` must be the
+resident's own uploads on that request), `POST /my/tickets/<id>/photos`
+(image or video), `POST /my/tickets/<id>/review`.
+
+### Rent (`/account/payments`)
+
+Balance, monthly rent, what's due with a Pay button (using the saved method),
+and what's been paid.
 
 ### Message the manager (`/account/messages` ↔ `/console/messages`)
 

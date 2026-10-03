@@ -23,6 +23,8 @@ pub struct Model {
     pub ship_to: Option<String>,
     pub ship_to_note: Option<String>,
     pub vendor: Option<String>,
+    /// Where to buy it (a Home Depot, Amazon, Lowe's… product page).
+    pub url: Option<String>,
     pub tracking: Option<String>,
     pub unit_cost_cents: Option<i64>,
     pub expense_id: Option<Uuid>,

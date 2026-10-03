@@ -77,6 +77,7 @@ pub async fn add_comment(
     });
 
     let model = entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!(b.document_ids)),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),

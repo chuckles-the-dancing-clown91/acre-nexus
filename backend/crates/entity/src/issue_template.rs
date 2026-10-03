@@ -27,6 +27,8 @@ pub struct Model {
     pub active: bool,
     /// Created from the built-in starter set (kept editable).
     pub seeded: bool,
+    /// The catalog kit this came from (stable across renames).
+    pub kit_key: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

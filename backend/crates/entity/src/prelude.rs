@@ -1,5 +1,6 @@
 //! Convenient re-exports of every entity type.
 
+pub use super::action_item::Entity as ActionItem;
 pub use super::api_token::Entity as ApiToken;
 pub use super::application::Entity as Application;
 pub use super::application_event::Entity as ApplicationEvent;
@@ -40,9 +41,11 @@ pub use super::hoa_association::Entity as HoaAssociation;
 pub use super::hoa_member::Entity as HoaMember;
 pub use super::hoa_violation::Entity as HoaViolation;
 pub use super::impersonation_session::Entity as ImpersonationSession;
+pub use super::import_batch::Entity as ImportBatch;
 pub use super::inbound_email::Entity as InboundEmail;
 pub use super::inspection::Entity as Inspection;
 pub use super::inspection_item::Entity as InspectionItem;
+pub use super::insurance_policy::Entity as InsurancePolicy;
 pub use super::inventory_item::Entity as InventoryItem;
 pub use super::inventory_movement::Entity as InventoryMovement;
 pub use super::investor_commitment::Entity as InvestorCommitment;
@@ -88,6 +91,7 @@ pub use super::process_template_step::Entity as ProcessTemplateStep;
 pub use super::profile_type::Entity as ProfileType;
 pub use super::property::Entity as Property;
 pub use super::property_detail::Entity as PropertyDetail;
+pub use super::property_permit::Entity as PropertyPermit;
 pub use super::property_school::Entity as PropertySchool;
 pub use super::property_tax::Entity as PropertyTax;
 pub use super::property_utility::Entity as PropertyUtility;
@@ -110,6 +114,8 @@ pub use super::site_map::Entity as SiteMap;
 pub use super::sms_message::Entity as SmsMessage;
 pub use super::sms_thread::Entity as SmsThread;
 pub use super::sso_assertion::Entity as SsoAssertion;
+pub use super::syndication_channel::Entity as SyndicationChannel;
+pub use super::syndication_pull::Entity as SyndicationPull;
 pub use super::tenant::Entity as Tenant;
 pub use super::tenant_module::Entity as TenantModule;
 pub use super::text_saved_reply::Entity as TextSavedReply;

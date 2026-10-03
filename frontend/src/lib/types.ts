@@ -333,6 +333,10 @@ export interface PropertyDetail {
   flood_zone: string | null;
   walk_score: number | null;
   last_enriched_at: string | null;
+  /** The property in the team's words. */
+  description?: string | null;
+  /** Feature groups: interior, exterior, construction, utilities, community. */
+  features?: Record<string, string[]>;
 }
 
 export interface PropertyTax {
@@ -756,6 +760,12 @@ export interface MaintenanceTicket {
   status: string;
   assignee_user_id: string | null;
   assignee_entity_id: string | null;
+  /** Who has it: the teammate's or the vendor's name (on lists). */
+  assignee_name?: string | null;
+  assignee_kind?: "tech" | "vendor" | null;
+  /** Tasks on the work order and how many are finished (on lists). */
+  tasks_total?: number;
+  tasks_done?: number;
   reporter: string | null;
   /** Where in the home (e.g. "Kitchen"). */
   location: string | null;
@@ -835,6 +845,9 @@ export interface TicketComment {
   body: string;
   /** Photos and files attached to the note. */
   document_ids?: string[];
+  /** The action button or event behind the note (`on_my_way`, `task_done`,
+   * `resident_comment`, ...); null for a typed note. */
+  action?: string | null;
   created_at: string;
 }
 
@@ -877,6 +890,10 @@ export interface TicketPart {
   tracking: string | null;
   unit_cost_cents: number | null;
   note: string | null;
+  /** Product page to buy it from. */
+  url?: string | null;
+  /** The store, from the vendor or the link's host ("Home Depot"). */
+  store?: string | null;
   /** On the shelf right now (stock items). */
   in_stock: number | null;
   ordered_at: string | null;
@@ -1012,6 +1029,8 @@ export interface UpdateTicketInput {
   priority?: string;
   status?: string;
   assignee_user_id?: string;
+  /** Take the work order off whoever on the team has it. */
+  clear_assignee_user?: boolean;
   assignee_entity_id?: string;
   reporter?: string;
   location?: string;
@@ -1152,6 +1171,10 @@ export interface ConsoleListing {
   description: string;
   is_public: boolean;
   created_at: string;
+  state: string;
+  postal_code: string;
+  /** Sent to the rental portals when syndication is on. */
+  syndicate: boolean;
 }
 
 export interface CreateListingInput {
@@ -1175,6 +1198,9 @@ export interface UpdateListingInput {
   description?: string;
   status?: string;
   is_public?: boolean;
+  state?: string;
+  postal_code?: string;
+  syndicate?: boolean;
 }
 
 /** Back-office application intake. */

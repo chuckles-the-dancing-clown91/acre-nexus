@@ -42,7 +42,7 @@ The biggest gap for "total" management — most operators live in their books.
 | Online applications + application fees | 🟡 | P1 | apply funnel exists; add fee payment |
 | **Tenant screening** (credit/criminal/eviction/income) | 🟡 | P1 | simulated job today → real FCRA provider |
 | Leasing **CRM** (leads, tours, follow-ups) | ✅ | P2 | `lead` pipeline (inbound-email + manual entry) + tour scheduling + one-click convert-to-application (#44); see `LEASING.md` |
-| Listing **syndication** (Zillow, Apartments.com, MLS) | ⬜ | P2 | feed out to portals — the remaining §2 gap |
+| Listing **syndication** (Zillow, Apartments.com, MLS) | ✅ | — | Zillow rentals feed (HotPads 2.1) + MITS 4.1 ILS feed behind secret URLs, readiness checks, pull log (`docs/LISTING-SYNDICATION.md`); MLS (IDX/RESO) still open |
 | Tour scheduling / self-showing / lockboxes | 🟡 | P3 | tour scheduling ships as `tour` calendar reminders off a lead (#44); self-showing / lockbox access still open |
 | Rent **pricing / comps** optimization | 🟡 | P3 | AVM rent estimate exists |
 | Vacancy / days-on-market tracking | 🟡 | P2 | unit status exists |
@@ -147,7 +147,7 @@ The biggest gap for "total" management — most operators live in their books.
 | **Federated login** ("Log in with Google/Microsoft/Apple") + **MFA/2FA** | 🟡 | P2 | OAuth/OIDC social login (sandbox-first) + account linking + TOTP MFA shipped (#63); enterprise SSO/SAML/SCIM remains (#12). See `IAM.md` |
 | Global **search** | ✅ | — | `search` module: command palette across properties/tenants/entities/tickets/LLCs, tenant-scoped + permission-aware |
 | **AI copilot** (leasing chat, maintenance triage, comms drafting, report Q&A) | ⬜ | P3 | strong differentiator |
-| **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ⬜ | P2 | adoption unlock |
+| **Import / migration** (Buildium/AppFolio/Yardi/CSV) | ✅ | — | rent rolls, properties/units, owners, vendors from AppFolio, Buildium, Yardi Breeze, Rent Manager, DoorLoop or any CSV: mapping, exact preview, row-by-row commit, undo; CSV/zip export that round-trips (`docs/IMPORTS.md`) |
 | SaaS **billing/metering** for client workspaces | ✅ | — | per-door metered plans, auto monthly `platform_invoice`, self-serve + HQ console (`docs/SAAS_BILLING.md`) |
 | Calendar / scheduling / reminders engine | ✅ | — | `reminder` + per-tenant scan + console calendar (`docs/CALENDAR.md`) |
 

@@ -78,6 +78,15 @@ pub async fn update(
     if let Some(v) = b.is_public {
         am.is_public = Set(v);
     }
+    if let Some(v) = b.state {
+        am.state = Set(crate::geo::state_code(v.trim()));
+    }
+    if let Some(v) = b.postal_code {
+        am.postal_code = Set(v.trim().to_string());
+    }
+    if let Some(v) = b.syndicate {
+        am.syndicate = Set(v);
+    }
     let saved = am.update(&db).await?;
 
     crate::audit::change::change(

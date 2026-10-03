@@ -45,5 +45,7 @@ pub async fn list_tickets(
         .order_by_desc(entity::maintenance_ticket::Column::CreatedAt)
         .all(&db)
         .await?;
-    Ok(Json(rows.into_iter().map(TicketDto::from).collect()))
+    Ok(Json(
+        super::queue::decorate(&db, scope.tenant_id, rows).await?,
+    ))
 }
