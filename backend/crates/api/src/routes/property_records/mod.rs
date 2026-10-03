@@ -11,6 +11,8 @@ pub mod attention;
 pub mod insurance;
 pub mod permits;
 pub mod schools;
+pub mod story;
+pub mod timeline;
 
 use crate::error::{ApiError, ApiResult};
 use chrono::NaiveDate;

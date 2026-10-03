@@ -128,6 +128,7 @@ async fn integration_suite() {
     maintenance_actions_and_resident(&c).await;
     property_profile_records(&c).await;
     desk_queues_and_vendor_batches(&c).await;
+    property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -7168,4 +7169,96 @@ async fn desk_queues_and_vendor_batches(c: &Ctx) {
         .await;
         assert_eq!(st, Status::BadRequest, "no email on file");
     }
+}
+
+/// The description and features, and the history list.
+async fn property_story_and_timeline(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let base = format!("/properties/{pid}");
+
+    let (st, s) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({
+            "description": "  Corner fourplex, a block from the light rail.  ",
+            "features": {
+                "Interior": ["Flooring: Hardwood", " flooring: hardwood ", "", "Gas fireplace"],
+                "exterior": ["Fenced yard"]
+            }
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{s}");
+    assert_eq!(
+        s["description"],
+        "Corner fourplex, a block from the light rail."
+    );
+    assert_eq!(
+        s["features"]["interior"],
+        serde_json::json!(["Flooring: Hardwood", "Gas fireplace"])
+    );
+    // It comes back with the property's details.
+    let (_, intel) = get_json(c, &format!("{base}/intel"), &reader).await;
+    assert_eq!(intel["detail"]["features"]["exterior"][0], "Fenced yard");
+    assert!(intel["detail"]["description"]
+        .as_str()
+        .unwrap()
+        .starts_with("Corner"));
+    // A group left out is cleared; an unknown group, or reading-only access, is refused.
+    let (_, s2) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({ "features": { "interior": ["Gas fireplace"] } }),
+    )
+    .await;
+    assert!(s2["features"]["exterior"].is_null());
+    assert_eq!(
+        s2["description"], s["description"],
+        "the description stays when not sent"
+    );
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({ "features": { "garage": ["x"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &reader,
+        serde_json::json!({ "description": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // The history is newest first and mixes the sources.
+    let (st, tl) = get_json(c, &format!("{base}/timeline"), &reader).await;
+    assert_eq!(st, Status::Ok, "{tl}");
+    let events = tl.as_array().unwrap();
+    assert!(!events.is_empty());
+    let dates: Vec<&str> = events.iter().map(|e| e["date"].as_str().unwrap()).collect();
+    let mut sorted = dates.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(dates, sorted, "newest first");
+    let kinds: std::collections::BTreeSet<&str> =
+        events.iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    for k in ["built", "estimate", "tax", "lease"] {
+        assert!(kinds.contains(k), "{k} in {kinds:?}");
+    }
+    assert!(events
+        .iter()
+        .filter(|e| e["kind"] == "lease")
+        .all(|e| e["monthly"] == true && e["amount_label"].as_str().unwrap().ends_with("/mo")));
 }

@@ -537,6 +537,8 @@ mod tests {
             flood_zone: Some("AE".into()),
             walk_score: None,
             last_enriched_at: None,
+            description: None,
+            features: serde_json::json!({}),
             created_at: ts(),
             updated_at: ts(),
         };

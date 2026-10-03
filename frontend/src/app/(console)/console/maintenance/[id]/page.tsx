@@ -86,13 +86,7 @@ export default function WorkOrderPage() {
   });
 
   const refresh = useCallback(() => {
-    for (const k of [
-      "ticket",
-      "tasks",
-      "costs",
-      "files",
-      "expenses",
-    ]) {
+    for (const k of ["ticket", "tasks", "costs", "files", "expenses"]) {
       void qc.invalidateQueries({ queryKey: [k, id] });
     }
     void qc.invalidateQueries({ queryKey: ["tickets"] });

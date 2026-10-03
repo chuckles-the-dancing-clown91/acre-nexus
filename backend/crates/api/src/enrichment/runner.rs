@@ -71,7 +71,7 @@ fn full_address(p: &entity::property::Model) -> String {
 // ---------------------------------------------------------------------------
 
 /// Load the property's detail row, creating a blank one if absent.
-async fn load_or_init_detail<C: ConnectionTrait>(
+pub(crate) async fn load_or_init_detail<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
 ) -> Result<entity::property_detail::Model, EnrichmentError> {
@@ -111,6 +111,8 @@ async fn load_or_init_detail<C: ConnectionTrait>(
         flood_zone: Set(None),
         walk_score: Set(None),
         last_enriched_at: Set(None),
+        description: Set(None),
+        features: Set(serde_json::json!({})),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };
