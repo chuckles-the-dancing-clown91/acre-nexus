@@ -19,6 +19,8 @@ pub struct Model {
     /// Display name of the author (resident or staff member).
     pub author_name: Option<String>,
     pub body: String,
+    /// The action a button recorded (`on_my_way`, `waiting_parts`, …).
+    pub action: Option<String>,
     /// Photos and files attached to this note (documents on the ticket).
     pub document_ids: Json,
     pub created_at: DateTimeWithTimeZone,

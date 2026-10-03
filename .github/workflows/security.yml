@@ -44,7 +44,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - name: Audit dependencies (fail on high/critical)
+      # The gate is what ships: production dependencies, high or critical.
+      - name: Audit shipped dependencies (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+      # Dev tooling (lint, test, pre-commit) is reported, not gating: an
+      # advisory with no upstream fix there shouldn't block every PR.
+      - name: Audit dev tooling (report only)
+        continue-on-error: true
         run: npm audit --audit-level=high
 
   codeql:

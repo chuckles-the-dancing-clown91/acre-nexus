@@ -80,6 +80,9 @@ pub async fn create(
         description: Set(b.description.unwrap_or_default()),
         is_public: Set(b.is_public.unwrap_or(true)),
         created_at: Set(now.into()),
+        state: Set(property.state.clone()),
+        postal_code: Set(property.postal_code.clone()),
+        syndicate: Set(b.syndicate.unwrap_or(true)),
     }
     .insert(&db)
     .await?;

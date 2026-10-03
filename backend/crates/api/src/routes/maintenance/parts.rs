@@ -58,6 +58,9 @@ pub struct TicketPartDto {
     pub tracking: Option<String>,
     pub unit_cost_cents: Option<i64>,
     pub note: Option<String>,
+    /// Where to buy it, and the store that is.
+    pub url: Option<String>,
+    pub store: Option<String>,
     /// How many are on the shelf right now (when it's a stock item).
     pub in_stock: Option<i32>,
     pub ordered_at: Option<String>,
@@ -98,6 +101,13 @@ pub(super) async fn part_dtos(
             need_by: p.need_by,
             ship_to: p.ship_to,
             ship_to_note: p.ship_to_note,
+            store: p.vendor.clone().or_else(|| {
+                p.url
+                    .as_deref()
+                    .and_then(crate::servicedesk::store_of)
+                    .map(str::to_string)
+            }),
+            url: p.url,
             vendor: p.vendor,
             tracking: p.tracking,
             unit_cost_cents: p.unit_cost_cents,
@@ -139,6 +149,7 @@ pub async fn add_part(
 ) -> ApiResult<entity::ticket_part::Model> {
     let now = Utc::now();
     Ok(entity::ticket_part::ActiveModel {
+        url: Set(None),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         ticket_id: Set(ticket_id),
@@ -322,6 +333,7 @@ pub async fn add_finding(
         .await?
         .map(|u| u.name);
     let comment = entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -497,6 +509,8 @@ pub struct UpdatePartReq {
     pub status: Option<String>,
     pub need_by: Option<String>,
     pub note: Option<String>,
+    /// Where to buy it ("" clears it); the store comes from the link.
+    pub url: Option<String>,
 }
 
 /// `PATCH /parts/<id>`.
@@ -553,6 +567,14 @@ pub async fn update_part(
             .clone()
             .map(|n| n.trim().to_string())
             .filter(|n| !n.is_empty()));
+    }
+    if let Some(u) = body.url.as_deref() {
+        let u = crate::servicedesk::clean_url(u).map_err(ApiError::BadRequest)?;
+        am.vendor = Set(u
+            .as_deref()
+            .and_then(crate::servicedesk::store_of)
+            .map(str::to_string));
+        am.url = Set(u);
     }
     am.updated_at = Set(Utc::now().into());
     let p = am.update(&db).await?;

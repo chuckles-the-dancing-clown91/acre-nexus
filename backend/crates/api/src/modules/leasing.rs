@@ -60,6 +60,11 @@ impl PlatformModule for LeasingModule {
             listings::photos::reorder,
             listings::photos::remove,
             listings::photos::public_photo,
+            crate::routes::portals::overview,
+            crate::routes::portals::update_channel,
+            crate::routes::portals::rotate,
+            crate::routes::portals::preview,
+            crate::routes::portals::feed,
             // CRM leads (the #46 seed; inbound leasing email lands here) +
             // the manual-entry, tour-scheduling, and convert-to-application doors
             leads::list::list_leads,

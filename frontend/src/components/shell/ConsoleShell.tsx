@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { motion } from "motion/react";
 import { useAuth } from "@/lib/auth";
+import { isResidentOnly } from "@/lib/resident";
 import { useUiStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Ambient } from "@/components/ambient";
@@ -21,9 +22,12 @@ export function ConsoleShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
+    // Residents have their own pages; the console is for staff.
+    if (!loading && isResidentOnly(user))
+      router.replace("/account/maintenance");
   }, [loading, user, router]);
 
-  if (loading || !user) return <Booting />;
+  if (loading || !user || isResidentOnly(user)) return <Booting />;
 
   return (
     <>

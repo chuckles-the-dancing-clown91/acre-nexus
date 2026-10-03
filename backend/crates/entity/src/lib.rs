@@ -17,6 +17,7 @@
 
 pub mod prelude;
 
+pub mod action_item;
 pub mod api_token;
 pub mod application;
 pub mod application_event;
@@ -57,9 +58,11 @@ pub mod hoa_association;
 pub mod hoa_member;
 pub mod hoa_violation;
 pub mod impersonation_session;
+pub mod import_batch;
 pub mod inbound_email;
 pub mod inspection;
 pub mod inspection_item;
+pub mod insurance_policy;
 pub mod inventory_item;
 pub mod inventory_movement;
 pub mod investor_commitment;
@@ -105,6 +108,7 @@ pub mod process_template_step;
 pub mod profile_type;
 pub mod property;
 pub mod property_detail;
+pub mod property_permit;
 pub mod property_school;
 pub mod property_tax;
 pub mod property_utility;
@@ -127,6 +131,8 @@ pub mod site_map;
 pub mod sms_message;
 pub mod sms_thread;
 pub mod sso_assertion;
+pub mod syndication_channel;
+pub mod syndication_pull;
 pub mod tenant;
 pub mod tenant_module;
 pub mod text_saved_reply;

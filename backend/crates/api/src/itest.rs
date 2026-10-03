@@ -123,6 +123,12 @@ async fn integration_suite() {
     batch_d_listing_photos(&c).await;
     property_reach(&c).await;
     service_desk(&c).await;
+    imports_and_exports(&c).await;
+    listing_syndication(&c).await;
+    maintenance_actions_and_resident(&c).await;
+    property_profile_records(&c).await;
+    desk_queues_and_vendor_batches(&c).await;
+    property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -152,9 +158,11 @@ async fn bg_job_queue_contract(c: &Ctx) {
             .unwrap()
             .unwrap()
     }
-    // Tick until the job reaches a terminal state (or we give up).
+    // Tick until the job reaches a terminal state (or we give up). Each tick
+    // advances at most 25 due jobs, oldest first, so earlier scenarios' queued
+    // notifications can take several ticks before this job's turn comes.
     async fn drain(c: &Ctx, id: Uuid) -> entity::background_job::Model {
-        for _ in 0..8 {
+        for _ in 0..200 {
             let j = job(c, id).await;
             if j.status == "failed" || j.status == "completed" {
                 return j;
@@ -2945,8 +2953,8 @@ async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|i| i["name"] == "Leaking faucet")
-        .expect("starter issue")
+        .find(|i| i["name"] == "Replace faucet cartridge")
+        .expect("catalog kit")
         .clone();
     assert!(issues.as_array().unwrap().len() >= 10);
 
@@ -2976,10 +2984,20 @@ async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
         .as_str()
         .unwrap()
         .contains("Drips every few seconds"));
-    assert!(out["ticket"]["description"]
-        .as_str()
+    // An action kit, not a symptom: its steps are tasks on the work order.
+    let tid = out["ticket"]["id"].as_str().unwrap();
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &mgr).await;
+    assert!(tasks
+        .as_array()
         .unwrap()
-        .contains("Replace cartridge"));
+        .iter()
+        .any(|t| t["title"] == "Install the new cartridge"));
+    // The old symptom entries aren't in the catalog.
+    assert!(!issues
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["name"] == "AC not cooling" || i["name"] == "Leaking faucet"));
     let from_stock: Vec<&str> = out["parts"]["from_stock"]
         .as_array()
         .unwrap()
@@ -4757,7 +4775,9 @@ async fn batch_c_texts(c: &Ctx) {
     assert_eq!(links.len(), 1);
     let url = links[0].payload["vars"]["url"].as_str().unwrap();
     assert!(
-        url.contains("/account/maintenance?new=1&title=Leaking%20faucet&category=plumbing"),
+        url.contains(
+            "/account/maintenance?new=1&title=The%20kitchen%20faucet%20is%20leaking%20again&category=plumbing"
+        ),
         "{url}"
     );
 
@@ -5391,7 +5411,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "Shower replacement")
+        .find(|k| k["name"] == "Replace shower")
         .expect("the shower kit")
         .clone();
     assert!(shower["tasks"].as_array().unwrap().len() >= 8);
@@ -5664,7 +5684,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "Toilet replacement")
+        .find(|k| k["name"] == "Replace toilet")
         .unwrap()["id"]
         .as_str()
         .unwrap()
@@ -5684,7 +5704,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "HVAC seasonal service")
+        .find(|k| k["name"] == "Service HVAC (seasonal)")
         .unwrap()["id"]
         .as_str()
         .unwrap()
@@ -5809,7 +5829,7 @@ async fn service_desk(c: &Ctx) {
         .map(|k| k["name"].as_str().unwrap())
         .collect();
     assert!(names.contains(&"Shower remodel"));
-    assert!(!names.contains(&"Shower replacement"), "{names:?}");
+    assert!(!names.contains(&"Replace shower"), "{names:?}");
 
     // Their own kit, priced at their rates, then retired.
     let (st, mine) = post_json(
@@ -5848,4 +5868,1397 @@ async fn service_desk(c: &Ctx) {
         .unwrap()
         .iter()
         .any(|k| k["id"] == mine["id"]));
+}
+
+/// Moving in from another tool: an AppFolio rent roll is recognised, mapped,
+/// previewed (nothing written), committed (one bad row reported, the rest in),
+/// matched rather than duplicated the second time, exported in a shape that
+/// goes straight back in, and undone, keeping what was used since.
+async fn imports_and_exports(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "data:import",
+            "data:export",
+            "lease:read",
+            "lease:manage",
+            "property:read",
+        ],
+    );
+    let upload = |path: String, body: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let resp = c
+                .client
+                .post(path)
+                .header(bearer(&staff))
+                .header(ContentType::CSV)
+                .body(body)
+                .dispatch()
+                .await;
+            let st = resp.status();
+            (
+                st,
+                resp.into_json::<serde_json::Value>()
+                    .await
+                    .unwrap_or_default(),
+            )
+        }
+    };
+    const ROLL: &str = "Rent Roll\nAs of 10/01/2026\n\n\
+Property,Unit,Tenant,Status,BD/BA,Sqft,Rent,Deposit,Lease From,Lease To,Past Due\n\
+Juniper Flats - 410 Juniper St,101,\"Okafor, Ada\",Current,2/1,850,\"$1,450.00\",\"1,450.00\",01/01/2026,12/31/2026,0.00\n\
+Juniper Flats - 410 Juniper St,102,Ben Ruiz,Notice,1/1,610,\"1,150.00\",500,3/1/25,2/28/26,\"$75.00\"\n\
+Juniper Flats - 410 Juniper St,103,VACANT,,Studio/1,420,,,,,\n\
+Juniper Flats - 410 Juniper St,104,Cy Park,Current,1/1,610,,,6/1/2026,,\n\
+Total,,,,,,\"2,600.00\",,,,\n";
+
+    let (st, p) = upload("/imports?kind=tenants&filename=rent_roll.csv".into(), ROLL).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    let bid = p["batch"]["id"].as_str().unwrap().to_string();
+    assert_eq!(p["batch"]["source"], "appfolio", "{p}");
+    assert_eq!(p["batch"]["mapping"]["lease_start"], "Lease From");
+    assert_eq!(
+        p["counts"]["rows"], 4,
+        "the title and total rows are skipped"
+    );
+    assert_eq!(p["counts"]["properties"], 1, "{p}");
+    assert_eq!(
+        p["counts"]["units"], 3,
+        "a failed row leaves nothing behind, its unit included"
+    );
+    assert_eq!(p["counts"]["leases"], 2);
+    assert_eq!(p["counts"]["errors"], 1, "Cy Park has no rent");
+    let bad = &p["rows"][0];
+    assert_eq!(bad["action"], "error");
+    assert!(
+        bad["message"].as_str().unwrap().contains("no rent"),
+        "{bad}"
+    );
+    // A preview writes nothing.
+    let none = Property::find()
+        .filter(entity::property::Column::TenantId.eq(nw))
+        .filter(entity::property::Column::Name.eq("Juniper Flats - 410 Juniper St"))
+        .one(&c.db)
+        .await
+        .unwrap();
+    assert!(none.is_none());
+
+    // Commit.
+    let (st, done) = post_json(
+        c,
+        &format!("/imports/{bid}/commit"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(done["status"], "done");
+    assert_eq!(done["summary"]["leases"], 2);
+    let prop = Property::find()
+        .filter(entity::property::Column::TenantId.eq(nw))
+        .filter(entity::property::Column::Name.eq("Juniper Flats - 410 Juniper St"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the property came in");
+    assert_eq!(prop.units, 3);
+    assert_eq!(
+        prop.occupied_units, 1,
+        "the notice lease isn't counted as occupied"
+    );
+    let leases = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::PropertyId.eq(prop.id))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let ada = leases
+        .iter()
+        .find(|l| l.tenant_name == "Ada Okafor")
+        .expect("name flipped");
+    assert_eq!(ada.rent_cents, 145_000);
+    assert_eq!(ada.start_date, "2026-01-01");
+    let ben = leases.iter().find(|l| l.tenant_name == "Ben Ruiz").unwrap();
+    assert_eq!(ben.status, "notice");
+    assert_eq!(ben.balance_cents, 7_500);
+    assert_eq!(ben.payment_status, "late");
+    assert_eq!(ben.start_date, "2025-03-01");
+
+    // The same file again: matched, nothing new.
+    let (_, again) = upload("/imports?kind=tenants".into(), ROLL).await;
+    assert_eq!(again["counts"]["leases"], 0, "{again}");
+    assert_eq!(again["counts"]["properties"], 0);
+    assert_eq!(again["counts"]["matched"], 2);
+    let again_id = again["batch"]["id"].as_str().unwrap().to_string();
+    // Fix the mapping instead: point rent at a column that isn't there.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/imports/{again_id}"),
+        &staff,
+        serde_json::json!({ "mapping": { "rent": "Nope" } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/imports/{again_id}"),
+        &staff,
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // Export: the tenants file goes back in as a Vantedge file, and matches.
+    let resp = c
+        .client
+        .get("/exports/tenants")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let csv = resp.into_string().await.unwrap();
+    assert!(
+        csv.contains("Ada Okafor") && csv.contains("1450.00"),
+        "{csv}"
+    );
+    let resp = c
+        .client
+        .post("/imports?kind=tenants")
+        .header(bearer(&staff))
+        .body(csv)
+        .dispatch()
+        .await;
+    let back: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(back["batch"]["source"], "vantedge", "{back}");
+    assert_eq!(back["counts"]["leases"], 0, "everything matches: {back}");
+    assert_eq!(back["counts"]["errors"], 0, "{back}");
+    let back_id = back["batch"]["id"].as_str().unwrap();
+    send_json(
+        c,
+        Method::Delete,
+        &format!("/imports/{back_id}"),
+        &staff,
+        serde_json::Value::Null,
+    )
+    .await;
+    let resp = c
+        .client
+        .get("/exports/all")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert_eq!(resp.content_type(), Some(ContentType::ZIP));
+    let zip = resp.into_bytes().await.unwrap();
+    assert!(zip.starts_with(b"PK"), "a zip");
+
+    // Vendors: trades come through, an existing vendor is filled in, not doubled.
+    let (st, v) = upload(
+        "/imports?kind=vendors".into(),
+        "Vendor Name,Category,Email,Phone\nRapid Rooter Plumbing,Plumbing,,(503) 555-0199\nHigh Desert Pest,Pest Control,bugs@hdp.example,\n",
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["counts"]["vendors"], 1, "{v}");
+    let vid = v["batch"]["id"].as_str().unwrap();
+    let (_, vdone) = post_json(
+        c,
+        &format!("/imports/{vid}/commit"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(vdone["summary"]["vendors"], 1);
+    let pest = entity::prelude::Counterparty::find()
+        .filter(entity::counterparty::Column::TenantId.eq(nw))
+        .filter(entity::counterparty::Column::Name.eq("High Desert Pest"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pest.trades, serde_json::json!(["pest"]));
+    assert_eq!(pest.kind, "contractor");
+
+    // Someone takes a payment on Ada's lease; then the import is undone.
+    let (st, _) = post_json(
+        c,
+        &format!("/leases/{}/payments", ada.id),
+        &staff,
+        serde_json::json!({ "due_date": "2026-10-01", "amount_cents": 145000, "paid_date": "2026-10-01", "status": "paid" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, u) = post_json(
+        c,
+        &format!("/imports/{bid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{u}");
+    assert_eq!(u["batch"]["status"], "undone");
+    assert_eq!(u["report"]["removed"]["lease"], 1, "Ben's lease goes: {u}");
+    let kept: Vec<&str> = u["report"]["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["t"].as_str().unwrap())
+        .collect();
+    assert!(
+        kept.contains(&"lease") && kept.contains(&"unit") && kept.contains(&"property"),
+        "{u}"
+    );
+    assert!(
+        u["report"]["kept"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("payments"),
+        "{u}"
+    );
+    assert_eq!(u["report"]["removed"]["unit"], 2, "the other two units go");
+    let (st, _) = post_json(
+        c,
+        &format!("/imports/{bid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "once");
+    let (_, vu) = post_json(
+        c,
+        &format!("/imports/{vid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(vu["report"]["removed"]["vendor"], 1, "{vu}");
+
+    // A property manager scoped to their properties can't import.
+    let pat = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("pat.reach@northwind.test"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("property_reach made Pat, a property manager on one property");
+    let pm = crate::auth::issue_access_token(
+        &c.config,
+        pat.id,
+        Some(nw),
+        false,
+        vec!["data:import".into(), "data:export".into()],
+    )
+    .unwrap();
+    let resp = c
+        .client
+        .post("/imports?kind=vendors")
+        .header(bearer(&pm))
+        .body("Name\nX\n")
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Forbidden);
+
+    // Leave Northwind as it was.
+    use sea_orm::ConnectionTrait;
+    for sql in [
+        format!("DELETE FROM lease_payment WHERE lease_id = '{}'", ada.id),
+        format!("DELETE FROM lease WHERE property_id = '{}'", prop.id),
+        format!("DELETE FROM unit WHERE property_id = '{}'", prop.id),
+        format!(
+            "DELETE FROM property_detail WHERE property_id = '{}'",
+            prop.id
+        ),
+        format!("DELETE FROM property WHERE id = '{}'", prop.id),
+    ] {
+        c.db.execute_unprepared(&sql).await.unwrap();
+    }
+}
+
+/// Listing syndication: each portal reads a feed from a secret URL. A channel
+/// is off until turned on (with someone for renters to reach), only listings
+/// complete enough for the portals go out, every pull is logged, and a new
+/// URL retires the old one.
+async fn listing_syndication(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["listing:read", "listing:write"]);
+    let (st, s) = get_json(c, "/syndication", &staff).await;
+    assert_eq!(st, Status::Ok, "{s}");
+    let keys: Vec<&str> = s["channels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(keys, vec!["zillow", "mits"]);
+    assert_eq!(s["channels"][0]["enabled"], false);
+    let maple = s["listings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["title"] == "The Maple Court")
+        .expect("seeded listing")
+        .clone();
+    assert_eq!(maple["ready"], false);
+    assert_eq!(maple["state"], "OR");
+    assert_eq!(maple["city"], "Portland", "the state comes off the city");
+    assert!(
+        maple["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["message"].as_str().unwrap().contains("photo")),
+        "{maple}"
+    );
+    let url = s["channels"][0]["feed_url"].as_str().unwrap().to_string();
+    let path = url
+        .split_once("/feeds/")
+        .map(|(_, p)| format!("/feeds/{p}"))
+        .unwrap();
+    let pull = |p: String| async move {
+        let r = c
+            .client
+            .get(p)
+            .header(Header::new("User-Agent", "ZillowFeedBot/1.0"))
+            .dispatch()
+            .await;
+        let st = r.status();
+        (st, r.into_string().await.unwrap_or_default())
+    };
+    assert_eq!(
+        pull(path.clone()).await.0,
+        Status::NotFound,
+        "off until turned on"
+    );
+
+    // A photo makes Maple Court ready.
+    let lid = uuid::Uuid::parse_str(maple["id"].as_str().unwrap()).unwrap();
+    let photo = entity::listing_photo::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        listing_id: Set(lid),
+        document_id: Set(uuid::Uuid::new_v4()),
+        alt_text: Set("Living room".into()),
+        caption: Set(None),
+        position: Set(0),
+        created_by: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        updated_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+
+    // Turning it on needs someone to reach.
+    let (st, on) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &staff,
+        serde_json::json!({ "enabled": true, "contact_email": "leasing@northwind.example", "contact_phone": "(503) 555-0100" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{on}");
+    assert_eq!(on["enabled"], true);
+    assert!(on["listings"].as_u64().unwrap() >= 1, "{on}");
+    let (st, xml) = pull(path.clone()).await;
+    assert_eq!(st, Status::Ok, "{xml}");
+    assert!(xml.contains("<hotPadsItems version=\"2.1\">"), "{xml}");
+    assert!(xml.contains("<name>The Maple Court</name>"));
+    assert!(xml.contains("<price>1850</price>"));
+    assert!(xml.contains("<zip>97214</zip>") && xml.contains("<state>OR</state>"));
+    assert!(xml.contains("<contactEmail>leasing@northwind.example</contactEmail>"));
+    assert!(xml.contains(&format!("/public/listing-photos/{}", photo.id)));
+    assert!(!xml.contains("Leased"), "only ready listings");
+    let (_, s) = get_json(c, "/syndication", &staff).await;
+    assert_eq!(s["channels"][0]["pull_count"], 1);
+    assert_eq!(s["channels"][0]["last_pull_agent"], "ZillowFeedBot/1.0");
+    assert_eq!(
+        s["channels"][0]["pulls"][0]["listings"],
+        s["channels"][0]["listings"]
+    );
+
+    // Turned off for the portals: gone from the feed.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/listings/{lid}"),
+        &staff,
+        serde_json::json!({ "syndicate": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, xml) = pull(path.clone()).await;
+    assert!(!xml.contains("The Maple Court"));
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/listings/{lid}"),
+        &staff,
+        serde_json::json!({ "syndicate": true }),
+    )
+    .await;
+
+    // The MITS feed, previewed while it's off.
+    let r = c
+        .client
+        .get("/syndication/mits/preview")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(r.status(), Status::Ok);
+    let mits = r.into_string().await.unwrap();
+    assert!(
+        mits.contains("<PhysicalProperty") && mits.contains("The Maple Court"),
+        "{mits}"
+    );
+    let wrong = path.replace("/feeds/zillow/", "/feeds/mits/");
+    assert_eq!(
+        pull(wrong).await.0,
+        Status::NotFound,
+        "a token belongs to its channel"
+    );
+
+    // A new URL retires the old one.
+    let (st, rot) = post_json(
+        c,
+        "/syndication/zillow/rotate",
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let fresh = rot["feed_url"].as_str().unwrap();
+    assert_ne!(fresh, url);
+    assert_eq!(pull(path).await.0, Status::NotFound);
+    let fresh_path = fresh
+        .split_once("/feeds/")
+        .map(|(_, p)| format!("/feeds/{p}"))
+        .unwrap();
+    assert_eq!(pull(fresh_path).await.0, Status::Ok);
+
+    // Leasing agents can't turn channels on; scoped people don't see it.
+    let reader = mint(c, Some(nw), false, &["listing:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &reader,
+        serde_json::json!({ "enabled": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Leave Northwind as it was.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        "/syndication/zillow",
+        &staff,
+        serde_json::json!({ "enabled": false }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    entity::prelude::ListingPhoto::delete_many()
+        .filter(entity::listing_photo::Column::Id.eq(photo.id))
+        .exec(&c.db)
+        .await
+        .unwrap();
+}
+
+/// The resident reports a problem with a video and a comment; staff see it
+/// marked as theirs, put an action kit on it, link a part to a store, and
+/// work it with the buttons. The resident follows along: the public lines,
+/// their own files, never staff receipts or internal steps.
+async fn maintenance_actions_and_resident(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded resident");
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+
+    // The resident reports it, with a video.
+    let (st, t) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Dishwasher leaking", "category": "appliance", "location": "Kitchen" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, v) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "leak.mp4", "mime_type": "video/mp4", "size_bytes": 40_000_000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "a 40 MB video is fine: {v}");
+    let vid = v["document"]["id"].as_str().unwrap().to_string();
+    // The bytes land (a small stand-in for the video).
+    let put = |url: &str| {
+        let path = url
+            .split_once("/storage/")
+            .map(|(_, p)| format!("/storage/{p}"))
+            .unwrap();
+        async move {
+            c.client
+                .put(path)
+                .body(vec![0u8; 64])
+                .dispatch()
+                .await
+                .status()
+        }
+    };
+    assert_eq!(put(v["upload_url"].as_str().unwrap()).await, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "lease.pdf", "mime_type": "application/pdf", "size_bytes": 1000 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "photos and videos only");
+    let (st, _) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "long.mp4", "mime_type": "video/mp4", "size_bytes": 150_000_000 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "too large");
+    let (st, cmt) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/comments"),
+        &res,
+        serde_json::json!({ "body": "It pools under the door", "document_ids": [vid] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{cmt}");
+
+    // Staff see it as the resident's, with the video.
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let theirs = detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["action"] == "resident_comment")
+        .expect("the resident's comment")
+        .clone();
+    assert_eq!(theirs["document_ids"][0], vid.as_str());
+    let (_, files) = get_json(c, &format!("/tickets/{tid}/files"), &staff).await;
+    assert!(
+        files
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["kind"] == "video"),
+        "{files}"
+    );
+
+    // An action kit goes on, and a part gets a store link.
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let kit = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Replace dishwasher")
+        .expect("an action kit")
+        .clone();
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/kits"),
+        &staff,
+        serde_json::json!({ "issue_template_id": kit["id"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let part = detail["parts"][0]["id"].as_str().unwrap().to_string();
+    let (st, p) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{part}"),
+        &staff,
+        serde_json::json!({ "url": "https://www.homedepot.com/p/Whirlpool-24-in-Dishwasher/123" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["store"], "Home Depot");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{part}"),
+        &staff,
+        serde_json::json!({ "url": "javascript:alert(1)" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    // A staff receipt on the work order.
+    let (st, r) = post_json(
+        c,
+        &format!("/tickets/{tid}/uploads"),
+        &staff,
+        serde_json::json!({ "filename": "receipt.jpg", "mime_type": "image/jpeg", "size_bytes": 2000, "kind": "receipt" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(put(r["upload_url"].as_str().unwrap()).await, Status::Ok);
+
+    // The buttons.
+    let (_, actions) = get_json(c, "/ticket-actions", &staff).await;
+    assert!(actions
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["key"] == "work_done"));
+    let press = |action: &'static str, note: Option<&'static str>| {
+        let staff = staff.clone();
+        let tid = tid.clone();
+        async move {
+            post_json(
+                c,
+                &format!("/tickets/{tid}/actions"),
+                &staff,
+                serde_json::json!({ "action": action, "note": note }),
+            )
+            .await
+        }
+    };
+    let (st, after) = press("on_my_way", None).await;
+    assert_eq!(st, Status::Ok, "{after}");
+    assert_eq!(after["status"], "open", "no status change");
+    assert_eq!(
+        press("diagnosed", None).await.0,
+        Status::BadRequest,
+        "say what you found"
+    );
+    assert_eq!(
+        press("diagnosed", Some("Door gasket torn; replacing the unit."))
+            .await
+            .0,
+        Status::Ok
+    );
+    let (_, held) = press("waiting_parts", None).await;
+    assert_eq!(held["status"], "on_hold", "{held}");
+    assert_eq!(held["waiting_on"], "parts");
+    let (_, back) = press("parts_in", None).await;
+    assert_eq!(back["status"], "in_progress");
+    assert!(back["waiting_on"].is_null());
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let first = tasks[0]["id"].as_str().unwrap();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{first}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, done) = press("work_done", None).await;
+    assert_eq!(done["status"], "resolved");
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let bodies: Vec<&str> = detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["kind"] == "action")
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert!(bodies.contains(&"On my way."), "{bodies:?}");
+    assert!(bodies.iter().any(|b| b.starts_with("Done: ")), "{bodies:?}");
+
+    // What the resident sees.
+    let (st, mine) = get_json(c, &format!("/my/tickets/{tid}"), &res).await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    let lines: Vec<&str> = mine["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert!(lines.contains(&"On my way."), "{lines:?}");
+    assert!(lines.contains(&"Diagnosed: Door gasket torn; replacing the unit."));
+    assert!(lines.contains(&"Work complete."));
+    assert!(
+        !lines.iter().any(|l| l.starts_with("Done: ")),
+        "internal steps stay internal"
+    );
+    let names: Vec<&str> = mine["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["filename"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["leak.mp4"], "their video, not staff receipts");
+    assert_eq!(mine["files"][0]["kind"], "video");
+}
+
+/// The full property profile: permits, insurance, schools with their zone,
+/// and action items fed by the "needs attention" rules.
+async fn property_profile_records(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let other = property_ids(c, nw).await[1];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let today = chrono::Utc::now().date_naive();
+    let day = |n: i64| (today + chrono::Duration::days(n)).to_string();
+    let base = format!("/properties/{pid}");
+
+    // A permit about to lapse, with an inspection next week.
+    let (st, p) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({
+            "description": "Rebuild rear deck", "kind": "building", "status": "issued",
+            "permit_number": "B-2026-0412", "jurisdiction": "City of Portland",
+            "expires_on": day(20), "inspection_on": day(5), "fee_cents": 41000
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["open"], true);
+    assert_eq!(p["fee_label"], "$410");
+    let permit = p["id"].as_str().unwrap().to_string();
+    let (st, e) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "expires_on": "next week" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "kind": "spaceship" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "document_ids": [Uuid::new_v4()] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "files must be this property's");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &reader,
+        serde_json::json!({ "description": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden, "reading isn't writing");
+    // A permit on one property isn't reachable through another.
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/properties/{other}/permits/{permit}"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // Insurance renewing next month; a school the team says the home is zoned for.
+    let (st, pol) = post_json(
+        c,
+        &format!("{base}/insurance"),
+        &staff,
+        serde_json::json!({
+            "carrier": "Cascade Mutual", "kind": "property", "policy_number": "HO-88213",
+            "effective_on": day(-335), "expires_on": day(30),
+            "premium_cents": 184000, "coverage_cents": 65000000, "agent_name": "Dana Ruiz"
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{pol}");
+    assert_eq!(pol["coverage_label"], "$650,000");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/insurance"),
+        &staff,
+        serde_json::json!({ "carrier": "X", "effective_on": day(10), "expires_on": day(1) }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "renewal before start");
+    let (st, sch) = post_json(
+        c,
+        &format!("{base}/schools"),
+        &staff,
+        serde_json::json!({
+            "name": "Sunnyside Elementary", "level": "elementary", "district": "Portland SD 1J",
+            "assigned": true, "rating": 8, "website": "https://sunnyside.pps.net"
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sch}");
+    assert_eq!(sch["source"], "manual");
+    let school = sch["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/schools"),
+        &staff,
+        serde_json::json!({ "name": "X", "level": "elementary", "rating": 11 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // What needs attention.
+    let (st, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    assert_eq!(st, Status::Ok, "{att}");
+    let keys: Vec<String> = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["key"].as_str().unwrap().to_string())
+        .collect();
+    let has = |k: &str| keys.iter().any(|x| x.starts_with(k));
+    assert!(has(&format!("permit-expiring:{permit}")), "{keys:?}");
+    assert!(has(&format!("permit-inspection:{permit}")), "{keys:?}");
+    assert!(has("policy-renew:"), "{keys:?}");
+    assert!(has(&format!("school-zone:{school}")), "{keys:?}");
+    assert!(!has("policy-none"), "a property policy is on file");
+
+    // Turn one into an action item; it stops being suggested, and twice is refused.
+    let renew = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["key"].as_str().unwrap().starts_with("policy-renew:"))
+        .unwrap()
+        .clone();
+    let (st, item) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({
+            "title": renew["title"], "subject_type": "insurance", "subject_id": renew["subject_id"],
+            "due_on": renew["due_on"], "priority": renew["priority"], "suggestion_key": renew["key"]
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{item}");
+    assert_eq!(item["status"], "open");
+    let item_id = item["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({ "title": "again", "suggestion_key": renew["key"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (_, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    assert!(!att
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["key"] == renew["key"]));
+
+    // A to-do of the team's own, overdue.
+    let (st, mine) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({ "title": "Walk the roof after the storm", "due_on": day(-2), "priority": "high" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(mine["overdue"], true);
+    let (_, open) = get_json(c, &format!("{base}/action-items"), &reader).await;
+    assert_eq!(
+        open[0]["title"], "Walk the roof after the storm",
+        "high first"
+    );
+
+    // Tick the renewal off.
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("{base}/action-items/{item_id}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert!(done["completed_at"].is_string());
+    let (_, open) = get_json(c, &format!("{base}/action-items"), &reader).await;
+    assert!(!open
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["id"] == item_id.as_str()));
+    let (_, fin) = get_json(c, &format!("{base}/action-items?status=done"), &reader).await;
+    assert!(fin
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["id"] == item_id.as_str()));
+
+    // Confirming the school zone clears that suggestion; finaling the permit
+    // clears both permit suggestions.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/schools/{school}"),
+        &staff,
+        serde_json::json!({
+            "name": "Sunnyside Elementary", "level": "elementary", "assigned": true,
+            "district": "Portland SD 1J", "zone_verified_on": day(0)
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, fp) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/permits/{permit}"),
+        &staff,
+        serde_json::json!({ "description": "Rebuild rear deck", "status": "finaled", "permit_number": "B-2026-0412" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{fp}");
+    assert_eq!(fp["open"], false);
+    assert_eq!(
+        fp["finaled_on"],
+        day(0).as_str(),
+        "finaled today by default"
+    );
+    let (_, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    let keys: Vec<&str> = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["key"].as_str().unwrap())
+        .collect();
+    assert!(!keys.iter().any(|k| k.starts_with("permit-")), "{keys:?}");
+    assert!(
+        !keys.contains(&format!("school-zone:{school}").as_str()),
+        "{keys:?}"
+    );
+
+    // The schools list puts the zoned school first among its level.
+    let (_, list) = get_json(c, &format!("{base}/schools"), &reader).await;
+    assert!(list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["name"] == "Sunnyside Elementary" && s["assigned"] == true));
+}
+
+/// Assigned techs and queues: who can take work, a task given to a person,
+/// their own queue, and several tasks sent to a vendor as one job.
+async fn desk_queues_and_vendor_batches(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "property:read",
+        ],
+    );
+
+    // Who can take work on this property.
+    let (st, techs) = get_json(c, &format!("/ticket-techs?property_id={pid}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{techs}");
+    let techs = techs.as_array().unwrap().clone();
+    assert!(!techs.is_empty(), "somebody on the team can take it");
+    assert!(
+        techs.iter().all(|t| t["role"] != "renter"),
+        "residents aren't offered"
+    );
+    let load = |t: &serde_json::Value| {
+        t["open_tickets"].as_i64().unwrap() + t["open_tasks"].as_i64().unwrap()
+    };
+    let tech = techs[0].clone();
+    let tech_id = tech["user_id"].as_str().unwrap().to_string();
+    let tech_token = crate::auth::issue_access_token(
+        &c.config,
+        Uuid::parse_str(&tech_id).unwrap(),
+        Some(nw),
+        false,
+        vec!["maintenance:read".into(), "maintenance:manage".into()],
+    )
+    .unwrap();
+    let before = load(&tech);
+
+    // A work order from a kit, with its tasks.
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let kit = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Replace dishwasher")
+        .expect("the dishwasher kit")
+        .clone();
+    assert_eq!(kit["kit_key"], "replace-dishwasher");
+    let (st, g) = post_json(
+        c,
+        &format!("/issue-templates/{}/generate", kit["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{g}");
+    let tid = g["ticket"]["id"].as_str().unwrap().to_string();
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let tasks = tasks.as_array().unwrap().clone();
+    assert!(tasks.len() >= 3);
+    let (t1, t2, t3) = (
+        tasks[0]["id"].as_str().unwrap().to_string(),
+        tasks[1]["id"].as_str().unwrap().to_string(),
+        tasks[2]["id"].as_str().unwrap().to_string(),
+    );
+
+    // Give a task to a teammate; a stranger and a resident are refused.
+    let (st, out) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &staff,
+        serde_json::json!({ "assignee_user_id": tech_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{out}");
+    assert_eq!(out[0]["assignee_user_id"], tech_id.as_str());
+    assert_eq!(out[0]["assignee_user_name"], tech["name"]);
+    for who in [
+        Uuid::new_v4(),
+        entity::prelude::User::find()
+            .filter(entity::user::Column::Email.eq("taylor@example.com"))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+    ] {
+        let (st, _) = send_json(
+            c,
+            Method::Patch,
+            &format!("/tickets/{tid}/tasks/{t2}"),
+            &staff,
+            serde_json::json!({ "assignee_user_id": who.to_string() }),
+        )
+        .await;
+        assert_eq!(st, Status::BadRequest, "not on the team: {who}");
+    }
+
+    // It's in their queue, not anyone else's, and their load went up.
+    let (st, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    assert_eq!(st, Status::Ok, "{q}");
+    let mine = q["tasks"].as_array().unwrap();
+    let row = mine
+        .iter()
+        .find(|t| t["task_id"] == t1.as_str())
+        .expect("in my queue");
+    assert_eq!(row["ticket_id"], tid.as_str());
+    assert_eq!(row["property_id"], pid.to_string());
+    let (_, other) = get_json(c, "/ticket-queue", &staff).await;
+    assert!(!other["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["task_id"] == t1.as_str()));
+    let (_, techs2) = get_json(c, &format!("/ticket-techs?property_id={pid}"), &staff).await;
+    let after = techs2
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["user_id"] == tech_id.as_str())
+        .unwrap();
+    assert_eq!(load(after), before + 1);
+
+    // Starting it keeps it in the queue; finishing takes it out.
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &tech_token,
+        serde_json::json!({ "status": "doing" }),
+    )
+    .await;
+    let (_, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    let row = q["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["task_id"] == t1.as_str())
+        .unwrap();
+    assert_eq!(row["status"], "doing");
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &tech_token,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    let (_, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    assert!(!q["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["task_id"] == t1.as_str()));
+
+    // The work order list shows who has it and how far along it is.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "assignee_user_id": tech_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let find = |list: &serde_json::Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"] == tid.as_str())
+            .unwrap()
+            .clone()
+    };
+    let (_, list) = get_json(c, "/tickets", &staff).await;
+    let row = find(&list);
+    assert_eq!(row["assignee_kind"], "tech");
+    assert_eq!(row["assignee_name"], tech["name"]);
+    assert_eq!(row["tasks_done"], 1);
+    assert_eq!(row["tasks_total"].as_i64().unwrap(), tasks.len() as i64);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "clear_assignee_user": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, list) = get_json(c, "/tickets", &staff).await;
+    assert!(find(&list)["assignee_name"].is_null());
+
+    // Two tasks go to one vendor as one job (one email listing both); a
+    // finished task can't be sent; a vendor with no email is refused.
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Batch Appliance Co",
+            "email": "jobs@batchappliance.example", "trades": ["appliance"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let vid = v["id"].as_str().unwrap().to_string();
+    let (st, e) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [t1], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "a finished task isn't sent: {e}");
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [t2, t3], "entity_id": vid, "note": "Gate code 4411" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    for id in [&t2, &t3] {
+        let row = sent
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"] == id.as_str())
+            .unwrap();
+        assert_eq!(row["assignee_name"], "Batch Appliance Co");
+        assert_eq!(row["dispatch_via"], "email");
+        assert_eq!(row["dispatch_note"], "Gate code 4411");
+        assert!(row["dispatched_at"].is_string());
+    }
+    let mails: Vec<_> = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["to"] == "jobs@batchappliance.example")
+        .collect();
+    assert_eq!(mails.len(), 1, "one job, one email");
+    let body = mails[0].payload["vars"]["description"].as_str().unwrap();
+    assert!(body.starts_with("Tasks:"), "{body}");
+    assert!(body.contains(tasks[1]["title"].as_str().unwrap()));
+    assert!(body.contains(tasks[2]["title"].as_str().unwrap()));
+    assert!(body.contains("Gate code 4411"));
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "task_sent"
+            && m["body"]
+                .as_str()
+                .unwrap()
+                .starts_with("Sent to Batch Appliance Co")));
+    // The vendor and the work order are on a shared list.
+    let (st, none) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "No Email Co" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{none}");
+    let (_, fresh) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let spare = fresh
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["dispatched_at"].is_null() && t["status"] == "todo");
+    if let Some(spare) = spare {
+        let (st, _) = post_json(
+            c,
+            &format!("/tickets/{tid}/dispatch-tasks"),
+            &staff,
+            serde_json::json!({ "task_ids": [spare["id"]], "entity_id": none["id"] }),
+        )
+        .await;
+        assert_eq!(st, Status::BadRequest, "no email on file");
+    }
+}
+
+/// The description and features, and the history list.
+async fn property_story_and_timeline(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let base = format!("/properties/{pid}");
+
+    let (st, s) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({
+            "description": "  Corner fourplex, a block from the light rail.  ",
+            "features": {
+                "Interior": ["Flooring: Hardwood", " flooring: hardwood ", "", "Gas fireplace"],
+                "exterior": ["Fenced yard"]
+            }
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{s}");
+    assert_eq!(
+        s["description"],
+        "Corner fourplex, a block from the light rail."
+    );
+    assert_eq!(
+        s["features"]["interior"],
+        serde_json::json!(["Flooring: Hardwood", "Gas fireplace"])
+    );
+    // It comes back with the property's details.
+    let (_, intel) = get_json(c, &format!("{base}/intel"), &reader).await;
+    assert_eq!(intel["detail"]["features"]["exterior"][0], "Fenced yard");
+    assert!(intel["detail"]["description"]
+        .as_str()
+        .unwrap()
+        .starts_with("Corner"));
+    // A group left out is cleared; an unknown group, or reading-only access, is refused.
+    let (_, s2) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({ "features": { "interior": ["Gas fireplace"] } }),
+    )
+    .await;
+    assert!(s2["features"]["exterior"].is_null());
+    assert_eq!(
+        s2["description"], s["description"],
+        "the description stays when not sent"
+    );
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &staff,
+        serde_json::json!({ "features": { "garage": ["x"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/story"),
+        &reader,
+        serde_json::json!({ "description": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // The history is newest first and mixes the sources.
+    let (st, tl) = get_json(c, &format!("{base}/timeline"), &reader).await;
+    assert_eq!(st, Status::Ok, "{tl}");
+    let events = tl.as_array().unwrap();
+    assert!(!events.is_empty());
+    let dates: Vec<&str> = events.iter().map(|e| e["date"].as_str().unwrap()).collect();
+    let mut sorted = dates.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(dates, sorted, "newest first");
+    let kinds: std::collections::BTreeSet<&str> =
+        events.iter().map(|e| e["kind"].as_str().unwrap()).collect();
+    for k in ["built", "estimate", "tax", "lease"] {
+        assert!(kinds.contains(k), "{k} in {kinds:?}");
+    }
+    assert!(events
+        .iter()
+        .filter(|e| e["kind"] == "lease")
+        .all(|e| e["monthly"] == true && e["amount_label"].as_str().unwrap().ends_with("/mo")));
 }

@@ -17,6 +17,7 @@ pub mod parts;
 pub mod plans;
 pub mod portal;
 pub mod property_maintenance;
+pub mod queue;
 pub mod quotes;
 pub mod stock;
 pub mod update_ticket;

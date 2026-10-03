@@ -49,6 +49,11 @@ pub struct Model {
     pub walk_score: Option<i32>,
     /// When the enrichment engine last refreshed this row.
     pub last_enriched_at: Option<DateTimeWithTimeZone>,
+    /// What the property is like, in the team's words.
+    pub description: Option<String>,
+    /// `{ interior: [..], exterior: [..], construction: [..], utilities: [..], community: [..] }`;
+    /// an entry may read `Label: value`.
+    pub features: Json,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

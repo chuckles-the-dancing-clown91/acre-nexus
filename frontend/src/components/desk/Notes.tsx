@@ -1,10 +1,11 @@
 "use client";
 
-// Notes on a work order, newest first, with the photos taken along the way.
-// Internal notes stay with staff; public ones reach the resident.
+// Notes on a work order, newest first, with the photos and videos taken
+// along the way. Internal notes stay with staff; public ones reach the
+// resident. Action buttons and the resident's own replies are marked.
 
 import { useMemo, useRef, useState } from "react";
-import { Camera, Lock, MessageSquare, X } from "lucide-react";
+import { Camera, Home, Lock, MessageSquare, Play, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { desk, type TicketFile } from "@/lib/servicedesk";
 import type { TicketComment } from "@/lib/types";
@@ -48,11 +49,16 @@ export function Notes({
     try {
       const added: TicketFile[] = [];
       for (const f of Array.from(list)) {
-        if (!f.type.startsWith("image/")) {
-          toast.error(`${f.name} isn't a photo`);
+        const video = f.type.startsWith("video/");
+        if (!video && !f.type.startsWith("image/")) {
+          toast.error(`${f.name} isn't a photo or video`);
           continue;
         }
-        added.push(await desk.upload(ticketId, f, "photo"));
+        if (f.size > (video ? 100 : 25) * 1024 * 1024) {
+          toast.error(`${f.name} is over ${video ? 100 : 25} MB`);
+          continue;
+        }
+        added.push(await desk.upload(ticketId, f, video ? "video" : "photo"));
       }
       setAttached((a) => [...a, ...added]);
     } catch (e) {
@@ -124,8 +130,7 @@ export function Notes({
               <input
                 ref={input}
                 type="file"
-                accept="image/*"
-                capture="environment"
+                accept="image/*,video/*"
                 multiple
                 className="hidden"
                 onChange={(e) => e.target.files && attach(e.target.files)}
@@ -138,7 +143,7 @@ export function Notes({
                 disabled={busy}
               >
                 <Camera />
-                Photo
+                Photo or video
               </Button>
               <label className="flex items-center gap-1.5 text-xs text-fg-2">
                 <input
@@ -177,7 +182,7 @@ export function Notes({
                 key={c.id}
                 className={cn(
                   "rounded-xl border px-3 py-2.5",
-                  c.kind === "status"
+                  c.kind === "status" || c.kind === "action"
                     ? "border-transparent bg-fill/40"
                     : "border-line"
                 )}
@@ -187,6 +192,18 @@ export function Notes({
                     {c.author_name ?? "System"}
                   </span>
                   <span>{when(c.created_at)}</span>
+                  {c.action === "resident_comment" && (
+                    <Badge tone="accent">
+                      <Home className="size-3" />
+                      Resident
+                    </Badge>
+                  )}
+                  {c.action && c.action !== "resident_comment" && (
+                    <Badge>
+                      <Zap className="size-3" />
+                      Update
+                    </Badge>
+                  )}
                   {c.visibility === "internal" && (
                     <Badge>
                       <Lock className="size-3" />
@@ -199,23 +216,9 @@ export function Notes({
                 </p>
                 {photos.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {photos.map((p) =>
-                      p.url ? (
-                        <a
-                          key={p.id}
-                          href={p.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element -- signed blob URL */}
-                          <img
-                            src={p.url}
-                            alt={p.filename}
-                            className="size-20 rounded-lg border border-line object-cover"
-                          />
-                        </a>
-                      ) : null
-                    )}
+                    {photos.map((p) => (
+                      <Media key={p.id} file={p} className="size-20" />
+                    ))}
                   </div>
                 )}
               </li>
@@ -224,5 +227,53 @@ export function Notes({
         </ol>
       </div>
     </Panel>
+  );
+}
+
+/** A photo or video thumbnail that opens the full file. */
+export function Media({
+  file,
+  className,
+}: {
+  file: TicketFile;
+  className?: string;
+}) {
+  if (!file.url) return null;
+  const video = file.kind === "video" || file.mime_type.startsWith("video/");
+  return (
+    <a
+      href={file.url}
+      target="_blank"
+      rel="noreferrer"
+      title={file.filename}
+      className={cn(
+        "relative block overflow-hidden rounded-lg border border-line bg-fill",
+        className
+      )}
+    >
+      {video ? (
+        <>
+          <video
+            src={file.url}
+            preload="metadata"
+            muted
+            playsInline
+            className="size-full object-cover"
+          />
+          <span className="absolute inset-0 flex items-center justify-center">
+            <span className="flex size-8 items-center justify-center rounded-full bg-black/55 text-white">
+              <Play className="size-4" />
+            </span>
+          </span>
+        </>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element -- signed blob URL
+        <img
+          src={file.url}
+          alt={file.filename}
+          className="size-full object-cover"
+        />
+      )}
+    </a>
   );
 }

@@ -37,10 +37,14 @@ export interface KitPart {
   quantity: number;
   inventory_item_id: string | null;
   unit_cost_cents: number | null;
+  /** Product page (Home Depot, Lowe's, Amazon, ...). */
+  url?: string | null;
 }
 
 export interface Kit {
   id: string;
+  /** Stable key for a catalog kit (`replace-dishwasher`). */
+  kit_key?: string | null;
   name: string;
   area: string | null;
   category: string;
@@ -69,10 +73,100 @@ export interface Task {
   est_cost_label: string | null;
   needs_contractor: boolean;
   assignee_entity_id: string | null;
+  /** The vendor's name. */
   assignee_name: string | null;
+  /** A person on the team doing it. */
+  assignee_user_id: string | null;
+  assignee_user_name: string | null;
   status: "todo" | "doing" | "done" | "skipped";
   done_at: string | null;
   dispatched_at: string | null;
+  /** How it reached the vendor: their own board, or by email. */
+  dispatch_via: "partner" | "email" | null;
+  dispatch_note: string | null;
+}
+
+/** A teammate who can be given work, with what they already have. */
+export interface Tech {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  title: string | null;
+  open_tickets: number;
+  open_tasks: number;
+  /** Assigned to the property asked about. */
+  on_property: boolean;
+}
+
+/** One of the caller's own tasks, with the work order it belongs to. */
+export interface QueueTask {
+  task_id: string;
+  ticket_id: string;
+  title: string;
+  trade: string;
+  est_minutes: number | null;
+  status: "todo" | "doing";
+  ticket_title: string;
+  property_id: string;
+  property_name: string;
+  location: string | null;
+  priority: string;
+  due_date: string | null;
+  ticket_status: string;
+  waiting_on: string | null;
+}
+
+/** "Maintenance" → "maintenance"; "property_manager" → "Property manager". */
+export function roleLabel(r: string): string {
+  const s = r.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** "3 open" or "free": what a teammate already has. */
+export function loadLabel(
+  t: Pick<Tech, "open_tickets" | "open_tasks">
+): string {
+  const parts = [
+    t.open_tickets &&
+      `${t.open_tickets} work ${t.open_tickets === 1 ? "order" : "orders"}`,
+    t.open_tasks && `${t.open_tasks} ${t.open_tasks === 1 ? "task" : "tasks"}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "free";
+}
+
+/** The queue views, and which work orders each shows. */
+export type QueueView =
+  "mine" | "open" | "unassigned" | "urgent" | "waiting" | "done";
+
+const OPEN_STATUSES = ["open", "triage", "scheduled", "in_progress", "on_hold"];
+
+export function inQueueView(
+  t: {
+    status: string;
+    priority: string;
+    waiting_on: string | null;
+    assignee_user_id: string | null;
+    assignee_entity_id: string | null;
+  },
+  view: QueueView,
+  me: string | null
+): boolean {
+  const open = OPEN_STATUSES.includes(t.status);
+  switch (view) {
+    case "mine":
+      return open && !!me && t.assignee_user_id === me;
+    case "open":
+      return open;
+    case "unassigned":
+      return open && !t.assignee_user_id && !t.assignee_entity_id;
+    case "urgent":
+      return open && (t.priority === "urgent" || t.priority === "high");
+    case "waiting":
+      return t.status === "on_hold" || !!t.waiting_on;
+    case "done":
+      return !open;
+  }
 }
 
 export interface TradeNeed {
@@ -104,7 +198,7 @@ export interface TicketFile {
   id: string;
   filename: string;
   mime_type: string;
-  kind: "photo" | "receipt" | "document";
+  kind: "photo" | "video" | "receipt" | "document";
   size_bytes: number;
   url: string | null;
   created_at: string;
@@ -133,6 +227,46 @@ export interface VendorOption {
   matches: boolean;
   coi_current: boolean;
   linked: boolean;
+}
+
+/** A one-press update on a work order: posts the note and moves the status. */
+export interface TicketAction {
+  key: string;
+  label: string;
+  says: string;
+  visibility: "public" | "internal";
+  status: string | null;
+  waiting_on: string | null;
+  needs_note: boolean;
+}
+
+/** Where to buy a part: its own link if it has one, else store searches. */
+export function partLinks(p: {
+  name: string;
+  url?: string | null;
+  store?: string | null;
+}): { label: string; href: string }[] {
+  if (p.url)
+    return [{ label: p.store ? `Buy at ${p.store}` : "Buy", href: p.url }];
+  const q = encodeURIComponent(p.name);
+  return [
+    { label: "Home Depot", href: `https://www.homedepot.com/s/${q}` },
+    { label: "Lowe's", href: `https://www.lowes.com/search?searchTerm=${q}` },
+    { label: "Amazon", href: `https://www.amazon.com/s?k=${q}` },
+  ];
+}
+
+/** True for a link the server will take: http(s), no spaces. */
+export function looksLikeUrl(raw: string): boolean {
+  const v = raw.trim();
+  if (!v) return true;
+  if (/\s/.test(v)) return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export interface Generated {
@@ -214,6 +348,7 @@ export interface KitDraft {
     name: string;
     quantity: string;
     cost: string;
+    url: string;
     inventory_item_id: string | null;
   }[];
 }
@@ -271,6 +406,7 @@ export function draftFrom(kit: Kit): KitDraft {
       quantity: String(p.quantity),
       cost:
         p.unit_cost_cents != null ? (p.unit_cost_cents / 100).toFixed(2) : "",
+      url: p.url ?? "",
       inventory_item_id: p.inventory_item_id,
     })),
   };
@@ -298,6 +434,7 @@ export function draftToReq(d: KitDraft): KitReq {
       quantity: Math.max(1, Math.round(Number(p.quantity)) || 1),
       inventory_item_id: p.inventory_item_id,
       unit_cost_cents: parseCents(p.cost),
+      url: p.url.trim() || null,
     }));
   const minutes = tasks.reduce((s, t) => s + (t.est_minutes ?? 0), 0);
   return {
@@ -373,9 +510,27 @@ export const desk = {
       needs_contractor: boolean;
       status: Task["status"];
       assignee_entity_id: string;
+      /** A teammate's user id, or "" to clear. */
+      assignee_user_id: string;
       position: number;
     }>
   ) => patch<Task[]>(`/tickets/${ticketId}/tasks/${taskId}`, body),
+  techs: (propertyId?: string) =>
+    request<Tech[]>(
+      `/ticket-techs${propertyId ? `?property_id=${propertyId}` : ""}`,
+      { auth: true }
+    ),
+  queue: () => request<{ tasks: QueueTask[] }>("/ticket-queue", { auth: true }),
+  /** Several tasks to one vendor, as one job. */
+  dispatchTasks: (
+    ticketId: string,
+    body: {
+      task_ids: string[];
+      entity_id: string;
+      note?: string;
+      coi_override_reason?: string;
+    }
+  ) => post<Task[]>(`/tickets/${ticketId}/dispatch-tasks`, body),
   removeTask: (ticketId: string, taskId: string) =>
     request<Task[]>(`/tickets/${ticketId}/tasks/${taskId}`, {
       method: "DELETE",
@@ -424,7 +579,7 @@ export const desk = {
   upload: async (
     ticketId: string,
     file: File,
-    kind: "photo" | "receipt" | "document"
+    kind: "photo" | "video" | "receipt" | "document"
   ): Promise<TicketFile> => {
     const reg = await post<{ file: TicketFile; upload_url: string }>(
       `/tickets/${ticketId}/uploads`,
@@ -444,6 +599,13 @@ export const desk = {
       throw new ApiError(res.status, "upload_failed", "upload failed");
     return reg.file;
   },
+  actions: () => request<TicketAction[]>("/ticket-actions", { auth: true }),
+  press: (
+    ticketId: string,
+    body: { action: string; note?: string; follow_up_date?: string }
+  ) => post<MaintenanceTicket>(`/tickets/${ticketId}/actions`, body),
+  updatePart: (partId: string, body: { url?: string; vendor?: string }) =>
+    patch<unknown>(`/parts/${partId}`, body),
   plans: () => request<MaintenancePlan[]>("/maintenance-plans", { auth: true }),
   createPlan: (body: {
     property_id: string;

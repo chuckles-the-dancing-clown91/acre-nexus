@@ -439,3 +439,7 @@ pub const TICKET_TASK_REMOVE: &str = "ticket_task.remove";
 pub const TICKET_TASK_DISPATCH: &str = "ticket_task.dispatch";
 pub const TICKET_KIT_APPLY: &str = "ticket.kit_apply";
 pub const TICKET_EXPENSE_ADD: &str = "ticket.expense_add";
+pub const IMPORT_COMMIT: &str = "import.commit";
+pub const IMPORT_UNDO: &str = "import.undo";
+pub const DATA_EXPORT: &str = "data.export";
+pub const SYNDICATION_SAVE: &str = "syndication.save";
