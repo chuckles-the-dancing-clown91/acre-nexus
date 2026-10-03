@@ -209,7 +209,47 @@ const base = (id: string) => `/properties/${id}`;
 const send = <T>(method: string, path: string, body?: unknown) =>
   request<T>(path, { method, auth: true, body });
 
+export const FEATURE_GROUPS = [
+  { key: "interior", label: "Interior" },
+  { key: "exterior", label: "Exterior" },
+  { key: "construction", label: "Construction" },
+  { key: "utilities", label: "Utilities" },
+  { key: "community", label: "Community" },
+] as const;
+
+export interface TimelineEvent {
+  date: string;
+  kind: string;
+  title: string;
+  detail: string | null;
+  amount_cents: number | null;
+  amount_label: string | null;
+  monthly: boolean;
+}
+
+/** "Flooring: Hardwood" → a label and its value; a plain entry has no label. */
+export function splitFeature(e: string): {
+  label: string | null;
+  value: string;
+} {
+  const i = e.indexOf(": ");
+  return i > 0 && i < 40
+    ? { label: e.slice(0, i), value: e.slice(i + 2) }
+    : { label: null, value: e };
+}
+
 export const records = {
+  timeline: (id: string) =>
+    request<TimelineEvent[]>(`${base(id)}/timeline`, { auth: true }),
+  saveStory: (
+    id: string,
+    body: { description?: string; features?: Record<string, string[]> }
+  ) =>
+    send<{ description: string | null; features: Record<string, string[]> }>(
+      "PUT",
+      `${base(id)}/story`,
+      body
+    ),
   permits: (id: string) =>
     request<Permit[]>(`${base(id)}/permits`, { auth: true }),
   createPermit: (id: string, body: PermitInput) =>

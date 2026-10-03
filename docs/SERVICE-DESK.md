@@ -54,6 +54,26 @@ A maintenance plan (`/maintenance-plans`) repeats on a cadence and, when due,
 opens a work order. With `issue_template_id` set, that work order starts with
 the kit's tasks and parts.
 
+## Queues and assignment
+
+- **Who has it.** A work order belongs to a person on the team or a vendor.
+  `GET /ticket-techs?property_id=` lists who can take work: people assigned
+  to the property first (company-wide roles can work anywhere), then the
+  lightest load (open work orders and tasks). `PATCH /tickets/<id>` takes
+  `assignee_user_id` to assign and `clear_assignee_user` to take it off; the
+  assignee is told in the app and by email.
+- **Tasks go to people too.** `PATCH /tickets/<id>/tasks/<task_id>` takes
+  `assignee_user_id` (`""` clears). Only people with a live, non-resident
+  membership in the workspace can be given work.
+- **A person's queue.** `GET /ticket-queue` returns the caller's tasks that
+  aren't done, with the work order and property for each: started ones first,
+  then urgent, then soonest due. Only properties in their reach.
+- **The queue page** has Mine, Open, Unassigned, Urgent, Waiting and Done
+  with counts, a Whose work filter (everyone, vendors, a person), the team
+  and what each has, task progress on each row, and assigning from the row.
+  The work list (`GET /tickets`) carries `assignee_name`, `assignee_kind`
+  (`tech` or `vendor`), `tasks_total` and `tasks_done`.
+
 ## Action buttons
 
 The work order has one-press updates (`GET /ticket-actions`,
@@ -82,7 +102,15 @@ Staff and residents attach photos (up to 25 MB) and videos (up to 100 MB) to
 a work order and its notes. Residents see their own files and anything staff
 shared in a public note.
 
-## Sending a task to a vendor
+## Sending tasks to a vendor
+
+Tick one or more tasks and send them to one vendor as **one job**
+(`POST /tickets/<id>/dispatch-tasks`, or
+`POST /tickets/<id>/tasks/<task_id>/dispatch` for a single task): one email
+listing the tasks, or one entry on a linked vendor's board titled "3 tasks —
+<work order>". A finished or skipped task can't be sent. Each task keeps how
+it went (`dispatch_via`: `partner` or `email`) and the note, and the work
+order gets a staff note ("Sent to Rose City Appliance (by email): …").
 
 The send button on a task offers contractors, plus any other counterparty that
 lists trades or is linked to a partner system, the ones covering the task's

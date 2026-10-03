@@ -129,7 +129,7 @@ pub fn build(s: &Sources) -> Vec<Event> {
     }
     for t in s.taxes {
         out.push(ev(
-            &format!("{}-12-31", t.tax_year),
+            &format!("{}-01-01", t.tax_year),
             "tax",
             format!("{} tax assessment", t.tax_year),
             t.assessed_value_cents

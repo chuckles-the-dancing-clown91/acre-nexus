@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   Building2,
   DoorOpen,
-  MapPin,
   UserPlus,
   Users,
   Wrench,
@@ -40,11 +39,15 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { ActionItems } from "@/components/property/ActionItems";
+import { Facts } from "@/components/property/Facts";
+import { Gallery } from "@/components/property/Gallery";
+import { History } from "@/components/property/History";
+import { Summary } from "@/components/property/Summary";
 import { Insurance } from "@/components/property/Insurance";
 import { Parcel } from "@/components/property/Parcel";
 import { Permits } from "@/components/property/Permits";
 import { Plans } from "@/components/property/Plans";
-import { Schools } from "@/components/property/Schools";
+import { Area, Schools } from "@/components/property/Schools";
 import { Systems } from "@/components/property/Systems";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +56,8 @@ const TABS = [
   { key: "parcel", label: "Parcel and money" },
   { key: "systems", label: "Appliances and systems" },
   { key: "permits", label: "Permits and plans" },
-  { key: "schools", label: "Schools" },
+  { key: "history", label: "History" },
+  { key: "schools", label: "Schools and area" },
   { key: "insurance", label: "Insurance" },
 ] as const;
 
@@ -151,47 +155,17 @@ function PropertyView() {
         Properties
       </Link>
 
-      <motion.div {...rise(0)}>
-        <Panel className="overflow-hidden">
-          <div className="relative h-44 bg-fill sm:h-56">
-            {p?.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- street photo from our blob store
-              <img
-                src={p.image_url}
-                alt=""
-                className="size-full object-cover"
-              />
-            ) : (
-              <div className="size-full bg-[radial-gradient(120%_120%_at_0%_0%,color-mix(in_oklab,var(--accent)_30%,transparent),transparent)]" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-            <div className="absolute inset-x-5 bottom-4 text-white">
-              {p ? (
-                <>
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    <Badge tone={statusTone(p.status)}>{p.status}</Badge>
-                    {p.property_type && <Badge>{p.property_type}</Badge>}
-                  </div>
-                  <h1 className="text-[26px] leading-tight font-semibold sm:text-[32px]">
-                    {p.name}
-                  </h1>
-                  <div className="mt-1 flex items-center gap-1.5 text-[14px] text-white/80">
-                    <MapPin className="size-4" />
-                    {[
-                      p.address,
-                      p.city,
-                      [p.state, p.postal_code].filter(Boolean).join(" "),
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </div>
-                </>
-              ) : (
-                <Skeleton className="h-10 w-72" />
-              )}
-            </div>
-          </div>
-        </Panel>
+      <motion.div
+        {...rise(0)}
+        className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+      >
+        <Gallery
+          propertyId={id}
+          name={p?.name ?? "Property"}
+          fallbackUrl={p?.image_url ?? null}
+          manage={write}
+        />
+        <Summary property={p} propertyId={id} />
       </motion.div>
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -277,7 +251,13 @@ function PropertyView() {
           <Plans propertyId={id} manage={write} />
         </div>
       )}
-      {tab === "schools" && <Schools propertyId={id} manage={write} />}
+      {tab === "history" && <History propertyId={id} />}
+      {tab === "schools" && (
+        <>
+          <Area propertyId={id} />
+          <Schools propertyId={id} manage={write} />
+        </>
+      )}
       {tab === "insurance" && (
         <Insurance
           propertyId={id}
@@ -290,6 +270,7 @@ function PropertyView() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="space-y-4">
             <ActionItems propertyId={id} manage={write} />
+            <Facts property={p} propertyId={id} manage={write} />
             {can("lease:read") && (
               <Panel>
                 <PanelHeader

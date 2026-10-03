@@ -16,6 +16,7 @@ import {
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import {
   day,
   label,
@@ -438,5 +439,69 @@ function SchoolCard({
         </div>
       )}
     </div>
+  );
+}
+
+/** The neighborhood in four facts: walkability, flood risk, county, zoning. */
+export function Area({ propertyId }: { propertyId: string }) {
+  const intel = useQuery({
+    queryKey: ["intel", propertyId],
+    queryFn: () => api.propertyIntel(propertyId),
+  });
+  const d = intel.data?.detail;
+  if (!d) return null;
+  const flood = d.flood_zone;
+  const risky = !!flood && /^[AV]/i.test(flood);
+  const walk = d.walk_score;
+  const cells: {
+    label: string;
+    value: string;
+    note?: string;
+    tone?: string;
+  }[] = [
+    walk != null && {
+      label: "Walk score",
+      value: String(walk),
+      note:
+        walk >= 90
+          ? "Walker's paradise"
+          : walk >= 70
+            ? "Very walkable"
+            : walk >= 50
+              ? "Somewhat walkable"
+              : "Car-dependent",
+    },
+    flood && {
+      label: "Flood zone",
+      value: flood,
+      note: risky ? "High-risk area" : "Minimal risk",
+      tone: risky ? "text-bad" : undefined,
+    },
+    d.county && { label: "County", value: d.county },
+    d.zoning && { label: "Zoning", value: d.zoning },
+  ].filter(Boolean) as {
+    label: string;
+    value: string;
+    note?: string;
+    tone?: string;
+  }[];
+  if (cells.length === 0) return null;
+  return (
+    <Panel className="mb-4 grid grid-cols-2 gap-px overflow-hidden bg-line p-0 lg:grid-cols-4">
+      {cells.map((c) => (
+        <div key={c.label} className="bg-surface p-4">
+          <div className="eyebrow">{c.label}</div>
+          <div
+            className={cn(
+              "figure mt-1 text-[22px] leading-none font-semibold text-fg",
+              c.tone
+            )}
+          >
+            {c.value}
+          </div>
+          {c.note && <div className="mt-1 text-xs text-fg-3">{c.note}</div>}
+        </div>
+      ))}
+    </Panel>
   );
 }

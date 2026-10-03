@@ -333,6 +333,10 @@ export interface PropertyDetail {
   flood_zone: string | null;
   walk_score: number | null;
   last_enriched_at: string | null;
+  /** The property in the team's words. */
+  description?: string | null;
+  /** Feature groups: interior, exterior, construction, utilities, community. */
+  features?: Record<string, string[]>;
 }
 
 export interface PropertyTax {

@@ -1,6 +1,19 @@
 # Property profile
 
-Everything about one property, at `/console/properties/<id>`, in tabs.
+Everything about one property, at `/console/properties/<id>`, laid out like
+a listing page: photos on the left, a summary card on the right, then tabs.
+
+## Photos and summary
+
+- **Gallery**: one large photo and four small, "See all N photos" for a
+  full-screen viewer (arrow keys, thumbnails), floor plans on their own tab,
+  and Add photos for people who can edit. The cover leads.
+- **Summary card**: status, type and year built; estimated value (with its
+  range) and rent roll (against the market estimate); beds, baths and area;
+  gross yield (a year's rent over value), price per square foot and
+  occupancy; and **the month**: rent, less the loan payment, property tax
+  and insurance (the latest on file, over twelve months), leaving what's
+  left before upkeep and management.
 
 ## Overview
 
@@ -34,7 +47,24 @@ Everything about one property, at `/console/properties/<id>`, in tabs.
 The rules are in `api/src/routes/property_records/attention.rs` and are unit
 tested without a database.
 
+Then **About this property**: a description in the team's words, the facts
+from the public record (type, year built, beds, baths, living area, lot,
+stories, parking, heating, cooling, zoning, parcel), and feature groups
+(interior, exterior, construction, utilities, community). An entry may read
+`Flooring: Hardwood` to show a label. `PUT /properties/<id>/story` sets the
+description and features (a group left out is cleared; blanks and repeats are
+dropped); they come back with `GET /properties/<id>/intel`.
+
 Units, open work orders and the people assigned follow.
+
+## History
+
+`GET /properties/<id>/timeline` merges everything that has happened, newest
+first: built, acquired and sold, value estimates, tax assessments (dated the
+first of the year), leases and listings with rent, loans, deeds, liens,
+permits issued and finaled, and policies started. The tab shows the estimate
+of value and of rent over time, then the list with filters (sales and value,
+rent, loans and title, permits and cover).
 
 ## Parcel and money
 
@@ -67,7 +97,10 @@ files. Marking a permit finaled with no date finals it today.
 `blueprint`, `survey` or `permit` (a permit set). Upload them on the tab;
 images and PDFs open in the page.
 
-## Schools
+## Schools and area
+
+The tab opens with the area in four facts: walk score, flood zone, county and
+zoning.
 
 Each school row has its own profile: level, grades, district, rating,
 distance, address, phone, website, enrollment and notes, plus whether the
