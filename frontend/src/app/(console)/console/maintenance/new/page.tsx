@@ -1,6 +1,6 @@
 "use client";
 
-// New work order: choose the property, pick a job kit ("Shower replacement")
+// New work order: choose the property, pick a job kit ("Replace dishwasher")
 // and the work order opens with its tasks by trade, the parts with typical
 // costs, and the estimate. Or start blank.
 
@@ -135,14 +135,14 @@ function NewWorkOrder() {
           <Panel>
             <PanelHeader
               title="Job kits"
-              description="Each one lists the work by trade and the parts it takes."
+              description="Jobs to do, like replace a dishwasher or run a circuit. Each lists the steps by trade and the parts it takes."
               action={
                 <div className="relative w-44 sm:w-56">
                   <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-3" />
                   <Input
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Shower, toilet, paint…"
+                    placeholder="Dishwasher, thermostat, wiring…"
                     aria-label="Search kits"
                     className="pl-9"
                   />
@@ -222,7 +222,7 @@ function NewWorkOrder() {
               description={
                 kit
                   ? "This is what the work order starts with. Everything can be changed after."
-                  : "No kit: just a title and what's wrong."
+                  : "No kit yet? Describe the problem. Add the job once someone has looked at it."
               }
             />
             <div className="space-y-4 p-5">

@@ -37,6 +37,8 @@ export interface KitPart {
   quantity: number;
   inventory_item_id: string | null;
   unit_cost_cents: number | null;
+  /** Product page (Home Depot, Lowe's, Amazon, ...). */
+  url?: string | null;
 }
 
 export interface Kit {
@@ -104,7 +106,7 @@ export interface TicketFile {
   id: string;
   filename: string;
   mime_type: string;
-  kind: "photo" | "receipt" | "document";
+  kind: "photo" | "video" | "receipt" | "document";
   size_bytes: number;
   url: string | null;
   created_at: string;
@@ -133,6 +135,46 @@ export interface VendorOption {
   matches: boolean;
   coi_current: boolean;
   linked: boolean;
+}
+
+/** A one-press update on a work order: posts the note and moves the status. */
+export interface TicketAction {
+  key: string;
+  label: string;
+  says: string;
+  visibility: "public" | "internal";
+  status: string | null;
+  waiting_on: string | null;
+  needs_note: boolean;
+}
+
+/** Where to buy a part: its own link if it has one, else store searches. */
+export function partLinks(p: {
+  name: string;
+  url?: string | null;
+  store?: string | null;
+}): { label: string; href: string }[] {
+  if (p.url)
+    return [{ label: p.store ? `Buy at ${p.store}` : "Buy", href: p.url }];
+  const q = encodeURIComponent(p.name);
+  return [
+    { label: "Home Depot", href: `https://www.homedepot.com/s/${q}` },
+    { label: "Lowe's", href: `https://www.lowes.com/search?searchTerm=${q}` },
+    { label: "Amazon", href: `https://www.amazon.com/s?k=${q}` },
+  ];
+}
+
+/** True for a link the server will take: http(s), no spaces. */
+export function looksLikeUrl(raw: string): boolean {
+  const v = raw.trim();
+  if (!v) return true;
+  if (/\s/.test(v)) return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export interface Generated {
@@ -214,6 +256,7 @@ export interface KitDraft {
     name: string;
     quantity: string;
     cost: string;
+    url: string;
     inventory_item_id: string | null;
   }[];
 }
@@ -271,6 +314,7 @@ export function draftFrom(kit: Kit): KitDraft {
       quantity: String(p.quantity),
       cost:
         p.unit_cost_cents != null ? (p.unit_cost_cents / 100).toFixed(2) : "",
+      url: p.url ?? "",
       inventory_item_id: p.inventory_item_id,
     })),
   };
@@ -298,6 +342,7 @@ export function draftToReq(d: KitDraft): KitReq {
       quantity: Math.max(1, Math.round(Number(p.quantity)) || 1),
       inventory_item_id: p.inventory_item_id,
       unit_cost_cents: parseCents(p.cost),
+      url: p.url.trim() || null,
     }));
   const minutes = tasks.reduce((s, t) => s + (t.est_minutes ?? 0), 0);
   return {
@@ -424,7 +469,7 @@ export const desk = {
   upload: async (
     ticketId: string,
     file: File,
-    kind: "photo" | "receipt" | "document"
+    kind: "photo" | "video" | "receipt" | "document"
   ): Promise<TicketFile> => {
     const reg = await post<{ file: TicketFile; upload_url: string }>(
       `/tickets/${ticketId}/uploads`,
@@ -444,6 +489,13 @@ export const desk = {
       throw new ApiError(res.status, "upload_failed", "upload failed");
     return reg.file;
   },
+  actions: () => request<TicketAction[]>("/ticket-actions", { auth: true }),
+  press: (
+    ticketId: string,
+    body: { action: string; note?: string; follow_up_date?: string }
+  ) => post<MaintenanceTicket>(`/tickets/${ticketId}/actions`, body),
+  updatePart: (partId: string, body: { url?: string; vendor?: string }) =>
+    patch<unknown>(`/parts/${partId}`, body),
   plans: () => request<MaintenancePlan[]>("/maintenance-plans", { auth: true }),
   createPlan: (body: {
     property_id: string;

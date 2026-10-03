@@ -25,6 +25,7 @@ import {
   draftToReq,
   draftTotals,
   KIT_CATEGORIES,
+  looksLikeUrl,
   minutesLabel,
   PRIORITIES,
   TRADES,
@@ -100,13 +101,18 @@ export function KitEditor({
   const addPart = () =>
     set("parts", [
       ...d.parts,
-      { name: "", quantity: "1", cost: "", inventory_item_id: null },
+      { name: "", quantity: "1", cost: "", url: "", inventory_item_id: null },
     ]);
 
   async function save() {
     const body = draftToReq(d);
     if (!body.name) {
       toast.error("Name the kit.");
+      return;
+    }
+    const bad = d.parts.find((p) => p.name.trim() && !looksLikeUrl(p.url));
+    if (bad) {
+      toast.error(`${bad.name}: the link must be a web address (https://…).`);
       return;
     }
     if (body.tasks.length === 0) {
@@ -182,7 +188,7 @@ export function KitEditor({
             <div className="grid gap-3 p-5 md:grid-cols-2">
               <input
                 className={cn(field, "md:col-span-2")}
-                placeholder="Name, e.g. Shower replacement"
+                placeholder="The job, e.g. Replace dishwasher"
                 aria-label="Name"
                 value={d.name}
                 onChange={(e) => set("name", e.target.value)}
@@ -349,7 +355,7 @@ export function KitEditor({
           <Panel>
             <PanelHeader
               title="Parts"
-              description="Matched to stock by name when a work order opens. The cost is a typical price each."
+              description="Matched to stock by name when a work order opens. The cost is a typical price each; the link is where to buy it."
               action={
                 <Button size="sm" variant="secondary" onClick={addPart}>
                   <Plus />
@@ -412,6 +418,19 @@ export function KitEditor({
                       aria-label={`Part ${i + 1} cost each`}
                       value={p.cost}
                       onChange={(e) => setPart(i, { cost: e.target.value })}
+                    />
+                    <input
+                      className={cn(
+                        field,
+                        "col-span-2 col-start-2 sm:col-span-2",
+                        !looksLikeUrl(p.url) && "border-bad"
+                      )}
+                      inputMode="url"
+                      placeholder="Product link (Home Depot, Lowe's, Amazon), optional"
+                      aria-label={`Part ${i + 1} product link`}
+                      aria-invalid={!looksLikeUrl(p.url)}
+                      value={p.url}
+                      onChange={(e) => setPart(i, { url: e.target.value })}
                     />
                     <RowButton
                       label={`Remove part ${i + 1}`}

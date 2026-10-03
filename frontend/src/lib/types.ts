@@ -835,6 +835,9 @@ export interface TicketComment {
   body: string;
   /** Photos and files attached to the note. */
   document_ids?: string[];
+  /** The action button or event behind the note (`on_my_way`, `task_done`,
+   * `resident_comment`, ...); null for a typed note. */
+  action?: string | null;
   created_at: string;
 }
 
@@ -877,6 +880,10 @@ export interface TicketPart {
   tracking: string | null;
   unit_cost_cents: number | null;
   note: string | null;
+  /** Product page to buy it from. */
+  url?: string | null;
+  /** The store, from the vendor or the link's host ("Home Depot"). */
+  store?: string | null;
   /** On the shelf right now (stock items). */
   in_stock: number | null;
   ordered_at: string | null;

@@ -9,13 +9,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowLeft, HardHat, MapPin, Package, Wrench } from "lucide-react";
+import { ArrowLeft, HardHat, MapPin, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { desk, dollars, money, tradeLabel } from "@/lib/servicedesk";
 import { Expenses } from "@/components/desk/Expenses";
-import { Notes } from "@/components/desk/Notes";
+import { Media, Notes } from "@/components/desk/Notes";
+import { Parts } from "@/components/desk/Parts";
+import { TicketActions } from "@/components/desk/TicketActions";
 import { TaskList } from "@/components/desk/TaskList";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,7 +121,9 @@ export default function WorkOrderPage() {
 
   const t = ticket.data;
   const c = costs.data;
-  const photos = (files.data ?? []).filter((f) => f.kind === "photo" && f.url);
+  const photos = (files.data ?? []).filter(
+    (f) => (f.kind === "photo" || f.kind === "video") && f.url
+  );
   const uncovered = c?.trades_needed.filter((n) => !n.covered) ?? [];
 
   async function setStatus(status: string) {
@@ -217,6 +221,12 @@ export default function WorkOrderPage() {
         )}
       </motion.header>
 
+      {t && manage && (
+        <motion.div {...rise(1)}>
+          <TicketActions ticketId={id} status={t.status} onChange={refresh} />
+        </motion.div>
+      )}
+
       {t?.description && (
         <motion.div {...rise(1)}>
           <Panel className="p-4 text-[13px] whitespace-pre-wrap text-fg-2">
@@ -294,49 +304,7 @@ export default function WorkOrderPage() {
             <Skeleton className="h-64 rounded-2xl" />
           )}
 
-          <Panel>
-            <PanelHeader
-              title="Parts"
-              description="From stock, to buy, or maybe."
-            />
-            <div className="p-2 pt-3">
-              {t && t.parts.length === 0 && (
-                <EmptyState
-                  icon={<Package />}
-                  title="No parts listed"
-                  className="py-6"
-                />
-              )}
-              <ul className="divide-y divide-line">
-                {t?.parts.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 px-3 py-2">
-                    <span className="figure w-8 text-right text-[13px] text-fg-3">
-                      {p.quantity}×
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-fg">
-                      {p.name}
-                    </span>
-                    {p.unit_cost_cents != null && (
-                      <span className="figure text-xs text-fg-3">
-                        {dollars(p.unit_cost_cents * p.quantity)}
-                      </span>
-                    )}
-                    <Badge
-                      tone={
-                        p.status === "to_order"
-                          ? "warn"
-                          : p.status === "used" || p.status === "from_stock"
-                            ? "good"
-                            : "neutral"
-                      }
-                    >
-                      {p.status.replace("_", " ")}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Panel>
+          {t && <Parts parts={t.parts} manage={manage} onChange={refresh} />}
 
           {expenses.data && files.data && (
             <Expenses
@@ -353,19 +321,12 @@ export default function WorkOrderPage() {
           {photos.length > 0 && (
             <Panel>
               <PanelHeader
-                title="Photos"
+                title="Photos and video"
                 description={`${photos.length} on this work order`}
               />
               <div className="grid grid-cols-3 gap-2 p-5 sm:grid-cols-4">
                 {photos.map((p) => (
-                  <a key={p.id} href={p.url!} target="_blank" rel="noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- signed blob URL */}
-                    <img
-                      src={p.url!}
-                      alt={p.filename}
-                      className="aspect-square w-full rounded-lg border border-line object-cover"
-                    />
-                  </a>
+                  <Media key={p.id} file={p} className="aspect-square w-full" />
                 ))}
               </div>
             </Panel>
