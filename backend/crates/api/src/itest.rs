@@ -123,6 +123,7 @@ async fn integration_suite() {
     batch_d_listing_photos(&c).await;
     property_reach(&c).await;
     service_desk(&c).await;
+    imports_and_exports(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -5848,4 +5849,314 @@ async fn service_desk(c: &Ctx) {
         .unwrap()
         .iter()
         .any(|k| k["id"] == mine["id"]));
+}
+
+/// Moving in from another tool: an AppFolio rent roll is recognised, mapped,
+/// previewed (nothing written), committed (one bad row reported, the rest in),
+/// matched rather than duplicated the second time, exported in a shape that
+/// goes straight back in, and undone, keeping what was used since.
+async fn imports_and_exports(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "data:import",
+            "data:export",
+            "lease:read",
+            "lease:manage",
+            "property:read",
+        ],
+    );
+    let upload = |path: String, body: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let resp = c
+                .client
+                .post(path)
+                .header(bearer(&staff))
+                .header(ContentType::CSV)
+                .body(body)
+                .dispatch()
+                .await;
+            let st = resp.status();
+            (
+                st,
+                resp.into_json::<serde_json::Value>()
+                    .await
+                    .unwrap_or_default(),
+            )
+        }
+    };
+    const ROLL: &str = "Rent Roll\nAs of 10/01/2026\n\n\
+Property,Unit,Tenant,Status,BD/BA,Sqft,Rent,Deposit,Lease From,Lease To,Past Due\n\
+Juniper Flats - 410 Juniper St,101,\"Okafor, Ada\",Current,2/1,850,\"$1,450.00\",\"1,450.00\",01/01/2026,12/31/2026,0.00\n\
+Juniper Flats - 410 Juniper St,102,Ben Ruiz,Notice,1/1,610,\"1,150.00\",500,3/1/25,2/28/26,\"$75.00\"\n\
+Juniper Flats - 410 Juniper St,103,VACANT,,Studio/1,420,,,,,\n\
+Juniper Flats - 410 Juniper St,104,Cy Park,Current,1/1,610,,,6/1/2026,,\n\
+Total,,,,,,\"2,600.00\",,,,\n";
+
+    let (st, p) = upload("/imports?kind=tenants&filename=rent_roll.csv".into(), ROLL).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    let bid = p["batch"]["id"].as_str().unwrap().to_string();
+    assert_eq!(p["batch"]["source"], "appfolio", "{p}");
+    assert_eq!(p["batch"]["mapping"]["lease_start"], "Lease From");
+    assert_eq!(
+        p["counts"]["rows"], 4,
+        "the title and total rows are skipped"
+    );
+    assert_eq!(p["counts"]["properties"], 1, "{p}");
+    assert_eq!(
+        p["counts"]["units"], 3,
+        "a failed row leaves nothing behind, its unit included"
+    );
+    assert_eq!(p["counts"]["leases"], 2);
+    assert_eq!(p["counts"]["errors"], 1, "Cy Park has no rent");
+    let bad = &p["rows"][0];
+    assert_eq!(bad["action"], "error");
+    assert!(
+        bad["message"].as_str().unwrap().contains("no rent"),
+        "{bad}"
+    );
+    // A preview writes nothing.
+    let none = Property::find()
+        .filter(entity::property::Column::TenantId.eq(nw))
+        .filter(entity::property::Column::Name.eq("Juniper Flats - 410 Juniper St"))
+        .one(&c.db)
+        .await
+        .unwrap();
+    assert!(none.is_none());
+
+    // Commit.
+    let (st, done) = post_json(
+        c,
+        &format!("/imports/{bid}/commit"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(done["status"], "done");
+    assert_eq!(done["summary"]["leases"], 2);
+    let prop = Property::find()
+        .filter(entity::property::Column::TenantId.eq(nw))
+        .filter(entity::property::Column::Name.eq("Juniper Flats - 410 Juniper St"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the property came in");
+    assert_eq!(prop.units, 3);
+    assert_eq!(
+        prop.occupied_units, 1,
+        "the notice lease isn't counted as occupied"
+    );
+    let leases = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::PropertyId.eq(prop.id))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let ada = leases
+        .iter()
+        .find(|l| l.tenant_name == "Ada Okafor")
+        .expect("name flipped");
+    assert_eq!(ada.rent_cents, 145_000);
+    assert_eq!(ada.start_date, "2026-01-01");
+    let ben = leases.iter().find(|l| l.tenant_name == "Ben Ruiz").unwrap();
+    assert_eq!(ben.status, "notice");
+    assert_eq!(ben.balance_cents, 7_500);
+    assert_eq!(ben.payment_status, "late");
+    assert_eq!(ben.start_date, "2025-03-01");
+
+    // The same file again: matched, nothing new.
+    let (_, again) = upload("/imports?kind=tenants".into(), ROLL).await;
+    assert_eq!(again["counts"]["leases"], 0, "{again}");
+    assert_eq!(again["counts"]["properties"], 0);
+    assert_eq!(again["counts"]["matched"], 2);
+    let again_id = again["batch"]["id"].as_str().unwrap().to_string();
+    // Fix the mapping instead: point rent at a column that isn't there.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/imports/{again_id}"),
+        &staff,
+        serde_json::json!({ "mapping": { "rent": "Nope" } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/imports/{again_id}"),
+        &staff,
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+
+    // Export: the tenants file goes back in as a Vantedge file, and matches.
+    let resp = c
+        .client
+        .get("/exports/tenants")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let csv = resp.into_string().await.unwrap();
+    assert!(
+        csv.contains("Ada Okafor") && csv.contains("1450.00"),
+        "{csv}"
+    );
+    let resp = c
+        .client
+        .post("/imports?kind=tenants")
+        .header(bearer(&staff))
+        .body(csv)
+        .dispatch()
+        .await;
+    let back: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(back["batch"]["source"], "vantedge", "{back}");
+    assert_eq!(back["counts"]["leases"], 0, "everything matches: {back}");
+    assert_eq!(back["counts"]["errors"], 0, "{back}");
+    let back_id = back["batch"]["id"].as_str().unwrap();
+    send_json(
+        c,
+        Method::Delete,
+        &format!("/imports/{back_id}"),
+        &staff,
+        serde_json::Value::Null,
+    )
+    .await;
+    let resp = c
+        .client
+        .get("/exports/all")
+        .header(bearer(&staff))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert_eq!(resp.content_type(), Some(ContentType::ZIP));
+    let zip = resp.into_bytes().await.unwrap();
+    assert!(zip.starts_with(b"PK"), "a zip");
+
+    // Vendors: trades come through, an existing vendor is filled in, not doubled.
+    let (st, v) = upload(
+        "/imports?kind=vendors".into(),
+        "Vendor Name,Category,Email,Phone\nRapid Rooter Plumbing,Plumbing,,(503) 555-0199\nHigh Desert Pest,Pest Control,bugs@hdp.example,\n",
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["counts"]["vendors"], 1, "{v}");
+    let vid = v["batch"]["id"].as_str().unwrap();
+    let (_, vdone) = post_json(
+        c,
+        &format!("/imports/{vid}/commit"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(vdone["summary"]["vendors"], 1);
+    let pest = entity::prelude::Counterparty::find()
+        .filter(entity::counterparty::Column::TenantId.eq(nw))
+        .filter(entity::counterparty::Column::Name.eq("High Desert Pest"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pest.trades, serde_json::json!(["pest"]));
+    assert_eq!(pest.kind, "contractor");
+
+    // Someone takes a payment on Ada's lease; then the import is undone.
+    let (st, _) = post_json(
+        c,
+        &format!("/leases/{}/payments", ada.id),
+        &staff,
+        serde_json::json!({ "due_date": "2026-10-01", "amount_cents": 145000, "paid_date": "2026-10-01", "status": "paid" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, u) = post_json(
+        c,
+        &format!("/imports/{bid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{u}");
+    assert_eq!(u["batch"]["status"], "undone");
+    assert_eq!(u["report"]["removed"]["lease"], 1, "Ben's lease goes: {u}");
+    let kept: Vec<&str> = u["report"]["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["t"].as_str().unwrap())
+        .collect();
+    assert!(
+        kept.contains(&"lease") && kept.contains(&"unit") && kept.contains(&"property"),
+        "{u}"
+    );
+    assert!(
+        u["report"]["kept"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("payments"),
+        "{u}"
+    );
+    assert_eq!(u["report"]["removed"]["unit"], 2, "the other two units go");
+    let (st, _) = post_json(
+        c,
+        &format!("/imports/{bid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "once");
+    let (_, vu) = post_json(
+        c,
+        &format!("/imports/{vid}/undo"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(vu["report"]["removed"]["vendor"], 1, "{vu}");
+
+    // A property manager scoped to their properties can't import.
+    let pat = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("pat.reach@northwind.test"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("property_reach made Pat, a property manager on one property");
+    let pm = crate::auth::issue_access_token(
+        &c.config,
+        pat.id,
+        Some(nw),
+        false,
+        vec!["data:import".into(), "data:export".into()],
+    )
+    .unwrap();
+    let resp = c
+        .client
+        .post("/imports?kind=vendors")
+        .header(bearer(&pm))
+        .body("Name\nX\n")
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Forbidden);
+
+    // Leave Northwind as it was.
+    use sea_orm::ConnectionTrait;
+    for sql in [
+        format!("DELETE FROM lease_payment WHERE lease_id = '{}'", ada.id),
+        format!("DELETE FROM lease WHERE property_id = '{}'", prop.id),
+        format!("DELETE FROM unit WHERE property_id = '{}'", prop.id),
+        format!(
+            "DELETE FROM property_detail WHERE property_id = '{}'",
+            prop.id
+        ),
+        format!("DELETE FROM property WHERE id = '{}'", prop.id),
+    ] {
+        c.db.execute_unprepared(&sql).await.unwrap();
+    }
 }

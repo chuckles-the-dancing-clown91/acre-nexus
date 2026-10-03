@@ -61,6 +61,11 @@ pub enum Permission {
     ScreeningRead,
     ThemeWrite,
     ApiTokenManage,
+    /// Bring data in from another tool (rent rolls, property, owner and vendor
+    /// lists), and undo an import.
+    DataImport,
+    /// Download the workspace's data as CSV files.
+    DataExport,
     /// Integration credentials + integrations settings (write-only: set /
     /// rotate / delete — plaintext is never read back).
     IntegrationsManage,
@@ -156,6 +161,8 @@ impl Permission {
             Permission::ScreeningRead => "screening:read",
             Permission::ThemeWrite => "theme:write",
             Permission::ApiTokenManage => "apitoken:manage",
+            Permission::DataImport => "data:import",
+            Permission::DataExport => "data:export",
             Permission::IntegrationsManage => "integrations:manage",
             Permission::DocumentRead => "document:read",
             Permission::DocumentManage => "document:manage",
@@ -232,6 +239,8 @@ pub const ALL_PERMS: &[Permission] = &[
     ScreeningRead,
     ThemeWrite,
     ApiTokenManage,
+    DataImport,
+    DataExport,
     IntegrationsManage,
     DocumentRead,
     DocumentManage,

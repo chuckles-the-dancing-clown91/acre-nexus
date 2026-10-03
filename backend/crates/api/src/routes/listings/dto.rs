@@ -24,6 +24,10 @@ pub struct ConsoleListingResp {
     /// Whether the listing shows on the public website.
     pub is_public: bool,
     pub created_at: String,
+    pub state: String,
+    pub postal_code: String,
+    /// Sent to the rental portals when syndication is on.
+    pub syndicate: bool,
 }
 
 impl From<entity::listing::Model> for ConsoleListingResp {
@@ -44,6 +48,9 @@ impl From<entity::listing::Model> for ConsoleListingResp {
             description: l.description,
             is_public: l.is_public,
             created_at: l.created_at.to_rfc3339(),
+            state: l.state,
+            postal_code: l.postal_code,
+            syndicate: l.syndicate,
         }
     }
 }
@@ -62,6 +69,8 @@ pub struct CreateListingReq {
     pub description: Option<String>,
     /// Defaults to public (visible on the website).
     pub is_public: Option<bool>,
+    /// Defaults to yes: sent to the rental portals when syndication is on.
+    pub syndicate: Option<bool>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -76,4 +85,7 @@ pub struct UpdateListingReq {
     /// `Available` | `New` | `Pending` | `Leased`.
     pub status: Option<String>,
     pub is_public: Option<bool>,
+    pub state: Option<String>,
+    pub postal_code: Option<String>,
+    pub syndicate: Option<bool>,
 }

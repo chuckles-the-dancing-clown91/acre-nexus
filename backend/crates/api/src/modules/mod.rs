@@ -28,6 +28,7 @@
 pub mod accounting;
 pub mod backoffice;
 pub mod calendar;
+pub mod data;
 pub mod domains;
 pub mod enrichment;
 pub mod entities;
@@ -199,6 +200,7 @@ pub fn registry() -> Vec<Box<dyn PlatformModule>> {
         Box::new(hoa::HoaModule),
         Box::new(reports::ReportsModule),
         Box::new(search::SearchModule),
+        Box::new(data::DataModule),
     ];
     // A deterministic job kind used only by the integration tests (#28).
     #[cfg(test)]

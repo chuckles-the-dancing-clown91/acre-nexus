@@ -3054,6 +3054,16 @@ async fn seed_listing(
         description: Set(description.into()),
         is_public: Set(true),
         created_at: Set(Utc::now().into()),
+        // "Portland, OR" → OR; the demo ZIPs are the cities' main ones.
+        state: Set(city.rsplit(", ").next().unwrap_or("").to_string()),
+        postal_code: Set(match city {
+            c if c.starts_with("Portland") => "97214",
+            c if c.starts_with("Beaverton") => "97005",
+            c if c.starts_with("Lake Oswego") => "97034",
+            _ => "",
+        }
+        .into()),
+        syndicate: Set(true),
     }
     .insert(db)
     .await?;

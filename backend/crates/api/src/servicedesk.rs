@@ -73,6 +73,17 @@ pub fn clean_tasks(tasks: Vec<KitTask>) -> Vec<KitTask> {
         .collect()
 }
 
+/// "hvac" → "HVAC", "plumbing" → "Plumbing".
+pub fn trade_label(t: &str) -> String {
+    if t == "hvac" {
+        return "HVAC".into();
+    }
+    let mut c = t.chars();
+    c.next()
+        .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+        .unwrap_or_default()
+}
+
 /// Keep only known trades, once each, in the given order.
 pub fn clean_trades(raw: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = vec![];

@@ -58,6 +58,8 @@ const TENANT_FULL: &[Permission] = &[
     DomainRead,
     DomainManage,
     ApiTokenManage,
+    DataImport,
+    DataExport,
     IntegrationsManage,
     DocumentRead,
     DocumentManage,
