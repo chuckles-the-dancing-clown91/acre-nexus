@@ -485,8 +485,11 @@ pub async fn bundle(
         for d in DATASETS {
             if let Some((text, n)) = dataset(db, tenant_id, d.key).await? {
                 readme.push_str(&format!(
-                    "{}.csv: {} ({n} rows). {}\n",
-                    d.key, d.label, d.description
+                    "{}.csv: {} ({n} row{}). {}\n",
+                    d.key,
+                    d.label,
+                    if n == 1 { "" } else { "s" },
+                    d.description
                 ));
                 let _ = zip.start_file(format!("{}.csv", d.key), opts);
                 // Excel reads UTF-8 CSV correctly with the byte-order mark.

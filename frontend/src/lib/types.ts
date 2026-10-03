@@ -1152,6 +1152,10 @@ export interface ConsoleListing {
   description: string;
   is_public: boolean;
   created_at: string;
+  state: string;
+  postal_code: string;
+  /** Sent to the rental portals when syndication is on. */
+  syndicate: boolean;
 }
 
 export interface CreateListingInput {
@@ -1175,6 +1179,9 @@ export interface UpdateListingInput {
   description?: string;
   status?: string;
   is_public?: boolean;
+  state?: string;
+  postal_code?: string;
+  syndicate?: boolean;
 }
 
 /** Back-office application intake. */

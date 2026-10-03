@@ -33,6 +33,10 @@ CREATE INDEX IF NOT EXISTS idx_import_batch_tenant ON import_batch (tenant_id, c
 ALTER TABLE listing ADD COLUMN IF NOT EXISTS state text NOT NULL DEFAULT '';
 ALTER TABLE listing ADD COLUMN IF NOT EXISTS postal_code text NOT NULL DEFAULT '';
 ALTER TABLE listing ADD COLUMN IF NOT EXISTS syndicate boolean NOT NULL DEFAULT true;
+-- Listings made before this carry their property's state and ZIP.
+UPDATE listing SET state = p.state, postal_code = p.postal_code
+  FROM property p
+ WHERE listing.property_id = p.id AND listing.state = '' AND listing.postal_code = '';
 
 CREATE TABLE IF NOT EXISTS syndication_channel (
     id uuid PRIMARY KEY,

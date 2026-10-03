@@ -267,15 +267,25 @@ async fn run_inner(
 }
 
 fn row_label(t: &Table, row: &[String], m: &BTreeMap<String, String>, kind: &str) -> String {
-    let parts: Vec<&str> = match kind {
-        "properties" | "tenants" => ["property", "address", "unit", "tenant_name"]
-            .iter()
-            .filter_map(|f| cell(t, row, m, f))
-            .collect(),
+    let parts: Vec<String> = match kind {
+        "properties" | "tenants" => {
+            let mut p = vec![];
+            if let Some(x) = cell(t, row, m, "property").or_else(|| cell(t, row, m, "address")) {
+                p.push(x.to_string());
+            }
+            if let Some(u) = cell(t, row, m, "unit") {
+                p.push(format!("Unit {u}"));
+            }
+            if let Some(n) = cell(t, row, m, "tenant_name") {
+                p.push(person(n));
+            }
+            p
+        }
         _ => ["name", "company", "last_name"]
             .iter()
             .filter_map(|f| cell(t, row, m, f))
             .take(1)
+            .map(str::to_string)
             .collect(),
     };
     if parts.is_empty() {

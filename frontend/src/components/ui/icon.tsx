@@ -2,6 +2,7 @@
 // an icon without importing React components.
 
 import {
+  ArrowDownUp,
   BadgeCheck,
   Bell,
   Blocks,
@@ -72,6 +73,7 @@ export const ICONS: Record<string, LucideIcon> = {
   inbox: Inbox,
   phone: Smartphone,
   megaphone: Megaphone,
+  transfer: ArrowDownUp,
   clipboard: ClipboardList,
   magnet: Magnet,
   door: DoorOpen,
