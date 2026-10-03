@@ -49,6 +49,11 @@ Residents land here after sign-in; the staff console sends them here too.
   it, a reply box that takes photos and video, and a star rating once it's
   done.
 
+- When staff offer visit times, the request shows them with one tap to pick
+  (`GET /my/appointments`, `POST /my/appointments/<id>/pick`), or "None of
+  these work" to suggest another time (`…/decline`). A confirmed visit shows
+  at the top of the request, with "That no longer works" to reschedule.
+
 API: `GET|POST /my/tickets`, `GET /my/tickets/<id>` (with `files` and their
 view links), `POST /my/tickets/<id>/comments` (`document_ids` must be the
 resident's own uploads on that request), `POST /my/tickets/<id>/photos`

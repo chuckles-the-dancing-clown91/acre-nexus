@@ -9,7 +9,7 @@
 
 use crate::error::{ApiError, ApiResult};
 use crate::modules::JobOutcome;
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
+use chrono::{DateTime, Duration, Timelike, Utc};
 use entity::prelude::{Appointment, Lease, MaintenanceTicket, Property, Tenant, User};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,

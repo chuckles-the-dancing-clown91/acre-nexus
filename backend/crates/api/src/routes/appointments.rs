@@ -283,10 +283,46 @@ pub struct CreateAppointmentReq {
     pub lead_id: Option<Uuid>,
 }
 
+/// A time as RFC 3339, or a plain `YYYY-MM-DDTHH:MM` read in the
+/// workspace's time zone (what a date and time field on a form produce).
 #[derive(Deserialize, JsonSchema)]
 pub struct WindowReq {
-    pub start: DateTime<Utc>,
-    pub end: Option<DateTime<Utc>>,
+    pub start: String,
+    pub end: Option<String>,
+}
+
+fn parse_when(raw: &str, tz: &chrono_tz::Tz) -> ApiResult<DateTime<Utc>> {
+    use chrono::TimeZone;
+    let raw = raw.trim();
+    if let Ok(t) = DateTime::parse_from_rfc3339(raw) {
+        return Ok(t.to_utc());
+    }
+    let naive = chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S"))
+        .map_err(|_| ApiError::BadRequest(format!("\"{raw}\" isn't a date and time")))?;
+    tz.from_local_datetime(&naive)
+        .earliest()
+        .map(|t| t.to_utc())
+        .ok_or_else(|| ApiError::BadRequest("that time doesn't exist in this time zone".into()))
+}
+
+async fn window_from(
+    db: &crate::db::RequestDb,
+    tenant_id: Uuid,
+    w: WindowReq,
+) -> ApiResult<Window> {
+    let tz = appt::tz_for(db, tenant_id).await;
+    let default_len = Duration::minutes(
+        crate::settings::get_i64(db, tenant_id, crate::settings::APPOINTMENT_WINDOW_MINUTES)
+            .await
+            .clamp(15, 24 * 60),
+    );
+    let start = parse_when(&w.start, &tz)?;
+    let end = match w.end {
+        Some(e) => parse_when(&e, &tz)?,
+        None => start + default_len,
+    };
+    Ok(Window { start, end })
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -310,26 +346,11 @@ pub async fn create_appointment(
 ) -> ApiResult<Json<CreatedAppointment>> {
     user.require(Permission::MaintenanceManage)?;
     let b = body.into_inner();
-    let default_len = Duration::minutes(
-        crate::settings::get_i64(
-            &db,
-            scope.tenant_id,
-            crate::settings::APPOINTMENT_WINDOW_MINUTES,
-        )
-        .await
-        .clamp(15, 24 * 60),
-    );
-    let windows = appt::clean_windows(
-        b.windows
-            .into_iter()
-            .map(|w| Window {
-                start: w.start,
-                end: w.end.unwrap_or(w.start + default_len),
-            })
-            .collect(),
-        Utc::now(),
-    )
-    .map_err(ApiError::BadRequest)?;
+    let mut raw = Vec::new();
+    for w in b.windows {
+        raw.push(window_from(&db, scope.tenant_id, w).await?);
+    }
+    let windows = appt::clean_windows(raw, Utc::now()).map_err(ApiError::BadRequest)?;
 
     let (mut offer, ticket) = match b.ticket_id {
         Some(tid) => {
@@ -509,19 +530,7 @@ pub async fn update_appointment(
     let b = body.into_inner();
     let now = Utc::now();
     if let Some(w) = b.confirm {
-        let default_len = Duration::minutes(
-            crate::settings::get_i64(
-                &db,
-                scope.tenant_id,
-                crate::settings::APPOINTMENT_WINDOW_MINUTES,
-            )
-            .await
-            .clamp(15, 24 * 60),
-        );
-        let w = Window {
-            start: w.start,
-            end: w.end.unwrap_or(w.start + default_len),
-        };
+        let w = window_from(&db, scope.tenant_id, w).await?;
         if w.end <= w.start {
             return Err(ApiError::BadRequest("the end is before the start".into()));
         }
@@ -710,15 +719,7 @@ async fn proposed_window(
     w: Option<WindowReq>,
 ) -> ApiResult<Option<Window>> {
     let Some(w) = w else { return Ok(None) };
-    let default_len = Duration::minutes(
-        crate::settings::get_i64(db, tenant_id, crate::settings::APPOINTMENT_WINDOW_MINUTES)
-            .await
-            .clamp(15, 24 * 60),
-    );
-    let w = Window {
-        start: w.start,
-        end: w.end.unwrap_or(w.start + default_len),
-    };
+    let w = window_from(db, tenant_id, w).await?;
     if w.start < Utc::now() || w.end <= w.start {
         return Err(ApiError::BadRequest(
             "suggest a time that's still ahead".into(),

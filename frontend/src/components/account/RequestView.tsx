@@ -6,9 +6,16 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Play, Star } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarCheck,
+  CalendarClock,
+  Play,
+  Star,
+} from "lucide-react";
 import { toast } from "sonner";
 import { api, type MyTicketFile } from "@/lib/api";
+import { appointments, instantFrom } from "@/lib/appointments";
 import { residentStatus } from "@/lib/resident";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +50,18 @@ export function RequestView({
   const [busy, setBusy] = useState(false);
   const [stars, setStars] = useState(0);
   const [review, setReview] = useState("");
+  const visits = useQuery({
+    queryKey: ["my-appointments"],
+    queryFn: appointments.mine,
+  });
+  const visit = (visits.data ?? []).find(
+    (a) => a.subject_type === "ticket" && a.subject_id === id
+  );
+  const [picked, setPicked] = useState<number | null>(null);
+  const [otherTime, setOtherTime] = useState(false);
+  const [otherDate, setOtherDate] = useState("");
+  const [otherClock, setOtherClock] = useState("09:00");
+  const [otherWhy, setOtherWhy] = useState("");
 
   const byId = useMemo(
     () => new Map((q.data?.files ?? []).map((f) => [f.id, f])),
@@ -52,7 +71,42 @@ export function RequestView({
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["my-ticket", id] });
     void qc.invalidateQueries({ queryKey: ["my-tickets"] });
+    void qc.invalidateQueries({ queryKey: ["my-appointments"] });
   };
+
+  async function pickVisit() {
+    if (!visit || picked == null) return;
+    setBusy(true);
+    try {
+      const a = await appointments.pick(visit.id, picked);
+      toast.success(`You're set for ${a.when_words}.`);
+      setPicked(null);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't save that");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function declineVisit() {
+    if (!visit) return;
+    setBusy(true);
+    try {
+      const start = instantFrom(otherDate, otherClock);
+      await appointments.decline(visit.id, {
+        propose: start ? { start } : undefined,
+        reason: otherWhy.trim() || undefined,
+      });
+      toast.success("Thanks. We'll come back with other times.");
+      setOtherTime(false);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send that");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function send() {
     if (!body.trim() && files.length === 0) return;
@@ -150,6 +204,99 @@ export function RequestView({
           </p>
         )}
       </Panel>
+
+      {visit && visit.status === "confirmed" && visit.when_words && (
+        <Panel className="flex items-start gap-3 border-good/30 p-4">
+          <CalendarCheck className="mt-0.5 size-5 shrink-0 text-good" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-medium text-fg">
+              We&apos;re coming {visit.when_words}
+            </div>
+            {visit.note && (
+              <div className="mt-0.5 text-[13px] text-fg-3">{visit.note}</div>
+            )}
+            <button
+              type="button"
+              onClick={() => setOtherTime(true)}
+              className="mt-1 text-xs text-accent hover:underline"
+            >
+              That no longer works
+            </button>
+          </div>
+        </Panel>
+      )}
+      {visit && visit.status === "proposed" && !otherTime && (
+        <Panel className="space-y-3 p-4">
+          <div className="text-[15px] font-semibold text-fg">
+            Pick a time for the visit
+          </div>
+          {visit.note && <p className="text-[13px] text-fg-3">{visit.note}</p>}
+          <ul className="space-y-2">
+            {visit.windows_words.map((w, i) => (
+              <li key={w}>
+                <button
+                  type="button"
+                  onClick={() => setPicked(i)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[14px]",
+                    picked === i
+                      ? "border-accent bg-accent/10 text-fg"
+                      : "border-line text-fg-2"
+                  )}
+                >
+                  <CalendarClock className="size-4 shrink-0 text-fg-3" />
+                  {w}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={pickVisit} disabled={picked == null || busy}>
+              Confirm
+            </Button>
+            <Button variant="ghost" onClick={() => setOtherTime(true)}>
+              None of these work
+            </Button>
+          </div>
+        </Panel>
+      )}
+      {visit && otherTime && (
+        <Panel className="space-y-3 p-4">
+          <div className="text-[15px] font-semibold text-fg">
+            When would work?
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="date"
+              aria-label="Date"
+              className="rounded-xl border border-line bg-surface px-3 py-2 text-[14px] text-fg"
+              value={otherDate}
+              onChange={(e) => setOtherDate(e.target.value)}
+            />
+            <input
+              type="time"
+              aria-label="Time"
+              className="rounded-xl border border-line bg-surface px-3 py-2 text-[14px] text-fg"
+              value={otherClock}
+              onChange={(e) => setOtherClock(e.target.value)}
+            />
+          </div>
+          <textarea
+            className="min-h-[56px] w-full rounded-xl border border-line bg-surface px-3 py-2 text-[14px] text-fg outline-none focus:border-accent"
+            placeholder="Anything we should know (optional)"
+            value={otherWhy}
+            onChange={(e) => setOtherWhy(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={declineVisit} disabled={busy}>
+              {otherDate ? "Suggest this time" : "Send"}
+            </Button>
+            <Button variant="ghost" onClick={() => setOtherTime(false)}>
+              Back
+            </Button>
+          </div>
+        </Panel>
+      )}
 
       {t.files.length > 0 && (
         <Panel className="p-4">
