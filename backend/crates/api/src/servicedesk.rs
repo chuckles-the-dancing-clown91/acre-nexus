@@ -8,6 +8,7 @@
 //! carry a kit too, so every filter change starts with its filter.
 
 use crate::error::ApiResult;
+use crate::kit_catalog::KITS;
 use crate::settings as cfg;
 use chrono::Utc;
 use entity::prelude::{InventoryItem, IssueTemplate, TicketTask};
@@ -137,227 +138,23 @@ pub fn trades_of(tasks: &[KitTask]) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
-// The starter kits
+// The starter kits: crate::kit_catalog
 // ---------------------------------------------------------------------------
 
-struct Kit {
-    name: &'static str,
-    area: &'static str,
-    category: &'static str,
-    priority: &'static str,
-    description: &'static str,
-    /// `(title, trade, minutes, needs a contractor)`.
-    tasks: &'static [(&'static str, &'static str, i32, bool)],
-    /// `(name, quantity, typical unit cost in cents)`.
-    parts: &'static [(&'static str, i32, i64)],
-}
-
-const KITS: &[Kit] = &[
-    Kit {
-        name: "Shower replacement",
-        area: "Bathroom",
-        category: "plumbing",
-        priority: "normal",
-        description: "Tear out the old shower, check the framing and valve, hang \
-                      cement board, waterproof, and set a new surround and trim.",
-        tasks: &[
-            ("Shut off water and protect the room", "general", 30, false),
-            ("Demo old surround and haul debris", "demo", 240, false),
-            ("Inspect framing and studs for rot", "carpentry", 45, false),
-            (
-                "Replace shower valve and supply lines",
-                "plumbing",
-                180,
-                true,
-            ),
-            (
-                "Hang cement board and drywall around the shower",
-                "drywall",
-                180,
-                false,
-            ),
-            ("Tape, mud and sand the drywall", "drywall", 240, false),
-            (
-                "Waterproof membrane over the cement board",
-                "tile",
-                120,
-                false,
-            ),
-            ("Install the new surround or tile", "tile", 480, false),
-            ("Set trim, shower head and handle", "plumbing", 60, true),
-            ("Caulk, touch up paint and clean", "paint", 120, false),
-            ("Pressure test and final walkthrough", "plumbing", 30, true),
-        ],
-        parts: &[
-            ("Shower valve, pressure-balance", 1, 14_900),
-            ("Shower trim kit", 1, 12_900),
-            ("Shower surround kit", 1, 54_900),
-            ("Cement board 3x5", 4, 1_450),
-            ("Drywall 4x8 1/2in moisture-resistant", 2, 1_850),
-            ("Joint compound", 1, 1_600),
-            ("Drywall tape", 1, 600),
-            ("Waterproofing membrane", 1, 8_900),
-            ("PEX pipe 1/2in, 10 ft", 2, 850),
-            ("PEX fittings and crimp rings", 1, 2_400),
-            ("Silicone caulk, kitchen and bath", 2, 900),
-            ("Cement board screws", 1, 1_100),
-            ("Contractor bags", 1, 2_200),
-        ],
-    },
-    Kit {
-        name: "Toilet replacement",
-        area: "Bathroom",
-        category: "plumbing",
-        priority: "normal",
-        description: "Pull the old toilet, check the flange and subfloor, set a new one.",
-        tasks: &[
-            ("Shut off and drain the toilet", "plumbing", 15, false),
-            ("Remove the old toilet and wax ring", "plumbing", 30, false),
-            ("Inspect flange and subfloor", "carpentry", 20, false),
-            (
-                "Set the new toilet on a new wax ring",
-                "plumbing",
-                45,
-                false,
-            ),
-            ("Connect supply and test for leaks", "plumbing", 20, false),
-            ("Caulk the base and clean up", "cleaning", 15, false),
-        ],
-        parts: &[
-            ("Toilet, elongated 1.28 gpf", 1, 21_900),
-            ("Wax ring with sleeve", 1, 800),
-            ("Closet bolts", 1, 500),
-            ("Toilet supply line 12in", 1, 900),
-            ("Silicone caulk, kitchen and bath", 1, 900),
-        ],
-    },
-    Kit {
-        name: "Water heater replacement",
-        area: "Utility",
-        category: "plumbing",
-        priority: "high",
-        description: "Swap the tank: drain, remove, set the new heater with a pan \
-                      and expansion tank, connect, and test.",
-        tasks: &[
-            (
-                "Shut off gas or power and water, drain the tank",
-                "plumbing",
-                45,
-                false,
-            ),
-            ("Remove and haul the old heater", "demo", 60, false),
-            (
-                "Set the new heater, pan and expansion tank",
-                "plumbing",
-                120,
-                true,
-            ),
-            (
-                "Connect water, gas or electric, and venting",
-                "plumbing",
-                90,
-                true,
-            ),
-            ("Fill, purge air, light and test", "plumbing", 30, true),
-            ("Check the permit and seismic straps", "general", 20, false),
-        ],
-        parts: &[
-            ("Water heater, 50 gal", 1, 89_900),
-            ("Expansion tank", 1, 5_500),
-            ("Water heater drain pan", 1, 3_200),
-            ("Flex water connector", 2, 1_600),
-            ("Seismic strap kit", 1, 3_400),
-            ("Gas flex line", 1, 2_800),
-        ],
-    },
-    Kit {
-        name: "Drywall patch and paint",
-        area: "Any room",
-        category: "structural",
-        priority: "low",
-        description: "Cut out the damage, patch, match the texture and paint.",
-        tasks: &[
-            ("Cut out the damaged drywall", "drywall", 30, false),
-            ("Patch, tape and mud, three coats", "drywall", 180, false),
-            ("Sand and match the texture", "drywall", 60, false),
-            ("Prime and paint", "paint", 90, false),
-        ],
-        parts: &[
-            ("Drywall 4x8 1/2in", 1, 1_600),
-            ("Joint compound", 1, 1_600),
-            ("Drywall tape", 1, 600),
-            ("Primer, 1 qt", 1, 1_800),
-            ("Interior paint, 1 gal", 1, 4_200),
-            ("Sanding sponge", 2, 400),
-        ],
-    },
-    Kit {
-        name: "Unit turn: interior repaint",
-        area: "Whole unit",
-        category: "general",
-        priority: "normal",
-        description: "Repaint a vacant unit: patch, prime, two coats on walls, trim and doors.",
-        tasks: &[
-            ("Patch nail holes and dings", "drywall", 90, false),
-            ("Mask and protect floors", "paint", 60, false),
-            ("Prime stains", "paint", 60, false),
-            ("Paint walls, two coats", "paint", 600, false),
-            ("Paint trim and doors", "paint", 240, false),
-            ("Clean up and touch up", "cleaning", 90, false),
-        ],
-        parts: &[
-            ("Interior paint, 5 gal", 1, 17_900),
-            ("Primer, 1 gal", 1, 3_200),
-            ("Spackle", 1, 900),
-            ("Painter's tape", 3, 700),
-            ("Drop cloth", 2, 1_500),
-            ("Roller cover", 4, 600),
-        ],
-    },
-    Kit {
-        name: "HVAC seasonal service",
-        area: "Mechanical",
-        category: "hvac",
-        priority: "normal",
-        description: "Spring and fall service: filter, coil, refrigerant, drain line, thermostat.",
-        tasks: &[
-            ("Replace the air filter", "hvac", 15, false),
-            ("Clean the condenser coil", "hvac", 45, false),
-            ("Check refrigerant and electrical", "hvac", 45, true),
-            ("Flush the condensate line", "hvac", 20, false),
-            (
-                "Test the thermostat and run a full cycle",
-                "hvac",
-                20,
-                false,
-            ),
-        ],
-        parts: &[
-            ("Air filter 16x25x1 MERV 8", 1, 1_200),
-            ("Condensate line tablets", 1, 900),
-            ("Coil cleaner", 1, 1_400),
-        ],
-    },
-];
-
-/// Give a workspace the starter kits, once. After that the catalog is theirs:
-/// kits they rename, change or retire stay that way. A name the workspace
-/// already uses is skipped.
+/// Give a workspace every catalog kit it hasn't had yet, by key. A kit the
+/// workspace renamed, changed or retired keeps its key, so it isn't added
+/// back; a kit new in this release is. A name the workspace already uses
+/// (its own kit) is left alone.
 pub async fn ensure_kits(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<()> {
     let rows = IssueTemplate::find()
         .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
         .all(db)
         .await?;
-    let seeded_before = rows
-        .iter()
-        .any(|t| t.seeded && t.tasks.as_array().is_some_and(|a| !a.is_empty()));
-    if seeded_before {
-        return Ok(());
-    }
-    let have: Vec<String> = rows.into_iter().map(|t| t.name.to_lowercase()).collect();
+    let keys: Vec<String> = rows.iter().filter_map(|t| t.kit_key.clone()).collect();
+    let names: Vec<String> = rows.iter().map(|t| t.name.to_lowercase()).collect();
     let now = Utc::now();
     for k in KITS {
-        if have.contains(&k.name.to_lowercase()) {
+        if keys.iter().any(|x| x == k.key) || names.contains(&k.name.to_lowercase()) {
             continue;
         }
         let tasks: Vec<KitTask> = k
@@ -393,6 +190,7 @@ pub async fn ensure_kits(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResul
             tasks: Set(json!(tasks)),
             active: Set(true),
             seeded: Set(true),
+            kit_key: Set(Some(k.key.into())),
             created_at: Set(now.into()),
             updated_at: Set(now.into()),
         }
@@ -400,6 +198,53 @@ pub async fn ensure_kits(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResul
         .await?;
     }
     Ok(())
+}
+
+/// A buy link as entered: `http(s)://…`, at most 1,000 characters; blank is
+/// none.
+pub fn clean_url(raw: &str) -> Result<Option<String>, String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    if !(t.starts_with("https://") || t.starts_with("http://")) || t.len() > 1000 || t.contains(' ')
+    {
+        return Err("a part link must be a web address (https://…)".into());
+    }
+    Ok(Some(t.to_string()))
+}
+
+/// The store a product link is at, by its domain.
+pub fn store_of(url: &str) -> Option<&'static str> {
+    let host = url
+        .split("://")
+        .nth(1)?
+        .split(['/', '?', '#'])
+        .next()?
+        .to_lowercase();
+    let host = host.trim_start_matches("www.");
+    const STORES: &[(&str, &str)] = &[
+        ("homedepot.com", "Home Depot"),
+        ("lowes.com", "Lowe's"),
+        ("amazon.com", "Amazon"),
+        ("amzn.to", "Amazon"),
+        ("a.co", "Amazon"),
+        ("walmart.com", "Walmart"),
+        ("menards.com", "Menards"),
+        ("acehardware.com", "Ace Hardware"),
+        ("grainger.com", "Grainger"),
+        ("supplyhouse.com", "SupplyHouse"),
+        ("ferguson.com", "Ferguson"),
+        ("repairclinic.com", "RepairClinic"),
+        ("appliancepartspros.com", "AppliancePartsPros"),
+        ("partselect.com", "PartSelect"),
+        ("build.com", "Build.com"),
+        ("zoro.com", "Zoro"),
+    ];
+    STORES
+        .iter()
+        .find(|(d, _)| host == *d || host.ends_with(&format!(".{d}")))
+        .map(|(_, n)| *n)
 }
 
 /// A kit's part line as stored.
@@ -410,6 +255,8 @@ struct StoredPart {
     quantity: i32,
     inventory_item_id: Option<Uuid>,
     unit_cost_cents: Option<i64>,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 /// Put a kit's tasks and parts on a work order (after anything already there).
@@ -485,9 +332,16 @@ pub async fn apply_kit(
             user,
         )
         .await?;
-        if item.is_none() && p.unit_cost_cents.is_some() {
+        let url = p.url.as_deref().and_then(|u| clean_url(u).ok().flatten());
+        if (item.is_none() && p.unit_cost_cents.is_some()) || url.is_some() {
             let mut am: entity::ticket_part::ActiveModel = added.into();
-            am.unit_cost_cents = Set(p.unit_cost_cents);
+            if item.is_none() && p.unit_cost_cents.is_some() {
+                am.unit_cost_cents = Set(p.unit_cost_cents);
+            }
+            if let Some(u) = url {
+                am.vendor = Set(store_of(&u).map(str::to_string));
+                am.url = Set(Some(u));
+            }
             am.update(db).await?;
         }
     }
@@ -539,15 +393,44 @@ mod tests {
     }
 
     #[test]
+    fn part_links_name_their_store() {
+        assert_eq!(
+            store_of("https://www.homedepot.com/p/Moen-1222/100026379"),
+            Some("Home Depot")
+        );
+        assert_eq!(store_of("https://www.amazon.com/dp/B00ABC"), Some("Amazon"));
+        assert_eq!(store_of("https://amzn.to/3xyz"), Some("Amazon"));
+        assert_eq!(store_of("https://www.lowes.com/pd/x/1000"), Some("Lowe's"));
+        assert_eq!(store_of("https://example.com/part"), None);
+        assert_eq!(store_of("https://notamazon.com.evil.io/x"), None);
+        assert_eq!(clean_url("  ").unwrap(), None);
+        assert!(clean_url("javascript:alert(1)").is_err());
+        assert!(clean_url("homedepot.com/p/1").is_err());
+    }
+
+    #[test]
     fn the_shower_kit_calls_for_a_plumber() {
-        let k = KITS
-            .iter()
-            .find(|k| k.name == "Shower replacement")
-            .unwrap();
+        let k = KITS.iter().find(|k| k.key == "replace-shower").unwrap();
         assert!(k.tasks.iter().any(|t| t.1 == "plumbing" && t.3));
         assert!(k.tasks.iter().any(|t| t.1 == "drywall"));
         assert!(k.parts.iter().any(|p| p.0.contains("valve")));
+        let mut keys = std::collections::HashSet::new();
         for k in KITS {
+            assert!(keys.insert(k.key), "duplicate kit key {}", k.key);
+            assert!(
+                [
+                    "plumbing",
+                    "electrical",
+                    "hvac",
+                    "appliance",
+                    "structural",
+                    "general"
+                ]
+                .contains(&k.category),
+                "{} has category {}",
+                k.name,
+                k.category
+            );
             for t in k.tasks {
                 assert!(
                     TRADES.contains(&t.1),

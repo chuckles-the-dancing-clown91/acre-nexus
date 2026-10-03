@@ -49,6 +49,7 @@ pub const CATEGORIES: &[&str] = &[
     "statement",
     "notice",
     "photo",
+    "video",
     "floorplan",
     "waiver",
     "other",
@@ -81,3 +82,14 @@ pub fn normalize_category(raw: Option<String>) -> Result<Option<String>, String>
 
 /// Upper bound we accept for a single stored file.
 pub const MAX_SIZE_BYTES: i64 = 25 * 1024 * 1024;
+/// Videos (a resident showing a leak, a tech showing the fix) run larger.
+pub const MAX_VIDEO_BYTES: i64 = 100 * 1024 * 1024;
+
+/// The largest file of this type.
+pub fn max_size_for(mime: &str) -> i64 {
+    if mime.trim().to_lowercase().starts_with("video/") {
+        MAX_VIDEO_BYTES
+    } else {
+        MAX_SIZE_BYTES
+    }
+}

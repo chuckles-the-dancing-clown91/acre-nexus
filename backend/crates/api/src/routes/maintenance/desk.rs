@@ -131,7 +131,7 @@ pub struct FileDto {
     pub id: Uuid,
     pub filename: String,
     pub mime_type: String,
-    /// `photo` | `receipt` | `document`.
+    /// `photo` | `video` | `receipt` | `document`.
     pub kind: String,
     pub size_bytes: i64,
     /// A signed link, good for 15 minutes.
@@ -288,6 +288,7 @@ async fn tasks_of(
 fn kind_of(category: Option<&str>) -> &'static str {
     match category {
         Some("photo") => "photo",
+        Some("video") => "video",
         Some("receipt") => "receipt",
         _ => "document",
     }
@@ -470,6 +471,24 @@ pub async fn update_task(
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
+    if saved.status != existing.status {
+        let (action, verb) = match saved.status.as_str() {
+            "doing" => ("task_started", "Started"),
+            "done" => ("task_done", "Done"),
+            "skipped" => ("task_skipped", "Skipped"),
+            _ => ("task_reopened", "Reopened"),
+        };
+        action_comment(
+            &db,
+            scope.tenant_id,
+            t.id,
+            &user,
+            action,
+            &format!("{verb}: {}", saved.title),
+            "internal",
+        )
+        .await?;
+    }
     record(
         &db,
         &user,
@@ -823,23 +842,31 @@ pub async fn upload(
         return Err(ApiError::BadRequest("mime_type is required".into()));
     }
     let size = b.size_bytes.unwrap_or(0);
-    if !(0..=crate::routes::documents::MAX_SIZE_BYTES).contains(&size) {
+    if !(0..=crate::routes::documents::max_size_for(&mime)).contains(&size) {
         return Err(ApiError::BadRequest("that file is too large".into()));
     }
     let kind = match b.kind.as_deref().map(str::trim) {
         Some("receipt") => "receipt",
         Some("document") => "document",
+        Some("photo") if mime.starts_with("video/") => "video",
         Some("photo") => "photo",
+        Some("video") => "video",
         None if mime.starts_with("image/") => "photo",
+        None if mime.starts_with("video/") => "video",
         None => "document",
         Some(k) => {
             return Err(ApiError::BadRequest(format!(
-                "kind must be photo, receipt or document, not {k}"
+                "kind must be photo, video, receipt or document, not {k}"
             )))
         }
     };
     if kind == "photo" && !mime.starts_with("image/") {
         return Err(ApiError::BadRequest("a photo has to be an image".into()));
+    }
+    if kind == "video" && !mime.starts_with("video/") {
+        return Err(ApiError::BadRequest(
+            "a video has to be a video file".into(),
+        ));
     }
     let doc_id = Uuid::new_v4();
     let key = format!("{}/{}", scope.tenant_id, doc_id);
@@ -907,11 +934,16 @@ pub async fn files(
     user.require(Permission::MaintenanceRead)?;
     let t = ticket(&db, scope.tenant_id, id).await?;
     let store = ObjectStore::from_env().ok();
-    let rows = Document::find()
+    let mut q = Document::find()
         .filter(entity::document::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::document::Column::OwnerType.eq("maintenance_ticket"))
-        .filter(entity::document::Column::OwnerId.eq(t.id))
-        .filter(entity::document::Column::Status.eq("stored"))
+        .filter(entity::document::Column::OwnerId.eq(t.id));
+    // The local store marks a file stored when its bytes land; uploads to S3
+    // go straight there and stay "pending_upload", so only filter locally.
+    if matches!(store, Some(ObjectStore::Local(_))) {
+        q = q.filter(entity::document::Column::Status.eq("stored"));
+    }
+    let rows = q
         .order_by_desc(entity::document::Column::CreatedAt)
         .all(&db)
         .await?;
@@ -1133,4 +1165,273 @@ pub async fn vendors(
     }
     out.sort_by_key(|v| !v.matches);
     Ok(Json(out))
+}
+
+// ---------------------------------------------------------------------------
+// Actions: one button, one line on the timeline
+// ---------------------------------------------------------------------------
+
+/// A button on the work order: what it says on the timeline, who sees it, and
+/// what it does to the work order.
+#[derive(Serialize, Clone, Copy, schemars::JsonSchema)]
+pub struct ActionDef {
+    pub key: &'static str,
+    pub label: &'static str,
+    /// The line on the timeline (a note, when given, follows it).
+    pub says: &'static str,
+    /// `public` (the resident sees it) or `internal`.
+    pub visibility: &'static str,
+    /// The status it moves the work order to, if any.
+    pub status: Option<&'static str>,
+    /// What the work order then waits on (`parts`, `vendor`, `resident`).
+    pub waiting_on: Option<&'static str>,
+    /// Whether it needs a note (a diagnosis says what was found).
+    pub needs_note: bool,
+}
+
+const fn a(
+    key: &'static str,
+    label: &'static str,
+    says: &'static str,
+    visibility: &'static str,
+    status: Option<&'static str>,
+    waiting_on: Option<&'static str>,
+    needs_note: bool,
+) -> ActionDef {
+    ActionDef {
+        key,
+        label,
+        says,
+        visibility,
+        status,
+        waiting_on,
+        needs_note,
+    }
+}
+
+pub const ACTIONS: &[ActionDef] = &[
+    a(
+        "on_my_way",
+        "On my way",
+        "On my way.",
+        "public",
+        None,
+        None,
+        false,
+    ),
+    a(
+        "arrived",
+        "Arrived",
+        "Arrived on site.",
+        "public",
+        Some("in_progress"),
+        None,
+        false,
+    ),
+    a(
+        "diagnosed",
+        "Diagnosed",
+        "Diagnosed:",
+        "public",
+        None,
+        None,
+        true,
+    ),
+    a(
+        "need_access",
+        "Need access",
+        "Couldn't get in. We need access to finish this.",
+        "public",
+        Some("on_hold"),
+        Some("resident"),
+        false,
+    ),
+    a(
+        "waiting_parts",
+        "Waiting on parts",
+        "Waiting on parts.",
+        "public",
+        Some("on_hold"),
+        Some("parts"),
+        false,
+    ),
+    a(
+        "parts_in",
+        "Parts are in",
+        "Parts are in; back on it.",
+        "public",
+        Some("in_progress"),
+        None,
+        false,
+    ),
+    a(
+        "waiting_vendor",
+        "Waiting on vendor",
+        "Waiting on the vendor.",
+        "internal",
+        Some("on_hold"),
+        Some("vendor"),
+        false,
+    ),
+    a(
+        "follow_up",
+        "Needs a return visit",
+        "Needs a return visit.",
+        "internal",
+        Some("scheduled"),
+        None,
+        false,
+    ),
+    a(
+        "work_done",
+        "Work complete",
+        "Work complete.",
+        "public",
+        Some("resolved"),
+        None,
+        false,
+    ),
+];
+
+pub fn action_def(key: &str) -> Option<&'static ActionDef> {
+    ACTIONS.iter().find(|a| a.key == key)
+}
+
+/// One line on the timeline, recorded by a button.
+pub async fn action_comment(
+    db: &impl sea_orm::ConnectionTrait,
+    tenant_id: Uuid,
+    ticket_id: Uuid,
+    user: &AuthUser,
+    action: &str,
+    body: &str,
+    visibility: &str,
+) -> ApiResult<entity::ticket_comment::Model> {
+    let author = entity::prelude::User::find_by_id(user.user_id)
+        .one(db)
+        .await?
+        .map(|u| u.name);
+    Ok(entity::ticket_comment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        ticket_id: Set(ticket_id),
+        author_user_id: Set(Some(user.user_id)),
+        kind: Set("action".into()),
+        visibility: Set(visibility.into()),
+        author_name: Set(author),
+        body: Set(body.to_string()),
+        document_ids: Set(json!([])),
+        action: Set(Some(action.into())),
+        created_at: Set(Utc::now().into()),
+    }
+    .insert(db)
+    .await?)
+}
+
+/// `GET /ticket-actions` — the buttons a work order offers.
+#[rocket_okapi::openapi(tag = "Service Desk")]
+#[get("/ticket-actions")]
+pub async fn list_actions(user: AuthUser) -> ApiResult<Json<Vec<ActionDef>>> {
+    user.require(Permission::MaintenanceRead)?;
+    Ok(Json(ACTIONS.to_vec()))
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ActionReq {
+    pub action: String,
+    /// Added to the line ("Diagnosed: the fan motor is seized").
+    pub note: Option<String>,
+    /// When it waits on something, when to chase it (default three days).
+    pub follow_up_date: Option<String>,
+}
+
+/// `POST /tickets/<id>/actions` — press a button: the line goes on the
+/// timeline and the work order moves (the same rules as editing it by hand:
+/// waiting on something needs a follow-up date, a finished job asks the
+/// resident for a rating, and a resident hears about status changes).
+#[rocket_okapi::openapi(tag = "Service Desk")]
+#[post("/tickets/<id>/actions", data = "<body>")]
+pub async fn press_action(
+    state: &rocket::State<crate::state::AppState>,
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+    body: Json<ActionReq>,
+) -> ApiResult<Json<super::dto::TicketDto>> {
+    user.require(Permission::MaintenanceManage)?;
+    let t = ticket(&db, scope.tenant_id, id).await?;
+    let b = body.into_inner();
+    let def =
+        action_def(b.action.trim()).ok_or_else(|| ApiError::BadRequest("unknown action".into()))?;
+    let note = b
+        .note
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    if def.needs_note && note.is_none() {
+        return Err(ApiError::BadRequest(format!(
+            "{}: say what you found",
+            def.label
+        )));
+    }
+    if matches!(t.status.as_str(), "closed") && def.key != "follow_up" {
+        return Err(ApiError::Conflict("this work order is closed".into()));
+    }
+    let line = match &note {
+        Some(n) => format!("{} {n}", def.says),
+        None => def.says.to_string(),
+    };
+    action_comment(
+        &db,
+        scope.tenant_id,
+        t.id,
+        &user,
+        def.key,
+        &line,
+        def.visibility,
+    )
+    .await?;
+    // Move the work order through the usual edit, so its rules and messages hold.
+    let moves = def.status.is_some_and(|s| s != t.status) || def.waiting_on.is_some();
+    if moves {
+        let follow_up = b
+            .follow_up_date
+            .filter(|d| !d.trim().is_empty())
+            .unwrap_or_else(|| (Utc::now().date_naive() + chrono::Duration::days(3)).to_string());
+        let req = super::dto::UpdateTicketReq {
+            status: def.status.map(str::to_string),
+            waiting_on: def.waiting_on.map(str::to_string),
+            follow_up_date: def.waiting_on.map(|_| follow_up.clone()),
+            follow_up_note: def.waiting_on.map(|_| line.clone()),
+            ..Default::default()
+        };
+        return super::update_ticket::update_ticket(state, db, user, scope, id, Json(req)).await;
+    }
+    // A public line with no status change still reaches the resident.
+    if def.visibility == "public" {
+        if let Some(lease_id) = t.lease_id {
+            let lease = entity::prelude::Lease::find_by_id(lease_id)
+                .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
+                .one(&db)
+                .await?;
+            if let Some(email) = lease
+                .as_ref()
+                .and_then(|l| l.tenant_email.as_deref())
+                .filter(|e| !e.trim().is_empty())
+            {
+                crate::notify::notify_person(
+                    &db,
+                    scope.tenant_id,
+                    email,
+                    "maintenance_update",
+                    json!({ "title": t.title, "status": line.trim_end_matches('.').to_lowercase() }),
+                    Some(("maintenance_ticket", t.id)),
+                    &format!("action:{}:{}", def.key, Utc::now().timestamp()),
+                )
+                .await;
+            }
+        }
+    }
+    let fresh = ticket(&db, scope.tenant_id, id).await?;
+    Ok(Json(super::dto::TicketDto::from(fresh)))
 }

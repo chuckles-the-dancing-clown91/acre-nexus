@@ -8,7 +8,7 @@ use super::dto::{AddCommentReq, ReviewReq, TicketCommentDto, TicketDto};
 use crate::auth::AuthUser;
 use crate::error::{ApiError, ApiResult};
 use crate::routes::documents::dto::{DocumentDto, UploadDocumentResp};
-use crate::routes::documents::MAX_SIZE_BYTES;
+use crate::routes::documents::max_size_for;
 use crate::state::AppState;
 use crate::storage::{ObjectStore, SIGNED_URL_TTL_SECS};
 use crate::tenancy::TenantScope;
@@ -67,6 +67,23 @@ pub struct MyTicketDetailResp {
     pub comments: Vec<TicketCommentDto>,
     /// Photos/attachments on the request, newest first.
     pub documents: Vec<DocumentDto>,
+    /// The same files with a link to view them (photos and videos inline).
+    pub files: Vec<MyFile>,
+}
+
+/// A photo, video or file the resident can see on their request.
+#[derive(serde::Serialize, JsonSchema)]
+pub struct MyFile {
+    pub id: Uuid,
+    pub filename: String,
+    pub mime_type: String,
+    /// `photo` | `video` | `document`.
+    pub kind: String,
+    /// A signed link, good for 15 minutes.
+    pub url: Option<String>,
+    /// They uploaded it (rather than staff).
+    pub mine: bool,
+    pub created_at: String,
 }
 
 /// The signed-in resident's lease, or 404.
@@ -271,23 +288,63 @@ pub async fn my_ticket_detail(
     let comments = TicketComment::find()
         .filter(entity::ticket_comment::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::ticket_comment::Column::TicketId.eq(ticket.id))
-        .filter(entity::ticket_comment::Column::Kind.is_in(["comment", "status"]))
+        .filter(entity::ticket_comment::Column::Kind.is_in(["comment", "status", "action"]))
         .filter(entity::ticket_comment::Column::Visibility.eq("public"))
         .order_by_desc(entity::ticket_comment::Column::CreatedAt)
         .all(&db)
         .await?;
-    let documents = Document::find()
+    // Their own uploads, and files staff put on a public note; never staff
+    // receipts or internal photos.
+    let shared: std::collections::HashSet<Uuid> = comments
+        .iter()
+        .flat_map(|c| {
+            serde_json::from_value::<Vec<Uuid>>(c.document_ids.clone()).unwrap_or_default()
+        })
+        .collect();
+    let store = ObjectStore::from_env().ok();
+    let mut q = Document::find()
         .filter(entity::document::Column::TenantId.eq(scope.tenant_id))
         .filter(entity::document::Column::OwnerType.eq("maintenance_ticket"))
-        .filter(entity::document::Column::OwnerId.eq(ticket.id))
+        .filter(entity::document::Column::OwnerId.eq(ticket.id));
+    // Locally, a file counts once its bytes land (S3 uploads go straight there).
+    if matches!(store, Some(ObjectStore::Local(_))) {
+        q = q.filter(entity::document::Column::Status.eq("stored"));
+    }
+    let documents: Vec<entity::document::Model> = q
         .order_by_desc(entity::document::Column::CreatedAt)
         .all(&db)
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|d| d.created_by == Some(user.user_id) || shared.contains(&d.id))
+        .collect();
+    let files = documents
+        .iter()
+        .map(|d| MyFile {
+            id: d.id,
+            filename: d.filename.clone(),
+            mime_type: d.mime_type.clone(),
+            kind: if d.mime_type.starts_with("video/") {
+                "video"
+            } else if d.mime_type.starts_with("image/") {
+                "photo"
+            } else {
+                "document"
+            }
+            .into(),
+            url: store
+                .as_ref()
+                .and_then(|s| s.signed_get_url(&d.storage_key, SIGNED_URL_TTL_SECS).ok())
+                .map(|s| s.url),
+            mine: d.created_by == Some(user.user_id),
+            created_at: d.created_at.to_rfc3339(),
+        })
+        .collect();
 
     Ok(Json(MyTicketDetailResp {
         ticket: TicketDto::from(ticket),
         comments: comments.into_iter().map(TicketCommentDto::from).collect(),
         documents: documents.into_iter().map(DocumentDto::from).collect(),
+        files,
     }))
 }
 
@@ -305,13 +362,33 @@ pub async fn add_my_comment(
 ) -> ApiResult<Json<TicketCommentDto>> {
     let lease = my_lease(&db, scope.tenant_id, user.user_id).await?;
     let ticket = my_ticket(&db, scope.tenant_id, lease.id, id).await?;
-    let text = body.into_inner().body.trim().to_string();
-    if text.is_empty() {
-        return Err(ApiError::BadRequest("comment body is required".into()));
+    let b = body.into_inner();
+    let text = b.body.trim().to_string();
+    if text.is_empty() && b.document_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "write a comment or add a photo".into(),
+        ));
+    }
+    // Attachments are their own uploads to this request.
+    if !b.document_ids.is_empty() {
+        let found = Document::find()
+            .filter(entity::document::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::document::Column::OwnerType.eq("maintenance_ticket"))
+            .filter(entity::document::Column::OwnerId.eq(ticket.id))
+            .filter(entity::document::Column::CreatedBy.eq(user.user_id))
+            .filter(entity::document::Column::Id.is_in(b.document_ids.clone()))
+            .all(&db)
+            .await?;
+        if found.len() != b.document_ids.len() {
+            return Err(ApiError::BadRequest(
+                "attach photos or videos you uploaded to this request".into(),
+            ));
+        }
     }
 
     let saved = entity::ticket_comment::ActiveModel {
-        document_ids: Set(serde_json::json!([])),
+        action: Set(Some("resident_comment".into())),
+        document_ids: Set(serde_json::json!(b.document_ids)),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(ticket.id),
@@ -377,16 +454,23 @@ pub async fn add_my_ticket_photo(
     if filename.is_empty() || filename.contains('/') || filename.contains('\\') {
         return Err(ApiError::BadRequest("invalid filename".into()));
     }
-    let mime_type = b.mime_type.trim().to_string();
-    if mime_type.is_empty() {
-        return Err(ApiError::BadRequest("mime_type is required".into()));
+    let mime_type = b.mime_type.trim().to_lowercase();
+    if !(mime_type.starts_with("image/") || mime_type.starts_with("video/")) {
+        return Err(ApiError::BadRequest("add a photo or a video".into()));
     }
     let size = b.size_bytes.unwrap_or(0);
-    if !(0..=MAX_SIZE_BYTES).contains(&size) {
+    let max = max_size_for(&mime_type);
+    if !(0..=max).contains(&size) {
         return Err(ApiError::BadRequest(format!(
-            "size_bytes must be between 0 and {MAX_SIZE_BYTES}"
+            "that file is too large (up to {} MB)",
+            max / 1024 / 1024
         )));
     }
+    let category = if mime_type.starts_with("video/") {
+        "video"
+    } else {
+        "photo"
+    };
 
     let doc_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", scope.tenant_id, doc_id);
@@ -397,7 +481,7 @@ pub async fn add_my_ticket_photo(
         owner_type: Set("maintenance_ticket".into()),
         owner_id: Set(ticket.id),
         filename: Set(filename.clone()),
-        category: Set(Some("other".into())),
+        category: Set(Some(category.into())),
         requires_wet_ink: Set(false),
         physical_location: Set(None),
         mime_type: Set(mime_type),

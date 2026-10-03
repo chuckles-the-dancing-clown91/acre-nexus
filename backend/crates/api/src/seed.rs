@@ -917,6 +917,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     // The visibility split on its timeline: a public staff reply the
     // resident sees, and an internal note they don't.
     entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
@@ -935,6 +936,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
     .insert(db)
     .await?;
     entity::ticket_comment::ActiveModel {
+        action: Set(None),
         document_ids: Set(serde_json::json!([])),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),

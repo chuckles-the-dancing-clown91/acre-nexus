@@ -125,6 +125,7 @@ async fn integration_suite() {
     service_desk(&c).await;
     imports_and_exports(&c).await;
     listing_syndication(&c).await;
+    maintenance_actions_and_resident(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -154,9 +155,11 @@ async fn bg_job_queue_contract(c: &Ctx) {
             .unwrap()
             .unwrap()
     }
-    // Tick until the job reaches a terminal state (or we give up).
+    // Tick until the job reaches a terminal state (or we give up). Each tick
+    // advances at most 25 due jobs, oldest first, so earlier scenarios' queued
+    // notifications can take several ticks before this job's turn comes.
     async fn drain(c: &Ctx, id: Uuid) -> entity::background_job::Model {
-        for _ in 0..8 {
+        for _ in 0..200 {
             let j = job(c, id).await;
             if j.status == "failed" || j.status == "completed" {
                 return j;
@@ -2947,8 +2950,8 @@ async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|i| i["name"] == "Leaking faucet")
-        .expect("starter issue")
+        .find(|i| i["name"] == "Replace faucet cartridge")
+        .expect("catalog kit")
         .clone();
     assert!(issues.as_array().unwrap().len() >= 10);
 
@@ -2978,10 +2981,20 @@ async fn issue_catalog_generates_ticket_and_shopping_list(c: &Ctx) {
         .as_str()
         .unwrap()
         .contains("Drips every few seconds"));
-    assert!(out["ticket"]["description"]
-        .as_str()
+    // An action kit, not a symptom: its steps are tasks on the work order.
+    let tid = out["ticket"]["id"].as_str().unwrap();
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &mgr).await;
+    assert!(tasks
+        .as_array()
         .unwrap()
-        .contains("Replace cartridge"));
+        .iter()
+        .any(|t| t["title"] == "Install the new cartridge"));
+    // The old symptom entries aren't in the catalog.
+    assert!(!issues
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["name"] == "AC not cooling" || i["name"] == "Leaking faucet"));
     let from_stock: Vec<&str> = out["parts"]["from_stock"]
         .as_array()
         .unwrap()
@@ -4759,7 +4772,9 @@ async fn batch_c_texts(c: &Ctx) {
     assert_eq!(links.len(), 1);
     let url = links[0].payload["vars"]["url"].as_str().unwrap();
     assert!(
-        url.contains("/account/maintenance?new=1&title=Leaking%20faucet&category=plumbing"),
+        url.contains(
+            "/account/maintenance?new=1&title=The%20kitchen%20faucet%20is%20leaking%20again&category=plumbing"
+        ),
         "{url}"
     );
 
@@ -5393,7 +5408,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "Shower replacement")
+        .find(|k| k["name"] == "Replace shower")
         .expect("the shower kit")
         .clone();
     assert!(shower["tasks"].as_array().unwrap().len() >= 8);
@@ -5666,7 +5681,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "Toilet replacement")
+        .find(|k| k["name"] == "Replace toilet")
         .unwrap()["id"]
         .as_str()
         .unwrap()
@@ -5686,7 +5701,7 @@ async fn service_desk(c: &Ctx) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|k| k["name"] == "HVAC seasonal service")
+        .find(|k| k["name"] == "Service HVAC (seasonal)")
         .unwrap()["id"]
         .as_str()
         .unwrap()
@@ -5811,7 +5826,7 @@ async fn service_desk(c: &Ctx) {
         .map(|k| k["name"].as_str().unwrap())
         .collect();
     assert!(names.contains(&"Shower remodel"));
-    assert!(!names.contains(&"Shower replacement"), "{names:?}");
+    assert!(!names.contains(&"Replace shower"), "{names:?}");
 
     // Their own kit, priced at their rates, then retired.
     let (st, mine) = post_json(
@@ -6353,4 +6368,246 @@ async fn listing_syndication(c: &Ctx) {
         .exec(&c.db)
         .await
         .unwrap();
+}
+
+/// The resident reports a problem with a video and a comment; staff see it
+/// marked as theirs, put an action kit on it, link a part to a store, and
+/// work it with the buttons. The resident follows along: the public lines,
+/// their own files, never staff receipts or internal steps.
+async fn maintenance_actions_and_resident(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded resident");
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+
+    // The resident reports it, with a video.
+    let (st, t) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Dishwasher leaking", "category": "appliance", "location": "Kitchen" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, v) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "leak.mp4", "mime_type": "video/mp4", "size_bytes": 40_000_000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "a 40 MB video is fine: {v}");
+    let vid = v["document"]["id"].as_str().unwrap().to_string();
+    // The bytes land (a small stand-in for the video).
+    let put = |url: &str| {
+        let path = url
+            .split_once("/storage/")
+            .map(|(_, p)| format!("/storage/{p}"))
+            .unwrap();
+        async move {
+            c.client
+                .put(path)
+                .body(vec![0u8; 64])
+                .dispatch()
+                .await
+                .status()
+        }
+    };
+    assert_eq!(put(v["upload_url"].as_str().unwrap()).await, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "lease.pdf", "mime_type": "application/pdf", "size_bytes": 1000 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "photos and videos only");
+    let (st, _) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/photos"),
+        &res,
+        serde_json::json!({ "filename": "long.mp4", "mime_type": "video/mp4", "size_bytes": 150_000_000 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "too large");
+    let (st, cmt) = post_json(
+        c,
+        &format!("/my/tickets/{tid}/comments"),
+        &res,
+        serde_json::json!({ "body": "It pools under the door", "document_ids": [vid] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{cmt}");
+
+    // Staff see it as the resident's, with the video.
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let theirs = detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["action"] == "resident_comment")
+        .expect("the resident's comment")
+        .clone();
+    assert_eq!(theirs["document_ids"][0], vid.as_str());
+    let (_, files) = get_json(c, &format!("/tickets/{tid}/files"), &staff).await;
+    assert!(
+        files
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["kind"] == "video"),
+        "{files}"
+    );
+
+    // An action kit goes on, and a part gets a store link.
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let kit = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Replace dishwasher")
+        .expect("an action kit")
+        .clone();
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/kits"),
+        &staff,
+        serde_json::json!({ "issue_template_id": kit["id"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let part = detail["parts"][0]["id"].as_str().unwrap().to_string();
+    let (st, p) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{part}"),
+        &staff,
+        serde_json::json!({ "url": "https://www.homedepot.com/p/Whirlpool-24-in-Dishwasher/123" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["store"], "Home Depot");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{part}"),
+        &staff,
+        serde_json::json!({ "url": "javascript:alert(1)" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    // A staff receipt on the work order.
+    let (st, r) = post_json(
+        c,
+        &format!("/tickets/{tid}/uploads"),
+        &staff,
+        serde_json::json!({ "filename": "receipt.jpg", "mime_type": "image/jpeg", "size_bytes": 2000, "kind": "receipt" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(put(r["upload_url"].as_str().unwrap()).await, Status::Ok);
+
+    // The buttons.
+    let (_, actions) = get_json(c, "/ticket-actions", &staff).await;
+    assert!(actions
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["key"] == "work_done"));
+    let press = |action: &'static str, note: Option<&'static str>| {
+        let staff = staff.clone();
+        let tid = tid.clone();
+        async move {
+            post_json(
+                c,
+                &format!("/tickets/{tid}/actions"),
+                &staff,
+                serde_json::json!({ "action": action, "note": note }),
+            )
+            .await
+        }
+    };
+    let (st, after) = press("on_my_way", None).await;
+    assert_eq!(st, Status::Ok, "{after}");
+    assert_eq!(after["status"], "open", "no status change");
+    assert_eq!(
+        press("diagnosed", None).await.0,
+        Status::BadRequest,
+        "say what you found"
+    );
+    assert_eq!(
+        press("diagnosed", Some("Door gasket torn; replacing the unit."))
+            .await
+            .0,
+        Status::Ok
+    );
+    let (_, held) = press("waiting_parts", None).await;
+    assert_eq!(held["status"], "on_hold", "{held}");
+    assert_eq!(held["waiting_on"], "parts");
+    let (_, back) = press("parts_in", None).await;
+    assert_eq!(back["status"], "in_progress");
+    assert!(back["waiting_on"].is_null());
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let first = tasks[0]["id"].as_str().unwrap();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{first}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, done) = press("work_done", None).await;
+    assert_eq!(done["status"], "resolved");
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    let bodies: Vec<&str> = detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["kind"] == "action")
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert!(bodies.contains(&"On my way."), "{bodies:?}");
+    assert!(bodies.iter().any(|b| b.starts_with("Done: ")), "{bodies:?}");
+
+    // What the resident sees.
+    let (st, mine) = get_json(c, &format!("/my/tickets/{tid}"), &res).await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    let lines: Vec<&str> = mine["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["body"].as_str().unwrap())
+        .collect();
+    assert!(lines.contains(&"On my way."), "{lines:?}");
+    assert!(lines.contains(&"Diagnosed: Door gasket torn; replacing the unit."));
+    assert!(lines.contains(&"Work complete."));
+    assert!(
+        !lines.iter().any(|l| l.starts_with("Done: ")),
+        "internal steps stay internal"
+    );
+    let names: Vec<&str> = mine["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["filename"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["leak.mp4"], "their video, not staff receipts");
+    assert_eq!(mine["files"][0]["kind"], "video");
 }

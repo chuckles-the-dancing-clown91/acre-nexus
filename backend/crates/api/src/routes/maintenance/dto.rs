@@ -130,6 +130,9 @@ pub struct TicketCommentDto {
     pub body: String,
     /// Photos and files attached to the note.
     pub document_ids: Vec<Uuid>,
+    /// What recorded it: a button (`on_my_way`, `task_done`, …), or
+    /// `resident_comment` when the resident wrote it in the portal.
+    pub action: Option<String>,
     pub created_at: String,
 }
 
@@ -145,6 +148,7 @@ impl From<entity::ticket_comment::Model> for TicketCommentDto {
             author_name: c.author_name,
             body: c.body,
             document_ids: serde_json::from_value(c.document_ids).unwrap_or_default(),
+            action: c.action,
             created_at: c.created_at.to_rfc3339(),
         }
     }
@@ -308,7 +312,7 @@ pub struct CreateTicketReq {
     pub coi_override_reason: Option<String>,
 }
 
-#[derive(Deserialize, schemars::JsonSchema)]
+#[derive(Deserialize, Default, schemars::JsonSchema)]
 pub struct UpdateTicketReq {
     pub title: Option<String>,
     pub description: Option<String>,

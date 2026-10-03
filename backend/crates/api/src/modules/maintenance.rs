@@ -80,6 +80,8 @@ impl PlatformModule for MaintenanceModule {
             maintenance::desk::list_tasks,
             maintenance::desk::add_task,
             maintenance::desk::update_task,
+            maintenance::desk::list_actions,
+            maintenance::desk::press_action,
             maintenance::desk::remove_task,
             maintenance::desk::dispatch_task,
             maintenance::desk::apply_kit,

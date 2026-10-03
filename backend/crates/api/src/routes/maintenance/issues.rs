@@ -20,8 +20,7 @@ use entity::prelude::{Asset, IssueTemplate, Property, Unit};
 use rocket::serde::json::Json;
 use rocket::{delete, get, post, put, State};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -37,196 +36,6 @@ const CATEGORIES: &[&str] = &[
 ];
 const PRIORITIES: &[&str] = &["low", "normal", "high", "urgent"];
 
-/// `(name, area, category, priority, minutes, checklist, parts)`.
-type Starter = (
-    &'static str,
-    &'static str,
-    &'static str,
-    &'static str,
-    i32,
-    &'static [&'static str],
-    &'static [(&'static str, i32)],
-);
-
-const STARTERS: &[Starter] = &[
-    (
-        "Leaking faucet",
-        "Kitchen / bath",
-        "plumbing",
-        "normal",
-        45,
-        &[
-            "Shut off the supply",
-            "Replace cartridge or washers",
-            "Check for drips under load",
-            "Wipe down",
-        ],
-        &[("Faucet cartridge", 1), ("Supply line", 2)],
-    ),
-    (
-        "Running toilet",
-        "Bathroom",
-        "plumbing",
-        "normal",
-        30,
-        &[
-            "Check flapper and fill valve",
-            "Replace the worn part",
-            "Flush-test three times",
-        ],
-        &[("Toilet flapper", 1), ("Toilet fill valve", 1)],
-    ),
-    (
-        "Clogged drain",
-        "Kitchen / bath",
-        "plumbing",
-        "normal",
-        40,
-        &[
-            "Clear with snake",
-            "Flush with hot water",
-            "Check trap for damage",
-        ],
-        &[("P-trap", 1)],
-    ),
-    (
-        "No hot water",
-        "Utility",
-        "plumbing",
-        "high",
-        90,
-        &[
-            "Check pilot or breaker",
-            "Test thermostat and element",
-            "Flush the tank if sediment",
-        ],
-        &[("Water heater element", 1), ("Water heater thermostat", 1)],
-    ),
-    (
-        "Outlet not working",
-        "Any room",
-        "electrical",
-        "normal",
-        30,
-        &[
-            "Check the GFCI and breaker",
-            "Test with a meter",
-            "Replace the outlet if dead",
-        ],
-        &[("Outlet receptacle", 1), ("Cover plate", 1)],
-    ),
-    (
-        "Light fixture out",
-        "Any room",
-        "electrical",
-        "low",
-        20,
-        &[
-            "Replace the bulb",
-            "Test the switch",
-            "Replace the fixture if needed",
-        ],
-        &[("LED bulb", 2)],
-    ),
-    (
-        "Smoke or CO detector chirping",
-        "Hallway / bedroom",
-        "electrical",
-        "high",
-        15,
-        &[
-            "Replace the battery",
-            "Test the alarm",
-            "Replace the unit if past ten years",
-        ],
-        &[("9V battery", 2), ("Smoke detector", 1)],
-    ),
-    (
-        "AC not cooling",
-        "HVAC",
-        "hvac",
-        "high",
-        90,
-        &[
-            "Check the filter",
-            "Check the thermostat and breaker",
-            "Inspect the condensate line",
-            "Check refrigerant if the coil is cold",
-        ],
-        &[("HVAC filter", 1), ("Capacitor", 1)],
-    ),
-    (
-        "No heat",
-        "HVAC",
-        "hvac",
-        "urgent",
-        90,
-        &[
-            "Check the thermostat and power",
-            "Check the pilot or igniter",
-            "Replace the filter",
-        ],
-        &[("HVAC filter", 1), ("Igniter", 1)],
-    ),
-    (
-        "Dishwasher not draining",
-        "Kitchen",
-        "appliance",
-        "normal",
-        45,
-        &["Clean the filter", "Check the drain hose", "Test the pump"],
-        &[("Dishwasher drain pump", 1)],
-    ),
-    (
-        "Refrigerator not cold",
-        "Kitchen",
-        "appliance",
-        "high",
-        60,
-        &[
-            "Check the temperature settings",
-            "Clean the coils",
-            "Test the fan and thermostat",
-        ],
-        &[("Refrigerator thermostat", 1)],
-    ),
-    (
-        "Door will not lock",
-        "Entry",
-        "general",
-        "high",
-        30,
-        &[
-            "Check the strike plate and alignment",
-            "Replace the latch or cylinder",
-            "Test with all keys",
-        ],
-        &[("Door lockset", 1)],
-    ),
-    (
-        "Drywall hole or damage",
-        "Any room",
-        "structural",
-        "low",
-        60,
-        &["Cut and patch", "Tape, mud and sand", "Prime and paint"],
-        &[("Drywall patch", 1), ("Joint compound", 1), ("Primer", 1)],
-    ),
-    (
-        "Pest sighting",
-        "Any room",
-        "general",
-        "normal",
-        30,
-        &[
-            "Identify the pest",
-            "Treat and seal entry points",
-            "Schedule a follow-up",
-        ],
-        &[("Pest bait stations", 2)],
-    ),
-];
-
 // ---------------------------------------------------------------------------
 // Shapes
 // ---------------------------------------------------------------------------
@@ -239,6 +48,9 @@ pub struct IssuePart {
     /// Typical cost each, for estimates (stock items use their own cost).
     #[serde(default)]
     pub unit_cost_cents: Option<i64>,
+    /// Where it's bought: a product page at Home Depot, Amazon, Lowe's…
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -345,6 +157,12 @@ fn check(b: &IssueReq) -> Result<(String, String), ApiError> {
     if b.name.trim().is_empty() {
         return Err(ApiError::BadRequest("name is required".into()));
     }
+    for p in b.parts.iter().flatten() {
+        if let Some(u) = p.url.as_deref() {
+            crate::servicedesk::clean_url(u)
+                .map_err(|e| ApiError::BadRequest(format!("{}: {e}", p.name.trim())))?;
+        }
+    }
     let category = b.category.clone().unwrap_or_else(|| "general".into());
     if !CATEGORIES.contains(&category.as_str()) {
         return Err(ApiError::BadRequest(format!(
@@ -369,58 +187,21 @@ fn parts_json(parts: Option<Vec<IssuePart>>) -> serde_json::Value {
             quantity: p.quantity.max(1),
             inventory_item_id: p.inventory_item_id,
             unit_cost_cents: p.unit_cost_cents.filter(|c| *c >= 0),
+            url: p
+                .url
+                .as_deref()
+                .and_then(|u| crate::servicedesk::clean_url(u).ok().flatten()),
         })
         .collect();
     json!(p)
-}
-
-async fn ensure_starters(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiResult<()> {
-    let have = IssueTemplate::find()
-        .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
-        .count(db)
-        .await?;
-    if have > 0 {
-        return Ok(());
-    }
-    let now = Utc::now();
-    for (name, area, category, priority, minutes, checklist, parts) in STARTERS {
-        let parts: Vec<IssuePart> = parts
-            .iter()
-            .map(|(n, q)| IssuePart {
-                name: n.to_string(),
-                quantity: *q,
-                inventory_item_id: None,
-                unit_cost_cents: None,
-            })
-            .collect();
-        entity::issue_template::ActiveModel {
-            tasks: Set(serde_json::json!([])),
-            id: Set(Uuid::new_v4()),
-            tenant_id: Set(tenant_id),
-            name: Set(name.to_string()),
-            area: Set(Some(area.to_string())),
-            category: Set(category.to_string()),
-            priority: Set(priority.to_string()),
-            description: Set(None),
-            est_minutes: Set(Some(*minutes)),
-            checklist: Set(json!(checklist)),
-            parts: Set(json!(parts)),
-            active: Set(true),
-            seeded: Set(true),
-            created_at: Set(now.into()),
-            updated_at: Set(now.into()),
-        }
-        .insert(db)
-        .await?;
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
-/// `GET /issue-templates` — the catalog (the starter set appears on first use).
+/// `GET /issue-templates` — the catalog (catalog kits a workspace hasn't had
+/// yet appear on first use).
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[get("/issue-templates")]
 pub async fn list_issues(
@@ -430,7 +211,6 @@ pub async fn list_issues(
     scope: TenantScope,
 ) -> ApiResult<Json<Vec<IssueDto>>> {
     user.require(Permission::MaintenanceRead)?;
-    ensure_starters(&db, scope.tenant_id).await?;
     crate::servicedesk::ensure_kits(&db, scope.tenant_id).await?;
     let rates = rates(&db, scope.tenant_id).await;
     let rows = IssueTemplate::find()
@@ -462,6 +242,7 @@ pub async fn create_issue(
     let (category, priority) = check(&b)?;
     let now = Utc::now();
     let saved = entity::issue_template::ActiveModel {
+        kit_key: Set(None),
         tasks: Set(json!(clean_tasks(b.tasks.clone().unwrap_or_default()))),
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),

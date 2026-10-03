@@ -44,6 +44,7 @@ mod google_places;
 mod guards;
 mod helpdesk;
 mod imports;
+mod kit_catalog;
 mod leasedoc;
 mod listing_sync;
 mod mail;
@@ -181,10 +182,10 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
     // its routes and a matching spec fragment.
     let mut spec = OpenApi::new();
     // Raise the default body limits: document uploads (`Vec<u8>` blobs, 25 MiB
-    // to match `routes::documents::MAX_SIZE_BYTES`) and raw webhook payloads
+    // to match `routes::documents::MAX_VIDEO_BYTES`, the largest a video may be) and raw webhook payloads
     // (`String`, 1 MiB) both exceed Rocket's 8 KiB defaults.
     let figment = rocket::Config::figment()
-        .merge(("limits.bytes", "25MiB"))
+        .merge(("limits.bytes", "100MiB"))
         .merge(("limits.string", "1MiB"));
     let mut app = rocket::custom(figment)
         .manage(state)

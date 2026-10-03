@@ -202,6 +202,7 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     // work order from a kit and a routine on a property (the handlers check
     // the property is in reach), and the schedule (narrowed by reach).
     (Method::Get, "/issue-templates"),
+    (Method::Get, "/ticket-actions"),
     (Method::Post, "/issue-templates/<id>/generate"),
     (Method::Get, "/maintenance-plans"),
     (Method::Post, "/maintenance-plans"),
@@ -440,6 +441,12 @@ mod tests {
         assert_eq!(verdict(Method::Get, "/finance/series"), "forbidden");
         assert_eq!(verdict(Method::Get, "/members"), "forbidden");
         assert_eq!(verdict(Method::Get, "/issue-templates"), "allow");
+        assert_eq!(verdict(Method::Get, "/ticket-actions"), "allow");
+        assert_eq!(
+            verdict(Method::Post, "/tickets/<id>/actions"),
+            "ticket",
+            "a button on a work order is checked against its property"
+        );
         assert_eq!(
             verdict(Method::Post, "/issue-templates"),
             "forbidden",
