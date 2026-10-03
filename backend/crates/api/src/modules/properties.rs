@@ -83,6 +83,24 @@ impl PlatformModule for PropertiesModule {
             assignments::llc::list,
             assignments::llc::create,
             assignments::llc::delete,
+            // the full profile: permits, insurance, schools, action items
+            crate::routes::property_records::permits::list_permits,
+            crate::routes::property_records::permits::create_permit,
+            crate::routes::property_records::permits::update_permit,
+            crate::routes::property_records::permits::delete_permit,
+            crate::routes::property_records::insurance::list_policies,
+            crate::routes::property_records::insurance::create_policy,
+            crate::routes::property_records::insurance::update_policy,
+            crate::routes::property_records::insurance::delete_policy,
+            crate::routes::property_records::schools::list_schools,
+            crate::routes::property_records::schools::create_school,
+            crate::routes::property_records::schools::update_school,
+            crate::routes::property_records::schools::delete_school,
+            crate::routes::property_records::action_items::list_action_items,
+            crate::routes::property_records::action_items::create_action_item,
+            crate::routes::property_records::action_items::update_action_item,
+            crate::routes::property_records::action_items::delete_action_item,
+            crate::routes::property_records::attention::attention,
         ]
     }
 }

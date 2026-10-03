@@ -57,6 +57,7 @@ pub mod portfolios;
 pub mod process;
 pub mod properties;
 pub mod property_intel;
+pub mod property_records;
 pub mod public;
 pub mod rehab;
 pub mod reminders;

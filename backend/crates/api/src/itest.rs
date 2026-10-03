@@ -126,6 +126,7 @@ async fn integration_suite() {
     imports_and_exports(&c).await;
     listing_syndication(&c).await;
     maintenance_actions_and_resident(&c).await;
+    property_profile_records(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -6610,4 +6611,263 @@ async fn maintenance_actions_and_resident(c: &Ctx) {
         .collect();
     assert_eq!(names, vec!["leak.mp4"], "their video, not staff receipts");
     assert_eq!(mine["files"][0]["kind"], "video");
+}
+
+/// The full property profile: permits, insurance, schools with their zone,
+/// and action items fed by the "needs attention" rules.
+async fn property_profile_records(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let other = property_ids(c, nw).await[1];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let today = chrono::Utc::now().date_naive();
+    let day = |n: i64| (today + chrono::Duration::days(n)).to_string();
+    let base = format!("/properties/{pid}");
+
+    // A permit about to lapse, with an inspection next week.
+    let (st, p) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({
+            "description": "Rebuild rear deck", "kind": "building", "status": "issued",
+            "permit_number": "B-2026-0412", "jurisdiction": "City of Portland",
+            "expires_on": day(20), "inspection_on": day(5), "fee_cents": 41000
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert_eq!(p["open"], true);
+    assert_eq!(p["fee_label"], "$410");
+    let permit = p["id"].as_str().unwrap().to_string();
+    let (st, e) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "expires_on": "next week" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "kind": "spaceship" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &staff,
+        serde_json::json!({ "description": "x", "document_ids": [Uuid::new_v4()] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "files must be this property's");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/permits"),
+        &reader,
+        serde_json::json!({ "description": "x" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden, "reading isn't writing");
+    // A permit on one property isn't reachable through another.
+    let (st, _) = send_json(
+        c,
+        Method::Delete,
+        &format!("/properties/{other}/permits/{permit}"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // Insurance renewing next month; a school the team says the home is zoned for.
+    let (st, pol) = post_json(
+        c,
+        &format!("{base}/insurance"),
+        &staff,
+        serde_json::json!({
+            "carrier": "Cascade Mutual", "kind": "property", "policy_number": "HO-88213",
+            "effective_on": day(-335), "expires_on": day(30),
+            "premium_cents": 184000, "coverage_cents": 65000000, "agent_name": "Dana Ruiz"
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{pol}");
+    assert_eq!(pol["coverage_label"], "$650,000");
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/insurance"),
+        &staff,
+        serde_json::json!({ "carrier": "X", "effective_on": day(10), "expires_on": day(1) }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "renewal before start");
+    let (st, sch) = post_json(
+        c,
+        &format!("{base}/schools"),
+        &staff,
+        serde_json::json!({
+            "name": "Sunnyside Elementary", "level": "elementary", "district": "Portland SD 1J",
+            "assigned": true, "rating": 8, "website": "https://sunnyside.pps.net"
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sch}");
+    assert_eq!(sch["source"], "manual");
+    let school = sch["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/schools"),
+        &staff,
+        serde_json::json!({ "name": "X", "level": "elementary", "rating": 11 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // What needs attention.
+    let (st, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    assert_eq!(st, Status::Ok, "{att}");
+    let keys: Vec<String> = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["key"].as_str().unwrap().to_string())
+        .collect();
+    let has = |k: &str| keys.iter().any(|x| x.starts_with(k));
+    assert!(has(&format!("permit-expiring:{permit}")), "{keys:?}");
+    assert!(has(&format!("permit-inspection:{permit}")), "{keys:?}");
+    assert!(has("policy-renew:"), "{keys:?}");
+    assert!(has(&format!("school-zone:{school}")), "{keys:?}");
+    assert!(!has("policy-none"), "a property policy is on file");
+
+    // Turn one into an action item; it stops being suggested, and twice is refused.
+    let renew = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["key"].as_str().unwrap().starts_with("policy-renew:"))
+        .unwrap()
+        .clone();
+    let (st, item) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({
+            "title": renew["title"], "subject_type": "insurance", "subject_id": renew["subject_id"],
+            "due_on": renew["due_on"], "priority": renew["priority"], "suggestion_key": renew["key"]
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{item}");
+    assert_eq!(item["status"], "open");
+    let item_id = item["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({ "title": "again", "suggestion_key": renew["key"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (_, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    assert!(!att
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["key"] == renew["key"]));
+
+    // A to-do of the team's own, overdue.
+    let (st, mine) = post_json(
+        c,
+        &format!("{base}/action-items"),
+        &staff,
+        serde_json::json!({ "title": "Walk the roof after the storm", "due_on": day(-2), "priority": "high" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(mine["overdue"], true);
+    let (_, open) = get_json(c, &format!("{base}/action-items"), &reader).await;
+    assert_eq!(
+        open[0]["title"], "Walk the roof after the storm",
+        "high first"
+    );
+
+    // Tick the renewal off.
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("{base}/action-items/{item_id}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert!(done["completed_at"].is_string());
+    let (_, open) = get_json(c, &format!("{base}/action-items"), &reader).await;
+    assert!(!open
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["id"] == item_id.as_str()));
+    let (_, fin) = get_json(c, &format!("{base}/action-items?status=done"), &reader).await;
+    assert!(fin
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["id"] == item_id.as_str()));
+
+    // Confirming the school zone clears that suggestion; finaling the permit
+    // clears both permit suggestions.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/schools/{school}"),
+        &staff,
+        serde_json::json!({
+            "name": "Sunnyside Elementary", "level": "elementary", "assigned": true,
+            "district": "Portland SD 1J", "zone_verified_on": day(0)
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, fp) = send_json(
+        c,
+        Method::Put,
+        &format!("{base}/permits/{permit}"),
+        &staff,
+        serde_json::json!({ "description": "Rebuild rear deck", "status": "finaled", "permit_number": "B-2026-0412" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{fp}");
+    assert_eq!(fp["open"], false);
+    assert_eq!(
+        fp["finaled_on"],
+        day(0).as_str(),
+        "finaled today by default"
+    );
+    let (_, att) = get_json(c, &format!("{base}/attention"), &reader).await;
+    let keys: Vec<&str> = att
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["key"].as_str().unwrap())
+        .collect();
+    assert!(!keys.iter().any(|k| k.starts_with("permit-")), "{keys:?}");
+    assert!(
+        !keys.contains(&format!("school-zone:{school}").as_str()),
+        "{keys:?}"
+    );
+
+    // The schools list puts the zoned school first among its level.
+    let (_, list) = get_json(c, &format!("{base}/schools"), &reader).await;
+    assert!(list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["name"] == "Sunnyside Elementary" && s["assigned"] == true));
 }

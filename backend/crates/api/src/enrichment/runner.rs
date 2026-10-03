@@ -270,18 +270,32 @@ async fn run_valuation<C: ConnectionTrait>(
     })))
 }
 
+/// `property_school.source` for a school the team added or edited.
+pub const MANUAL_SCHOOL: &str = "manual";
+
 async fn run_schools<C: ConnectionTrait>(
     db: &C,
     property: &entity::property::Model,
 ) -> Result<SourceOutcome, EnrichmentError> {
     let mut rng = simulated::rng_for(property.id, &property.address);
     let schools = simulated::schools(&mut rng);
+    // A school the team added or edited is theirs: a refresh replaces only
+    // what the data source put there, and skips a level the team has covered.
     PropertySchool::delete_many()
         .filter(entity::property_school::Column::PropertyId.eq(property.id))
+        .filter(entity::property_school::Column::Source.ne(MANUAL_SCHOOL))
         .exec(db)
         .await
         .map_err(db_err)?;
-    for s in &schools {
+    let kept: Vec<String> = PropertySchool::find()
+        .filter(entity::property_school::Column::PropertyId.eq(property.id))
+        .all(db)
+        .await
+        .map_err(db_err)?
+        .into_iter()
+        .map(|s| s.level)
+        .collect();
+    for s in schools.iter().filter(|s| !kept.contains(&s.level)) {
         entity::property_school::ActiveModel {
             id: Set(Uuid::new_v4()),
             tenant_id: Set(property.tenant_id),
@@ -294,6 +308,17 @@ async fn run_schools<C: ConnectionTrait>(
             grades: Set(Some(s.grades.clone())),
             source: Set(Source::Schools.provider().to_string()),
             created_at: Set(Utc::now().into()),
+            // The source gives the zoned school for each level; the team
+            // confirms the zone with the district.
+            assigned: Set(true),
+            zone_name: Set(Some(format!("{} attendance zone", s.name))),
+            zone_verified_on: Set(None),
+            address: Set(None),
+            phone: Set(None),
+            website: Set(None),
+            enrollment: Set(None),
+            notes: Set(None),
+            updated_at: Set(None),
         }
         .insert(db)
         .await

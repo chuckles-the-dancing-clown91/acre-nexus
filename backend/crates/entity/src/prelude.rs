@@ -1,5 +1,6 @@
 //! Convenient re-exports of every entity type.
 
+pub use super::action_item::Entity as ActionItem;
 pub use super::api_token::Entity as ApiToken;
 pub use super::application::Entity as Application;
 pub use super::application_event::Entity as ApplicationEvent;
@@ -44,6 +45,7 @@ pub use super::import_batch::Entity as ImportBatch;
 pub use super::inbound_email::Entity as InboundEmail;
 pub use super::inspection::Entity as Inspection;
 pub use super::inspection_item::Entity as InspectionItem;
+pub use super::insurance_policy::Entity as InsurancePolicy;
 pub use super::inventory_item::Entity as InventoryItem;
 pub use super::inventory_movement::Entity as InventoryMovement;
 pub use super::investor_commitment::Entity as InvestorCommitment;
@@ -89,6 +91,7 @@ pub use super::process_template_step::Entity as ProcessTemplateStep;
 pub use super::profile_type::Entity as ProfileType;
 pub use super::property::Entity as Property;
 pub use super::property_detail::Entity as PropertyDetail;
+pub use super::property_permit::Entity as PropertyPermit;
 pub use super::property_school::Entity as PropertySchool;
 pub use super::property_tax::Entity as PropertyTax;
 pub use super::property_utility::Entity as PropertyUtility;

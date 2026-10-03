@@ -51,6 +51,8 @@ pub const CATEGORIES: &[&str] = &[
     "photo",
     "video",
     "floorplan",
+    "blueprint",
+    "survey",
     "waiver",
     "other",
 ];
