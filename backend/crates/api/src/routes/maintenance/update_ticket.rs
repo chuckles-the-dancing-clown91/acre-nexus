@@ -171,6 +171,9 @@ pub async fn update_ticket(
     if let Some(v) = b.status {
         am.status = Set(v);
     }
+    if b.clear_assignee_user && b.assignee_user_id.is_none() {
+        am.assignee_user_id = Set(None);
+    }
     if let Some(v) = b.assignee_user_id {
         am.assignee_user_id = Set(Some(v));
     }

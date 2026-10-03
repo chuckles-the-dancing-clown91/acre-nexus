@@ -203,6 +203,8 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     // the property is in reach), and the schedule (narrowed by reach).
     (Method::Get, "/issue-templates"),
     (Method::Get, "/ticket-actions"),
+    (Method::Get, "/ticket-techs"),
+    (Method::Get, "/ticket-queue"),
     (Method::Post, "/issue-templates/<id>/generate"),
     (Method::Get, "/maintenance-plans"),
     (Method::Post, "/maintenance-plans"),

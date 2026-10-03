@@ -15,6 +15,6 @@ pub mod public;
 pub mod resolve;
 pub mod scope;
 
-pub use access::Access;
+pub use access::{Access, SCOPED_PERSONAS};
 pub use public::PublicTenant;
 pub use scope::TenantScope;

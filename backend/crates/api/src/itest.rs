@@ -127,6 +127,7 @@ async fn integration_suite() {
     listing_syndication(&c).await;
     maintenance_actions_and_resident(&c).await;
     property_profile_records(&c).await;
+    desk_queues_and_vendor_batches(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -6870,4 +6871,301 @@ async fn property_profile_records(c: &Ctx) {
         .unwrap()
         .iter()
         .any(|s| s["name"] == "Sunnyside Elementary" && s["assigned"] == true));
+}
+
+/// Assigned techs and queues: who can take work, a task given to a person,
+/// their own queue, and several tasks sent to a vendor as one job.
+async fn desk_queues_and_vendor_batches(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "property:read",
+        ],
+    );
+
+    // Who can take work on this property.
+    let (st, techs) = get_json(c, &format!("/ticket-techs?property_id={pid}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{techs}");
+    let techs = techs.as_array().unwrap().clone();
+    assert!(!techs.is_empty(), "somebody on the team can take it");
+    assert!(
+        techs.iter().all(|t| t["role"] != "renter"),
+        "residents aren't offered"
+    );
+    let load = |t: &serde_json::Value| {
+        t["open_tickets"].as_i64().unwrap() + t["open_tasks"].as_i64().unwrap()
+    };
+    let tech = techs[0].clone();
+    let tech_id = tech["user_id"].as_str().unwrap().to_string();
+    let tech_token = crate::auth::issue_access_token(
+        &c.config,
+        Uuid::parse_str(&tech_id).unwrap(),
+        Some(nw),
+        false,
+        vec!["maintenance:read".into(), "maintenance:manage".into()],
+    )
+    .unwrap();
+    let before = load(&tech);
+
+    // A work order from a kit, with its tasks.
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let kit = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Replace dishwasher")
+        .expect("the dishwasher kit")
+        .clone();
+    assert_eq!(kit["kit_key"], "replace-dishwasher");
+    let (st, g) = post_json(
+        c,
+        &format!("/issue-templates/{}/generate", kit["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{g}");
+    let tid = g["ticket"]["id"].as_str().unwrap().to_string();
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let tasks = tasks.as_array().unwrap().clone();
+    assert!(tasks.len() >= 3);
+    let (t1, t2, t3) = (
+        tasks[0]["id"].as_str().unwrap().to_string(),
+        tasks[1]["id"].as_str().unwrap().to_string(),
+        tasks[2]["id"].as_str().unwrap().to_string(),
+    );
+
+    // Give a task to a teammate; a stranger and a resident are refused.
+    let (st, out) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &staff,
+        serde_json::json!({ "assignee_user_id": tech_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{out}");
+    assert_eq!(out[0]["assignee_user_id"], tech_id.as_str());
+    assert_eq!(out[0]["assignee_user_name"], tech["name"]);
+    for who in [
+        Uuid::new_v4(),
+        entity::prelude::User::find()
+            .filter(entity::user::Column::Email.eq("taylor@example.com"))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+    ] {
+        let (st, _) = send_json(
+            c,
+            Method::Patch,
+            &format!("/tickets/{tid}/tasks/{t2}"),
+            &staff,
+            serde_json::json!({ "assignee_user_id": who.to_string() }),
+        )
+        .await;
+        assert_eq!(st, Status::BadRequest, "not on the team: {who}");
+    }
+
+    // It's in their queue, not anyone else's, and their load went up.
+    let (st, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    assert_eq!(st, Status::Ok, "{q}");
+    let mine = q["tasks"].as_array().unwrap();
+    let row = mine
+        .iter()
+        .find(|t| t["task_id"] == t1.as_str())
+        .expect("in my queue");
+    assert_eq!(row["ticket_id"], tid.as_str());
+    assert_eq!(row["property_id"], pid.to_string());
+    let (_, other) = get_json(c, "/ticket-queue", &staff).await;
+    assert!(!other["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["task_id"] == t1.as_str()));
+    let (_, techs2) = get_json(c, &format!("/ticket-techs?property_id={pid}"), &staff).await;
+    let after = techs2
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["user_id"] == tech_id.as_str())
+        .unwrap();
+    assert_eq!(load(after), before + 1);
+
+    // Starting it keeps it in the queue; finishing takes it out.
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &tech_token,
+        serde_json::json!({ "status": "doing" }),
+    )
+    .await;
+    let (_, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    let row = q["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["task_id"] == t1.as_str())
+        .unwrap();
+    assert_eq!(row["status"], "doing");
+    send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{t1}"),
+        &tech_token,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    let (_, q) = get_json(c, "/ticket-queue", &tech_token).await;
+    assert!(!q["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["task_id"] == t1.as_str()));
+
+    // The work order list shows who has it and how far along it is.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "assignee_user_id": tech_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let find = |list: &serde_json::Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"] == tid.as_str())
+            .unwrap()
+            .clone()
+    };
+    let (_, list) = get_json(c, "/tickets", &staff).await;
+    let row = find(&list);
+    assert_eq!(row["assignee_kind"], "tech");
+    assert_eq!(row["assignee_name"], tech["name"]);
+    assert_eq!(row["tasks_done"], 1);
+    assert_eq!(row["tasks_total"].as_i64().unwrap(), tasks.len() as i64);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "clear_assignee_user": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, list) = get_json(c, "/tickets", &staff).await;
+    assert!(find(&list)["assignee_name"].is_null());
+
+    // Two tasks go to one vendor as one job (one email listing both); a
+    // finished task can't be sent; a vendor with no email is refused.
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Batch Appliance Co",
+            "email": "jobs@batchappliance.example", "trades": ["appliance"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let vid = v["id"].as_str().unwrap().to_string();
+    let (st, e) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [t1], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "a finished task isn't sent: {e}");
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [t2, t3], "entity_id": vid, "note": "Gate code 4411" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    for id in [&t2, &t3] {
+        let row = sent
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"] == id.as_str())
+            .unwrap();
+        assert_eq!(row["assignee_name"], "Batch Appliance Co");
+        assert_eq!(row["dispatch_via"], "email");
+        assert_eq!(row["dispatch_note"], "Gate code 4411");
+        assert!(row["dispatched_at"].is_string());
+    }
+    let mails: Vec<_> = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["to"] == "jobs@batchappliance.example")
+        .collect();
+    assert_eq!(mails.len(), 1, "one job, one email");
+    let body = mails[0].payload["vars"]["description"].as_str().unwrap();
+    assert!(body.starts_with("Tasks:"), "{body}");
+    assert!(body.contains(tasks[1]["title"].as_str().unwrap()));
+    assert!(body.contains(tasks[2]["title"].as_str().unwrap()));
+    assert!(body.contains("Gate code 4411"));
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "task_sent"
+            && m["body"]
+                .as_str()
+                .unwrap()
+                .starts_with("Sent to Batch Appliance Co")));
+    // The vendor and the work order are on a shared list.
+    let (st, none) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "No Email Co" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{none}");
+    let (_, fresh) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let spare = fresh
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["dispatched_at"].is_null() && t["status"] == "todo");
+    if let Some(spare) = spare {
+        let (st, _) = post_json(
+            c,
+            &format!("/tickets/{tid}/dispatch-tasks"),
+            &staff,
+            serde_json::json!({ "task_ids": [spare["id"]], "entity_id": none["id"] }),
+        )
+        .await;
+        assert_eq!(st, Status::BadRequest, "no email on file");
+    }
 }

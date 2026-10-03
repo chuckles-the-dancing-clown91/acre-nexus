@@ -42,10 +42,17 @@ pub struct TaskDto {
     pub est_cost_label: Option<String>,
     pub needs_contractor: bool,
     pub assignee_entity_id: Option<Uuid>,
+    /// The vendor's name.
     pub assignee_name: Option<String>,
+    /// A person on the team doing it.
+    pub assignee_user_id: Option<Uuid>,
+    pub assignee_user_name: Option<String>,
     pub status: String,
     pub done_at: Option<String>,
     pub dispatched_at: Option<String>,
+    /// `partner` (their own board) | `email`: how it reached the vendor.
+    pub dispatch_via: Option<String>,
+    pub dispatch_note: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -66,6 +73,8 @@ pub struct TaskPatch {
     pub status: Option<String>,
     /// A vendor's id, or `""` to clear.
     pub assignee_entity_id: Option<String>,
+    /// A teammate's user id, or `""` to clear.
+    pub assignee_user_id: Option<String>,
     pub position: Option<i32>,
 }
 
@@ -265,10 +274,26 @@ async fn tasks_of(
             .map(|c| (c.id, c.name))
             .collect()
     };
+    let user_ids: Vec<Uuid> = rows.iter().filter_map(|t| t.assignee_user_id).collect();
+    let people: HashMap<Uuid, String> = if user_ids.is_empty() {
+        HashMap::new()
+    } else {
+        entity::prelude::User::find()
+            .filter(entity::user::Column::Id.is_in(user_ids))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|u| (u.id, u.name))
+            .collect()
+    };
     Ok(rows
         .into_iter()
         .map(|t| TaskDto {
             assignee_name: t.assignee_entity_id.and_then(|i| names.get(&i).cloned()),
+            assignee_user_name: t.assignee_user_id.and_then(|i| people.get(&i).cloned()),
+            assignee_user_id: t.assignee_user_id,
+            dispatch_via: t.dispatch_via.clone(),
+            dispatch_note: t.dispatch_note.clone(),
             est_cost_label: t.est_cost_cents.map(usd),
             id: t.id,
             position: t.position,
@@ -377,6 +402,9 @@ pub async fn add_task(
         done_at: Set(None),
         done_by: Set(None),
         dispatched_at: Set(None),
+        assignee_user_id: Set(None),
+        dispatch_via: Set(None),
+        dispatch_note: Set(None),
         created_by: Set(Some(user.user_id)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -466,11 +494,39 @@ pub async fn update_task(
         };
         am.assignee_entity_id = Set(vendor);
     }
+    let mut newly_assigned_user = None;
+    if let Some(raw) = b.assignee_user_id {
+        let person = match raw.trim() {
+            "" => None,
+            v => {
+                let uid = uuid(v, "person")?;
+                require_teammate(&db, scope.tenant_id, uid).await?;
+                Some(uid)
+            }
+        };
+        if person != existing.assignee_user_id {
+            newly_assigned_user = person;
+        }
+        am.assignee_user_id = Set(person);
+    }
     if let Some(p) = b.position {
         am.position = Set(p.max(0));
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;
+    if let Some(uid) = newly_assigned_user {
+        notify_task_assignee(&db, scope.tenant_id, &t, &saved, uid).await;
+        action_comment(
+            &db,
+            scope.tenant_id,
+            t.id,
+            &user,
+            "task_assigned",
+            &format!("Assigned: {}", saved.title),
+            "internal",
+        )
+        .await?;
+    }
     if saved.status != existing.status {
         let (action, verb) = match saved.status.as_str() {
             "doing" => ("task_started", "Started"),
@@ -527,10 +583,248 @@ pub async fn remove_task(
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
 }
 
+/// Someone with a live membership in this workspace, who can be given work.
+async fn require_teammate(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    user_id: Uuid,
+) -> ApiResult<()> {
+    let found = entity::prelude::Membership::find()
+        .filter(entity::membership::Column::UserId.eq(user_id))
+        .filter(entity::membership::Column::TenantId.eq(tenant_id))
+        .filter(entity::membership::Column::Status.eq("active"))
+        .filter(entity::membership::Column::ProfileType.ne("renter"))
+        .one(db)
+        .await?;
+    if found.is_none() {
+        return Err(ApiError::BadRequest(
+            "that person isn't on your team".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Tell a teammate a task is theirs, in the app and by email. Best effort.
+async fn notify_task_assignee(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    t: &entity::maintenance_ticket::Model,
+    task: &entity::ticket_task::Model,
+    user_id: Uuid,
+) {
+    let Ok(Some(member)) = entity::prelude::User::find_by_id(user_id).one(db).await else {
+        return;
+    };
+    let property = Property::find_by_id(t.property_id)
+        .one(db)
+        .await
+        .ok()
+        .flatten()
+        .map(|p| p.address)
+        .unwrap_or_default();
+    let vars = json!({
+        "title": format!("{}: {}", t.title, task.title),
+        "priority": t.priority,
+        "property": property,
+        "due_line": t.due_date.as_deref().map(|d| format!(", wanted by {d}")).unwrap_or_default(),
+    });
+    crate::notify::in_app(
+        db,
+        tenant_id,
+        &member,
+        "ticket_assigned",
+        &vars,
+        Some(("maintenance_ticket", t.id)),
+        &format!("task_assigned:{}:{user_id}", task.id),
+    )
+    .await;
+    let payload = json!({
+        "template": "ticket_assigned",
+        "to": member.email,
+        "user_id": member.id,
+        "owner_type": "maintenance_ticket",
+        "owner_id": t.id,
+        "trigger": format!("task_assigned_email:{}:{user_id}", task.id),
+        "vars": vars,
+    });
+    if let Err(e) = crate::scheduler::enqueue(db, tenant_id, "auto_email", payload, 0).await {
+        tracing::error!("failed to enqueue task assignment email: {e}");
+    }
+}
+
+/// How a note reads for a set of tasks: one line each.
+pub fn task_lines(tasks: &[entity::ticket_task::Model]) -> String {
+    match tasks {
+        [one] => format!("Task: {} ({})", one.title, one.trade),
+        many => {
+            let mut s = String::from("Tasks:");
+            for t in many {
+                s.push_str(&format!("\n- {} ({})", t.title, t.trade));
+            }
+            s
+        }
+    }
+}
+
+/// Send one or more tasks of a work order to a vendor, as one job. A vendor
+/// linked to a partner system (Alpha Power Wash and the like) gets it on their
+/// own board; any other vendor gets it by email. The insurance rule applies.
+#[allow(clippy::too_many_arguments)]
+async fn send_to_vendor(
+    db: &crate::db::RequestDb,
+    user: &AuthUser,
+    scope: &TenantScope,
+    t: &entity::maintenance_ticket::Model,
+    tasks: Vec<entity::ticket_task::Model>,
+    vendor_id: Uuid,
+    note: Option<String>,
+    coi_override_reason: Option<String>,
+) -> ApiResult<()> {
+    if tasks.is_empty() {
+        return Err(ApiError::BadRequest("pick at least one task".into()));
+    }
+    if let Some(done) = tasks
+        .iter()
+        .find(|x| matches!(x.status.as_str(), "done" | "skipped"))
+    {
+        return Err(ApiError::Conflict(format!(
+            "\"{}\" is already {}",
+            done.title, done.status
+        )));
+    }
+    let vendor = Counterparty::find_by_id(vendor_id)
+        .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
+        .one(db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("vendor not found".into()))?;
+    crate::vendor_compliance::check_dispatch(
+        db,
+        scope.tenant_id,
+        vendor.id,
+        coi_override_reason.as_deref(),
+        Some(user.user_id),
+        t.id,
+    )
+    .await?;
+    let note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    let lines = task_lines(&tasks);
+    let job_title = match tasks.as_slice() {
+        [one] => format!("{} — {}", one.title, t.title),
+        many => format!("{} tasks — {}", many.len(), t.title),
+    };
+    let how = if vendor.partner_kind.is_some() {
+        crate::partner::dispatch(
+            db,
+            scope.tenant_id,
+            crate::partner::DispatchSpec {
+                ticket_id: t.id,
+                counterparty_id: vendor.id,
+                requested_for: None,
+                service_key: None,
+                note: Some(match &note {
+                    Some(n) => format!("{lines}\n{n}"),
+                    None => lines.clone(),
+                }),
+                title: Some(job_title.clone()),
+            },
+            Some(user.user_id),
+        )
+        .await?;
+        "partner"
+    } else {
+        let Some(email) = vendor.email.as_deref().filter(|e| !e.trim().is_empty()) else {
+            return Err(ApiError::BadRequest(format!(
+                "{} has no email on file; add one, or call them",
+                vendor.name
+            )));
+        };
+        let property = Property::find_by_id(t.property_id)
+            .one(db)
+            .await?
+            .map(|p| format!("{}, {}", p.address, p.city))
+            .unwrap_or_default();
+        let mut description = lines.clone();
+        if let Some(n) = &note {
+            description.push_str(&format!("\n{n}"));
+        }
+        if let Some(d) = t.description.as_deref().filter(|d| !d.is_empty()) {
+            description.push_str(&format!("\n\n{d}"));
+        }
+        let ids: Vec<String> = tasks.iter().map(|x| x.id.to_string()).collect();
+        crate::scheduler::enqueue(
+            db,
+            scope.tenant_id,
+            "auto_email",
+            json!({
+                "template": "ticket_dispatch",
+                "to": email,
+                "owner_type": "maintenance_ticket",
+                "owner_id": t.id,
+                "trigger": format!("task_dispatch:{}:{}", ids.join(","), vendor.id),
+                "vars": {
+                    "title": job_title,
+                    "priority": t.priority,
+                    "property": property,
+                    "due_line": t.due_date.as_deref().map(|d| format!(", wanted by {d}")).unwrap_or_default(),
+                    "description": description,
+                },
+            }),
+            0,
+        )
+        .await?;
+        "email"
+    };
+    let now = Utc::now();
+    for existing in &tasks {
+        let mut am: entity::ticket_task::ActiveModel = existing.clone().into();
+        am.assignee_entity_id = Set(Some(vendor.id));
+        am.dispatched_at = Set(Some(now.into()));
+        am.dispatch_via = Set(Some(how.into()));
+        am.dispatch_note = Set(note.clone());
+        am.updated_at = Set(now.into());
+        am.update(db).await?;
+    }
+    action_comment(
+        db,
+        scope.tenant_id,
+        t.id,
+        user,
+        "task_sent",
+        &format!(
+            "Sent to {} ({}): {}",
+            vendor.name,
+            if how == "partner" {
+                "their board"
+            } else {
+                "by email"
+            },
+            tasks
+                .iter()
+                .map(|x| x.title.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        "internal",
+    )
+    .await?;
+    record(
+        db,
+        user,
+        scope,
+        act::TICKET_TASK_DISPATCH,
+        t.id,
+        json!({
+            "task_ids": tasks.iter().map(|x| x.id).collect::<Vec<_>>(),
+            "vendor_id": vendor.id,
+            "vendor": vendor.name,
+            "via": how,
+        }),
+    )
+    .await;
+    Ok(())
+}
+
 /// `POST /tickets/<id>/tasks/<task_id>/dispatch` — send this task to a vendor.
-/// A vendor linked to a partner system (Alpha Power Wash and the like) gets
-/// the job in their own board; any other vendor gets the work order by email.
-/// The insurance rule applies.
 #[rocket_okapi::openapi(tag = "Service Desk")]
 #[post("/tickets/<id>/tasks/<task_id>/dispatch", data = "<body>")]
 pub async fn dispatch_task(
@@ -545,100 +839,68 @@ pub async fn dispatch_task(
     let t = ticket(&db, scope.tenant_id, id).await?;
     let existing = task(&db, scope.tenant_id, t.id, task_id).await?;
     let b = body.into_inner();
-    let vendor = Counterparty::find_by_id(b.entity_id)
-        .filter(entity::counterparty::Column::TenantId.eq(scope.tenant_id))
-        .one(&db)
-        .await?
-        .ok_or_else(|| ApiError::NotFound("vendor not found".into()))?;
-    crate::vendor_compliance::check_dispatch(
-        &db,
-        scope.tenant_id,
-        vendor.id,
-        b.coi_override_reason.as_deref(),
-        Some(user.user_id),
-        t.id,
-    )
-    .await?;
-    let note = b
-        .note
-        .map(|n| n.trim().to_string())
-        .filter(|n| !n.is_empty());
-    let task_line = format!("Task: {} ({})", existing.title, existing.trade);
-    let how = if vendor.partner_kind.is_some() {
-        crate::partner::dispatch(
-            &db,
-            scope.tenant_id,
-            crate::partner::DispatchSpec {
-                ticket_id: t.id,
-                counterparty_id: vendor.id,
-                requested_for: None,
-                service_key: None,
-                note: Some(match &note {
-                    Some(n) => format!("{task_line}\n{n}"),
-                    None => task_line.clone(),
-                }),
-                title: Some(format!("{} — {}", existing.title, t.title)),
-            },
-            Some(user.user_id),
-        )
-        .await?;
-        "partner"
-    } else {
-        let Some(email) = vendor.email.as_deref().filter(|e| !e.trim().is_empty()) else {
-            return Err(ApiError::BadRequest(format!(
-                "{} has no email on file; add one, or call them",
-                vendor.name
-            )));
-        };
-        let property = Property::find_by_id(t.property_id)
-            .one(&db)
-            .await?
-            .map(|p| format!("{}, {}", p.address, p.city))
-            .unwrap_or_default();
-        let mut description = task_line.clone();
-        if let Some(n) = &note {
-            description.push_str(&format!("\n{n}"));
-        }
-        if let Some(d) = t.description.as_deref().filter(|d| !d.is_empty()) {
-            description.push_str(&format!("\n\n{d}"));
-        }
-        crate::scheduler::enqueue(
-            &db,
-            scope.tenant_id,
-            "auto_email",
-            json!({
-                "template": "ticket_dispatch",
-                "to": email,
-                "owner_type": "maintenance_ticket",
-                "owner_id": t.id,
-                "trigger": format!("task_dispatch:{}:{}", existing.id, vendor.id),
-                "vars": {
-                    "title": format!("{} — {}", t.title, existing.title),
-                    "priority": t.priority,
-                    "property": property,
-                    "due_line": t.due_date.as_deref().map(|d| format!(", wanted by {d}")).unwrap_or_default(),
-                    "description": description,
-                },
-            }),
-            0,
-        )
-        .await?;
-        "email"
-    };
-    let mut am: entity::ticket_task::ActiveModel = existing.clone().into();
-    am.assignee_entity_id = Set(Some(vendor.id));
-    am.dispatched_at = Set(Some(Utc::now().into()));
-    am.updated_at = Set(Utc::now().into());
-    am.update(&db).await?;
-    record(
+    send_to_vendor(
         &db,
         &user,
         &scope,
-        act::TICKET_TASK_DISPATCH,
-        t.id,
-        json!({ "task_id": existing.id, "vendor_id": vendor.id, "vendor": vendor.name, "via": how }),
+        &t,
+        vec![existing],
+        b.entity_id,
+        b.note,
+        b.coi_override_reason,
     )
-    .await;
+    .await?;
+    Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct DispatchTasksReq {
+    pub task_ids: Vec<Uuid>,
+    pub entity_id: Uuid,
+    pub note: Option<String>,
+    pub coi_override_reason: Option<String>,
+}
+
+/// `POST /tickets/<id>/dispatch-tasks` — send several tasks to one vendor as one
+/// job: a single message or board entry listing them all.
+#[rocket_okapi::openapi(tag = "Service Desk")]
+#[post("/tickets/<id>/dispatch-tasks", data = "<body>")]
+pub async fn dispatch_tasks(
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+    body: Json<DispatchTasksReq>,
+) -> ApiResult<Json<Vec<TaskDto>>> {
+    user.require(Permission::MaintenanceManage)?;
+    let t = ticket(&db, scope.tenant_id, id).await?;
+    let b = body.into_inner();
+    let mut ids = b.task_ids.clone();
+    ids.sort();
+    ids.dedup();
+    let rows = TicketTask::find()
+        .filter(entity::ticket_task::Column::TenantId.eq(scope.tenant_id))
+        .filter(entity::ticket_task::Column::TicketId.eq(t.id))
+        .filter(entity::ticket_task::Column::Id.is_in(ids.clone()))
+        .order_by_asc(entity::ticket_task::Column::Position)
+        .all(&db)
+        .await?;
+    if rows.len() != ids.len() {
+        return Err(ApiError::NotFound(
+            "one of those tasks isn't on this work order".into(),
+        ));
+    }
+    send_to_vendor(
+        &db,
+        &user,
+        &scope,
+        &t,
+        rows,
+        b.entity_id,
+        b.note,
+        b.coi_override_reason,
+    )
+    .await?;
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
 }
 
