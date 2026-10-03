@@ -94,6 +94,10 @@ ALTER TABLE property_school ADD COLUMN IF NOT EXISTS website text NULL;
 ALTER TABLE property_school ADD COLUMN IF NOT EXISTS enrollment integer NULL;
 ALTER TABLE property_school ADD COLUMN IF NOT EXISTS notes text NULL;
 ALTER TABLE property_school ADD COLUMN IF NOT EXISTS updated_at timestamptz NULL;
+-- Rows already here came from the schools source, which lists the zoned
+-- school for each level; the team confirms them.
+UPDATE property_school SET assigned = true, zone_name = name || ' attendance zone'
+ WHERE source <> 'manual' AND NOT assigned;
 "#;
 
 const RLS_PRED: &str = "NULLIF(current_setting('app.tenant_id', true), '') IS NULL \

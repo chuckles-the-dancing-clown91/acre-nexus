@@ -40,10 +40,20 @@ function NewWorkOrder() {
   const [propertyId, setPropertyId] = useState(params.get("property") ?? "");
   const [kitId, setKitId] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(params.get("note") ?? "");
   const [priority, setPriority] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // `?kit=` picks a kit by its key or id, e.g. from an appliance on a
+  // property profile ("Replace water heater").
+  const wanted = params.get("kit");
+  const [picked, setPicked] = useState(false);
+  if (!picked && wanted && kits.data) {
+    const k = kits.data.find((k) => k.kit_key === wanted || k.id === wanted);
+    setPicked(true);
+    if (k) setKitId(k.id);
+  }
 
   const kit = kits.data?.find((k) => k.id === kitId) ?? null;
   const groups = useMemo(() => {

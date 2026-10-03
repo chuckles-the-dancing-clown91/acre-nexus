@@ -56,6 +56,16 @@ fn nice(d: NaiveDate) -> String {
     d.format("%b %-d, %Y").to_string()
 }
 
+/// "Permit B-1" → "permit B-1"; "Water heater" → "water heater". Only the
+/// first letter, so numbers and names keep their case.
+fn lower_first(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_lowercase().chain(c).collect(),
+        None => String::new(),
+    }
+}
+
 fn permit_name(p: &entity::property_permit::Model) -> String {
     match &p.permit_number {
         Some(n) => format!("Permit {n}"),
@@ -124,7 +134,7 @@ pub fn suggest(f: &Facts) -> Vec<Suggestion> {
                     format!("permit-expiring:{}", p.id),
                     "permit",
                     Some(p.id),
-                    format!("Get the final inspection for {}", name.to_lowercase()),
+                    format!("Get the final inspection on {}", lower_first(&name)),
                     format!("It expires {}.", nice(exp)),
                     Some(exp),
                     "high",
@@ -224,7 +234,7 @@ pub fn suggest(f: &Facts) -> Vec<Suggestion> {
                     Some(a.id),
                     format!(
                         "Check the {} before its warranty ends",
-                        a.name.to_lowercase()
+                        lower_first(&a.name)
                     ),
                     format!(
                         "Coverage{} ends {}. Anything wrong with it is covered until then.",
@@ -247,7 +257,7 @@ pub fn suggest(f: &Facts) -> Vec<Suggestion> {
                     format!("replace:{}", a.id),
                     "asset",
                     Some(a.id),
-                    format!("Plan to replace the {}", a.name.to_lowercase()),
+                    format!("Plan to replace the {}", lower_first(&a.name)),
                     format!(
                         "Installed {}; these last about {life} years. Budget for it before it fails.",
                         installed.year()
@@ -480,6 +490,11 @@ mod tests {
         assert_eq!(k.iter().filter(|x| *x == "permit-expired").count(), 1);
         // High first.
         assert_eq!(out[0].priority, "high");
+        let expiring = out
+            .iter()
+            .find(|s| s.key.starts_with("permit-expiring"))
+            .unwrap();
+        assert_eq!(expiring.title, "Get the final inspection on permit B-1");
         // Renewal is due two weeks before the policy ends.
         let renew = out
             .iter()

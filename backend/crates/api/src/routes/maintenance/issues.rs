@@ -56,6 +56,9 @@ pub struct IssuePart {
 #[derive(Serialize, schemars::JsonSchema)]
 pub struct IssueDto {
     pub id: Uuid,
+    /// Stable key for a catalog kit (`replace-dishwasher`); none for a
+    /// workspace's own.
+    pub kit_key: Option<String>,
     pub name: String,
     pub area: Option<String>,
     pub category: String,
@@ -106,6 +109,7 @@ impl IssueDto {
             est_total_label: crate::dto::usd(est_labor_cents + est_parts_cents),
             tasks,
             id: m.id,
+            kit_key: m.kit_key,
             name: m.name,
             area: m.area,
             category: m.category,

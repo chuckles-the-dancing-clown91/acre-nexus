@@ -1,12 +1,14 @@
 "use client";
 
-// One property: its photo and headline numbers, units, open work orders, and
-// the people assigned to it. The company decides who is assigned; the people
-// assigned see the property but not the controls.
+// One property, in full: its photo and headline numbers, then tabs for what
+// needs doing (to-dos, units, open work orders, people), the parcel and the
+// money around it, the equipment, permits and plans, schools, and insurance.
+// The company decides who is assigned; the people assigned see the property
+// but not the controls.
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import {
@@ -37,6 +39,23 @@ import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Panel, PanelHeader } from "@/components/ui/panel";
+import { ActionItems } from "@/components/property/ActionItems";
+import { Insurance } from "@/components/property/Insurance";
+import { Parcel } from "@/components/property/Parcel";
+import { Permits } from "@/components/property/Permits";
+import { Plans } from "@/components/property/Plans";
+import { Schools } from "@/components/property/Schools";
+import { Systems } from "@/components/property/Systems";
+import { cn } from "@/lib/utils";
+
+const TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "parcel", label: "Parcel and money" },
+  { key: "systems", label: "Appliances and systems" },
+  { key: "permits", label: "Permits and plans" },
+  { key: "schools", label: "Schools" },
+  { key: "insurance", label: "Insurance" },
+] as const;
 
 const OPEN = new Set(["open", "triage", "scheduled", "in_progress", "on_hold"]);
 
@@ -51,8 +70,27 @@ const rise = (i: number) => ({
 });
 
 export default function PropertyPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64" />}>
+      <PropertyView />
+    </Suspense>
+  );
+}
+
+function PropertyView() {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
+  const params = useSearchParams();
+  const router = useRouter();
+  const tab = TABS.some((t) => t.key === params.get("tab"))
+    ? (params.get("tab") as (typeof TABS)[number]["key"])
+    : "overview";
+  const write = can("property:write");
+  const intel = useQuery({
+    queryKey: ["intel", id],
+    queryFn: () => api.propertyIntel(id),
+    enabled: tab === "insurance",
+  });
   const property = useQuery({
     queryKey: queryKeys.property(id),
     queryFn: () => api.property(id),
@@ -203,120 +241,170 @@ export default function PropertyPage() {
         </motion.div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <nav
+        className="-mx-1 flex gap-1 overflow-x-auto border-b border-line px-1"
+        aria-label="Property sections"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            aria-current={tab === t.key ? "page" : undefined}
+            onClick={() =>
+              router.replace(t.key === "overview" ? `?` : `?tab=${t.key}`, {
+                scroll: false,
+              })
+            }
+            className={cn(
+              "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-[13px] font-medium whitespace-nowrap transition",
+              tab === t.key
+                ? "border-accent text-fg"
+                : "border-transparent text-fg-3 hover:text-fg"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "parcel" && <Parcel propertyId={id} />}
+      {tab === "systems" && (
+        <Systems propertyId={id} canOrder={can("maintenance:manage")} />
+      )}
+      {tab === "permits" && (
         <div className="space-y-4">
-          {can("lease:read") && (
-            <Panel>
-              <PanelHeader
-                title="Units"
-                description={
-                  units.data ? `${units.data.length} on record` : undefined
-                }
-              />
-              <div className="p-2 pt-3">
-                {units.data?.length === 0 && (
-                  <EmptyState
-                    icon={<DoorOpen />}
-                    title="No units on record"
-                    className="py-8"
-                  />
-                )}
-                {units.data && units.data.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[13px]">
-                      <thead>
-                        <tr className="text-left text-[11px] tracking-wide text-fg-3 uppercase">
-                          <th className="px-3 py-2 font-medium">Unit</th>
-                          <th className="px-3 py-2 font-medium">Layout</th>
-                          <th className="px-3 py-2 text-right font-medium">
-                            Market rent
-                          </th>
-                          <th className="px-3 py-2 text-right font-medium">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {units.data.map((u) => (
-                          <tr
-                            key={u.id}
-                            className="border-t border-line text-fg-2"
-                          >
-                            <td className="px-3 py-2.5 font-medium text-fg">
-                              {u.unit_number}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              {[
-                                u.beds != null && `${u.beds} bd`,
-                                u.baths != null && `${u.baths} ba`,
-                                u.sqft != null && `${u.sqft} sqft`,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ") || "—"}
-                            </td>
-                            <td className="figure px-3 py-2.5 text-right">
-                              {u.market_rent_label ?? "—"}
-                            </td>
-                            <td className="px-3 py-2.5 text-right">
-                              <Badge tone={statusTone(u.status)}>
-                                {u.status}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {units.isLoading && <Skeleton className="m-3 h-24" />}
-              </div>
-            </Panel>
-          )}
-
-          {can("maintenance:read") && (
-            <Panel>
-              <PanelHeader title="Open work orders" />
-              <div className="p-2 pt-3">
-                {tickets.data && open.length === 0 && (
-                  <EmptyState
-                    icon={<Wrench />}
-                    title="Nothing open"
-                    description="Every work order here is closed."
-                    className="py-8"
-                  />
-                )}
-                <ul className="divide-y divide-line">
-                  {open.map((t) => (
-                    <li
-                      key={t.id}
-                      className="flex items-center gap-3 px-3 py-2.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-fg">
-                          {t.title}
-                        </div>
-                        <div className="text-xs text-fg-3">
-                          {t.category}
-                          {t.location ? ` · ${t.location}` : ""}
-                        </div>
-                      </div>
-                      <Badge tone={t.priority === "urgent" ? "bad" : "neutral"}>
-                        {t.priority}
-                      </Badge>
-                      <Badge tone={statusTone(t.status)}>
-                        {t.status.replace("_", " ")}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-                {tickets.isLoading && <Skeleton className="m-3 h-16" />}
-              </div>
-            </Panel>
-          )}
+          <Permits propertyId={id} manage={write} />
+          <Plans propertyId={id} manage={write} />
         </div>
+      )}
+      {tab === "schools" && <Schools propertyId={id} manage={write} />}
+      {tab === "insurance" && (
+        <Insurance
+          propertyId={id}
+          manage={write}
+          floodZone={intel.data?.detail?.flood_zone}
+        />
+      )}
 
-        <People propertyId={id} />
-      </div>
+      {tab === "overview" && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <ActionItems propertyId={id} manage={write} />
+            {can("lease:read") && (
+              <Panel>
+                <PanelHeader
+                  title="Units"
+                  description={
+                    units.data ? `${units.data.length} on record` : undefined
+                  }
+                />
+                <div className="p-2 pt-3">
+                  {units.data?.length === 0 && (
+                    <EmptyState
+                      icon={<DoorOpen />}
+                      title="No units on record"
+                      className="py-8"
+                    />
+                  )}
+                  {units.data && units.data.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[13px]">
+                        <thead>
+                          <tr className="text-left text-[11px] tracking-wide text-fg-3 uppercase">
+                            <th className="px-3 py-2 font-medium">Unit</th>
+                            <th className="px-3 py-2 font-medium">Layout</th>
+                            <th className="px-3 py-2 text-right font-medium">
+                              Market rent
+                            </th>
+                            <th className="px-3 py-2 text-right font-medium">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {units.data.map((u) => (
+                            <tr
+                              key={u.id}
+                              className="border-t border-line text-fg-2"
+                            >
+                              <td className="px-3 py-2.5 font-medium text-fg">
+                                {u.unit_number}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {[
+                                  u.beds != null && `${u.beds} bd`,
+                                  u.baths != null && `${u.baths} ba`,
+                                  u.sqft != null && `${u.sqft} sqft`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ") || "—"}
+                              </td>
+                              <td className="figure px-3 py-2.5 text-right">
+                                {u.market_rent_label ?? "—"}
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <Badge tone={statusTone(u.status)}>
+                                  {u.status}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {units.isLoading && <Skeleton className="m-3 h-24" />}
+                </div>
+              </Panel>
+            )}
+
+            {can("maintenance:read") && (
+              <Panel>
+                <PanelHeader title="Open work orders" />
+                <div className="p-2 pt-3">
+                  {tickets.data && open.length === 0 && (
+                    <EmptyState
+                      icon={<Wrench />}
+                      title="Nothing open"
+                      description="Every work order here is closed."
+                      className="py-8"
+                    />
+                  )}
+                  <ul className="divide-y divide-line">
+                    {open.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-center gap-3 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-fg">
+                            {t.title}
+                          </div>
+                          <div className="text-xs text-fg-3">
+                            {t.category}
+                            {t.location ? ` · ${t.location}` : ""}
+                          </div>
+                        </div>
+                        <Badge
+                          tone={t.priority === "urgent" ? "bad" : "neutral"}
+                        >
+                          {t.priority}
+                        </Badge>
+                        <Badge tone={statusTone(t.status)}>
+                          {t.status.replace("_", " ")}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                  {tickets.isLoading && <Skeleton className="m-3 h-16" />}
+                </div>
+              </Panel>
+            )}
+          </div>
+
+          <People propertyId={id} />
+        </div>
+      )}
     </div>
   );
 }

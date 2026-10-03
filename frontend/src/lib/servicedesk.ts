@@ -43,6 +43,8 @@ export interface KitPart {
 
 export interface Kit {
   id: string;
+  /** Stable key for a catalog kit (`replace-dishwasher`). */
+  kit_key?: string | null;
   name: string;
   area: string | null;
   category: string;
