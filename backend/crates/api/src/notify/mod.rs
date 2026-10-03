@@ -153,6 +153,38 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{name} picked {when} for {title}.",
     },
     DefaultTemplate {
+        key: "vendor_task_declined",
+        subject: "{vendor} declined: {title}",
+        body: "Hi {recipient},\n\n{vendor} declined the work sent to them on {title} at \
+               {property}.{reason}\n\nThe tasks are open again; send them to someone else \
+               from the work order.\n\n— {company}",
+        sms: "{vendor} declined {title} at {property}.",
+    },
+    DefaultTemplate {
+        key: "vendor_task_accepted",
+        subject: "{vendor} accepted: {title}",
+        body: "Hi {recipient},\n\n{vendor} accepted the work on {title} at {property}.{when}\
+               {note}\n\n— {company}",
+        sms: "{vendor} accepted {title} at {property}.{when}",
+    },
+    DefaultTemplate {
+        key: "vendor_task_done",
+        subject: "{vendor} finished: {title}",
+        body: "Hi {recipient},\n\n{vendor} marked their work on {title} at {property} \
+               done.{note}{invoice}\n\nReview it from the work order.\n\n— {company}",
+        sms: "{vendor} finished {title} at {property}.{invoice}",
+    },
+    DefaultTemplate {
+        key: "alpha_invite",
+        subject: "{company} invites you to Alpha",
+        body: "Hi {recipient},\n\n{company} sends work orders through Alpha. With a free \
+               Alpha account, jobs from {company} land on your own board, you can text \
+               the office, and you get paid faster.\n\nSign up here:\n{join_url}\n\n\
+               Until then, each work order we send comes with a link you can answer \
+               from.\n\n— {company}",
+        sms: "{company} invites you to Alpha. Sign up: {join_url}",
+    },
+    DefaultTemplate {
         key: "appointment_declined",
         subject: "Needs a new time: {title}",
         body: "Hi {recipient},\n\n{name} can't make any of the times offered for {title} \
@@ -525,9 +557,10 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         subject: "Work order from {company}: {title}",
         body: "Hi {recipient},\n\n{company} has dispatched a work order to you:\n\n\
                {title} ({priority} priority)\nProperty: {property}{due_line}\n\n\
-               {description}\n\nPlease confirm scheduling with the property manager.\n\n\
+               {description}\n\nAccept or decline, tell us when you can come, and send \
+               photos and your invoice here (no account needed):\n{vendor_link}\n\n\
                — {company}",
-        sms: "{company} dispatched a work order: {title} at {property}.",
+        sms: "{company} dispatched a work order: {title} at {property}. Answer here: {vendor_link}",
     },
     DefaultTemplate {
         key: "maintenance_reply",

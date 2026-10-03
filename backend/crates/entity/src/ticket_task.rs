@@ -33,6 +33,12 @@ pub struct Model {
     /// `partner` | `email`: how the task reached the vendor.
     pub dispatch_via: Option<String>,
     pub dispatch_note: Option<String>,
+    /// SHA-256 of the link the vendor answers from (one per dispatch batch).
+    pub vendor_token_hash: Option<String>,
+    /// `accepted` | `declined` | `done`: the vendor's last answer.
+    pub vendor_response: Option<String>,
+    pub vendor_responded_at: Option<DateTimeWithTimeZone>,
+    pub vendor_note: Option<String>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

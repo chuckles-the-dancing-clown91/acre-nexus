@@ -291,7 +291,7 @@ pub struct WindowReq {
     pub end: Option<String>,
 }
 
-fn parse_when(raw: &str, tz: &chrono_tz::Tz) -> ApiResult<DateTime<Utc>> {
+pub(crate) fn parse_when(raw: &str, tz: &chrono_tz::Tz) -> ApiResult<DateTime<Utc>> {
     use chrono::TimeZone;
     let raw = raw.trim();
     if let Ok(t) = DateTime::parse_from_rfc3339(raw) {
@@ -306,7 +306,7 @@ fn parse_when(raw: &str, tz: &chrono_tz::Tz) -> ApiResult<DateTime<Utc>> {
         .ok_or_else(|| ApiError::BadRequest("that time doesn't exist in this time zone".into()))
 }
 
-async fn window_from(
+pub(crate) async fn window_from(
     db: &crate::db::RequestDb,
     tenant_id: Uuid,
     w: WindowReq,

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { vendorResponseWords } from "@/lib/vendorLink";
 import {
   desk,
   loadLabel,
@@ -24,6 +25,7 @@ import {
   tradeLabel,
   TRADES,
   type Task,
+  type VendorOption,
 } from "@/lib/servicedesk";
 import { KitPreview } from "@/components/desk/KitPreview";
 import { Badge } from "@/components/ui/badge";
@@ -224,6 +226,20 @@ export function TaskList({
                       {t.dispatch_via === "email" && " (email)"}
                     </span>
                   )}
+                  {t.vendor_response && (
+                    <Badge
+                      tone={
+                        t.vendor_response === "declined"
+                          ? "warn"
+                          : t.vendor_response === "done"
+                            ? "info"
+                            : "good"
+                      }
+                      className="h-[18px]"
+                    >
+                      {vendorResponseWords(t.vendor_response)}
+                    </Badge>
+                  )}
                   {t.assignee_user_name && (
                     <span className="inline-flex items-center gap-1 text-fg-2">
                       <User className="size-3" />
@@ -234,6 +250,11 @@ export function TaskList({
                 {t.dispatch_note && (
                   <div className="truncate text-xs text-fg-4">
                     Note: {t.dispatch_note}
+                  </div>
+                )}
+                {t.vendor_note && (
+                  <div className="truncate text-xs text-fg-4">
+                    Vendor said: &ldquo;{t.vendor_note}&rdquo;
                   </div>
                 )}
               </div>
@@ -422,6 +443,17 @@ function DispatchDialog({
   );
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [invited, setInvited] = useState<string[]>([]);
+
+  async function invite(v: VendorOption) {
+    try {
+      await desk.alphaInvite(v.id);
+      setInvited((i) => [...i, v.id]);
+      toast.success(`Invited ${v.name} to Alpha`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't send the invite");
+    }
+  }
 
   async function send() {
     if (!vendorId) return;
@@ -465,7 +497,8 @@ function DispatchDialog({
           {tasks.length === 1
             ? `${task.title} · ${tradeLabel(task.trade)}.`
             : `${tasks.length} tasks, sent as one job.`}{" "}
-          Linked vendors get it on their own job board; everyone else by email.
+          Linked vendors get it on their own job board; everyone else gets an
+          email with a link to accept, schedule, and send their invoice.
         </DialogDescription>
         {tasks.length > 1 && (
           <ul className="mt-3 space-y-0.5 rounded-xl border border-line bg-fill/40 px-3 py-2 text-xs text-fg-2">
@@ -516,6 +549,22 @@ function DispatchDialog({
               )}
               {v.linked && <Badge tone="info">Linked</Badge>}
               {!v.coi_current && <Badge tone="warn">No COI</Badge>}
+              {!v.linked &&
+                v.email &&
+                (v.alpha_invited_at || invited.includes(v.id) ? (
+                  <span className="text-[11px] text-fg-4">Invited</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-[11px] text-accent hover:underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      invite(v);
+                    }}
+                  >
+                    Invite to Alpha
+                  </button>
+                ))}
             </label>
           ))}
         </div>

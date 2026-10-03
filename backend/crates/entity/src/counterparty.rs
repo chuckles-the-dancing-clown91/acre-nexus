@@ -35,6 +35,8 @@ pub struct Model {
     /// `ok` | `error` after the last call.
     pub partner_status: Option<String>,
     pub partner_error: Option<String>,
+    /// When we last invited this vendor to sign up for Alpha.
+    pub alpha_invited_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

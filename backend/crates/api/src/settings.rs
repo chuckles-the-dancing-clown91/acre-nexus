@@ -83,6 +83,8 @@ pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 /// How long an offered window is when staff give only a start time.
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
+/// Where a vendor signs up for Alpha when we invite them.
+pub const PARTNERS_ALPHA_JOIN_URL: &str = "partners.alpha_join_url";
 /// Text (or email) the resident for a 1–5 rating when their repair resolves.
 pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
 /// In-house labor rate for work-order estimates, cents per hour.
@@ -466,6 +468,15 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: PARTNERS_ALPHA_JOIN_URL,
+        label: "Alpha sign-up link for vendors",
+        description: "The page a vendor is sent to when you invite them to Alpha. \
+                      Leave blank to use Alpha's public sign-up.",
+        group: "Vendors",
+        kind: SettingKind::Text,
+        default: || json!("https://alphapowerwash.com/partners/join"),
     },
     SettingDef {
         key: COMPLIANCE_REQUIRE_COI,

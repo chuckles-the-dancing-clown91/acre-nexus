@@ -53,6 +53,10 @@ pub struct TaskDto {
     /// `partner` (their own board) | `email`: how it reached the vendor.
     pub dispatch_via: Option<String>,
     pub dispatch_note: Option<String>,
+    /// `accepted` | `declined` | `done`: the vendor's answer from their link.
+    pub vendor_response: Option<String>,
+    pub vendor_responded_at: Option<String>,
+    pub vendor_note: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -202,6 +206,8 @@ pub struct VendorOption {
     /// Linked to a partner system (e.g. Alpha Power Wash): work orders go
     /// straight into their job board.
     pub linked: bool,
+    /// When we last invited them to sign up for Alpha.
+    pub alpha_invited_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +300,15 @@ async fn tasks_of(
             assignee_user_id: t.assignee_user_id,
             dispatch_via: t.dispatch_via.clone(),
             dispatch_note: t.dispatch_note.clone(),
+            vendor_response: t.vendor_response.clone(),
+            vendor_responded_at: t.vendor_responded_at.map(|d| d.to_rfc3339()),
+            // Stored as `vendor:<id>\n<what they said>`; staff see what they said.
+            vendor_note: t
+                .vendor_note
+                .as_deref()
+                .and_then(|n| n.split_once('\n'))
+                .map(|(_, r)| r.trim().to_string())
+                .filter(|r| !r.is_empty()),
             est_cost_label: t.est_cost_cents.map(usd),
             id: t.id,
             position: t.position,
@@ -405,6 +420,10 @@ pub async fn add_task(
         assignee_user_id: Set(None),
         dispatch_via: Set(None),
         dispatch_note: Set(None),
+        vendor_token_hash: Set(None),
+        vendor_response: Set(None),
+        vendor_responded_at: Set(None),
+        vendor_note: Set(None),
         created_by: Set(Some(user.user_id)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -708,6 +727,10 @@ async fn send_to_vendor(
     .await?;
     let note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
     let lines = task_lines(&tasks);
+    // One link for the batch: the vendor accepts, declines, says when they
+    // can come, and sends photos and their invoice from it. No account.
+    let token = crate::auth::random_secret(24);
+    let vendor_link = crate::routes::maintenance::vendor_link::url(&token);
     let job_title = match tasks.as_slice() {
         [one] => format!("{} — {}", one.title, t.title),
         many => format!("{} tasks — {}", many.len(), t.title),
@@ -722,8 +745,10 @@ async fn send_to_vendor(
                 requested_for: None,
                 service_key: None,
                 note: Some(match &note {
-                    Some(n) => format!("{lines}\n{n}"),
-                    None => lines.clone(),
+                    Some(n) => {
+                        format!("{lines}\n{n}\n\nAnswer or send your invoice: {vendor_link}")
+                    }
+                    None => format!("{lines}\n\nAnswer or send your invoice: {vendor_link}"),
                 }),
                 title: Some(job_title.clone()),
             },
@@ -767,6 +792,7 @@ async fn send_to_vendor(
                     "property": property,
                     "due_line": t.due_date.as_deref().map(|d| format!(", wanted by {d}")).unwrap_or_default(),
                     "description": description,
+                    "vendor_link": vendor_link,
                 },
             }),
             0,
@@ -781,6 +807,10 @@ async fn send_to_vendor(
         am.dispatched_at = Set(Some(now.into()));
         am.dispatch_via = Set(Some(how.into()));
         am.dispatch_note = Set(note.clone());
+        am.vendor_token_hash = Set(Some(crate::auth::hash_secret(&token)));
+        am.vendor_response = Set(None);
+        am.vendor_responded_at = Set(None);
+        am.vendor_note = Set(None);
         am.updated_at = Set(now.into());
         am.update(db).await?;
     }
@@ -1417,6 +1447,7 @@ pub async fn vendors(
             coi_current: crate::vendor_compliance::coi_current(&db, scope.tenant_id, c.id, today)
                 .await?,
             linked: c.partner_kind.is_some(),
+            alpha_invited_at: c.alpha_invited_at.map(|d| d.to_rfc3339()),
             id: c.id,
             name: c.name,
             email: c.email,

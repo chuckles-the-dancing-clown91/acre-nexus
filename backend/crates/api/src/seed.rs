@@ -1859,6 +1859,7 @@ async fn seed_rehab(
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),
+        alpha_invited_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -2389,6 +2390,7 @@ async fn seed_counterparty(
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),
+        alpha_invited_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

@@ -129,6 +129,7 @@ async fn integration_suite() {
     property_profile_records(&c).await;
     desk_queues_and_vendor_batches(&c).await;
     appointments_flow(&c).await;
+    vendor_link_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7267,6 +7268,373 @@ async fn property_story_and_timeline(c: &Ctx) {
 /// Appointments: offered windows reach the resident, who picks one in the
 /// portal; the work order follows; reminders go once; the public link lets
 /// anyone pick or decline with another time; staff confirm by phone.
+/// A vendor without an account answers from the link in their dispatch email:
+/// accepts with a time (which books the visit), sends a photo and an invoice,
+/// marks it done. Another batch is declined and goes back to unassigned. The
+/// office invites a vendor to Alpha.
+async fn vendor_link_flow(c: &Ctx) {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "property:read",
+        ],
+    );
+    let (st, vendor) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Ray's Plumbing", "contact_name": "Ray",
+            "email": "ray@plumbing.example", "trades": ["plumbing"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{vendor}");
+    let vid = vendor["id"].as_str().unwrap().to_string();
+
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &staff,
+        serde_json::json!({ "title": "Kitchen sink backs up", "category": "plumbing", "priority": "high" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let mut ids = vec![];
+    for title in ["Snake the drain", "Replace P-trap", "Caulk the sink"] {
+        let (st, tasks) = post_json(
+            c,
+            &format!("/tickets/{tid}/tasks"),
+            &staff,
+            serde_json::json!({ "title": title, "trade": "plumbing", "needs_contractor": true }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{tasks}");
+        ids.push(
+            tasks
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|x| x["title"] == title)
+                .unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+
+    // Two tasks go to Ray by email; the email carries one link for both.
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [ids[0], ids[1]], "entity_id": vid, "note": "Resident home after 4" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    let job = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "ticket_dispatch")
+        .max_by_key(|j| j.created_at)
+        .expect("the dispatch email");
+    let link = job.payload["vars"]["vendor_link"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(link.contains("/vendor/"), "{link}");
+    let token = link.rsplit('/').next().unwrap().to_string();
+    let public = |path: String| async move {
+        let r = c.client.get(path).dispatch().await;
+        let st = r.status();
+        (
+            st,
+            r.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or(serde_json::Value::Null),
+        )
+    };
+    let post_public = |path: String, body: serde_json::Value| async move {
+        let r = c
+            .client
+            .post(path)
+            .header(ContentType::JSON)
+            .body(body.to_string())
+            .dispatch()
+            .await;
+        let st = r.status();
+        (
+            st,
+            r.into_json::<serde_json::Value>()
+                .await
+                .unwrap_or(serde_json::Value::Null),
+        )
+    };
+    let (st, view) = public(format!("/public/vendor/{token}")).await;
+    assert_eq!(st, Status::Ok, "{view}");
+    assert_eq!(view["title"], "Kitchen sink backs up");
+    assert_eq!(view["vendor"], "Ray's Plumbing");
+    assert_eq!(view["tasks"].as_array().unwrap().len(), 2);
+    assert_eq!(view["note"], "Resident home after 4");
+    assert!(view["response"].is_null());
+    assert!(view["company"].as_str().unwrap().contains("Northwind"));
+    let (st, _) = public("/public/vendor/not-a-real-token-at-all".into()).await;
+    assert_eq!(st, Status::NotFound);
+
+    // Ray accepts and says when: the visit is on the calendar, the work order
+    // is scheduled, and the office hears.
+    let when = (chrono::Utc::now() + chrono::Duration::days(2))
+        .date_naive()
+        .and_hms_opt(15, 0, 0)
+        .unwrap()
+        .and_utc()
+        .to_rfc3339();
+    let (st, acc) = post_public(
+        format!("/public/vendor/{token}/accept"),
+        serde_json::json!({ "start": when, "note": "Bringing a 50ft auger" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{acc}");
+    assert_eq!(acc["response"], "accepted");
+    assert_eq!(acc["response_note"], "Bringing a 50ft auger");
+    assert!(acc["when_words"].as_str().unwrap().contains(" to "));
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert_eq!(detail["status"], "scheduled");
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "vendor_accepted" && m["author_name"] == "Ray's Plumbing"));
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let snake = tasks
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == ids[0].as_str())
+        .unwrap();
+    assert_eq!(snake["vendor_response"], "accepted");
+    assert_eq!(snake["status"], "doing");
+    let (_, cal) = get_json(
+        c,
+        &format!("/appointments?subject_type=ticket&subject_id={tid}"),
+        &staff,
+    )
+    .await;
+    let visit = cal
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["status"] == "confirmed")
+        .expect("the vendor's visit");
+    assert_eq!(visit["vendor_entity_id"], vid.as_str());
+    assert_eq!(visit["confirmed_by"], "vendor");
+    let heard = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "vendor_task_accepted")
+        .count();
+    assert!(heard >= 1, "staff were told");
+
+    // A photo and the invoice, then done. The invoice is an expense billable
+    // to the owner; the resident sees the done line.
+    let (st, up) = post_public(
+        format!("/public/vendor/{token}/uploads"),
+        serde_json::json!({ "filename": "after.jpg", "mime_type": "image/jpeg", "size_bytes": 4 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{up}");
+    assert_eq!(up["file"]["kind"], "photo");
+    let url = up["upload_url"].as_str().unwrap();
+    let path = &url[url.find("/storage/local/").unwrap()..];
+    let resp = c
+        .client
+        .put(path.to_string())
+        .body(vec![0xFF, 0xD8, 0xFF, 0xD9])
+        .dispatch()
+        .await;
+    assert!(resp.status().code < 300);
+    let (st, inv) = post_public(
+        format!("/public/vendor/{token}/uploads"),
+        serde_json::json!({ "filename": "invoice.pdf", "mime_type": "application/pdf", "size_bytes": 10, "kind": "invoice" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    assert_eq!(inv["file"]["kind"], "receipt");
+    let inv_id = inv["file"]["id"].as_str().unwrap().to_string();
+    let (st, _) = post_public(
+        format!("/public/vendor/{token}/invoice"),
+        serde_json::json!({ "amount_cents": 0 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, billed) = post_public(
+        format!("/public/vendor/{token}/invoice"),
+        serde_json::json!({ "amount_cents": 38500, "description": "Drain cleared, new P-trap", "document_id": inv_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{billed}");
+    assert_eq!(billed["invoices"][0]["amount_label"], "$385.00");
+    let (st, fin) = post_public(
+        format!("/public/vendor/{token}/done"),
+        serde_json::json!({ "note": "Flowing clear" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{fin}");
+    assert_eq!(fin["response"], "done");
+    assert!(fin["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["status"] == "done"));
+    assert_eq!(
+        fin["files"].as_array().unwrap().len(),
+        1,
+        "the stored photo"
+    );
+    let (_, expenses) = get_json(c, &format!("/tickets/{tid}/expenses"), &staff).await;
+    let e = expenses
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["vendor"] == "Ray's Plumbing")
+        .expect("the vendor's invoice as an expense");
+    assert_eq!(e["amount_cents"], 38500);
+    assert_eq!(e["billable_to_owner"], true);
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "vendor_done" && m["visibility"] == "public"));
+    // Once done, declining is refused.
+    let (st, _) = post_public(
+        format!("/public/vendor/{token}/decline"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // The third task goes to Ray too, and Ray declines: it's unassigned again.
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [ids[2]], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let job2 = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "ticket_dispatch")
+        .max_by_key(|j| j.created_at)
+        .unwrap();
+    let token2 = job2.payload["vars"]["vendor_link"]
+        .as_str()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_string();
+    assert_ne!(token, token2, "each batch has its own link");
+    let (st, dec) = post_public(
+        format!("/public/vendor/{token2}/decline"),
+        serde_json::json!({ "reason": "Booked solid this month" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{dec}");
+    assert_eq!(dec["response"], "declined");
+    assert_eq!(
+        dec["vendor"], "Ray's Plumbing",
+        "the page still knows who declined"
+    );
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let caulk = tasks
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == ids[2].as_str())
+        .unwrap();
+    assert!(caulk["assignee_entity_id"].is_null());
+    assert!(caulk["dispatched_at"].is_null());
+    assert_eq!(caulk["vendor_response"], "declined");
+    assert_eq!(
+        caulk["vendor_note"].as_str().unwrap(),
+        "Booked solid this month"
+    );
+    let told = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "vendor_task_declined")
+        .count();
+    assert!(told >= 1);
+    let (st, _) = post_public(
+        format!("/public/vendor/{token2}/done"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // Invite Ray to Alpha: an email with a prefilled sign-up link, remembered.
+    let (st, inv) = post_json(
+        c,
+        &format!("/entities/{vid}/alpha-invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    let join = inv["join_url"].as_str().unwrap();
+    assert!(join.contains("/partners/join?"), "{join}");
+    assert!(join.contains("email=ray%40plumbing.example"), "{join}");
+    assert!(join.contains("from=Northwind"), "{join}");
+    let invited = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "alpha_invite")
+        .count();
+    assert_eq!(invited, 1);
+    let (_, options) = get_json(c, &format!("/tickets/{tid}/vendors"), &staff).await;
+    let ray = options
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == vid.as_str())
+        .unwrap();
+    assert!(ray["alpha_invited_at"].is_string());
+    let (st, _) = post_json(
+        c,
+        &format!("/entities/{}/alpha-invite", Uuid::new_v4()),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+}
+
 async fn appointments_flow(c: &Ctx) {
     use rocket::http::Method;
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};

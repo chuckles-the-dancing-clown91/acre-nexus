@@ -94,6 +94,13 @@ impl PlatformModule for MaintenanceModule {
             maintenance::desk::list_expenses,
             maintenance::desk::add_expense,
             maintenance::desk::vendors,
+            // the vendor's link: answer, schedule, photos, invoice, no account
+            maintenance::vendor_link::view,
+            maintenance::vendor_link::accept,
+            maintenance::vendor_link::decline,
+            maintenance::vendor_link::done,
+            maintenance::vendor_link::upload,
+            maintenance::vendor_link::invoice,
             maintenance::plans::list_plans,
             maintenance::plans::create_plan,
             maintenance::plans::update_plan,
@@ -128,6 +135,7 @@ impl PlatformModule for MaintenanceModule {
             crate::routes::partner::rotate_secret,
             crate::routes::partner::linked_vendors,
             crate::routes::partner::dispatch,
+            crate::routes::partner::alpha_invite,
         ]
     }
 

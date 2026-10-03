@@ -21,6 +21,7 @@ pub mod queue;
 pub mod quotes;
 pub mod stock;
 pub mod update_ticket;
+pub mod vendor_link;
 
 /// Ticket statuses that count as still-open work (everything before the ticket
 /// is resolved/closed). Used to split the maintenance tab into "open" vs

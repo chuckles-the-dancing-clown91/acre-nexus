@@ -145,7 +145,45 @@ trade first. The insurance rule applies.
   the vendor's job moves an untouched work order to scheduled or in progress,
   and resolves it only when every task is done. A work order goes to Alpha
   once; Alpha keys jobs by the work order.
-- **Everyone else** gets the task by email.
+- **Everyone else** gets the task by email, with a link to answer from.
+
+### The vendor's link
+
+Every batch sent to a vendor carries one link (`/vendor/<token>`; the
+dispatch email and text carry it, and a linked vendor's board gets it in the
+job note). It needs no account. From it the vendor sees the work order, the
+property, the office's note and access notes, and their tasks, and can:
+
+- **Accept**, optionally saying when they'll come. A time books the visit on
+  the calendar (confirmed by `vendor`, the vendor on it), moves the work order
+  to scheduled, and tells the resident, the same as a picked window. Their
+  tasks move to doing.
+- **Decline**, with a reason. The tasks go back to unassigned (no vendor, no
+  dispatch), so they can be sent to someone else; staff with
+  `maintenance:manage` hear (`vendor_task_declined`).
+- **Send photos** (before and after) and **the invoice** as a file. They land
+  on the work order's files like any other.
+- **Send their invoice**: an amount and what it covers, with the uploaded file
+  attached. It lands as a vendor expense on the work order (category repairs,
+  billable to the owner, recorded by nobody) for the office to approve.
+- **Mark it done**, with a note. Their tasks close, the resident sees the line
+  on the request, and staff hear with the invoice total.
+
+Each task keeps the vendor's last answer (`vendor_response`: accepted,
+declined or done, with when and what they said), shown on the task list. A
+declined or finished batch can't be answered again; sending the tasks again
+mints a new link. Public routes: `GET /public/vendor/<token>` and
+`POST …/accept | /decline | /done | /uploads | /invoice`.
+
+### Inviting a vendor to Alpha
+
+In the send dialog, an unlinked vendor with an email shows **Invite to
+Alpha** (`POST /entities/<id>/alpha-invite`). They get the `alpha_invite`
+email with a sign-up link (the `partners.alpha_join_url` setting, by default
+Alpha's `/partners/join` page) prefilled with their business, contact, email,
+phone and who sent them. Alpha files it as a lead (source `vantedge`) for
+Alpha's office to set up and link back. The invite is remembered on the vendor
+(`alpha_invited_at`), so the dialog shows "Invited" after.
 
 Checked against a running Alpha: link (ping), send, job created with the right
 client, property and notes, then scheduled, started and completed callbacks

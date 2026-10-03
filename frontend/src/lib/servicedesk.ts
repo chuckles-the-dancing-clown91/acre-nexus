@@ -84,6 +84,10 @@ export interface Task {
   /** How it reached the vendor: their own board, or by email. */
   dispatch_via: "partner" | "email" | null;
   dispatch_note: string | null;
+  /** The vendor's answer from their link. */
+  vendor_response: "accepted" | "declined" | "done" | null;
+  vendor_responded_at: string | null;
+  vendor_note: string | null;
 }
 
 /** A teammate who can be given work, with what they already have. */
@@ -227,6 +231,8 @@ export interface VendorOption {
   matches: boolean;
   coi_current: boolean;
   linked: boolean;
+  /** When we last invited them to sign up for Alpha. */
+  alpha_invited_at: string | null;
 }
 
 /** A one-press update on a work order: posts the note and moves the status. */
@@ -562,6 +568,12 @@ export const desk = {
       reimbursable?: boolean;
     }
   ) => post<TicketExpense>(`/tickets/${ticketId}/expenses`, body),
+  /** Invite a vendor to sign up for Alpha, so work lands on their own board. */
+  alphaInvite: (entityId: string) =>
+    post<{ alpha_invited_at: string; join_url: string }>(
+      `/entities/${entityId}/alpha-invite`,
+      {}
+    ),
   vendors: (ticketId: string, trade?: string) =>
     request<VendorOption[]>(
       `/tickets/${ticketId}/vendors${trade ? `?trade=${encodeURIComponent(trade)}` : ""}`,
