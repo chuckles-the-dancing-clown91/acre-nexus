@@ -11360,4 +11360,34 @@ async fn lease_document_flow(c: &Ctx) {
     assert!(body.contains("Electricity | Tenant"), "{body}");
     assert!(body.contains("Trash and recycling | Landlord"), "{body}");
     assert!(body.contains("Emergency contact: Arun Nair"), "{body}");
+
+    // The resident sees the agreement only once the office has sent it, with
+    // the utility terms and equipment that come with the home.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"priya.nair@example.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let me = toks["access_token"].as_str().unwrap().to_string();
+    let (st, home) = get_json(c, "/my/home", &me).await;
+    assert_eq!(st, Status::Ok, "{home}");
+    assert!(home["agreement"].is_null(), "a draft is not shown: {home}");
+    assert!(!home["utilities"].as_array().unwrap().is_empty());
+    assert!(!home["equipment"].as_array().unwrap().is_empty());
+    let did = uuid::Uuid::parse_str(doc["id"].as_str().unwrap()).unwrap();
+    let mut am: entity::lease_document::ActiveModel =
+        entity::prelude::LeaseDocument::find_by_id(did)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .into();
+    am.status = sea_orm::Set("sent".into());
+    am.update(&c.db).await.unwrap();
+    let (_, home) = get_json(c, "/my/home", &me).await;
+    assert_eq!(home["agreement"]["status"], "sent");
+    assert!(home["agreement"]["sections"].as_array().unwrap().len() > 5);
 }

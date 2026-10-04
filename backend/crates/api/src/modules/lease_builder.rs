@@ -85,6 +85,7 @@ impl PlatformModule for LeaseBuilderModule {
             // resident profile + mobile ID card
             residents::my_resident,
             residents::update_my_resident,
+            residents::my_home,
             residents::resident_profile,
             residents::update_resident,
             // tenant history

@@ -22,6 +22,7 @@ import {
   type DocumentEntry,
   type InspectionDetail,
   type LeaseDeposit,
+  type MyHome,
   type MyLease,
 } from "@/lib/api";
 import {
@@ -30,6 +31,7 @@ import {
   day,
   settlementWords,
 } from "@/lib/portal-format";
+import { LeaseAgreement } from "@/components/lease/LeaseAgreement";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -58,6 +60,12 @@ export default function LeasePage() {
   const documents = useQuery({
     queryKey: ["my-documents"],
     queryFn: api.myDocuments,
+    enabled: ok,
+    retry: noRetry4xx,
+  });
+  const home = useQuery({
+    queryKey: ["my-home"],
+    queryFn: api.myHome,
     enabled: ok,
     retry: noRetry4xx,
   });
@@ -104,6 +112,8 @@ export default function LeasePage() {
       </div>
 
       <Summary lease={l} />
+
+      {home.data && <HomeTerms home={home.data} />}
 
       <section>
         <div className="eyebrow mb-2">Documents</div>
@@ -399,5 +409,110 @@ function Inspections({ rows }: { rows: InspectionDetail[] }) {
         );
       })}
     </Panel>
+  );
+}
+
+/** The agreement, who pays for each utility, and what stays with the home. */
+function HomeTerms({ home }: { home: MyHome }) {
+  const [open, setOpen] = useState(false);
+  const a = home.agreement;
+  return (
+    <>
+      {a && (
+        <section>
+          <div className="eyebrow mb-2">Your agreement</div>
+          <Panel className="overflow-hidden">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/50"
+            >
+              <FileText className="size-4 shrink-0 text-fg-3" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-medium text-fg">{a.title}</div>
+                <div className="text-xs text-fg-3">
+                  {a.status === "signed" && a.signed_at
+                    ? `Signed ${day(a.signed_at)}`
+                    : `Sent ${day(a.generated_at)}`}
+                </div>
+              </div>
+              <Badge tone={a.status === "signed" ? "good" : "warn"}>
+                {a.status === "signed" ? "Signed" : "Waiting for you"}
+              </Badge>
+              <ChevronDown
+                className={cn(
+                  "size-4 text-fg-4 transition",
+                  open && "rotate-180"
+                )}
+              />
+            </button>
+            {open && (
+              <div className="bg-stone-200/70 p-2 sm:p-4">
+                {a.sections ? (
+                  <LeaseAgreement
+                    title={a.title}
+                    sections={a.sections}
+                    signedBy={a.signed_by}
+                    signedAt={a.signed_at}
+                  />
+                ) : (
+                  <pre className="max-h-[70dvh] overflow-auto rounded-lg bg-white p-4 font-mono text-xs whitespace-pre-wrap text-stone-800">
+                    {a.body}
+                  </pre>
+                )}
+              </div>
+            )}
+          </Panel>
+        </section>
+      )}
+
+      {home.utilities.length > 0 && (
+        <section>
+          <div className="eyebrow mb-2">Utilities</div>
+          <Panel className="divide-y divide-line">
+            {home.utilities.map((u) => (
+              <div
+                key={u.kind}
+                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[13px]"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-fg">{u.label}</div>
+                  {(u.provider || u.note) && (
+                    <div className="text-xs text-fg-3">
+                      {[u.provider, u.note].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </div>
+                <Badge tone={u.paid_by === "landlord" ? "good" : "neutral"}>
+                  {u.paid_by === "landlord"
+                    ? "Included in rent"
+                    : u.paid_by === "shared"
+                      ? "Shared"
+                      : "You pay"}
+                </Badge>
+              </div>
+            ))}
+          </Panel>
+        </section>
+      )}
+
+      {home.equipment.length > 0 && (
+        <section>
+          <div className="eyebrow mb-2">Comes with the home</div>
+          <Panel className="divide-y divide-line">
+            {home.equipment.map((e, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 px-4 py-2.5 text-[13px]"
+              >
+                <span className="text-fg">{e.name}</span>
+                <span className="text-xs text-fg-3">{e.make}</span>
+              </div>
+            ))}
+          </Panel>
+        </section>
+      )}
+    </>
   );
 }

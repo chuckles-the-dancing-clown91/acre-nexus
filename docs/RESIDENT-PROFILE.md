@@ -61,3 +61,10 @@ Addenda, each on its own page with initials lines:
 
 The console lease page, the signing page and Print all show the laid-out
 agreement. Documents made before this change keep showing their plain text.
+
+## What the resident sees of it
+
+`GET /my/home` returns the lease agreement once the office has sent it (never a
+draft), who pays for each utility, and the equipment that comes with the home.
+The lease page in the resident portal shows all three; the agreement opens in
+the same laid-out view the office uses.

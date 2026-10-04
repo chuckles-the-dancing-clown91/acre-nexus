@@ -1483,6 +1483,8 @@ export const api = {
       body,
     }),
 
+  myHome: () => request<MyHome>("/my/home", { auth: true }),
+
   tenantHistory: () =>
     request<TenantHistoryRow[]>("/tenant-history", { auth: true }),
   propertyTenantHistory: (propertyId: string) =>
@@ -4229,4 +4231,34 @@ export interface ResidentDetail {
   tenancies: (TenancySummary & { unit_number: string | null })[];
   applications: Application[];
   card: IdCard | null;
+}
+
+export interface UtilityTermView {
+  kind: string;
+  label: string;
+  paid_by: string;
+  paid_by_label: string;
+  provider: string | null;
+  meters: string[];
+  note: string | null;
+}
+
+/** What the resident agreed to and what comes with the home. */
+export interface MyHome {
+  agreement: {
+    title: string;
+    status: "sent" | "signed";
+    generated_at: string;
+    signed_by: string | null;
+    signed_at: string | null;
+    sections: LeaseSection[] | null;
+    body: string;
+  } | null;
+  utilities: UtilityTermView[];
+  equipment: {
+    name: string;
+    kind: string;
+    make: string | null;
+    warranty_expires: string | null;
+  }[];
 }
