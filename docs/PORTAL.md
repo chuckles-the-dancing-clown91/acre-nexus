@@ -19,6 +19,10 @@ download their statement.
 
 ## Portal surfaces
 
+Owners have their own portal at `/account/owner` (approvals, sign-off,
+statements): see [OWNERS.md](OWNERS.md).
+
+
 ### My lease + documents (`/account/lease`)
 
 - `GET /my/lease` — lease summary (term, rent, deposit, balance, standing;

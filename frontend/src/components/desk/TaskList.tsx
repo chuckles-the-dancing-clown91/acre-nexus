@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
+import { owner } from "@/lib/owner";
 import { vendorResponseWords } from "@/lib/vendorLink";
 import {
   desk,
@@ -458,26 +459,36 @@ function DispatchDialog({
   async function send() {
     if (!vendorId) return;
     setBusy(true);
-    const go = (reason?: string) =>
+    const go = (coi?: string, approval?: string) =>
       desk.dispatchTasks(ticketId, {
         task_ids: tasks.map((t) => t.id),
         entity_id: vendorId,
         note: note.trim() || undefined,
-        coi_override_reason: reason,
+        coi_override_reason: coi,
+        approval_override_reason: approval,
       });
     try {
       try {
         await go();
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
+        // The owner's approval gate: the ask has gone out; going ahead
+        // anyway needs a reason that's recorded. Insurance works the same.
+        const ownerGate = /approv|limit/i.test(e.message);
+        if (ownerGate && window.confirm(`${e.message}\n\nAsk the owner now?`)) {
+          await owner.request(ticketId, {});
+          toast.success("Asked the owner; the work order waits on them");
+          onSent();
+          return;
+        }
         const reason = window.prompt(
-          `${e.message}\n\nReason to send them anyway:`
+          `${e.message}\n\n${ownerGate ? "Reason to go ahead without the owner (recorded):" : "Reason to send them anyway:"}`
         );
         if (!reason?.trim()) {
           setBusy(false);
           return;
         }
-        await go(reason.trim());
+        await (ownerGate ? go(undefined, reason.trim()) : go(reason.trim()));
       }
       toast.success("Sent to the vendor");
       onSent();

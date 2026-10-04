@@ -76,6 +76,7 @@ mod m20240101_000068_property_story;
 mod m20240101_000069_appointments;
 mod m20240101_000070_vendor_links;
 mod m20240101_000071_property_crime;
+mod m20240101_000072_owner_approvals;
 
 pub struct Migrator;
 
@@ -154,6 +155,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000069_appointments::Migration),
             Box::new(m20240101_000070_vendor_links::Migration),
             Box::new(m20240101_000071_property_crime::Migration),
+            Box::new(m20240101_000072_owner_approvals::Migration),
         ]
     }
 }

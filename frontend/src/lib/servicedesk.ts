@@ -535,6 +535,7 @@ export const desk = {
       entity_id: string;
       note?: string;
       coi_override_reason?: string;
+      approval_override_reason?: string;
     }
   ) => post<Task[]>(`/tickets/${ticketId}/dispatch-tasks`, body),
   removeTask: (ticketId: string, taskId: string) =>

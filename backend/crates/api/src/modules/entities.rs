@@ -36,6 +36,8 @@ impl PlatformModule for EntitiesModule {
             crm::owners,
             crm::create_owner,
             crm::update_owner,
+            crate::routes::owner_portal::owner_limit,
+            crate::routes::owner_portal::invite_owner,
             crm::list_leads,
             crm::create_lead,
             crm::update_lead,

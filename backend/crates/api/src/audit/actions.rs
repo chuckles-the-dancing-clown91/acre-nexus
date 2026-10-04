@@ -222,6 +222,8 @@ pub const OWNER_LEAD_CREATE: &str = "owner_lead.create";
 pub const OWNER_LEAD_CONVERT: &str = "owner_lead.convert";
 /// In-house work (hours, parts, expenses) billed to the owner as an AP bill.
 pub const OWNER_BILL_CREATE: &str = "owner_bill.create";
+/// Staff went ahead with work over the owner's limit without their approval.
+pub const OWNER_APPROVAL_OVERRIDE: &str = "owner_approval.override";
 /// A thread was marked done / reopened.
 pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 /// Staff triggered a test delivery (provider test or own-device push test).

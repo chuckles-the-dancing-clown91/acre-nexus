@@ -92,6 +92,7 @@ pub mod notification;
 pub mod notification_provider;
 pub mod onboarding_workflow;
 pub mod owner;
+pub mod owner_approval;
 pub mod owner_lead;
 pub mod owner_payout;
 pub mod ownership;

@@ -161,6 +161,44 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{name} picked {when} for {title}.",
     },
     DefaultTemplate {
+        key: "owner_approval_request",
+        subject: "Approve {amount} of work at {property}?",
+        body: "Hi {recipient},\n\n{title} at {property} is estimated at {amount}, over your \
+               {limit} limit.{note}\n\nApprove or decline here:\n{link}\n\nNothing is \
+               sent to a vendor until you say so.\n\n— {company}",
+        sms: "{company}: approve {amount} of work at {property} ({title})? {link}",
+    },
+    DefaultTemplate {
+        key: "owner_approval_reminder",
+        subject: "Still waiting: {amount} of work at {property}",
+        body: "Hi {recipient},\n\nA reminder that {title} at {property} ({amount}) is \
+               waiting for your approval. Approve or decline here:\n{link}\n\n— {company}",
+        sms: "{company}: still waiting on your approval for {title} at {property} ({amount}). {link}",
+    },
+    DefaultTemplate {
+        key: "owner_signoff_request",
+        subject: "Work finished at {property}: {title}",
+        body: "Hi {recipient},\n\n{title} at {property} is done. The cost came to {amount}.\
+               {note}\n\nSee the photos and sign off, or tell us what's not right:\n{link}\n\n\
+               — {company}",
+        sms: "{company}: {title} at {property} is done ({amount}). Sign off or dispute: {link}",
+    },
+    DefaultTemplate {
+        key: "owner_approval_decided",
+        subject: "{owner} {decision}: {title}",
+        body: "Hi {recipient},\n\n{owner} {decision} {title} at {property} ({amount}).\
+               {note}\n\n— {company}",
+        sms: "{owner} {decision} {title} at {property} ({amount}).",
+    },
+    DefaultTemplate {
+        key: "owner_statement",
+        subject: "Your {month} statement from {company}",
+        body: "Hi {recipient},\n\nYour statement for {month} is ready: rent collected \
+               {rent}, expenses {expenses}, net {net}.\n\nRead it, with the work done on \
+               your properties, here:\n{link}\n\n— {company}",
+        sms: "{company}: your {month} statement is ready. Net {net}. {link}",
+    },
+    DefaultTemplate {
         key: "vendor_task_declined",
         subject: "{vendor} declined: {title}",
         body: "Hi {recipient},\n\n{vendor} declined the work sent to them on {title} at \

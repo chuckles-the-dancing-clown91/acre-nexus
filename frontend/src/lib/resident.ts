@@ -2,6 +2,7 @@
 // lease. They get the resident pages (/account), not the staff console.
 
 import type { User } from "./types";
+import { isOwnerOnly } from "@/lib/owner";
 
 /** True when every membership the user holds is a renter's. Staff, owners
  * and anyone with a second role keep the console. */
@@ -68,5 +69,6 @@ export function landingFor(
     !next.startsWith("/\\")
   )
     return next;
+  if (isOwnerOnly(user)) return "/account/owner";
   return isResidentOnly(user) ? "/account/maintenance" : "/console";
 }

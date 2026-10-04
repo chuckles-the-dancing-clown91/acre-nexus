@@ -75,6 +75,7 @@ pub use super::notification::Entity as Notification;
 pub use super::notification_provider::Entity as NotificationProvider;
 pub use super::onboarding_workflow::Entity as OnboardingWorkflow;
 pub use super::owner::Entity as Owner;
+pub use super::owner_approval::Entity as OwnerApproval;
 pub use super::owner_lead::Entity as OwnerLead;
 pub use super::owner_payout::Entity as OwnerPayout;
 pub use super::ownership::Entity as Ownership;

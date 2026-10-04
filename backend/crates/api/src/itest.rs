@@ -122,6 +122,17 @@ async fn integration_suite() {
     batch_c_texts(&c).await;
     batch_d_listing_photos(&c).await;
     property_reach(&c).await;
+    // Older scenarios send work out freely; the owner-approval gate is
+    // exercised on its own in `owner_approvals_flow` through an owner's own
+    // limit.
+    crate::settings::set_value(
+        &c.db,
+        tenant_id(&c, "northwind").await,
+        crate::settings::MAINTENANCE_OWNER_APPROVAL_CENTS,
+        serde_json::json!(0),
+    )
+    .await
+    .unwrap();
     service_desk(&c).await;
     imports_and_exports(&c).await;
     listing_syndication(&c).await;
@@ -132,6 +143,7 @@ async fn integration_suite() {
     vendor_link_flow(&c).await;
     showings_flow(&c).await;
     property_data_sources(&c).await;
+    owner_approvals_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7892,6 +7904,336 @@ async fn property_data_sources(c: &Ctx) {
     assert_eq!(st, Status::Ok);
     let (_, live) = get_json(c, "/property-data/live", &staff).await;
     assert_eq!(live["crime_provider"], "fbi");
+}
+
+/// Owner approvals: work over the owner's limit can't go to a vendor until
+/// the owner says yes from their link; finished billable work asks them to
+/// sign off; the owner portal shows their holdings, asks and statement.
+async fn owner_approvals_flow(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "member:manage",
+            "property:read",
+            "tenant:manage",
+        ],
+    );
+    // Dana owns an LLC with properties; give her an email and a low limit.
+    let dana = entity::prelude::Owner::find()
+        .filter(entity::owner::Column::TenantId.eq(nw))
+        .filter(entity::owner::Column::Name.eq("Dana Kessler"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded owner");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/crm/owners/{}", dana.id),
+        &staff,
+        serde_json::json!({ "name": "Dana Kessler", "email": "dana.owner@example.com", "phone": "503-555-0177" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, lim) = send_json(
+        c,
+        Method::Patch,
+        &format!("/crm/owners/{}/approvals", dana.id),
+        &staff,
+        serde_json::json!({ "approval_limit_cents": 100 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lim}");
+    // Make Dana the majority holder of one LLC, so its properties are hers.
+    let stake = entity::prelude::EntityOwnership::find()
+        .filter(entity::entity_ownership::Column::OwnerId.eq(dana.id))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    {
+        use sea_orm::ActiveModelTrait;
+        let mut am: entity::entity_ownership::ActiveModel = stake.clone().into();
+        am.ownership_bps = sea_orm::Set(9_900);
+        am.update(&c.db).await.unwrap();
+    }
+    let pid = entity::prelude::Property::find()
+        .filter(entity::property::Column::LlcId.eq(stake.entity_id))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("a property in Dana's LLC")
+        .id;
+
+    // A work order from a kit: the estimate is over her limit.
+    let (_, kits) = get_json(c, "/issue-templates", &staff).await;
+    let kit = kits
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"] == "Replace dishwasher")
+        .unwrap()
+        .clone();
+    let (st, g) = post_json(
+        c,
+        &format!("/issue-templates/{}/generate", kit["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{g}");
+    let tid = g["ticket"]["id"].as_str().unwrap().to_string();
+    let (_, ap) = get_json(c, &format!("/tickets/{tid}/approvals"), &staff).await;
+    assert_eq!(ap["owner_name"], "Dana Kessler");
+    assert_eq!(ap["limit_cents"], 100);
+    assert_eq!(ap["needs_approval"], true);
+
+    // Sending a task to a vendor is refused and asks Dana.
+    let (_, vendors) = get_json(c, &format!("/tickets/{tid}/vendors"), &staff).await;
+    let vid = vendors
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["email"].is_string())
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (_, tasks) = get_json(c, &format!("/tickets/{tid}/tasks"), &staff).await;
+    let task_id = tasks[0]["id"].as_str().unwrap().to_string();
+    let (st, refused) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [task_id], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Ask them to approve"),
+        "{refused}"
+    );
+    // Staff ask her from the work order.
+    let (st, asked_now) = post_json(
+        c,
+        &format!("/tickets/{tid}/approvals"),
+        &staff,
+        serde_json::json!({ "note": "Old unit is leaking; this is the quote" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{asked_now}");
+    assert_eq!(asked_now["status"], "pending");
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert_eq!(detail["status"], "on_hold");
+    assert_eq!(detail["waiting_on"], "owner");
+    let (_, ap) = get_json(c, &format!("/tickets/{tid}/approvals"), &staff).await;
+    assert_eq!(ap["approvals"][0]["status"], "pending");
+    assert_eq!(ap["approvals"][0]["kind"], "approval");
+    let asked = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "owner_approval_request")
+        .collect::<Vec<_>>();
+    assert!(asked.len() >= 2, "email and text to Dana");
+    let link = asked[0].payload["vars"]["link"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let token = link.rsplit('/').next().unwrap().to_string();
+    // Asking again while pending is refused; so is a second dispatch.
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/approvals"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // Dana opens the link, sees the plan, approves.
+    let resp = c
+        .client
+        .get(format!("/public/approve/{token}"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let view: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(view["kind"], "approval");
+    assert_eq!(view["owner_name"], "Dana Kessler");
+    assert!(view["tasks"].as_array().unwrap().len() >= 3);
+    assert_eq!(view["limit_label"], "$1");
+    let resp = c
+        .client
+        .post(format!("/public/approve/{token}"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "approve": true, "note": "Go ahead, use the Bosch" }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let decided: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(decided["status"], "approved");
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert_eq!(detail["status"], "open");
+    assert!(detail["waiting_on"].is_null());
+    assert!(detail["comments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["action"] == "owner_approved" && m["author_name"] == "Dana Kessler"));
+    // Now the dispatch goes through.
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [task_id], "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    // A second answer on the same ask is refused.
+    let resp = c
+        .client
+        .post(format!("/public/approve/{token}"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "approve": false }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Conflict);
+
+    // Done with a cost on it: Dana is asked to sign off.
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/expenses"),
+        &staff,
+        serde_json::json!({ "description": "Dishwasher", "amount_cents": 61900, "billable_to_owner": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "status": "resolved" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, ap) = get_json(c, &format!("/tickets/{tid}/approvals"), &staff).await;
+    let signoff = ap["approvals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["kind"] == "signoff")
+        .expect("a sign-off ask")
+        .clone();
+    assert_eq!(signoff["status"], "pending");
+    assert_eq!(signoff["amount_cents"], 61900);
+
+    // Dana gets a login and answers from the portal.
+    let (st, inv) = post_json(
+        c,
+        &format!("/crm/owners/{}/invite", dana.id),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    assert_eq!(inv["outcome"], "invited");
+    let uid = Uuid::parse_str(inv["user_id"].as_str().unwrap()).unwrap();
+    let owner_tok =
+        crate::auth::issue_access_token(&c.config, uid, Some(nw), false, vec![]).unwrap();
+    let (st, home) = get_json(c, "/my/owner", &owner_tok).await;
+    assert_eq!(st, Status::Ok, "{home}");
+    assert_eq!(home["name"], "Dana Kessler");
+    assert!(home["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["id"] == pid.to_string()));
+    assert_eq!(home["pending"][0]["kind"], "signoff");
+    assert_eq!(home["approval_limit_cents"], 100);
+    let sid = home["pending"][0]["id"].as_str().unwrap().to_string();
+    let (st, done) = post_json(
+        c,
+        &format!("/my/owner/approvals/{sid}"),
+        &owner_tok,
+        serde_json::json!({ "approve": true, "note": "Looks great" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(done["status"], "approved");
+    let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
+    assert_eq!(detail["status"], "closed");
+    let (st, allw) = get_json(c, "/my/owner/work?all=true", &owner_tok).await;
+    assert_eq!(st, Status::Ok);
+    assert!(allw
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w["id"] == tid.as_str() && w["approval"]["kind"] == "signoff"));
+    // The statement for this month lists the work and the asks.
+    let month = chrono::Utc::now().format("%Y-%m").to_string();
+    let (st, stmt) = get_json(c, &format!("/my/owner/statement?month={month}"), &owner_tok).await;
+    assert_eq!(st, Status::Ok, "{stmt}");
+    assert!(stmt["work"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w["ticket_id"] == tid.as_str()));
+    assert!(stmt["approvals"].as_array().unwrap().len() >= 2);
+    let resp = c
+        .client
+        .get(format!("/my/owner/statement.pdf?month={month}"))
+        .header(bearer(&owner_tok))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert!(resp.into_bytes().await.unwrap().starts_with(b"%PDF"));
+    // Someone who isn't an owner gets nothing here.
+    let (st, _) = get_json(c, "/my/owner", &staff).await;
+    assert_eq!(st, Status::NotFound);
+
+    // Staff can go ahead over the limit with a reason, which is recorded.
+    let (st, g2) = post_json(
+        c,
+        &format!("/issue-templates/{}/generate", kit["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "property_id": pid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{g2}");
+    let tid2 = g2["ticket"]["id"].as_str().unwrap().to_string();
+    let (_, tasks2) = get_json(c, &format!("/tickets/{tid2}/tasks"), &staff).await;
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid2}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": [tasks2[0]["id"]], "entity_id": vid, "approval_override_reason": "Water pouring into the unit below" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    let (_, ap2) = get_json(c, &format!("/tickets/{tid2}/approvals"), &staff).await;
+    assert_eq!(ap2["approvals"][0]["status"], "overridden");
+    assert_eq!(ap2["needs_approval"], false);
+    // Nudges: nothing is due yet (asked just now).
+    let n = crate::owner_approvals::nudge_pending(&c.db, nw)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
 }
 
 async fn appointments_flow(c: &Ctx) {

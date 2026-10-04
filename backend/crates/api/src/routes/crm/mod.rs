@@ -599,6 +599,8 @@ async fn insert_owner(
         phone: Set(clean(b.phone)),
         notes: Set(clean(b.notes)),
         created_at: Set(Utc::now().into()),
+        user_id: Set(None),
+        approval_limit_cents: Set(None),
     }
     .insert(db)
     .await?)

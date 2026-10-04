@@ -61,8 +61,8 @@ fn resolve_period(from: Option<String>, to: Option<String>) -> ApiResult<(String
     Ok((start.to_string(), end.to_string()))
 }
 
-async fn build(
-    db: &crate::db::RequestDb,
+pub async fn build(
+    db: &impl sea_orm::ConnectionTrait,
     tenant_id: Uuid,
     entity_id: Uuid,
     period_start: &str,

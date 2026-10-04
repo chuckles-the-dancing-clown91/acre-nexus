@@ -88,6 +88,8 @@ pub struct DispatchTaskReq {
     pub note: Option<String>,
     /// Why to send a vendor without current insurance, when that's required.
     pub coi_override_reason: Option<String>,
+    /// Why to go ahead without the owner's approval of work over their limit.
+    pub approval_override_reason: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -698,10 +700,20 @@ async fn send_to_vendor(
     vendor_id: Uuid,
     note: Option<String>,
     coi_override_reason: Option<String>,
+    approval_override_reason: Option<String>,
 ) -> ApiResult<()> {
     if tasks.is_empty() {
         return Err(ApiError::BadRequest("pick at least one task".into()));
     }
+    // Work over the owner's limit waits for their yes (or a reason to go on).
+    crate::owner_approvals::require_approval(
+        db,
+        scope.tenant_id,
+        t,
+        Some(user.user_id),
+        approval_override_reason.as_deref(),
+    )
+    .await?;
     if let Some(done) = tasks
         .iter()
         .find(|x| matches!(x.status.as_str(), "done" | "skipped"))
@@ -878,6 +890,7 @@ pub async fn dispatch_task(
         b.entity_id,
         b.note,
         b.coi_override_reason,
+        b.approval_override_reason,
     )
     .await?;
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
@@ -889,6 +902,8 @@ pub struct DispatchTasksReq {
     pub entity_id: Uuid,
     pub note: Option<String>,
     pub coi_override_reason: Option<String>,
+    /// Why to go ahead without the owner's approval of work over their limit.
+    pub approval_override_reason: Option<String>,
 }
 
 /// `POST /tickets/<id>/dispatch-tasks` — send several tasks to one vendor as one
@@ -929,6 +944,7 @@ pub async fn dispatch_tasks(
         b.entity_id,
         b.note,
         b.coi_override_reason,
+        b.approval_override_reason,
     )
     .await?;
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
@@ -984,11 +1000,19 @@ pub async fn costs(
 ) -> ApiResult<Json<CostSummary>> {
     user.require(Permission::MaintenanceRead)?;
     let t = ticket(&db, scope.tenant_id, id).await?;
-    let tenant_id = scope.tenant_id;
+    Ok(Json(cost_summary(&db, scope.tenant_id, &t).await?))
+}
+
+/// The estimate and the spend on one work order (shared with owner approvals).
+pub async fn cost_summary<C: ConnectionTrait>(
+    db: &C,
+    tenant_id: Uuid,
+    t: &entity::maintenance_ticket::Model,
+) -> ApiResult<CostSummary> {
     let tasks = TicketTask::find()
         .filter(entity::ticket_task::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_task::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let est_labor: i64 = tasks
         .iter()
@@ -998,7 +1022,7 @@ pub async fn costs(
     let parts = TicketPart::find()
         .filter(entity::ticket_part::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_part::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let stock_cost: HashMap<Uuid, i64> = {
         let ids: Vec<Uuid> = parts.iter().filter_map(|p| p.inventory_item_id).collect();
@@ -1008,7 +1032,7 @@ pub async fn costs(
             entity::prelude::InventoryItem::find()
                 .filter(entity::inventory_item::Column::TenantId.eq(tenant_id))
                 .filter(entity::inventory_item::Column::Id.is_in(ids))
-                .all(&db)
+                .all(db)
                 .await?
                 .into_iter()
                 .filter_map(|i| i.unit_cost_cents.map(|c| (i.id, c)))
@@ -1032,7 +1056,7 @@ pub async fn costs(
     let lines: i64 = TicketLine::find()
         .filter(entity::ticket_line::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_line::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?
         .iter()
         .map(|l| l.total_cents)
@@ -1040,7 +1064,7 @@ pub async fn costs(
     let expenses = Expense::find()
         .filter(entity::expense::Column::TenantId.eq(tenant_id))
         .filter(entity::expense::Column::MaintenanceTicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let expenses_cents: i64 = expenses.iter().map(|e| e.amount_cents).sum();
     let receipts = Document::find()
@@ -1049,14 +1073,14 @@ pub async fn costs(
         .filter(entity::document::Column::OwnerId.eq(t.id))
         .filter(entity::document::Column::Category.eq("receipt"))
         .filter(entity::document::Column::Status.eq("stored"))
-        .all(&db)
+        .all(db)
         .await?
         .len();
     let quotes: i64 = TicketQuote::find()
         .filter(entity::ticket_quote::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_quote::Column::TicketId.eq(t.id))
         .filter(entity::ticket_quote::Column::Status.eq("approved"))
-        .all(&db)
+        .all(db)
         .await?
         .iter()
         .map(|q| q.amount_cents)
@@ -1083,7 +1107,7 @@ pub async fn costs(
     let est = est_labor + est_parts;
     let actual = lines + expenses_cents + quotes;
     let variance = actual - est;
-    Ok(Json(CostSummary {
+    Ok(CostSummary {
         ticket_id: t.id,
         est_labor_cents: est_labor,
         est_parts_cents: est_parts,
@@ -1104,7 +1128,7 @@ pub async fn costs(
         tasks_total: tasks.iter().filter(|x| x.status != "skipped").count(),
         tasks_done: tasks.iter().filter(|x| x.status == "done").count(),
         trades_needed: needs,
-    }))
+    })
 }
 
 // ---------------------------------------------------------------------------

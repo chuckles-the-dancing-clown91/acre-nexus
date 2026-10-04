@@ -83,6 +83,13 @@ pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 /// How long an offered window is when staff give only a start time.
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
+/// Work estimated at or over this many cents waits for the owner's approval
+/// before it's sent out (0 = never ask).
+pub const MAINTENANCE_OWNER_APPROVAL_CENTS: &str = "maintenance.owner_approval_cents";
+/// Ask the owner to sign off on finished billable work.
+pub const MAINTENANCE_OWNER_SIGNOFF: &str = "maintenance.owner_signoff";
+/// Day of the month the owner statement goes out (0 = don't send).
+pub const OWNERS_STATEMENT_DAY: &str = "owners.statement_day";
 /// `fbi` (the FBI Crime Data Explorer) or `off`.
 pub const PROPERTY_DATA_CRIME_PROVIDER: &str = "property_data.crime_provider";
 /// `simulated` or `rentcast` for parcel, tax and valuation records.
@@ -474,6 +481,36 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: MAINTENANCE_OWNER_APPROVAL_CENTS,
+        label: "Owner approval over (cents)",
+        description: "Work estimated at or over this amount waits for the property owner's \
+                      approval before it goes to a vendor. 50000 = $500. An owner can have \
+                      their own limit. Staff can go ahead with a reason, which is recorded. \
+                      0 never asks.",
+        group: "Owners",
+        kind: SettingKind::Int,
+        default: || json!(50000),
+    },
+    SettingDef {
+        key: MAINTENANCE_OWNER_SIGNOFF,
+        label: "Owner sign-off on finished work",
+        description: "When billable work is marked done, the owner gets a summary with the \
+                      cost and photos and signs off or disputes it from the link.",
+        group: "Owners",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: OWNERS_STATEMENT_DAY,
+        label: "Monthly statement day",
+        description: "Day of the month each owner is emailed last month's statement: rent \
+                      collected, expenses, management fee, net, and the work done. 0 turns \
+                      it off; owners can still read statements in their portal.",
+        group: "Owners",
+        kind: SettingKind::Int,
+        default: || json!(3),
     },
     SettingDef {
         key: PROPERTY_DATA_CRIME_PROVIDER,

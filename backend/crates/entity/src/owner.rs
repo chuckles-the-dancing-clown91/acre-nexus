@@ -18,6 +18,10 @@ pub struct Model {
     pub phone: Option<String>,
     pub notes: Option<String>,
     pub created_at: DateTimeWithTimeZone,
+    /// The login this owner signs into the owner portal with, once invited.
+    pub user_id: Option<Uuid>,
+    /// Their own spend limit; `None` uses the workspace's.
+    pub approval_limit_cents: Option<i64>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

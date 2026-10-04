@@ -18,6 +18,7 @@ import { Expenses } from "@/components/desk/Expenses";
 import { Assign } from "@/components/desk/Assign";
 import { Media, Notes } from "@/components/desk/Notes";
 import { Parts } from "@/components/desk/Parts";
+import { OwnerApprovalPanel } from "@/components/desk/OwnerApproval";
 import { Schedule } from "@/components/desk/Schedule";
 import { TicketActions } from "@/components/desk/TicketActions";
 import { TaskList } from "@/components/desk/TaskList";
@@ -235,6 +236,11 @@ export default function WorkOrderPage() {
       {t && (
         <motion.div {...rise(1)}>
           <Schedule ticket={t} manage={manage} onChange={refresh} />
+          <OwnerApprovalPanel
+            ticketId={id}
+            manage={manage}
+            onChange={refresh}
+          />
         </motion.div>
       )}
 

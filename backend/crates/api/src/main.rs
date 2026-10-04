@@ -56,6 +56,7 @@ mod notices;
 mod notify;
 mod oauth;
 mod openapi;
+mod owner_approvals;
 mod paging;
 mod partner;
 mod password_links;
