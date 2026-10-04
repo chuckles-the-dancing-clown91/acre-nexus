@@ -6,15 +6,19 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CreditCard, LogOut, Wrench } from "lucide-react";
+import { Building2, CreditCard, FileText, LogOut, Wrench } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { isOwnerOnly } from "@/lib/owner";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const RESIDENT_NAV = [
   { href: "/account/maintenance", label: "Repairs", icon: Wrench },
   { href: "/account/payments", label: "Rent", icon: CreditCard },
+];
+const OWNER_NAV = [
+  { href: "/account/owner/statement", label: "Statements", icon: FileText },
 ];
 
 export function AccountShell({ children }: { children: React.ReactNode }) {
@@ -22,6 +26,10 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
   const { brand } = useTheme();
   const router = useRouter();
   const path = usePathname();
+  const ownerSide = isOwnerOnly(user) || path.startsWith("/account/owner");
+  const NAV = ownerSide
+    ? [{ href: "/account/owner", label: "Home", icon: Building2 }, ...OWNER_NAV]
+    : RESIDENT_NAV;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -36,7 +44,7 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4">
           <Link
-            href="/account/maintenance"
+            href={ownerSide ? "/account/owner" : "/account/maintenance"}
             className="flex min-w-0 items-center gap-2"
           >
             {brand.logo_url ? (
@@ -53,7 +61,10 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="ml-auto flex items-center gap-1">
             {NAV.map((n) => {
-              const on = path.startsWith(n.href);
+              const on =
+                n.href === "/account/owner"
+                  ? path === n.href
+                  : path.startsWith(n.href);
               return (
                 <Link
                   key={n.href}

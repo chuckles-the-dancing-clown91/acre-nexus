@@ -205,9 +205,19 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Get, "/ticket-actions"),
     (Method::Get, "/ticket-techs"),
     (Method::Get, "/ticket-queue"),
+    (Method::Get, "/appointments"),
+    (Method::Post, "/appointments"),
     (Method::Post, "/issue-templates/<id>/generate"),
     (Method::Get, "/maintenance-plans"),
     (Method::Post, "/maintenance-plans"),
+    // Needs attention, To schedule and the code-required items: narrowed by
+    // reach in the handler.
+    (Method::Get, "/attention"),
+    (Method::Get, "/to-schedule"),
+    (Method::Get, "/mandates"),
+    (Method::Get, "/shopping"),
+    (Method::Post, "/routes/propose"),
+    (Method::Post, "/routes/accept"),
 ];
 
 /// Property routes a scoped person may not use even on their own properties:
@@ -229,6 +239,7 @@ enum Target {
     TicketLine,
     TicketQuote,
     Plan,
+    Appointment,
 }
 
 fn target(route: &str) -> Option<Target> {
@@ -246,6 +257,7 @@ fn target(route: &str) -> Option<Target> {
         ["ticket-lines", "<id>"] => Some(Target::TicketLine),
         ["ticket-quotes", "<id>"] => Some(Target::TicketQuote),
         ["maintenance-plans", "<id>"] => Some(Target::Plan),
+        ["appointments", "<id>"] => Some(Target::Appointment),
         _ => None,
     }
 }
@@ -364,6 +376,10 @@ pub async fn gate(req: &Request<'_>) -> Verdict {
             )
             .await
         }
+        Target::Appointment => entity::prelude::Appointment::find_by_id(id)
+            .one(&state.db)
+            .await
+            .map(|a| a.map(|a| a.property_id)),
         Target::Plan => MaintenancePlan::find_by_id(id)
             .one(&state.db)
             .await
@@ -407,6 +423,7 @@ mod tests {
             Err(Target::TicketLine) => "line",
             Err(Target::TicketQuote) => "quote",
             Err(Target::Plan) => "plan",
+            Err(Target::Appointment) => "appointment",
         }
     }
 

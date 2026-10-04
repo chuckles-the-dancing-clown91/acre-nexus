@@ -34,6 +34,11 @@ pub struct Model {
     pub created_by: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    /// The code-required item this plan came from, if any.
+    pub mandate_key: Option<String>,
+    /// Days ahead of the due date it shows as "to schedule"; `None` uses the
+    /// workspace's.
+    pub lead_days: Option<i32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

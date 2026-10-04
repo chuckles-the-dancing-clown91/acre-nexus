@@ -18,6 +18,8 @@ import { Expenses } from "@/components/desk/Expenses";
 import { Assign } from "@/components/desk/Assign";
 import { Media, Notes } from "@/components/desk/Notes";
 import { Parts } from "@/components/desk/Parts";
+import { OwnerApprovalPanel } from "@/components/desk/OwnerApproval";
+import { Schedule } from "@/components/desk/Schedule";
 import { TicketActions } from "@/components/desk/TicketActions";
 import { TaskList } from "@/components/desk/TaskList";
 import { Badge, statusTone } from "@/components/ui/badge";
@@ -92,6 +94,7 @@ export default function WorkOrderPage() {
     void qc.invalidateQueries({ queryKey: ["tickets"] });
     void qc.invalidateQueries({ queryKey: ["techs"] });
     void qc.invalidateQueries({ queryKey: ["my-queue"] });
+    void qc.invalidateQueries({ queryKey: ["appointments"] });
   }, [qc, id]);
 
   if (ticket.error) {
@@ -227,6 +230,17 @@ export default function WorkOrderPage() {
       {t && (
         <motion.div {...rise(1)}>
           <Assign ticket={t} manage={manage} onChange={refresh} />
+        </motion.div>
+      )}
+
+      {t && (
+        <motion.div {...rise(1)}>
+          <Schedule ticket={t} manage={manage} onChange={refresh} />
+          <OwnerApprovalPanel
+            ticketId={id}
+            manage={manage}
+            onChange={refresh}
+          />
         </motion.div>
       )}
 

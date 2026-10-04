@@ -12,6 +12,7 @@ use crate::state::AppState;
 use crate::tenancy::PublicTenant;
 use rocket::serde::json::Json;
 use rocket::{post, State};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 
 /// `POST /public/applications` — submit a rental application.
 ///
@@ -58,6 +59,22 @@ pub async fn apply(
         reused_from.as_ref(),
     )
     .await?;
+
+    // An invited prospect: the lead now has its application.
+    if let Some(lid) = b.lead_id {
+        if let Some(lead) = entity::prelude::Lead::find_by_id(lid)
+            .filter(entity::lead::Column::TenantId.eq(tenant.tenant_id))
+            .filter(entity::lead::Column::ApplicationId.is_null())
+            .one(&db)
+            .await?
+        {
+            let mut am: entity::lead::ActiveModel = lead.into();
+            am.application_id = Set(Some(saved.id));
+            am.status = Set("applied".into());
+            am.updated_at = Set(chrono::Utc::now().into());
+            am.update(&db).await?;
+        }
+    }
 
     let message = if reused_from.is_some() {
         "Welcome back — your recent application was reused and pre-approved for this listing."

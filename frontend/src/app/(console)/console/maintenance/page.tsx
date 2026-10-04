@@ -14,7 +14,6 @@ import {
   ClipboardList,
   Check,
   HardHat,
-  Hourglass,
   Play,
   Plus,
   Search,
@@ -36,6 +35,8 @@ import {
 } from "@/lib/servicedesk";
 import { useProperties } from "@/lib/queries";
 import { useHasTenantScope } from "@/components/shell/tenant-scope";
+import { ToSchedule } from "@/components/desk/ToSchedule";
+import { attention } from "@/lib/attention";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,14 @@ export default function ServiceDeskPage() {
     queryFn: desk.queue,
     enabled: scoped,
   });
+  const toSchedule = useQuery({
+    queryKey: ["to-schedule"],
+    queryFn: attention.toSchedule,
+    enabled: scoped,
+  });
+  const needDates =
+    (toSchedule.data?.plans.length ?? 0) +
+    (toSchedule.data?.tickets.length ?? 0);
   const [view, setView] = useState<QueueView>("open");
   const [who, setWho] = useState<string>("");
   const [q, setQ] = useState("");
@@ -192,9 +201,10 @@ export default function ServiceDeskPage() {
           tone={counts.urgent ? "bad" : undefined}
         />
         <Stat
-          icon={<Hourglass />}
-          label="Waiting on something"
-          value={counts.waiting}
+          icon={<CalendarClock />}
+          label="To schedule"
+          value={needDates}
+          tone={needDates ? "warn" : undefined}
         />
         <Stat
           icon={<AlarmClock />}
@@ -263,6 +273,8 @@ export default function ServiceDeskPage() {
           </ul>
         </Panel>
       )}
+
+      <ToSchedule manage={manage} names={names} enabled={scoped} />
 
       {manage && (techs.data?.length ?? 0) > 0 && (
         <TeamStrip techs={techs.data ?? []} who={who} onPick={setWho} />

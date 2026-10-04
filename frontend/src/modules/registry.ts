@@ -62,6 +62,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/attention",
+        label: "Needs attention",
+        icon: "alert",
+        permission: "property:read",
+      },
+      {
         href: "/console/properties/onboard",
         label: "Onboard",
         icon: "house-plus",
@@ -266,6 +272,18 @@ export const MODULES: ModuleDef[] = [
         permission: "maintenance:read",
       },
       {
+        href: "/console/my-day",
+        label: "My day",
+        icon: "clock",
+        permission: "maintenance:read",
+      },
+      {
+        href: "/console/maintenance/plan",
+        label: "Plan the day",
+        icon: "route",
+        permission: "maintenance:read",
+      },
+      {
         href: "/console/maintenance/schedule",
         label: "Schedule",
         icon: "calendar",
@@ -343,8 +361,8 @@ export const MODULES: ModuleDef[] = [
         permission: "application:read",
       },
       {
-        href: "/console/tours",
-        label: "Tours",
+        href: "/console/showings",
+        label: "Showings",
         icon: "door",
         permission: "application:read",
       },

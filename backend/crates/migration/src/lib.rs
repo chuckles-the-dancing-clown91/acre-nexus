@@ -73,6 +73,11 @@ mod m20240101_000065_maintenance_actions;
 mod m20240101_000066_property_profile;
 mod m20240101_000067_desk_queues;
 mod m20240101_000068_property_story;
+mod m20240101_000069_appointments;
+mod m20240101_000070_vendor_links;
+mod m20240101_000071_property_crime;
+mod m20240101_000072_owner_approvals;
+mod m20240101_000073_mandates;
 
 pub struct Migrator;
 
@@ -148,6 +153,11 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000066_property_profile::Migration),
             Box::new(m20240101_000067_desk_queues::Migration),
             Box::new(m20240101_000068_property_story::Migration),
+            Box::new(m20240101_000069_appointments::Migration),
+            Box::new(m20240101_000070_vendor_links::Migration),
+            Box::new(m20240101_000071_property_crime::Migration),
+            Box::new(m20240101_000072_owner_approvals::Migration),
+            Box::new(m20240101_000073_mandates::Migration),
         ]
     }
 }

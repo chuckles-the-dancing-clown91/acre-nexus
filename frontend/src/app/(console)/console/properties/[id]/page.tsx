@@ -46,7 +46,9 @@ import { Summary } from "@/components/property/Summary";
 import { Insurance } from "@/components/property/Insurance";
 import { Parcel } from "@/components/property/Parcel";
 import { Permits } from "@/components/property/Permits";
+import { Mandates } from "@/components/property/Mandates";
 import { Plans } from "@/components/property/Plans";
+import { Safety } from "@/components/property/Safety";
 import { Area, Schools } from "@/components/property/Schools";
 import { Systems } from "@/components/property/Systems";
 import { cn } from "@/lib/utils";
@@ -243,7 +245,10 @@ function PropertyView() {
 
       {tab === "parcel" && <Parcel propertyId={id} />}
       {tab === "systems" && (
-        <Systems propertyId={id} canOrder={can("maintenance:manage")} />
+        <div className="space-y-4">
+          <Systems propertyId={id} canOrder={can("maintenance:manage")} />
+          <Mandates propertyId={id} manage={can("maintenance:manage")} />
+        </div>
       )}
       {tab === "permits" && (
         <div className="space-y-4">
@@ -255,6 +260,7 @@ function PropertyView() {
       {tab === "schools" && (
         <>
           <Area propertyId={id} />
+          <Safety propertyId={id} />
           <Schools propertyId={id} manage={write} />
         </>
       )}

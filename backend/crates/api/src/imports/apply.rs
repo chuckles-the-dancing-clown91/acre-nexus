@@ -607,6 +607,8 @@ async fn owner_row(
         phone: Set(cell(t, row, m, "phone").map(str::to_string)),
         notes: Set(cell(t, row, m, "notes").map(str::to_string)),
         created_at: Set(Utc::now().into()),
+        user_id: Set(None),
+        approval_limit_cents: Set(None),
     }
     .insert(db)
     .await?;
@@ -688,6 +690,7 @@ async fn vendor_row(
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),
+        alpha_invited_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

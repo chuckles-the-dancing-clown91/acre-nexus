@@ -122,6 +122,8 @@ pub async fn create_plan(
         next_due_date: Set(b.next_due_date),
         active: Set(true),
         last_ticket_id: Set(None),
+        mandate_key: Set(None),
+        lead_days: Set(None),
         created_by: Set(Some(user.user_id)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),

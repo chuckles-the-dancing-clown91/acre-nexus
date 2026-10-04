@@ -19,6 +19,7 @@ import type {
   UpdateListingInput,
   AppWorkflowCatalog,
   ApplyResponse,
+  PropertyDataLive,
   Assignment,
   CreateAssignmentInput,
   Counterparty,
@@ -1424,6 +1425,8 @@ export const api = {
 
   // ---- system settings ----
   settings: () => request<SettingView[]>("/settings", { auth: true }),
+  propertyDataLive: () =>
+    request<PropertyDataLive>("/property-data/live", { auth: true }),
   setSetting: (key: string, value: unknown) =>
     request<SettingView>(`/settings/${key}`, {
       method: "PUT",

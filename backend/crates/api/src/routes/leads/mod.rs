@@ -5,6 +5,7 @@
 pub mod convert;
 pub mod create;
 pub mod dto;
+pub mod invite;
 pub mod list;
 pub mod tour;
 pub mod update;

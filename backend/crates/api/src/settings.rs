@@ -79,6 +79,47 @@ pub const CALENDAR_LEASE_RENEWAL_SYNC: &str = "calendar.lease_renewal_sync";
 pub const REMINDERS_ENABLED: &str = "reminders.enabled";
 /// Only send a vendor out with current liability insurance (or a reason).
 pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
+/// Hours before a confirmed visit to remind everyone (comma-separated).
+pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
+/// How long an offered window is when staff give only a start time.
+pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
+/// Days before a routine's due date it shows as "to schedule".
+pub const HELPDESK_PLAN_LEAD_DAYS: &str = "helpdesk.plan_lead_days";
+/// Hours after a work order is finished to ask the resident how it went (0 = off).
+pub const FOLLOWUPS_RATING_HOURS: &str = "followups.rating_hours";
+/// Days after a work order is finished to ask the resident if it's still fixed (0 = off).
+pub const FOLLOWUPS_CHECKIN_DAYS: &str = "followups.checkin_days";
+/// Hours after sending tasks to a vendor by email to nudge them if they haven't answered (0 = off).
+pub const FOLLOWUPS_VENDOR_HOURS: &str = "followups.vendor_hours";
+/// Hours after offering visit times to remind the person if they haven't picked (0 = off).
+pub const FOLLOWUPS_OFFER_HOURS: &str = "followups.offer_hours";
+/// Days after a showing to nudge a prospect who hasn't applied (0 = off).
+pub const FOLLOWUPS_PROSPECT_DAYS: &str = "followups.prospect_days";
+/// When a planned day starts, HH:MM in the workspace's zone.
+pub const ROUTES_DAY_START: &str = "routes.day_start";
+/// How long a planned day is, in minutes.
+pub const ROUTES_DAY_MINUTES: &str = "routes.day_minutes";
+/// Driving between stops when a property has no coordinates, in minutes.
+pub const ROUTES_DRIVE_MINUTES: &str = "routes.drive_minutes";
+/// The supply run at the start of a day with parts to buy, in minutes.
+pub const ROUTES_STORE_MINUTES: &str = "routes.store_minutes";
+/// Time on site for a work order whose tasks carry no estimate, in minutes.
+pub const ROUTES_JOB_MINUTES: &str = "routes.job_minutes";
+/// Work estimated at or over this many cents waits for the owner's approval
+/// before it's sent out (0 = never ask).
+pub const MAINTENANCE_OWNER_APPROVAL_CENTS: &str = "maintenance.owner_approval_cents";
+/// Ask the owner to sign off on finished billable work.
+pub const MAINTENANCE_OWNER_SIGNOFF: &str = "maintenance.owner_signoff";
+/// Day of the month the owner statement goes out (0 = don't send).
+pub const OWNERS_STATEMENT_DAY: &str = "owners.statement_day";
+/// `fbi` (the FBI Crime Data Explorer) or `off`.
+pub const PROPERTY_DATA_CRIME_PROVIDER: &str = "property_data.crime_provider";
+/// `simulated` or `rentcast` for parcel, tax and valuation records.
+pub const PROPERTY_DATA_RECORDS_PROVIDER: &str = "property_data.records_provider";
+/// Re-fetch public records older than this many days (0 = never).
+pub const PROPERTY_DATA_REFRESH_DAYS: &str = "property_data.refresh_days";
+/// Where a vendor signs up for Alpha when we invite them.
+pub const PARTNERS_ALPHA_JOIN_URL: &str = "partners.alpha_join_url";
 /// Text (or email) the resident for a 1–5 rating when their repair resolves.
 pub const MAINTENANCE_ASK_RATING: &str = "maintenance.ask_rating";
 /// In-house labor rate for work-order estimates, cents per hour.
@@ -419,6 +460,23 @@ pub const CATALOG: &[SettingDef] = &[
         default: || json!(800),
     },
     SettingDef {
+        key: APPOINTMENT_REMINDER_HOURS,
+        label: "Appointment reminders (hours before)",
+        description: "Comma-separated hours before a confirmed visit at which the \
+                      resident (and the person going) are reminded, e.g. \"24,2\".",
+        group: "Calendar",
+        kind: SettingKind::Text,
+        default: || json!("24,2"),
+    },
+    SettingDef {
+        key: APPOINTMENT_WINDOW_MINUTES,
+        label: "Default visit window (minutes)",
+        description: "How long an offered time window is when only a start time is given.",
+        group: "Calendar",
+        kind: SettingKind::Int,
+        default: || json!(120),
+    },
+    SettingDef {
         key: CALENDAR_DEFAULT_LEAD_DAYS,
         label: "Default reminder lead times (days)",
         description: "Comma-separated days before a due date at which new \
@@ -445,6 +503,166 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: HELPDESK_PLAN_LEAD_DAYS,
+        label: "Schedule routines this many days ahead",
+        description: "A routine (filters, inspections, code-required checks) shows under \
+                      \"To schedule\" this many days before it's due, so the visit can be \
+                      booked before the work order opens on the day.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(14),
+    },
+    SettingDef {
+        key: FOLLOWUPS_RATING_HOURS,
+        label: "Ask the resident to rate finished work after (hours)",
+        description: "Email and text once the work order has been finished this long and nobody has rated it. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(24),
+    },
+    SettingDef {
+        key: FOLLOWUPS_CHECKIN_DAYS,
+        label: "Check in on finished work after (days)",
+        description: "Ask the resident whether it's still fixed, once. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(7),
+    },
+    SettingDef {
+        key: FOLLOWUPS_VENDOR_HOURS,
+        label: "Nudge a quiet vendor after (hours)",
+        description: "Tasks sent by email with no answer from the vendor's link get one reminder with a fresh link. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(48),
+    },
+    SettingDef {
+        key: FOLLOWUPS_OFFER_HOURS,
+        label: "Remind about offered visit times after (hours)",
+        description: "The person offered times gets the link again once, while the times are still ahead. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(24),
+    },
+    SettingDef {
+        key: FOLLOWUPS_PROSPECT_DAYS,
+        label: "Nudge a prospect after a showing (days)",
+        description: "A prospect who toured and hasn't applied gets the application link once. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(2),
+    },
+    SettingDef {
+        key: ROUTES_DAY_START,
+        label: "Planned day starts at",
+        description:
+            "When a technician's planned day starts (HH:MM, in the workspace's time zone).",
+        group: "Helpdesk",
+        kind: SettingKind::Text,
+        default: || json!("08:00"),
+    },
+    SettingDef {
+        key: ROUTES_DAY_MINUTES,
+        label: "Planned day length (minutes)",
+        description: "Work past this goes to the next day when a route is proposed.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(480),
+    },
+    SettingDef {
+        key: ROUTES_DRIVE_MINUTES,
+        label: "Driving between stops (minutes)",
+        description: "Used when a property has no coordinates; otherwise the distance decides.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(20),
+    },
+    SettingDef {
+        key: ROUTES_STORE_MINUTES,
+        label: "Supply run (minutes)",
+        description: "The stop at the store at the start of a day with parts to buy.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(30),
+    },
+    SettingDef {
+        key: ROUTES_JOB_MINUTES,
+        label: "Time on site without an estimate (minutes)",
+        description: "A work order whose tasks carry no minutes is planned at this length.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(60),
+    },
+    SettingDef {
+        key: MAINTENANCE_OWNER_APPROVAL_CENTS,
+        label: "Owner approval over (cents)",
+        description: "Work estimated at or over this amount waits for the property owner's \
+                      approval before it goes to a vendor. 50000 = $500. An owner can have \
+                      their own limit. Staff can go ahead with a reason, which is recorded. \
+                      0 never asks.",
+        group: "Owners",
+        kind: SettingKind::Int,
+        default: || json!(50000),
+    },
+    SettingDef {
+        key: MAINTENANCE_OWNER_SIGNOFF,
+        label: "Owner sign-off on finished work",
+        description: "When billable work is marked done, the owner gets a summary with the \
+                      cost and photos and signs off or disputes it from the link.",
+        group: "Owners",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: OWNERS_STATEMENT_DAY,
+        label: "Monthly statement day",
+        description: "Day of the month each owner is emailed last month's statement: rent \
+                      collected, expenses, management fee, net, and the work done. 0 turns \
+                      it off; owners can still read statements in their portal.",
+        group: "Owners",
+        kind: SettingKind::Int,
+        default: || json!(3),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_CRIME_PROVIDER,
+        label: "Crime statistics",
+        description: "\"fbi\" reads the FBI Crime Data Explorer (free; put a data.gov key \
+                      in the vault as fbi.api_key, or the shared demo key is used) for the \
+                      nearest reporting agency's rates against the state and the country. \
+                      \"off\" keeps the simulated figures.",
+        group: "Property data",
+        kind: SettingKind::Text,
+        default: || json!("fbi"),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_RECORDS_PROVIDER,
+        label: "Public records provider",
+        description: "\"rentcast\" fetches the parcel, tax years and value estimate from \
+                      RentCast with the key in the vault as rentcast.api_key. \"simulated\" \
+                      uses deterministic stand-ins.",
+        group: "Property data",
+        kind: SettingKind::Text,
+        default: || json!("simulated"),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_REFRESH_DAYS,
+        label: "Refresh public records every (days)",
+        description: "Properties whose records are older than this are re-fetched, a few \
+                      a night. 0 turns the nightly refresh off.",
+        group: "Property data",
+        kind: SettingKind::Int,
+        default: || json!(30),
+    },
+    SettingDef {
+        key: PARTNERS_ALPHA_JOIN_URL,
+        label: "Alpha sign-up link for vendors",
+        description: "The page a vendor is sent to when you invite them to Alpha. \
+                      Leave blank to use Alpha's public sign-up.",
+        group: "Vendors",
+        kind: SettingKind::Text,
+        default: || json!("https://alphapowerwash.com/partners/join"),
     },
     SettingDef {
         key: COMPLIANCE_REQUIRE_COI,

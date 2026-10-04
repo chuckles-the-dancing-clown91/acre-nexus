@@ -74,6 +74,42 @@ the kit's tasks and parts.
   The work list (`GET /tickets`) carries `assignee_name`, `assignee_kind`
   (`tech` or `vendor`), `tasks_total` and `tasks_done`.
 
+## My day (the tech's phone)
+
+`/console/my-day` is the technician's screen for the day, built for a phone:
+the visits booked with them today in time order, then the rest of their
+queue, one card per work order with its tasks. Each card has directions, the
+resident's number when there's a visit, "Nobody home" and "Visit done" on a
+confirmed visit, and a checkbox per task. People on the team (an employee
+profile) also get the clock: **Start the clock** on a card clocks them in on
+that work order (`POST /me/clock/in` with `kind: work_order`), **Switch
+here** moves a running clock to another job, **Stop** clocks out, and the
+card shows the minutes logged there today. The bar at the top shows today's
+and the week's hours and any missed punches. It composes existing routes:
+`GET /appointments?from&to&assignee`, `GET /ticket-queue`, `GET /me/clock`,
+`GET /me/time?from&to`.
+
+## Scheduling the visit
+
+A work order's **Visit** panel offers up to four time windows
+(`POST /appointments` with `ticket_id`). The resident on the lease gets them
+by email and text with a one-time link (`/book/<token>`), and sees them on
+the request in the portal. They pick one, or say none work and suggest
+another time. Picking moves the work order to **scheduled** with that day as
+its due date and a public note ("Scheduled: Tue, Oct 6, 1 PM to 3 PM");
+declining tells staff what time was asked for. Staff can confirm a time
+agreed on the phone, change it, cancel, and mark the visit done or nobody
+home. A new offer on the same work order replaces the open one.
+
+Reminders go to the resident (email and text) and the person going (in-app)
+at `appointments.reminder_hours` before (default 24 and 2), once each.
+Windows default to `appointments.window_minutes` long (120). Times staff
+type are read in the workspace's time zone (`texts.timezone`).
+
+`GET /appointments?from&to&assignee&property_id&status` is the calendar at
+`/console/calendar`: a week of visits (repairs, showings, inspections) and
+reminders due, filtered to one person.
+
 ## Action buttons
 
 The work order has one-press updates (`GET /ticket-actions`,
@@ -124,7 +160,45 @@ trade first. The insurance rule applies.
   the vendor's job moves an untouched work order to scheduled or in progress,
   and resolves it only when every task is done. A work order goes to Alpha
   once; Alpha keys jobs by the work order.
-- **Everyone else** gets the task by email.
+- **Everyone else** gets the task by email, with a link to answer from.
+
+### The vendor's link
+
+Every batch sent to a vendor carries one link (`/vendor/<token>`; the
+dispatch email and text carry it, and a linked vendor's board gets it in the
+job note). It needs no account. From it the vendor sees the work order, the
+property, the office's note and access notes, and their tasks, and can:
+
+- **Accept**, optionally saying when they'll come. A time books the visit on
+  the calendar (confirmed by `vendor`, the vendor on it), moves the work order
+  to scheduled, and tells the resident, the same as a picked window. Their
+  tasks move to doing.
+- **Decline**, with a reason. The tasks go back to unassigned (no vendor, no
+  dispatch), so they can be sent to someone else; staff with
+  `maintenance:manage` hear (`vendor_task_declined`).
+- **Send photos** (before and after) and **the invoice** as a file. They land
+  on the work order's files like any other.
+- **Send their invoice**: an amount and what it covers, with the uploaded file
+  attached. It lands as a vendor expense on the work order (category repairs,
+  billable to the owner, recorded by nobody) for the office to approve.
+- **Mark it done**, with a note. Their tasks close, the resident sees the line
+  on the request, and staff hear with the invoice total.
+
+Each task keeps the vendor's last answer (`vendor_response`: accepted,
+declined or done, with when and what they said), shown on the task list. A
+declined or finished batch can't be answered again; sending the tasks again
+mints a new link. Public routes: `GET /public/vendor/<token>` and
+`POST …/accept | /decline | /done | /uploads | /invoice`.
+
+### Inviting a vendor to Alpha
+
+In the send dialog, an unlinked vendor with an email shows **Invite to
+Alpha** (`POST /entities/<id>/alpha-invite`). They get the `alpha_invite`
+email with a sign-up link (the `partners.alpha_join_url` setting, by default
+Alpha's `/partners/join` page) prefilled with their business, contact, email,
+phone and who sent them. Alpha files it as a lead (source `vantedge`) for
+Alpha's office to set up and link back. The invite is remembered on the vendor
+(`alpha_invited_at`), so the dialog shows "Invited" after.
 
 Checked against a running Alpha: link (ping), send, job created with the right
 client, property and notes, then scheduled, started and completed callbacks

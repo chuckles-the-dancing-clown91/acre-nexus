@@ -13,7 +13,9 @@
 pub mod accounting;
 pub mod api_tokens;
 pub mod applications;
+pub mod appointments;
 pub mod assignments;
+pub mod attention;
 pub mod audit_trail;
 pub mod auth;
 pub mod backoffice;
@@ -46,6 +48,7 @@ pub mod modules;
 pub mod mortgages;
 pub mod notifications;
 pub mod onboarding;
+pub mod owner_portal;
 pub mod partner;
 pub mod payables;
 pub mod payments;

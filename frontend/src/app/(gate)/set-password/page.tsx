@@ -14,6 +14,7 @@ import { BackToSignIn } from "@/components/gate/BackToSignIn";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/misc";
+import { landingFor } from "@/lib/resident";
 
 function SetPasswordForm() {
   const params = useSearchParams();
@@ -59,11 +60,8 @@ function SetPasswordForm() {
         router.push("/login");
         return;
       }
-      const u = session.user;
-      const staff =
-        u.is_platform_staff ||
-        u.memberships.some((m) => m.profile_type !== "renter");
-      router.push(staff ? "/console" : "/account/lease");
+      // Residents land in their portal, owners in theirs, staff in the console.
+      router.push(landingFor(session.user, ""));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Couldn't set the password"

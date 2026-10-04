@@ -121,6 +121,23 @@ staff get a `ticket_follow_up` notification (once per ticket per date —
 re-dating the follow-up re-arms it). Leaving on-hold clears the waiting
 state.
 
+## Follow-ups the scheduler sends
+
+`api/src/followups.rs`, run from the hourly helpdesk scan. Each goes out once
+(the notice log keeps the key) and only while it still makes sense; each has
+a setting under **Follow-ups** (0 turns it off):
+
+| What | To whom | When | Setting (default) | Template |
+| --- | --- | --- | --- | --- |
+| How did it go? Rate it or say what's wrong, with the request link | the resident on the lease (email and text) | the work order has been resolved or closed this long and has no rating | `followups.rating_hours` (24) | `ticket_rating_request` |
+| Still fixed? Reply to reopen | the resident | this long after it was finished | `followups.checkin_days` (7) | `ticket_checkin` |
+| Still need your answer, with a fresh link | a vendor sent tasks by email who hasn't answered from their link (tasks not done) | this long after dispatch, once per batch; an internal note lands on the work order | `followups.vendor_hours` (48) | `vendor_task_nudge` |
+| Pick a time, with a fresh link | the person offered visit windows who hasn't picked | this long after the offer, while a window is still ahead | `followups.offer_hours` (24) | `appointment_offer_reminder` |
+| Ready to apply? with the prefilled application link | a prospect marked toured with no application | this long after the tour | `followups.prospect_days` (2) | `lead_after_showing` |
+
+The scan summary carries the counts (`follow_ups`). Older items age out
+(finished work after 60 days, dispatches and offers after 30, tours after 45).
+
 ## Resident updates & reviews
 
 - **Updates pushed and emailed**: every resident-facing event — staff public
@@ -162,6 +179,63 @@ state.
   category/priority, `cadence_days`, and `next_due_date`. CRUD at
   `GET/POST /maintenance-plans` + `PATCH /maintenance-plans/{id}`
   (`maintenance:read` / `maintenance:manage`); pause/resume via `active`.
+- **To schedule** (`GET /to-schedule`, `maintenance:read`, narrowed by reach):
+  the routines due within their lead time (`lead_days` on the plan, else the
+  `helpdesk.plan_lead_days` setting, default 14) whose last work order isn't
+  still open, and the open or triage work orders with no due date and no
+  visit booked. The service desk shows it as a panel and a count;
+  **Open now** (`POST /maintenance-plans/{id}/run-now`, `maintenance:manage`)
+  opens the routine's work order early with the kit's tasks and parts and
+  moves the plan on a cadence from today (409 while its last work order is
+  still open). **Book** on a work order goes to its Visit panel.
+- **Required by code** (`api/src/mandates.rs`): a catalog of 25 checks
+  landlords owe by law or common code, each with the rule it comes from, a
+  cadence, a category and priority, a job kit where one fits, and who it
+  applies to (everyone, buildings with more than one unit, built before a
+  year, listed states, or multifamily in listed states). Smoke and CO alarm
+  tests, alarm replacement, extinguishers, fire alarm and sprinkler tests,
+  emergency lighting, water heater straps in seismic states, dryer vents,
+  HVAC service, GFCI tests, locks and window latches, lead paint checks for
+  pre-1978 buildings, carpet review on HUD's seven-year life, New York's
+  three-year repaint, window guards and bed bug report, boilers, elevators,
+  backflow, radon in disclosure states, gutters, moisture and mold, pools,
+  septic and chimneys. Items that only matter when the property has the thing
+  (pool, boiler, elevator, septic, backflow, chimney, sprinklers) are
+  `conditional` and added one at a time. `GET /mandates?property_id=` lists
+  what applies with where each stands; `POST /properties/{id}/mandates`
+  (`maintenance:manage`, body `{ "keys": [] }`) adds routines for the missing
+  items, every non-conditional one when `keys` is empty, first due 30 days
+  out. Routines made this way carry `mandate_key`, show "required by code" on
+  the schedule and under To schedule, and the schedule page and the property
+  profile's Appliances tab have the panel. Local code is the final word; the
+  catalog names the common rules.
+- **Plan the day** (`/console/maintenance/plan`, `routes/maintenance/dayplan.rs`):
+  pick a day and a person; `POST /routes/propose` lays the day out. The work
+  is what's due that day (or overdue and still open) or has a visit booked
+  that day, theirs plus unassigned work when a person is picked. Each job's
+  time on site comes from its unfinished tasks' minutes (else
+  `routes.job_minutes`, default 60); driving between stops from the
+  properties' coordinates at city speed (else `routes.drive_minutes`, 20);
+  booked visits keep their times and the rest go nearest first between them,
+  urgent work ahead when distance ties; a supply run (`routes.store_minutes`,
+  30) leads the day when anything has to be bought. The day starts at
+  `routes.day_start` (08:00) and runs `routes.day_minutes` (480); what doesn't
+  fit is listed as unplaced. The proposal carries what to buy by store, what
+  to pull from the shelf, and what runs low after that. **Accept the route**
+  (`POST /routes/accept`, `maintenance:manage`) books each stop as a confirmed
+  visit with the person on it (the resident hears the time; an older offer or
+  booking on the work order is cancelled), hands unassigned work to them,
+  runs each work order's parts list against stock, gives parts to buy a
+  need-by of the day before, tells managers what to order and what's low
+  (`route_parts_needed`), and tells the person their day is set
+  (`route_assigned`). Ordering itself stays in the close-out.
+- **Shopping** (`GET /shopping?from&to`, the page's second tab): parts still
+  wanted on open work orders, by the day the work is on (a confirmed visit's
+  day, else the due date; overdue work lands on the first day), then by store
+  (the part's store from its link, its vendor, or "Any store"), with an
+  estimate where costs are known; what's on the shelf is listed as pulls, and
+  stock that would run below its reorder level is flagged. Parts on work
+  orders with no date yet sit in their own group.
 - **Make-ready / turnover**: completing a **move-out inspection** (Phase 5)
   auto-opens a high-priority "Turnover / make-ready" ticket on the unit and
   flips the unit's status to `make_ready` — gated by the
@@ -203,6 +277,14 @@ runs an external desk, and nothing here precludes it.
 | GET | `/maintenance-plans` | `maintenance:read` |
 | POST | `/maintenance-plans` | `maintenance:manage` |
 | PATCH | `/maintenance-plans/{id}` | `maintenance:manage` |
+| POST | `/maintenance-plans/{id}/run-now` | `maintenance:manage` |
+| GET | `/to-schedule` | `maintenance:read` |
+| GET | `/mandates?property_id=` | `maintenance:read` |
+| POST | `/properties/{id}/mandates` | `maintenance:manage` |
+| GET | `/attention` | `property:read` |
+| GET | `/shopping?from&to` | `maintenance:read` |
+| POST | `/routes/propose` | `maintenance:read` |
+| POST | `/routes/accept` | `maintenance:manage` |
 
 Quotes ride along on `GET /tickets/{id}`.
 

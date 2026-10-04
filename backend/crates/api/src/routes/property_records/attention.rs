@@ -45,6 +45,7 @@ pub struct Facts<'a> {
     pub policies: &'a [entity::insurance_policy::Model],
     pub assets: &'a [entity::asset::Model],
     pub schools: &'a [entity::property_school::Model],
+    pub crime: Option<&'a entity::property_crime::Model>,
 }
 
 fn day(s: &Option<String>) -> Option<NaiveDate> {
@@ -109,6 +110,45 @@ fn push(
 pub fn suggest(f: &Facts) -> Vec<Suggestion> {
     let mut out = Vec::new();
     let today = f.today;
+
+    // Crime well above the state's: worth a look at lighting, locks and
+    // cameras, and worth knowing before a showing.
+    if let Some(c) = f.crime.filter(|c| c.verdict == "well_above") {
+        let offenses: Vec<crate::enrichment::data::CrimeOffense> =
+            serde_json::from_value(c.offenses.clone()).unwrap_or_default();
+        let worst = offenses
+            .iter()
+            .filter(|o| o.state_rate > 0.0)
+            .max_by(|a, b| {
+                (a.agency_rate / a.state_rate)
+                    .partial_cmp(&(b.agency_rate / b.state_rate))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        push(
+            &mut out,
+            "crime-high".into(),
+            "property",
+            None,
+            "Crime around here runs well above the state".into(),
+            match worst {
+                Some(o) => format!(
+                    "{} reports {} at {} per 100,000 a year against {} statewide. Walk the \
+                     exterior for lighting, locks and sightlines, and mention it on showings.",
+                    c.agency_name,
+                    o.label.to_lowercase(),
+                    o.agency_rate.round(),
+                    o.state_rate.round()
+                ),
+                None => format!(
+                    "{} reports violent and property crime well above the state. Walk the \
+                     exterior for lighting, locks and sightlines.",
+                    c.agency_name
+                ),
+            },
+            None,
+            "normal",
+        );
+    }
 
     for p in f.permits.iter().filter(|p| is_open(&p.status)) {
         let name = permit_name(p);
@@ -364,6 +404,10 @@ pub async fn attention(
         .filter(entity::property_school::Column::PropertyId.eq(p.id))
         .all(&db)
         .await?;
+    let crime = entity::prelude::PropertyCrime::find_by_id(p.id)
+        .filter(entity::property_crime::Column::TenantId.eq(t))
+        .one(&db)
+        .await?;
     let taken: HashSet<String> = ActionItem::find()
         .filter(entity::action_item::Column::TenantId.eq(t))
         .filter(entity::action_item::Column::PropertyId.eq(p.id))
@@ -380,6 +424,7 @@ pub async fn attention(
         policies: &policies,
         assets: &assets,
         schools: &schools,
+        crime: crime.as_ref(),
     });
     Ok(Json(
         all.into_iter()
@@ -477,6 +522,7 @@ mod tests {
             policies: &policies,
             assets: &[],
             schools: &[],
+            crime: None,
         });
         let k = keys(&out);
         assert!(k.contains(&"permit-expired".to_string()));
@@ -549,6 +595,7 @@ mod tests {
             policies: &[policy("property", None)],
             assets: &[],
             schools: &[],
+            crime: None,
         });
         assert!(keys(&none).contains(&"flood-policy".to_string()));
         assert!(!keys(&none).contains(&"parcel-apn".to_string()));
@@ -559,6 +606,7 @@ mod tests {
             policies: &[policy("property", None), policy("flood", None)],
             assets: &[],
             schools: &[],
+            crime: None,
         });
         assert!(!keys(&covered).contains(&"flood-policy".to_string()));
     }

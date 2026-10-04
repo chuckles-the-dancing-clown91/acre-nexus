@@ -103,6 +103,8 @@ pub async fn create(
                 phone: Set(None),
                 notes: Set(None),
                 created_at: Set(Utc::now().into()),
+                user_id: Set(None),
+                approval_limit_cents: Set(None),
             }
             .insert(&db)
             .await?

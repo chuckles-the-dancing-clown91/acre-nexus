@@ -19,6 +19,10 @@ download their statement.
 
 ## Portal surfaces
 
+Owners have their own portal at `/account/owner` (approvals, sign-off,
+statements): see [OWNERS.md](OWNERS.md).
+
+
 ### My lease + documents (`/account/lease`)
 
 - `GET /my/lease` — lease summary (term, rent, deposit, balance, standing;
@@ -48,6 +52,11 @@ Residents land here after sign-in; the staff console sends them here too.
   buttons like "On my way." and "Diagnosed: …"), the photos and videos on
   it, a reply box that takes photos and video, and a star rating once it's
   done.
+
+- When staff offer visit times, the request shows them with one tap to pick
+  (`GET /my/appointments`, `POST /my/appointments/<id>/pick`), or "None of
+  these work" to suggest another time (`…/decline`). A confirmed visit shows
+  at the top of the request, with "That no longer works" to reschedule.
 
 API: `GET|POST /my/tickets`, `GET /my/tickets/<id>` (with `files` and their
 view links), `POST /my/tickets/<id>/comments` (`document_ids` must be the

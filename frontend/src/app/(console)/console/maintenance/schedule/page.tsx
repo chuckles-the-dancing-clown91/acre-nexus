@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { useProperties } from "@/lib/queries";
 import { desk } from "@/lib/servicedesk";
 import type { MaintenancePlan } from "@/lib/types";
+import { Mandates } from "@/components/property/Mandates";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui/misc";
@@ -48,6 +49,7 @@ export default function SchedulePage() {
   const kits = useQuery({ queryKey: ["kits"], queryFn: desk.kits });
   const properties = useProperties();
   const [adding, setAdding] = useState(false);
+  const [codeFor, setCodeFor] = useState("");
 
   const names = useMemo(
     () => new Map((properties.data ?? []).map((p) => [p.id, p.name])),
@@ -129,6 +131,32 @@ export default function SchedulePage() {
         </Panel>
       )}
 
+      <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-[14px] font-semibold text-fg">
+            Required by code
+          </div>
+          <div className="text-xs text-fg-3">
+            Smoke and CO alarms, extinguishers, water heater straps, lead paint
+            and the rest, as routines. Pick a property.
+          </div>
+        </div>
+        <select
+          aria-label="Property for code-required items"
+          className={cn(field, "w-auto py-1.5")}
+          value={codeFor}
+          onChange={(e) => setCodeFor(e.target.value)}
+        >
+          <option value="">Choose a property…</option>
+          {(properties.data ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {codeFor && <Mandates propertyId={codeFor} manage={manage} />}
+
       {groups.map(([label, rows]) => (
         <Panel key={label}>
           <PanelHeader
@@ -147,6 +175,7 @@ export default function SchedulePage() {
                     <div className="truncate text-xs text-fg-3">
                       {names.get(p.property_id) ?? "Property"} ·{" "}
                       {cadenceLabel(p.cadence_days)}
+                      {p.mandate_key ? " · required by code" : ""}
                       {p.issue_template_id && kitNames.get(p.issue_template_id)
                         ? ` · kit: ${kitNames.get(p.issue_template_id)}`
                         : ""}

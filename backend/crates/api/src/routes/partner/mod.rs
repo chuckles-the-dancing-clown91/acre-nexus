@@ -207,3 +207,136 @@ pub async fn dispatch(
     .await?;
     Ok(Json(TicketDto::from(t)))
 }
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct AlphaInviteResp {
+    pub alpha_invited_at: String,
+    /// The sign-up link they were sent, prefilled with their details.
+    pub join_url: String,
+}
+
+/// `POST /entities/<id>/alpha-invite` — invite a vendor to sign up for Alpha.
+/// Once they do and link, work orders land on their own board instead of in
+/// their inbox. The link is the `partners.alpha_join_url` setting with the
+/// vendor's details on it, so the form is prefilled.
+#[rocket_okapi::openapi(tag = "Partners")]
+#[post("/entities/<id>/alpha-invite")]
+pub async fn alpha_invite(
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    id: &str,
+) -> ApiResult<Json<AlphaInviteResp>> {
+    user.require(Permission::EntityManage)?;
+    let c = partner::find_counterparty(&db, scope.tenant_id, parse_id(id, "vendor")?).await?;
+    if c.partner_kind.is_some() {
+        return Err(ApiError::Conflict(format!(
+            "{} is already linked to Alpha",
+            c.name
+        )));
+    }
+    let Some(email) = c.email.as_deref().map(str::trim).filter(|e| !e.is_empty()) else {
+        return Err(ApiError::BadRequest(format!(
+            "{} has no email on file; add one first",
+            c.name
+        )));
+    };
+    let company = entity::prelude::Tenant::find_by_id(scope.tenant_id)
+        .one(&db)
+        .await?
+        .map(|t| t.name)
+        .unwrap_or_default();
+    let base = crate::settings::get_string(
+        &db,
+        scope.tenant_id,
+        crate::settings::PARTNERS_ALPHA_JOIN_URL,
+    )
+    .await;
+    let join_url = alpha_join_url(&base, &c, &company);
+    let now = chrono::Utc::now();
+    crate::scheduler::enqueue(
+        &db,
+        scope.tenant_id,
+        "auto_email",
+        serde_json::json!({
+            "template": "alpha_invite",
+            "to": email,
+            "owner_type": "counterparty",
+            "owner_id": c.id,
+            "trigger": format!("alpha_invite:{}:{}", c.id, now.timestamp()),
+            "vars": { "join_url": join_url, "recipient": c.contact_name.clone().unwrap_or_else(|| c.name.clone()) },
+        }),
+        0,
+    )
+    .await?;
+    let mut am: entity::counterparty::ActiveModel = c.into();
+    am.alpha_invited_at = sea_orm::Set(Some(now.into()));
+    am.updated_at = sea_orm::Set(now.into());
+    sea_orm::ActiveModelTrait::update(am, &db).await?;
+    Ok(Json(AlphaInviteResp {
+        alpha_invited_at: now.to_rfc3339(),
+        join_url,
+    }))
+}
+
+/// The sign-up link with the vendor's details on the query string.
+pub fn alpha_join_url(base: &str, c: &entity::counterparty::Model, company: &str) -> String {
+    let base = base.trim().trim_end_matches('/');
+    let base = if base.is_empty() {
+        "https://alphapowerwash.com/partners/join"
+    } else {
+        base
+    };
+    let mut pairs = vec![("business", c.name.as_str())];
+    if let Some(n) = c.contact_name.as_deref().filter(|n| !n.trim().is_empty()) {
+        pairs.push(("name", n));
+    }
+    if let Some(e) = c.email.as_deref().filter(|e| !e.trim().is_empty()) {
+        pairs.push(("email", e));
+    }
+    if let Some(p) = c.phone.as_deref().filter(|p| !p.trim().is_empty()) {
+        pairs.push(("phone", p));
+    }
+    pairs.push(("from", company));
+    let q: Vec<String> = pairs
+        .iter()
+        .map(|(k, v)| format!("{k}={}", crate::google_places::urlencode(v)))
+        .collect();
+    let sep = if base.contains('?') { '&' } else { '?' };
+    format!("{base}{sep}{}", q.join("&"))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn join_url_prefills_the_vendor() {
+        let c = entity::counterparty::Model {
+            id: uuid::Uuid::nil(),
+            tenant_id: uuid::Uuid::nil(),
+            kind: "contractor".into(),
+            name: "Ace & Sons".into(),
+            contact_name: Some("Ray".into()),
+            email: Some("ray@ace.example".into()),
+            phone: None,
+            website: None,
+            address: None,
+            notes: None,
+            partner_kind: None,
+            trades: serde_json::json!([]),
+            partner_base_url: None,
+            partner_web_url: None,
+            partner_linked_at: None,
+            partner_status: None,
+            partner_error: None,
+            alpha_invited_at: None,
+            created_at: chrono::Utc::now().into(),
+            updated_at: chrono::Utc::now().into(),
+        };
+        let u = super::alpha_join_url("", &c, "Northwind");
+        assert!(u.starts_with("https://alphapowerwash.com/partners/join?business=Ace"));
+        assert!(u.contains("email=ray%40ace.example"));
+        assert!(u.contains("from=Northwind"));
+        let u2 = super::alpha_join_url("https://x.test/join?src=v", &c, "N");
+        assert!(u2.starts_with("https://x.test/join?src=v&business="));
+    }
+}

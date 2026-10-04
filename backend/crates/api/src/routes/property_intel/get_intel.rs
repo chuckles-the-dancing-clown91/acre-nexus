@@ -64,6 +64,11 @@ pub async fn get_intel(
         .map(SchoolDto::from)
         .collect();
 
+    let crime = entity::prelude::PropertyCrime::find_by_id(pid)
+        .one(&db)
+        .await?
+        .map(super::dto::CrimeDto::from);
+
     let utilities = PropertyUtility::find()
         .filter(entity::property_utility::Column::PropertyId.eq(pid))
         .all(&db)
@@ -78,5 +83,6 @@ pub async fn get_intel(
         taxes,
         schools,
         utilities,
+        crime,
     }))
 }

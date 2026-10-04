@@ -53,6 +53,10 @@ pub struct TaskDto {
     /// `partner` (their own board) | `email`: how it reached the vendor.
     pub dispatch_via: Option<String>,
     pub dispatch_note: Option<String>,
+    /// `accepted` | `declined` | `done`: the vendor's answer from their link.
+    pub vendor_response: Option<String>,
+    pub vendor_responded_at: Option<String>,
+    pub vendor_note: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -84,6 +88,8 @@ pub struct DispatchTaskReq {
     pub note: Option<String>,
     /// Why to send a vendor without current insurance, when that's required.
     pub coi_override_reason: Option<String>,
+    /// Why to go ahead without the owner's approval of work over their limit.
+    pub approval_override_reason: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -202,6 +208,8 @@ pub struct VendorOption {
     /// Linked to a partner system (e.g. Alpha Power Wash): work orders go
     /// straight into their job board.
     pub linked: bool,
+    /// When we last invited them to sign up for Alpha.
+    pub alpha_invited_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +302,15 @@ async fn tasks_of(
             assignee_user_id: t.assignee_user_id,
             dispatch_via: t.dispatch_via.clone(),
             dispatch_note: t.dispatch_note.clone(),
+            vendor_response: t.vendor_response.clone(),
+            vendor_responded_at: t.vendor_responded_at.map(|d| d.to_rfc3339()),
+            // Stored as `vendor:<id>\n<what they said>`; staff see what they said.
+            vendor_note: t
+                .vendor_note
+                .as_deref()
+                .and_then(|n| n.split_once('\n'))
+                .map(|(_, r)| r.trim().to_string())
+                .filter(|r| !r.is_empty()),
             est_cost_label: t.est_cost_cents.map(usd),
             id: t.id,
             position: t.position,
@@ -405,6 +422,10 @@ pub async fn add_task(
         assignee_user_id: Set(None),
         dispatch_via: Set(None),
         dispatch_note: Set(None),
+        vendor_token_hash: Set(None),
+        vendor_response: Set(None),
+        vendor_responded_at: Set(None),
+        vendor_note: Set(None),
         created_by: Set(Some(user.user_id)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -679,10 +700,20 @@ async fn send_to_vendor(
     vendor_id: Uuid,
     note: Option<String>,
     coi_override_reason: Option<String>,
+    approval_override_reason: Option<String>,
 ) -> ApiResult<()> {
     if tasks.is_empty() {
         return Err(ApiError::BadRequest("pick at least one task".into()));
     }
+    // Work over the owner's limit waits for their yes (or a reason to go on).
+    crate::owner_approvals::require_approval(
+        db,
+        scope.tenant_id,
+        t,
+        Some(user.user_id),
+        approval_override_reason.as_deref(),
+    )
+    .await?;
     if let Some(done) = tasks
         .iter()
         .find(|x| matches!(x.status.as_str(), "done" | "skipped"))
@@ -708,6 +739,10 @@ async fn send_to_vendor(
     .await?;
     let note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
     let lines = task_lines(&tasks);
+    // One link for the batch: the vendor accepts, declines, says when they
+    // can come, and sends photos and their invoice from it. No account.
+    let token = crate::auth::random_secret(24);
+    let vendor_link = crate::routes::maintenance::vendor_link::url(&token);
     let job_title = match tasks.as_slice() {
         [one] => format!("{} — {}", one.title, t.title),
         many => format!("{} tasks — {}", many.len(), t.title),
@@ -722,8 +757,10 @@ async fn send_to_vendor(
                 requested_for: None,
                 service_key: None,
                 note: Some(match &note {
-                    Some(n) => format!("{lines}\n{n}"),
-                    None => lines.clone(),
+                    Some(n) => {
+                        format!("{lines}\n{n}\n\nAnswer or send your invoice: {vendor_link}")
+                    }
+                    None => format!("{lines}\n\nAnswer or send your invoice: {vendor_link}"),
                 }),
                 title: Some(job_title.clone()),
             },
@@ -767,6 +804,7 @@ async fn send_to_vendor(
                     "property": property,
                     "due_line": t.due_date.as_deref().map(|d| format!(", wanted by {d}")).unwrap_or_default(),
                     "description": description,
+                    "vendor_link": vendor_link,
                 },
             }),
             0,
@@ -781,6 +819,10 @@ async fn send_to_vendor(
         am.dispatched_at = Set(Some(now.into()));
         am.dispatch_via = Set(Some(how.into()));
         am.dispatch_note = Set(note.clone());
+        am.vendor_token_hash = Set(Some(crate::auth::hash_secret(&token)));
+        am.vendor_response = Set(None);
+        am.vendor_responded_at = Set(None);
+        am.vendor_note = Set(None);
         am.updated_at = Set(now.into());
         am.update(db).await?;
     }
@@ -848,6 +890,7 @@ pub async fn dispatch_task(
         b.entity_id,
         b.note,
         b.coi_override_reason,
+        b.approval_override_reason,
     )
     .await?;
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
@@ -859,6 +902,8 @@ pub struct DispatchTasksReq {
     pub entity_id: Uuid,
     pub note: Option<String>,
     pub coi_override_reason: Option<String>,
+    /// Why to go ahead without the owner's approval of work over their limit.
+    pub approval_override_reason: Option<String>,
 }
 
 /// `POST /tickets/<id>/dispatch-tasks` — send several tasks to one vendor as one
@@ -899,6 +944,7 @@ pub async fn dispatch_tasks(
         b.entity_id,
         b.note,
         b.coi_override_reason,
+        b.approval_override_reason,
     )
     .await?;
     Ok(Json(tasks_of(&db, scope.tenant_id, t.id).await?))
@@ -954,11 +1000,19 @@ pub async fn costs(
 ) -> ApiResult<Json<CostSummary>> {
     user.require(Permission::MaintenanceRead)?;
     let t = ticket(&db, scope.tenant_id, id).await?;
-    let tenant_id = scope.tenant_id;
+    Ok(Json(cost_summary(&db, scope.tenant_id, &t).await?))
+}
+
+/// The estimate and the spend on one work order (shared with owner approvals).
+pub async fn cost_summary<C: ConnectionTrait>(
+    db: &C,
+    tenant_id: Uuid,
+    t: &entity::maintenance_ticket::Model,
+) -> ApiResult<CostSummary> {
     let tasks = TicketTask::find()
         .filter(entity::ticket_task::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_task::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let est_labor: i64 = tasks
         .iter()
@@ -968,7 +1022,7 @@ pub async fn costs(
     let parts = TicketPart::find()
         .filter(entity::ticket_part::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_part::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let stock_cost: HashMap<Uuid, i64> = {
         let ids: Vec<Uuid> = parts.iter().filter_map(|p| p.inventory_item_id).collect();
@@ -978,7 +1032,7 @@ pub async fn costs(
             entity::prelude::InventoryItem::find()
                 .filter(entity::inventory_item::Column::TenantId.eq(tenant_id))
                 .filter(entity::inventory_item::Column::Id.is_in(ids))
-                .all(&db)
+                .all(db)
                 .await?
                 .into_iter()
                 .filter_map(|i| i.unit_cost_cents.map(|c| (i.id, c)))
@@ -1002,7 +1056,7 @@ pub async fn costs(
     let lines: i64 = TicketLine::find()
         .filter(entity::ticket_line::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_line::Column::TicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?
         .iter()
         .map(|l| l.total_cents)
@@ -1010,7 +1064,7 @@ pub async fn costs(
     let expenses = Expense::find()
         .filter(entity::expense::Column::TenantId.eq(tenant_id))
         .filter(entity::expense::Column::MaintenanceTicketId.eq(t.id))
-        .all(&db)
+        .all(db)
         .await?;
     let expenses_cents: i64 = expenses.iter().map(|e| e.amount_cents).sum();
     let receipts = Document::find()
@@ -1019,14 +1073,14 @@ pub async fn costs(
         .filter(entity::document::Column::OwnerId.eq(t.id))
         .filter(entity::document::Column::Category.eq("receipt"))
         .filter(entity::document::Column::Status.eq("stored"))
-        .all(&db)
+        .all(db)
         .await?
         .len();
     let quotes: i64 = TicketQuote::find()
         .filter(entity::ticket_quote::Column::TenantId.eq(tenant_id))
         .filter(entity::ticket_quote::Column::TicketId.eq(t.id))
         .filter(entity::ticket_quote::Column::Status.eq("approved"))
-        .all(&db)
+        .all(db)
         .await?
         .iter()
         .map(|q| q.amount_cents)
@@ -1053,7 +1107,7 @@ pub async fn costs(
     let est = est_labor + est_parts;
     let actual = lines + expenses_cents + quotes;
     let variance = actual - est;
-    Ok(Json(CostSummary {
+    Ok(CostSummary {
         ticket_id: t.id,
         est_labor_cents: est_labor,
         est_parts_cents: est_parts,
@@ -1074,7 +1128,7 @@ pub async fn costs(
         tasks_total: tasks.iter().filter(|x| x.status != "skipped").count(),
         tasks_done: tasks.iter().filter(|x| x.status == "done").count(),
         trades_needed: needs,
-    }))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1417,6 +1471,7 @@ pub async fn vendors(
             coi_current: crate::vendor_compliance::coi_current(&db, scope.tenant_id, c.id, today)
                 .await?,
             linked: c.partner_kind.is_some(),
+            alpha_invited_at: c.alpha_invited_at.map(|d| d.to_rfc3339()),
             id: c.id,
             name: c.name,
             email: c.email,

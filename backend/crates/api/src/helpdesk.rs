@@ -173,6 +173,18 @@ pub async fn handle_scan_job(
         Ok(n) => summary["low_stock_notified"] = json!(n),
         Err(e) => tracing::error!("helpdesk: low-stock scan failed: {e}"),
     }
+    match crate::followups::run(db, tenant_id).await {
+        Ok(v) => summary["follow_ups"] = v,
+        Err(e) => tracing::error!("helpdesk: follow-ups failed: {e}"),
+    }
+    match crate::owner_approvals::nudge_pending(db, tenant_id).await {
+        Ok(n) => summary["owner_nudges"] = json!(n),
+        Err(e) => tracing::error!("helpdesk: owner nudges failed: {e}"),
+    }
+    match crate::owner_approvals::send_statements_if_due(db, tenant_id).await {
+        Ok(n) => summary["owner_statements"] = json!(n),
+        Err(e) => tracing::error!("helpdesk: owner statements failed: {e}"),
+    }
 
     tracing::info!(tenant = %tenant_id, ?summary, "helpdesk scan ran");
     let interval =
@@ -256,68 +268,81 @@ pub async fn run_due_plans(db: &impl ConnectionTrait, tenant_id: Uuid) -> ApiRes
         if due > today {
             continue;
         }
-        let ticket = open_ticket(
-            db,
-            tenant_id,
-            OpenTicket {
-                property_id: plan.property_id,
-                unit_id: plan.unit_id,
-                lease_id: None,
-                title: plan.title.clone(),
-                description: plan.description.clone(),
-                category: plan.category.clone(),
-                priority: plan.priority.clone(),
-                reporter: Some("Preventive maintenance".into()),
-                due_date: Some(plan.next_due_date.clone()),
-            },
-            None,
-        )
-        .await?;
-
-        // A routine with a job kit starts with the kit's tasks and parts.
-        if let Some(kit_id) = plan.issue_template_id {
-            if let Some(kit) = entity::prelude::IssueTemplate::find_by_id(kit_id)
-                .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
-                .one(db)
-                .await?
-            {
-                crate::servicedesk::apply_kit(db, tenant_id, ticket.id, &kit, None).await?;
-            }
-        }
-
-        // A routine on an appliance: link the ticket to it and pre-list the
-        // parts that fit (air filters, belts…) as potential parts.
-        if let Some(asset_id) = plan.asset_id {
-            let mut tam: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
-            tam.asset_id = Set(Some(asset_id));
-            tam.update(db).await?;
-            crate::routes::maintenance::parts::add_potential_from_asset(
-                db, tenant_id, ticket.id, asset_id, None,
-            )
-            .await?;
-        }
-
-        let next = advance_due(&plan.next_due_date, plan.cadence_days, today);
-        let plan_id = plan.id;
-        let mut am: entity::maintenance_plan::ActiveModel = plan.into();
-        am.next_due_date = Set(next);
-        am.last_ticket_id = Set(Some(ticket.id));
-        am.updated_at = Set(Utc::now().into());
-        am.update(db).await?;
-
-        crate::audit::record(
-            db,
-            None,
-            crate::audit::actions::MAINTENANCE_PLAN_RUN,
-            Some("maintenance_plan"),
-            Some(plan_id.to_string()),
-            Some(tenant_id),
-            Some(json!({ "ticket_id": ticket.id })),
-        )
-        .await;
+        run_plan(db, tenant_id, plan, today, None).await?;
         opened += 1;
     }
     Ok(opened)
+}
+
+/// Open a routine's work order now (on its due day, or early from "To
+/// schedule"), and move the routine to its next date.
+pub async fn run_plan(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    plan: entity::maintenance_plan::Model,
+    today: NaiveDate,
+    by: Option<Uuid>,
+) -> ApiResult<entity::maintenance_ticket::Model> {
+    let ticket = open_ticket(
+        db,
+        tenant_id,
+        OpenTicket {
+            property_id: plan.property_id,
+            unit_id: plan.unit_id,
+            lease_id: None,
+            title: plan.title.clone(),
+            description: plan.description.clone(),
+            category: plan.category.clone(),
+            priority: plan.priority.clone(),
+            reporter: Some("Preventive maintenance".into()),
+            due_date: Some(plan.next_due_date.clone()),
+        },
+        by,
+    )
+    .await?;
+
+    // A routine with a job kit starts with the kit's tasks and parts.
+    if let Some(kit_id) = plan.issue_template_id {
+        if let Some(kit) = entity::prelude::IssueTemplate::find_by_id(kit_id)
+            .filter(entity::issue_template::Column::TenantId.eq(tenant_id))
+            .one(db)
+            .await?
+        {
+            crate::servicedesk::apply_kit(db, tenant_id, ticket.id, &kit, by).await?;
+        }
+    }
+
+    // A routine on an appliance: link the ticket to it and pre-list the
+    // parts that fit (air filters, belts…) as potential parts.
+    if let Some(asset_id) = plan.asset_id {
+        let mut tam: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
+        tam.asset_id = Set(Some(asset_id));
+        tam.update(db).await?;
+        crate::routes::maintenance::parts::add_potential_from_asset(
+            db, tenant_id, ticket.id, asset_id, by,
+        )
+        .await?;
+    }
+
+    let next = advance_due(&plan.next_due_date, plan.cadence_days, today);
+    let plan_id = plan.id;
+    let mut am: entity::maintenance_plan::ActiveModel = plan.into();
+    am.next_due_date = Set(next);
+    am.last_ticket_id = Set(Some(ticket.id));
+    am.updated_at = Set(Utc::now().into());
+    am.update(db).await?;
+
+    crate::audit::record(
+        db,
+        by,
+        crate::audit::actions::MAINTENANCE_PLAN_RUN,
+        Some("maintenance_plan"),
+        Some(plan_id.to_string()),
+        Some(tenant_id),
+        Some(json!({ "ticket_id": ticket.id })),
+    )
+    .await;
+    Ok(ticket)
 }
 
 /// Chase waiting-on tickets whose follow-up date arrived: notify maintenance

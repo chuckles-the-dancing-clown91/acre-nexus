@@ -5,6 +5,7 @@
 pub mod add_comment;
 pub mod assets;
 pub mod create_ticket;
+pub mod dayplan;
 pub mod desk;
 pub mod dto;
 pub mod get_ticket;
@@ -21,6 +22,7 @@ pub mod queue;
 pub mod quotes;
 pub mod stock;
 pub mod update_ticket;
+pub mod vendor_link;
 
 /// Ticket statuses that count as still-open work (everything before the ticket
 /// is resolved/closed). Used to split the maintenance tab into "open" vs

@@ -266,6 +266,17 @@ pub async fn update_ticket(
         if let Err(e) = crate::text_auto::ask_for_rating(&db, scope.tenant_id, &saved).await {
             tracing::error!("rating ask failed: {e}");
         }
+        // Billable work that's done asks the owner to sign off.
+        if let Err(e) = crate::owner_approvals::request_signoff(
+            &db,
+            scope.tenant_id,
+            &saved,
+            Some(user.user_id),
+        )
+        .await
+        {
+            tracing::error!("owner sign-off ask failed: {e}");
+        }
     }
 
     // The waiting-on follow-up note lands as an internal comment.

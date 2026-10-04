@@ -79,6 +79,14 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
               We'll text you next steps shortly.",
     },
     DefaultTemplate {
+        key: "application_invite",
+        subject: "Apply with {company}",
+        body: "Hi {recipient},\n\nThanks for coming by. Here's the application; it takes a \
+               few minutes and your details are already filled in:\n{apply_url}{message}\n\n\
+               — {company}",
+        sms: "{company}: here's the application, your details are filled in: {apply_url}",
+    },
+    DefaultTemplate {
         key: "application_received",
         subject: "We received your application",
         body: "Hi {recipient},\n\nThanks for applying with {company}. Your application is in \
@@ -129,6 +137,168 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         body: "Hi {recipient},\n\nA new {priority}-priority maintenance ticket was opened: \
                {title}. Review it on the maintenance board.\n\n— {company}",
         sms: "New {priority} maintenance ticket: {title}",
+    },
+    // ---- Appointments ----
+    DefaultTemplate {
+        key: "appointment_offered",
+        subject: "Pick a time: {title}",
+        body: "Hi {name},\n\nWe'd like to come by for: {title} at {property}.\n\n\
+               Times we can do: {windows}.\n\nPick one here: {link}\n\nIf none of \
+               those work, the same link lets you suggest another time.\n\n— {company}",
+        sms: "{company}: pick a time for {title}. {windows}. {link}",
+    },
+    DefaultTemplate {
+        key: "appointment_confirmed",
+        subject: "Confirmed: {title}, {when}",
+        body: "Hi {name},\n\nYou're set for {when}: {title} at {property}. We'll \
+               remind you before.\n\n— {company}",
+        sms: "{company}: confirmed {when} for {title}.",
+    },
+    DefaultTemplate {
+        key: "appointment_confirmed_staff",
+        subject: "Scheduled: {title}, {when}",
+        body: "Hi {recipient},\n\n{name} picked {when} for {title} at {property}.\n\n— {company}",
+        sms: "{name} picked {when} for {title}.",
+    },
+    DefaultTemplate {
+        key: "owner_approval_request",
+        subject: "Approve {amount} of work at {property}?",
+        body: "Hi {recipient},\n\n{title} at {property} is estimated at {amount}, over your \
+               {limit} limit.{note}\n\nApprove or decline here:\n{link}\n\nNothing is \
+               sent to a vendor until you say so.\n\n— {company}",
+        sms: "{company}: approve {amount} of work at {property} ({title})? {link}",
+    },
+    DefaultTemplate {
+        key: "owner_approval_reminder",
+        subject: "Still waiting: {amount} of work at {property}",
+        body: "Hi {recipient},\n\nA reminder that {title} at {property} ({amount}) is \
+               waiting for your approval. Approve or decline here:\n{link}\n\n— {company}",
+        sms: "{company}: still waiting on your approval for {title} at {property} ({amount}). {link}",
+    },
+    DefaultTemplate {
+        key: "owner_signoff_request",
+        subject: "Work finished at {property}: {title}",
+        body: "Hi {recipient},\n\n{title} at {property} is done. The cost came to {amount}.\
+               {note}\n\nSee the photos and sign off, or tell us what's not right:\n{link}\n\n\
+               — {company}",
+        sms: "{company}: {title} at {property} is done ({amount}). Sign off or dispute: {link}",
+    },
+    DefaultTemplate {
+        key: "owner_approval_decided",
+        subject: "{owner} {decision}: {title}",
+        body: "Hi {recipient},\n\n{owner} {decision} {title} at {property} ({amount}).\
+               {note}\n\n— {company}",
+        sms: "{owner} {decision} {title} at {property} ({amount}).",
+    },
+    DefaultTemplate {
+        key: "owner_statement",
+        subject: "Your {month} statement from {company}",
+        body: "Hi {recipient},\n\nYour statement for {month} is ready: rent collected \
+               {rent}, expenses {expenses}, net {net}.\n\nRead it, with the work done on \
+               your properties, here:\n{link}\n\n— {company}",
+        sms: "{company}: your {month} statement is ready. Net {net}. {link}",
+    },
+    DefaultTemplate {
+        key: "vendor_task_declined",
+        subject: "{vendor} declined: {title}",
+        body: "Hi {recipient},\n\n{vendor} declined the work sent to them on {title} at \
+               {property}.{reason}\n\nThe tasks are open again; send them to someone else \
+               from the work order.\n\n— {company}",
+        sms: "{vendor} declined {title} at {property}.",
+    },
+    DefaultTemplate {
+        key: "vendor_task_accepted",
+        subject: "{vendor} accepted: {title}",
+        body: "Hi {recipient},\n\n{vendor} accepted the work on {title} at {property}.{when}\
+               {note}\n\n— {company}",
+        sms: "{vendor} accepted {title} at {property}.{when}",
+    },
+    DefaultTemplate {
+        key: "vendor_task_done",
+        subject: "{vendor} finished: {title}",
+        body: "Hi {recipient},\n\n{vendor} marked their work on {title} at {property} \
+               done.{note}{invoice}\n\nReview it from the work order.\n\n— {company}",
+        sms: "{vendor} finished {title} at {property}.{invoice}",
+    },
+    DefaultTemplate {
+        key: "ticket_rating_request",
+        subject: "How did we do on \"{title}\"?",
+        body: "Hi {name},\n\nWe marked \"{title}\" finished. Did it go well? A quick rating \
+               helps us do better, and if anything isn't right, tell us there and we'll \
+               come back.\n\n{link}\n\n— {company}",
+        sms: "{company}: how did we do on \"{title}\"? Rate it or tell us what's wrong: {link}",
+    },
+    DefaultTemplate {
+        key: "ticket_checkin",
+        subject: "Still fixed? \"{title}\"",
+        body: "Hi {name},\n\nIt's been a week since we finished \"{title}\". Is everything \
+               still working? If not, reply on the request and we'll reopen it.\n\n{link}\n\n— {company}",
+        sms: "{company}: a week on, is \"{title}\" still fixed? If not: {link}",
+    },
+    DefaultTemplate {
+        key: "vendor_task_nudge",
+        subject: "Still need an answer: {title}",
+        body: "Hi {vendor},\n\nWe sent you {count} task(s) on \"{title}\" {days} day(s) ago and \
+               haven't heard back:\n{tasks}\n\nCan you take it? Accept, decline or say when \
+               from this link (no account needed):\n{vendor_link}\n\n— {company}",
+        sms: "{company}: still need your answer on \"{title}\" ({count} tasks): {vendor_link}",
+    },
+    DefaultTemplate {
+        key: "appointment_offer_reminder",
+        subject: "Pick a time for {title}",
+        body: "Hi {name},\n\nWe offered times for {title} at {property} and haven't heard \
+               which works:\n{windows}\n\nPick one here, or tell us a better time:\n{link}\n\n— {company}",
+        sms: "{company}: pick a time for {title}: {link}",
+    },
+    DefaultTemplate {
+        key: "lead_after_showing",
+        subject: "Ready to apply?",
+        body: "Hi {name},\n\nThanks for coming to see the place. If it felt right, the \
+               application takes a few minutes and your details are already filled in:\n\n{link}\n\n\
+               Questions? Just reply.\n\n— {company}",
+        sms: "{company}: thanks for the tour. Ready to apply? {link}",
+    },
+    DefaultTemplate {
+        key: "route_parts_needed",
+        subject: "{assignee}'s route for {when}: what to order",
+        body: "Hi {recipient},\n\n{assignee}'s day for {when} is set: {stops} stops.\n\n               {to_order}{from_stock}{low}\n\nOrder from the close-out, or open the plan: {link}\n\n— {company}",
+        sms: "{assignee}'s route for {when} is set; see what to order: {link}",
+    },
+    DefaultTemplate {
+        key: "route_assigned",
+        subject: "Your day for {when} is planned",
+        body: "Hi {recipient},\n\n{by} planned your {when}: {stops} stops, in order, on My day.\n\n{link}\n\n— {company}",
+        sms: "Your {when} is planned: {stops} stops. {link}",
+    },
+    DefaultTemplate {
+        key: "alpha_invite",
+        subject: "{company} invites you to Alpha",
+        body: "Hi {recipient},\n\n{company} sends work orders through Alpha. With a free \
+               Alpha account, jobs from {company} land on your own board, you can text \
+               the office, and you get paid faster.\n\nSign up here:\n{join_url}\n\n\
+               Until then, each work order we send comes with a link you can answer \
+               from.\n\n— {company}",
+        sms: "{company} invites you to Alpha. Sign up: {join_url}",
+    },
+    DefaultTemplate {
+        key: "appointment_declined",
+        subject: "Needs a new time: {title}",
+        body: "Hi {recipient},\n\n{name} can't make any of the times offered for {title} \
+               at {property}.{asked} {reason}\n\nOffer new times from the work order.\n\n— {company}",
+        sms: "{name} can't make the offered times for {title}.{asked}",
+    },
+    DefaultTemplate {
+        key: "appointment_reminder",
+        subject: "Reminder: {title}, {when}",
+        body: "Hi {name},\n\nA reminder that we're coming by {in}: {when}, for {title} \
+               at {property}.\n\n— {company}",
+        sms: "{company}: reminder, {title} {in}: {when}.",
+    },
+    DefaultTemplate {
+        key: "appointment_reminder_staff",
+        subject: "Up {in}: {title}, {when}",
+        body: "Hi {recipient},\n\n{title} at {property} with {name} is {in}: {when}.\n\n— {company}",
+        sms: "{title} at {property} is {in}: {when}.",
     },
     DefaultTemplate {
         key: "tour_requested",
@@ -483,9 +653,10 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         subject: "Work order from {company}: {title}",
         body: "Hi {recipient},\n\n{company} has dispatched a work order to you:\n\n\
                {title} ({priority} priority)\nProperty: {property}{due_line}\n\n\
-               {description}\n\nPlease confirm scheduling with the property manager.\n\n\
+               {description}\n\nAccept or decline, tell us when you can come, and send \
+               photos and your invoice here (no account needed):\n{vendor_link}\n\n\
                — {company}",
-        sms: "{company} dispatched a work order: {title} at {property}.",
+        sms: "{company} dispatched a work order: {title} at {property}. Answer here: {vendor_link}",
     },
     DefaultTemplate {
         key: "maintenance_reply",
