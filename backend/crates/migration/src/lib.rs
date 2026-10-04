@@ -90,6 +90,7 @@ mod m20240101_000082_units_meters;
 mod m20240101_000083_ticket_feed;
 mod m20240101_000084_resident_profile;
 mod m20240101_000085_lease_sections;
+mod m20240101_000086_appliance_profile;
 
 pub struct Migrator;
 
@@ -182,6 +183,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000083_ticket_feed::Migration),
             Box::new(m20240101_000084_resident_profile::Migration),
             Box::new(m20240101_000085_lease_sections::Migration),
+            Box::new(m20240101_000086_appliance_profile::Migration),
         ]
     }
 }

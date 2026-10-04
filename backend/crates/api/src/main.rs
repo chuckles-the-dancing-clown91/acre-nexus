@@ -23,6 +23,7 @@ extern crate rocket;
 
 mod accounting;
 mod app_workflow;
+mod appliance_care;
 mod appointments;
 mod audit;
 mod auth;

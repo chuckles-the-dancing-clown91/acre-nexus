@@ -502,13 +502,36 @@ function HomeTerms({ home }: { home: MyHome }) {
           <div className="eyebrow mb-2">Comes with the home</div>
           <Panel className="divide-y divide-line">
             {home.equipment.map((e, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-2 px-4 py-2.5 text-[13px]"
-              >
-                <span className="text-fg">{e.name}</span>
-                <span className="text-xs text-fg-3">{e.make}</span>
-              </div>
+              <details key={i} className="group px-4 py-2.5 text-[13px]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                  <span className="text-fg">{e.name}</span>
+                  <span className="flex items-center gap-2 text-xs text-fg-3">
+                    {e.make}
+                    {(e.care_instructions || e.manual_url) && (
+                      <ChevronDown className="size-4 text-fg-4 transition group-open:rotate-180" />
+                    )}
+                  </span>
+                </summary>
+                {(e.care_instructions || e.manual_url) && (
+                  <div className="mt-2 space-y-2 text-fg-2">
+                    {e.care_instructions && (
+                      <p className="whitespace-pre-wrap">
+                        {e.care_instructions}
+                      </p>
+                    )}
+                    {e.manual_url && (
+                      <a
+                        href={e.manual_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-accent hover:underline"
+                      >
+                        Open the manual
+                      </a>
+                    )}
+                  </div>
+                )}
+              </details>
             ))}
           </Panel>
         </section>

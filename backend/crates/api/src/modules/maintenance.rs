@@ -76,6 +76,8 @@ impl PlatformModule for MaintenanceModule {
             maintenance::assets::list_assets,
             maintenance::assets::create_asset,
             maintenance::assets::update_asset,
+            maintenance::appliance_care::care_suggestion,
+            maintenance::appliance_care::apply_care,
             // helpdesk (Phase 6): quotes + preventive plans
             maintenance::quotes::add_quote,
             maintenance::quotes::approve_quote,

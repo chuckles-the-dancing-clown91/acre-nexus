@@ -557,6 +557,9 @@ pub struct MyEquipment {
     pub kind: String,
     pub make: Option<String>,
     pub warranty_expires: Option<String>,
+    /// How to look after it.
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -610,6 +613,8 @@ pub async fn my_home(
                 kind: a.kind,
                 make: a.make,
                 warranty_expires: a.warranty_expires,
+                care_instructions: a.care_instructions,
+                manual_url: a.manual_url,
             })
             .collect();
     Ok(Json(MyHome {

@@ -198,6 +198,9 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Get, "/search"),
     (Method::Get, "/tickets"),
     (Method::Get, "/leases"),
+    // Equipment: the list is narrowed by reach, a new one checks its property.
+    (Method::Get, "/assets"),
+    (Method::Post, "/assets"),
     // Residents: narrowed to the people leasing or applying in reach.
     (Method::Get, "/tenant-history"),
     (Method::Get, "/residents/profile"),
@@ -238,6 +241,7 @@ enum Target {
     Ticket,
     Lease,
     Unit,
+    Asset,
     /// Records that hang off a work order or a property.
     TicketPart,
     TicketLine,
@@ -257,6 +261,7 @@ fn target(route: &str) -> Option<Target> {
         ["tickets", "<id>"] => Some(Target::Ticket),
         ["leases", "<id>"] => Some(Target::Lease),
         ["units", "<id>"] => Some(Target::Unit),
+        ["assets", "<id>"] => Some(Target::Asset),
         ["parts", "<id>"] => Some(Target::TicketPart),
         ["ticket-lines", "<id>"] => Some(Target::TicketLine),
         ["ticket-quotes", "<id>"] => Some(Target::TicketQuote),
@@ -346,6 +351,10 @@ pub async fn gate(req: &Request<'_>) -> Verdict {
             .one(&state.db)
             .await
             .map(|l| l.map(|l| l.property_id)),
+        Target::Asset => entity::prelude::Asset::find_by_id(id)
+            .one(&state.db)
+            .await
+            .map(|a| a.map(|a| a.property_id)),
         Target::Unit => Unit::find_by_id(id)
             .one(&state.db)
             .await
@@ -423,6 +432,7 @@ mod tests {
             Err(Target::Ticket) => "ticket",
             Err(Target::Lease) => "lease",
             Err(Target::Unit) => "unit",
+            Err(Target::Asset) => "asset",
             Err(Target::TicketPart) => "part",
             Err(Target::TicketLine) => "line",
             Err(Target::TicketQuote) => "quote",
@@ -433,6 +443,9 @@ mod tests {
 
     #[test]
     fn scoped_routes_are_classified() {
+        assert_eq!(verdict(Method::Get, "/assets"), "allow");
+        assert_eq!(verdict(Method::Get, "/assets/<id>/care"), "asset");
+        assert_eq!(verdict(Method::Patch, "/assets/<id>"), "asset");
         assert_eq!(verdict(Method::Get, "/auth/me"), "allow");
         assert_eq!(verdict(Method::Get, "/notifications/unread_count"), "allow");
         assert_eq!(verdict(Method::Get, "/properties"), "allow");

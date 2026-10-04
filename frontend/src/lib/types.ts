@@ -1046,6 +1046,16 @@ export interface Asset {
   years_left: number | null;
   warranty_provider: string | null;
   warranty_notes: string | null;
+  warranty_starts_on: string | null;
+  warranty_policy_number: string | null;
+  warranty_phone: string | null;
+  warranty_coverage: string | null;
+  warranty_transferable: boolean;
+  /** Days until the warranty ends; negative once it has. */
+  warranty_days_left: number | null;
+  care_instructions: string | null;
+  manual_url: string | null;
+  recall_checked_on: string | null;
   notes: string | null;
   status: "active" | "retired";
   created_at: string;
@@ -1084,6 +1094,14 @@ export interface UpdateAssetInput {
   expected_life_years?: number;
   warranty_provider?: string;
   warranty_notes?: string;
+  warranty_starts_on?: string;
+  warranty_policy_number?: string;
+  warranty_phone?: string;
+  warranty_coverage?: string;
+  warranty_transferable?: boolean;
+  care_instructions?: string;
+  manual_url?: string;
+  recall_checked_on?: string;
   notes?: string;
   status?: "active" | "retired";
 }
