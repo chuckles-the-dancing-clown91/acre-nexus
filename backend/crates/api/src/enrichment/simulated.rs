@@ -121,6 +121,11 @@ pub fn parcel(rng: &mut Rng, city: &str, year_built: i32) -> ParcelData {
         ),
         last_sale_price_cents: sale_price,
         lot_size_sqft: rng.range(2_400, 14_000),
+        year_built: if year_built > 0 {
+            year_built
+        } else {
+            rng.range(1925, 2019) as i32
+        },
         property_type: rng.pick(&types).to_string(),
         beds: rng.range(1, 5) as i32,
         baths: rng.range(2, 7) as f64 / 2.0,

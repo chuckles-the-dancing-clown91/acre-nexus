@@ -13,7 +13,7 @@ use chrono::Utc;
 use entity::prelude::{Property, PropertyDetail, Unit};
 use rocket::serde::json::Json;
 use rocket::{get, post, State};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -33,6 +33,8 @@ struct Loaded {
     property: entity::property::Model,
     detail: Option<entity::property_detail::Model>,
     units: Vec<entity::unit::Model>,
+    /// The newest rent estimate on file.
+    estimated_rent_cents: Option<i64>,
 }
 
 async fn load(db: &impl sea_orm::ConnectionTrait, tenant_id: Uuid, id: &str) -> ApiResult<Loaded> {
@@ -52,10 +54,18 @@ async fn load(db: &impl sea_orm::ConnectionTrait, tenant_id: Uuid, id: &str) -> 
         .filter(entity::unit::Column::PropertyId.eq(id))
         .all(db)
         .await?;
+    let estimated_rent_cents = entity::prelude::PropertyValuation::find()
+        .filter(entity::property_valuation::Column::TenantId.eq(tenant_id))
+        .filter(entity::property_valuation::Column::PropertyId.eq(id))
+        .order_by_desc(entity::property_valuation::Column::AsOf)
+        .one(db)
+        .await?
+        .and_then(|v| v.estimated_rent_cents);
     Ok(Loaded {
         property,
         detail,
         units,
+        estimated_rent_cents,
     })
 }
 
@@ -77,11 +87,30 @@ fn compute(l: &Loaded) -> AutofillResp {
         unit_baths: unit.and_then(|u| u.baths),
         unit_sqft: unit.and_then(|u| u.sqft),
         single_unit: unit.is_some(),
+        property_year_built: l.property.year_built,
+        detail_year_built: d.year_built,
     };
+    let mut out = proposals(&facts, "property record");
+    out.extend(crate::autofill::rent_proposal(
+        unit.is_some(),
+        unit.and_then(|u| u.market_rent_cents),
+        l.estimated_rent_cents,
+        "rent estimate",
+    ));
     AutofillResp {
         fetched_at: d.last_enriched_at.map(|t| t.to_rfc3339()),
-        proposals: proposals(&facts, "property record"),
+        proposals: out,
     }
+}
+
+/// The open suggestions for a property (for the onboarding checklist).
+pub async fn proposals_for(
+    db: &impl sea_orm::ConnectionTrait,
+    tenant_id: Uuid,
+    id: Uuid,
+) -> ApiResult<Vec<Proposal>> {
+    let l = load(db, tenant_id, &id.to_string()).await?;
+    Ok(compute(&l).proposals)
 }
 
 /// `GET /properties/<id>/autofill` — what the property record suggests.
@@ -125,10 +154,20 @@ pub async fn apply_autofill(
     let now = Utc::now();
 
     // The proposal already carries the property-type code.
-    if let Some(p) = chosen.iter().find(|p| p.field == "property_type") {
+    let new_type = chosen.iter().find(|p| p.field == "property_type");
+    let new_year = chosen
+        .iter()
+        .find(|p| p.field == "year_built")
+        .and_then(|p| p.proposed.parse::<i32>().ok());
+    if new_type.is_some() || new_year.is_some() {
         let before = l.property.clone();
         let mut am: entity::property::ActiveModel = l.property.clone().into();
-        am.property_type = Set(p.proposed.clone());
+        if let Some(p) = new_type {
+            am.property_type = Set(p.proposed.clone());
+        }
+        if let Some(y) = new_year {
+            am.year_built = Set(y);
+        }
         let saved = am.update(&db).await?;
         change::change(
             &db,
@@ -160,6 +199,10 @@ pub async fn apply_autofill(
                 }
                 "unit_sqft" => {
                     am.sqft = Set(p.proposed.parse().ok());
+                    touched = true;
+                }
+                "unit_market_rent" => {
+                    am.market_rent_cents = Set(p.proposed.parse::<i64>().ok().map(|d| d * 100));
                     touched = true;
                 }
                 _ => {}

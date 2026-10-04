@@ -12,3 +12,4 @@ pub mod update;
 pub use dto::PropertyResp;
 
 pub mod autofill;
+pub mod checklist;

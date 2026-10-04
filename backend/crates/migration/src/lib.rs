@@ -81,6 +81,7 @@ mod m20240101_000073_mandates;
 mod m20240101_000074_text_links;
 mod m20240101_000075_backup_runs;
 mod m20240101_000076_contact_language;
+mod m20240101_000077_detail_year_built;
 
 pub struct Migrator;
 
@@ -164,6 +165,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000074_text_links::Migration),
             Box::new(m20240101_000075_backup_runs::Migration),
             Box::new(m20240101_000076_contact_language::Migration),
+            Box::new(m20240101_000077_detail_year_built::Migration),
         ]
     }
 }

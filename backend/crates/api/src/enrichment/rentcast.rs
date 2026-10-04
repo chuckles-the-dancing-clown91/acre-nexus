@@ -89,6 +89,12 @@ pub fn parse_record(
             .map(|v| v as i64)
             .or(existing.map(|e| e.lot_size_sqft))
             .unwrap_or(0),
+        year_built: p["yearBuilt"]
+            .as_f64()
+            .map(|v| v as i32)
+            .filter(|y| (1700..=2100).contains(y))
+            .or(existing.map(|e| e.year_built))
+            .unwrap_or(0),
         property_type: keep(
             property_type(&text(&p["propertyType"])),
             existing.map(|e| &e.property_type),
@@ -280,6 +286,7 @@ mod tests {
             last_sale_date: "2019-01-01".into(),
             last_sale_price_cents: 1,
             lot_size_sqft: 10,
+            year_built: 1960,
             property_type: "condo".into(),
             beds: 2,
             baths: 1.0,

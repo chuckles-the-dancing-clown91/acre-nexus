@@ -19,7 +19,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 4 | Issue catalog → generate ticket → parts → shopping list | ☑ |
 | 5 | Site maps: apartment layouts and campgrounds | ☑ |
 | 6 | Tenant home search | ◐ |
-| 7 | House onboarding with autofill | ◐ |
+| 7 | House onboarding with autofill | ☑ |
 | 8 | Campground reservations (follows the map) | ☐ |
 | 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
@@ -225,7 +225,12 @@ with alerts, tours without phone tag, and commute time.
 6. Favourites and compare (local first, account later).
 7. Commute-time filter (a routing provider call, cached).
 
-## 7. House onboarding with autofill ◐
+## 7. House onboarding with autofill ☑
+
+Shipped: year built and a market rent proposed from the record and the rent
+estimate, and a per-house checklist ticked from the data
+([`PROPERTY-PROFILE.md`](PROPERTY-PROFILE.md), "Getting this house ready").
+Utilities and schools already come from enrichment.
 
 **Today.** A three-step wizard with address autocomplete; the property, loans,
 assignments and an enrichment job are created in one call. But enrichment is

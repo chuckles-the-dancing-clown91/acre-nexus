@@ -151,6 +151,7 @@ async fn integration_suite() {
     texts_round_two(&c).await;
     go_live_page(&c).await;
     spanish_messages(&c).await;
+    onboarding_checklist(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -9304,6 +9305,144 @@ async fn spanish_messages(c: &Ctx) {
         crate::language::for_contact(&c.db, nw, "+15035550144").await,
         "es"
     );
+}
+
+/// House onboarding: a new property's checklist starts empty and fills in
+/// from the data; the record's year built and the rent estimate are proposed
+/// and applied only when chosen.
+async fn onboarding_checklist(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let (st, prop) = send_json(
+        c,
+        Method::Post,
+        "/properties",
+        &staff,
+        serde_json::json!({ "name": "Checklist Cottage", "address": "9 Fern Ln", "city": "Portland", "state": "OR", "postal_code": "97202", "units": 1, "occupied_units": 0, "monthly_rent_cents": 0, "property_type": "single_family" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{prop}");
+    let pid = prop["id"].as_str().unwrap().to_string();
+    let (st, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(st, Status::Ok, "{list}");
+    assert_eq!(list["steps"].as_array().unwrap().len(), 11);
+    assert_eq!(list["next"], "address");
+    assert_eq!(list["required"], 10);
+    let step = |l: &serde_json::Value, k: &str| -> serde_json::Value {
+        l["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["key"] == k)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(step(&list, "owner")["done"], false);
+
+    // The record arrives with a year built; a rent estimate is on file.
+    let puid = uuid::Uuid::parse_str(&pid).unwrap();
+    let now = chrono::Utc::now();
+    let existing = entity::prelude::PropertyDetail::find()
+        .filter(entity::property_detail::Column::PropertyId.eq(puid))
+        .one(&c.db)
+        .await
+        .unwrap();
+    match existing {
+        Some(d) => {
+            let mut am: entity::property_detail::ActiveModel = d.into();
+            am.year_built = Set(Some(1948));
+            am.latitude = Set(Some(45.48));
+            am.longitude = Set(Some(-122.65));
+            am.last_enriched_at = Set(Some(now.into()));
+            am.update(&c.db).await.unwrap();
+        }
+        None => {
+            entity::property_detail::ActiveModel {
+                property_id: Set(puid),
+                tenant_id: Set(nw),
+                year_built: Set(Some(1948)),
+                latitude: Set(Some(45.48)),
+                longitude: Set(Some(-122.65)),
+                last_enriched_at: Set(Some(now.into())),
+                features: Set(serde_json::json!([])),
+                created_at: Set(now.into()),
+                updated_at: Set(now.into()),
+                ..Default::default()
+            }
+            .insert(&c.db)
+            .await
+            .unwrap();
+        }
+    }
+    entity::property_valuation::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        property_id: Set(puid),
+        as_of: Set(now.date_naive().to_string()),
+        estimated_value_cents: Set(Some(52_000_000)),
+        value_low_cents: Set(None),
+        value_high_cents: Set(None),
+        estimated_rent_cents: Set(Some(214_960)),
+        confidence: Set(Some(80)),
+        source: Set("test".into()),
+        created_at: Set(now.into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    let (_, auto) = get_json(c, &format!("/properties/{pid}/autofill"), &staff).await;
+    let fields: Vec<&str> = auto["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["field"].as_str().unwrap())
+        .collect();
+    assert!(fields.contains(&"year_built"), "{auto}");
+    let has_unit = entity::prelude::Unit::find()
+        .filter(entity::unit::Column::PropertyId.eq(puid))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .len()
+        == 1;
+    if has_unit {
+        assert!(fields.contains(&"unit_market_rent"), "{auto}");
+    }
+    let (_, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(step(&list, "address")["done"], true);
+    assert_eq!(
+        step(&list, "record")["done"],
+        false,
+        "suggestions to review"
+    );
+    let (st, applied) = post_json(
+        c,
+        &format!("/properties/{pid}/autofill/apply"),
+        &staff,
+        serde_json::json!({ "fields": fields }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{applied}");
+    assert!(
+        applied["proposals"].as_array().unwrap().is_empty(),
+        "{applied}"
+    );
+    let p = entity::prelude::Property::find_by_id(puid)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(p.year_built, 1948);
+    let (_, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(step(&list, "record")["done"], true, "{list}");
+    if has_unit {
+        assert_eq!(step(&list, "rent")["done"], true, "{list}");
+    }
+    let reader = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = get_json(c, &format!("/properties/{pid}/checklist"), &reader).await;
+    assert_eq!(st, Status::Forbidden);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

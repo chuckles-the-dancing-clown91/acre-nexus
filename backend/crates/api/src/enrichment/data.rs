@@ -46,6 +46,8 @@ pub struct ParcelData {
     pub last_sale_date: String,
     pub last_sale_price_cents: i64,
     pub lot_size_sqft: i64,
+    /// 0 when the record doesn't say.
+    pub year_built: i32,
     pub property_type: String,
     pub beds: i32,
     pub baths: f64,
