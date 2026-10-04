@@ -425,7 +425,7 @@ export const MODULES: ModuleDef[] = [
     key: "integrations",
     label: "Integrations",
     description:
-      "Credential vault, document storage, notifications (email/SMS), and inbound webhooks.",
+      "Business profile, Google reviews, website widgets, Alpha sign-on and vendors, documents, and the sent log.",
     group: "platform",
     defaultEnabled: true,
     nav: [

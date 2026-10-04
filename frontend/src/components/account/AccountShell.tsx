@@ -6,7 +6,16 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, CreditCard, FileText, LogOut, Wrench } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  LogOut,
+  MessageSquare,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { isOwnerOnly } from "@/lib/owner";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -16,6 +25,9 @@ import { cn } from "@/lib/utils";
 const RESIDENT_NAV = [
   { href: "/account/maintenance", label: "Repairs", icon: Wrench },
   { href: "/account/payments", label: "Rent", icon: CreditCard },
+  { href: "/account/lease", label: "Lease", icon: FileText },
+  { href: "/account/messages", label: "Messages", icon: MessageSquare },
+  { href: "/account/applications", label: "Applications", icon: ClipboardList },
 ];
 const OWNER_NAV = [
   { href: "/account/owner/statement", label: "Statements", icon: FileText },
@@ -76,10 +88,27 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   <n.icon className="size-4" />
-                  <span className="hidden sm:inline">{n.label}</span>
+                  <span className="hidden md:inline">{n.label}</span>
                 </Link>
               );
             })}
+            {user && !ownerSide && (
+              <Link
+                href="/account/profile"
+                aria-label="Profile"
+                aria-current={
+                  path.startsWith("/account/profile") ? "page" : undefined
+                }
+                className={cn(
+                  "ml-1 rounded-lg p-1.5 transition",
+                  path.startsWith("/account/profile")
+                    ? "bg-fill text-fg"
+                    : "text-fg-3 hover:text-fg"
+                )}
+              >
+                <UserRound className="size-4" />
+              </Link>
+            )}
             {user && (
               <button
                 type="button"

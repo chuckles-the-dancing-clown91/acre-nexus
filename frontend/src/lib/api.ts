@@ -245,6 +245,10 @@ export interface TextThread {
   assigned_user_id: string | null;
   /** Consent on file for marketing texts. */
   marketing_consent: boolean;
+  /** A prospect this number belongs to. */
+  lead_id: string | null;
+  /** A vendor this number belongs to. */
+  counterparty_id: string | null;
 }
 
 export interface SavedReply {
@@ -258,7 +262,7 @@ export interface TextMessage {
   id: string;
   direction: "in" | "out";
   body: string;
-  status: "received" | "queued" | "sent" | "failed" | "blocked";
+  status: "received" | "queued" | "sent" | "failed" | "blocked" | "missed_call";
   template_key: string | null;
   sent_by: string | null;
   media_count: number;
@@ -278,6 +282,8 @@ export interface TextsStatus {
   provider_configured: boolean;
   inbound_webhook_url: string;
   status_webhook_url: string;
+  /** "A call comes in": missed-call text-back and ringing the office. */
+  voice_webhook_url: string;
   unread_threads: number;
 }
 
@@ -353,6 +359,10 @@ export const api = {
       /** A teammate's user id, or "" to clear. */
       assignee?: string;
       marketing_consent?: boolean;
+      /** Whose number this is. */
+      link?: { kind: "resident" | "lead" | "vendor" | "none"; id?: string };
+      /** What to call them; "" clears it. */
+      display_name?: string;
     }
   ) =>
     request<TextThread>(`/texts/${id}`, {
@@ -372,6 +382,12 @@ export const api = {
       method: "DELETE",
       auth: true,
     }),
+  /** Test mode only: act as if `phone` called and nobody answered. */
+  simulateCall: (phone: string) =>
+    request<{ texted_back: boolean; thread: TextThreadDetail }>(
+      "/texts/simulate-call",
+      { method: "POST", auth: true, body: { phone } }
+    ),
   /** Test mode only: act as if `phone` texted `body` in. */
   simulateText: (phone: string, body: string) =>
     request<TextThreadDetail>("/texts/simulate", {
