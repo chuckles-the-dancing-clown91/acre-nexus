@@ -28,6 +28,7 @@ import { Fact } from "@/components/property/bits";
 import { humanize } from "../kinds";
 import { Compliance } from "./Compliance";
 import { PartnerLink } from "./PartnerLink";
+import { PortalInvite } from "./PortalInvite";
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -182,6 +183,13 @@ export default function EntityPage() {
 
         <div className="space-y-4">
           {vendor && <Compliance counterpartyId={d.id} manage={manage} />}
+          {vendor && (
+            <PortalInvite
+              counterpartyId={d.id}
+              hasEmail={!!d.email?.includes("@")}
+              allowed={manage && can("member:manage")}
+            />
+          )}
 
           <Panel>
             <PanelHeader

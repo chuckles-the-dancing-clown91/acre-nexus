@@ -23,7 +23,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 8 | Campground reservations (follows the map) | ☐ |
 | 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
-| 11 | Vendor portal and compliance (W-9, COI, 1099) | ◐ |
+| 11 | Vendor portal and compliance (W-9, COI, 1099) | ☑ |
 | 12 | Owner portal and spend approvals | ☑ |
 | 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☑ |
 | 14 | Listing media, map search, saved searches and listing feeds | ◐ |
@@ -353,12 +353,13 @@ on/off switch and lead days, every send logged against the lease:
 - **Morning digest** for managers: rent late, leases expiring, tickets past SLA,
   turns past target, tours booked today. One email, skipped when empty.
 
-## 11. Vendor portal and compliance ◐
+## 11. Vendor portal and compliance ☑
 
 Since: every batch sent to a vendor carries a no-account link to accept,
 decline, book, upload photos and an invoice, and mark it done
-([`SERVICE-DESK.md`](SERVICE-DESK.md), "The vendor's link"). A signed-in
-portal across all of a vendor's work is still to do.
+([`SERVICE-DESK.md`](SERVICE-DESK.md), "The vendor's link"). The signed-in vendor portal
+across all of a vendor's work shipped too ([`SERVICE-DESK.md`](SERVICE-DESK.md),
+"The vendor portal").
 
 **Today.** Vendors are counterparties. There is a token API for vendor systems
 (`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into.

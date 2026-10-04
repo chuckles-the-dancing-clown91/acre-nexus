@@ -228,6 +228,8 @@ pub const OWNER_APPROVAL_OVERRIDE: &str = "owner_approval.override";
 pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 /// A person's message language was set.
 pub const LANGUAGE_SET: &str = "language.set";
+/// A vendor was given a vendor-portal login.
+pub const VENDOR_PORTAL_INVITE: &str = "vendor.portal_invite";
 /// Staff triggered a test delivery (provider test or own-device push test).
 pub const NOTIFICATION_TEST: &str = "notification.test";
 /// Inbox entries marked read (self-service; count in metadata).

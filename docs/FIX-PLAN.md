@@ -84,7 +84,7 @@ group, and Settings → Schedule in the console. Covered by
 |----|-----|------|--------|
 | F11 | Vendor W-9: TIN (encrypted), classification, the 1099 reads it | M | ☑ |
 | F12 | Vendor COI with expiry, requests before it lapses, dispatch warning | M | ☑ |
-| F13 | Vendor portal: invite, assigned work orders, status, photos, bills | L | ☐ |
+| F13 | Vendor portal: invite, assigned work orders, status, photos, bills | L | ☑ |
 
 - **F11.** `tax_1099.rs` exports `tin: None`. Add W-9 fields to the counterparty
   (legal name, TIN encrypted with the PII key and shown as last four,

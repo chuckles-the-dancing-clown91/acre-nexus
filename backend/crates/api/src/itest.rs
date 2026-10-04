@@ -152,6 +152,7 @@ async fn integration_suite() {
     go_live_page(&c).await;
     spanish_messages(&c).await;
     onboarding_checklist(&c).await;
+    vendor_portal_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -9442,6 +9443,157 @@ async fn onboarding_checklist(c: &Ctx) {
     }
     let reader = mint(c, Some(nw), false, &["lease:read"]);
     let (st, _) = get_json(c, &format!("/properties/{pid}/checklist"), &reader).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// The vendor portal: staff invite a vendor; signed in, the vendor sees the
+/// job sent to them and accepts it there; another vendor's job stays hidden;
+/// the login opens nothing in the console.
+async fn vendor_portal_flow(c: &Ctx) {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "member:manage",
+            "property:read",
+        ],
+    );
+    let make_vendor = |name: &'static str, email: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let (st, v) = post_json(
+                c,
+                "/entities",
+                &staff,
+                serde_json::json!({ "kind": "contractor", "name": name, "email": email, "trades": ["plumbing"] }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok, "{v}");
+            v["id"].as_str().unwrap().to_string()
+        }
+    };
+    let pipes = make_vendor("Portal Pipes", "portal.pipes@example.com").await;
+    let other = make_vendor("Other Drains", "other.drains@example.com").await;
+    let send = |vendor: String, title: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let (_, t) = post_json(
+                c,
+                &format!("/properties/{pid}/tickets"),
+                &staff,
+                serde_json::json!({ "title": title, "category": "plumbing" }),
+            )
+            .await;
+            let tid = t["id"].as_str().unwrap().to_string();
+            let (_, tasks) = post_json(
+                c,
+                &format!("/tickets/{tid}/tasks"),
+                &staff,
+                serde_json::json!({ "title": "Clear the line", "trade": "plumbing", "needs_contractor": true }),
+            )
+            .await;
+            let task = tasks.as_array().unwrap().last().unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let (st, sent) = post_json(
+                c,
+                &format!("/tickets/{tid}/dispatch-tasks"),
+                &staff,
+                serde_json::json!({ "task_ids": [task], "entity_id": vendor }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok, "{sent}");
+            tid
+        }
+    };
+    let mine_tid = send(pipes.clone(), "Portal: main line backs up").await;
+    let theirs_tid = send(other.clone(), "Portal: other vendor's job").await;
+
+    let (st, inv) = post_json(
+        c,
+        &format!("/entities/{pipes}/portal-invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    assert_eq!(inv["outcome"], "invited");
+    let uid = uuid::Uuid::parse_str(inv["user_id"].as_str().unwrap()).unwrap();
+    let (st, again) = post_json(
+        c,
+        &format!("/entities/{pipes}/portal-invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{again}");
+    let tok = crate::auth::issue_access_token(&c.config, uid, Some(nw), false, vec![]).unwrap();
+
+    let (st, me) = get_json(c, "/vendor-portal/me", &tok).await;
+    assert_eq!(st, Status::Ok, "{me}");
+    assert_eq!(me["vendor"], "Portal Pipes");
+    assert!(me["open_jobs"].as_u64().unwrap() >= 1);
+    let (_, jobs) = get_json(c, "/vendor-portal/jobs", &tok).await;
+    let job = jobs["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["ticket_id"] == mine_tid)
+        .expect("my job is listed")
+        .clone();
+    assert!(jobs["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|j| j["ticket_id"] != theirs_tid));
+    let batch = job["batch"].as_str().unwrap().to_string();
+    let (st, detail) = get_json(c, &format!("/vendor-portal/jobs/{batch}"), &tok).await;
+    assert_eq!(st, Status::Ok, "{detail}");
+    assert_eq!(detail["title"], "Portal: main line backs up");
+    let (st, acc) = post_json(
+        c,
+        &format!("/vendor-portal/jobs/{batch}/accept"),
+        &tok,
+        serde_json::json!({ "note": "Tomorrow morning" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{acc}");
+    assert_eq!(acc["response"], "accepted");
+
+    // Someone else's job, by its batch: not found.
+    let other_task = entity::prelude::TicketTask::find()
+        .filter(
+            entity::ticket_task::Column::TicketId.eq(uuid::Uuid::parse_str(&theirs_tid).unwrap()),
+        )
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let other_batch = other_task.vendor_token_hash.unwrap();
+    let (st, _) = get_json(c, &format!("/vendor-portal/jobs/{other_batch}"), &tok).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = post_json(
+        c,
+        &format!("/vendor-portal/jobs/{other_batch}/accept"),
+        &tok,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // The vendor login opens nothing in the console; staff aren't vendors.
+    let (st, _) = get_json(c, "/properties", &tok).await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = get_json(c, "/vendor-portal/me", &staff).await;
     assert_eq!(st, Status::Forbidden);
 }
 

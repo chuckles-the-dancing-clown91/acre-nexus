@@ -11,6 +11,7 @@ import {
   ClipboardList,
   CreditCard,
   FileText,
+  HardHat,
   LogOut,
   MessageSquare,
   UserRound,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { isOwnerOnly } from "@/lib/owner";
+import { isVendorOnly } from "@/lib/resident";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
@@ -39,9 +41,15 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const ownerSide = isOwnerOnly(user) || path.startsWith("/account/owner");
-  const NAV = ownerSide
-    ? [{ href: "/account/owner", label: "Home", icon: Building2 }, ...OWNER_NAV]
-    : RESIDENT_NAV;
+  const vendorSide = isVendorOnly(user) || path.startsWith("/account/vendor");
+  const NAV = vendorSide
+    ? [{ href: "/account/vendor", label: "Jobs", icon: HardHat }]
+    : ownerSide
+      ? [
+          { href: "/account/owner", label: "Home", icon: Building2 },
+          ...OWNER_NAV,
+        ]
+      : RESIDENT_NAV;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -56,7 +64,13 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4">
           <Link
-            href={ownerSide ? "/account/owner" : "/account/maintenance"}
+            href={
+              vendorSide
+                ? "/account/vendor"
+                : ownerSide
+                  ? "/account/owner"
+                  : "/account/maintenance"
+            }
             className="flex min-w-0 items-center gap-2"
           >
             {brand.logo_url ? (
@@ -92,7 +106,7 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-            {user && !ownerSide && (
+            {user && !ownerSide && !vendorSide && (
               <Link
                 href="/account/profile"
                 aria-label="Profile"

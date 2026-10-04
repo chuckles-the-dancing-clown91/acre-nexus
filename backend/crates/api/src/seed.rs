@@ -2521,15 +2521,30 @@ async fn ensure_catalogs(db: &DatabaseConnection) -> anyhow::Result<()> {
         }
     }
     // Built-in roles gain any permission the code now grants them (new
-    // features' permissions reach existing workspaces). Only ever adds.
+    // features' permissions reach existing workspaces), and a built-in role
+    // added since a database was seeded is created. Only ever adds.
     for sr in SYSTEM_ROLES {
-        let Some(role) = entity::role::Entity::find()
+        let found = entity::role::Entity::find()
             .filter(entity::role::Column::Key.eq(sr.key))
             .filter(entity::role::Column::IsSystem.eq(true))
             .one(db)
-            .await?
-        else {
-            continue;
+            .await?;
+        let role = match found {
+            Some(r) => r,
+            None => {
+                tracing::info!(role = sr.key, "seed: created new system role");
+                entity::role::ActiveModel {
+                    id: Set(Uuid::new_v4()),
+                    tenant_id: Set(None),
+                    scope: Set(sr.scope.into()),
+                    key: Set(sr.key.into()),
+                    name: Set(sr.name.into()),
+                    description: Set(sr.description.into()),
+                    is_system: Set(true),
+                }
+                .insert(db)
+                .await?
+            }
         };
         let have: std::collections::HashSet<String> = entity::role_permission::Entity::find()
             .filter(entity::role_permission::Column::RoleId.eq(role.id))

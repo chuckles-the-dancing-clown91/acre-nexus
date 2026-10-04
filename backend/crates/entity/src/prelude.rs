@@ -141,6 +141,7 @@ pub use super::user_totp::Entity as UserTotp;
 pub use super::vehicle::Entity as Vehicle;
 pub use super::vendor_bill::Entity as VendorBill;
 pub use super::vendor_insurance::Entity as VendorInsurance;
+pub use super::vendor_portal_user::Entity as VendorPortalUser;
 pub use super::vendor_tax_profile::Entity as VendorTaxProfile;
 pub use super::webhook_delivery::Entity as WebhookDelivery;
 pub use super::webhook_subscription::Entity as WebhookSubscription;

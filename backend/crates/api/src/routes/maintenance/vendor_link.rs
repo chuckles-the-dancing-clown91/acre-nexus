@@ -79,20 +79,33 @@ pub struct VendorJob {
 }
 
 /// The tasks a link was minted for, and the work order they're on.
-async fn by_token(
+/// How a batch is named: the vendor's link token, or (for a signed-in vendor)
+/// the stored hash of it, which the portal lists.
+pub enum BatchKey<'a> {
+    Token(&'a str),
+    Hash(&'a str),
+}
+
+async fn by_batch(
     db: &impl ConnectionTrait,
-    token: &str,
+    key: &BatchKey<'_>,
 ) -> ApiResult<(
     Vec<entity::ticket_task::Model>,
     entity::maintenance_ticket::Model,
     entity::counterparty::Model,
 )> {
-    let token = token.trim();
-    if token.len() < 16 {
-        return Err(ApiError::NotFound("that link isn't valid".into()));
-    }
+    let hash = match key {
+        BatchKey::Token(token) => {
+            let token = token.trim();
+            if token.len() < 16 {
+                return Err(ApiError::NotFound("that link isn't valid".into()));
+            }
+            crate::auth::hash_secret(token)
+        }
+        BatchKey::Hash(h) => h.to_string(),
+    };
     let tasks = TicketTask::find()
-        .filter(entity::ticket_task::Column::VendorTokenHash.eq(crate::auth::hash_secret(token)))
+        .filter(entity::ticket_task::Column::VendorTokenHash.eq(hash))
         .order_by_asc(entity::ticket_task::Column::Position)
         .all(db)
         .await?;
@@ -330,8 +343,20 @@ async fn staff_vars(
 #[rocket_okapi::openapi(tag = "Vendors (Public)")]
 #[get("/public/vendor/<token>")]
 pub async fn view(db: crate::db::RequestDb, token: &str) -> ApiResult<Json<VendorJob>> {
-    let (tasks, t, vendor) = by_token(&db, token).await?;
-    Ok(Json(job_dto(&db, tasks, t, vendor).await?))
+    view_for(&db, &BatchKey::Token(token)).await
+}
+
+/// Which vendor a batch belongs to (for the portal's ownership check).
+pub(crate) async fn batch_vendor(db: &impl ConnectionTrait, key: &BatchKey<'_>) -> ApiResult<Uuid> {
+    Ok(by_batch(db, key).await?.2.id)
+}
+
+pub(crate) async fn view_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+) -> ApiResult<Json<VendorJob>> {
+    let (tasks, t, vendor) = by_batch(db, key).await?;
+    Ok(Json(job_dto(db, tasks, t, vendor).await?))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -352,28 +377,36 @@ pub async fn accept(
     token: &str,
     body: Json<AcceptReq>,
 ) -> ApiResult<Json<VendorJob>> {
-    let (tasks, t, vendor) = by_token(&db, token).await?;
+    accept_for(&db, &BatchKey::Token(token), body.into_inner()).await
+}
+
+pub(crate) async fn accept_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+    body: AcceptReq,
+) -> ApiResult<Json<VendorJob>> {
+    let (tasks, t, vendor) = by_batch(db, key).await?;
     if tasks
         .iter()
         .all(|x| matches!(x.status.as_str(), "done" | "skipped"))
     {
         return Err(ApiError::Conflict("this work is already done".into()));
     }
-    let b = body.into_inner();
+    let b = body;
     let note = clean(b.note);
     let now = Utc::now();
-    stamp(&db, &tasks, &vendor, "accepted", note.as_deref(), |am| {
+    stamp(db, &tasks, &vendor, "accepted", note.as_deref(), |am| {
         am.assignee_entity_id = Set(Some(vendor.id));
         if matches!(am.status.as_ref().as_str(), "todo") {
             am.status = Set("doing".into());
         }
     })
     .await?;
-    let mut vars = staff_vars(&db, &t, &vendor.name).await;
+    let mut vars = staff_vars(db, &t, &vendor.name).await;
     let mut line = format!("{} accepted the work.", vendor.name);
     if let Some(start) = b.start.as_deref().filter(|s| !s.trim().is_empty()) {
         let w = window_from(
-            &db,
+            db,
             t.tenant_id,
             WindowReq {
                 start: start.to_string(),
@@ -392,15 +425,15 @@ pub async fn accept(
             .filter(entity::appointment::Column::SubjectType.eq("ticket"))
             .filter(entity::appointment::Column::SubjectId.eq(t.id))
             .filter(entity::appointment::Column::Status.is_in(["proposed", "confirmed"]))
-            .all(&db)
+            .all(db)
             .await?;
         for a in open {
             let mut am: entity::appointment::ActiveModel = a.into();
             am.status = Set("cancelled".into());
             am.updated_at = Set(now.into());
-            am.update(&db).await?;
+            am.update(db).await?;
         }
-        let resident = crate::appointments::resident_for_ticket(&db, t.tenant_id, &t).await;
+        let resident = crate::appointments::resident_for_ticket(db, t.tenant_id, &t).await;
         let a = entity::appointment::ActiveModel {
             id: Set(Uuid::new_v4()),
             tenant_id: Set(t.tenant_id),
@@ -433,10 +466,10 @@ pub async fn accept(
             created_at: Set(now.into()),
             updated_at: Set(now.into()),
         }
-        .insert(&db)
+        .insert(db)
         .await?;
-        crate::appointments::confirm(&db, t.tenant_id, a, w.clone(), "vendor").await?;
-        let tz = crate::appointments::tz_for(&db, t.tenant_id).await;
+        crate::appointments::confirm(db, t.tenant_id, a, w.clone(), "vendor").await?;
+        let tz = crate::appointments::tz_for(db, t.tenant_id).await;
         let words = crate::appointments::window_words(&w, &tz);
         line = format!("{} accepted the work and is coming {words}.", vendor.name);
         vars["when"] = json!(format!(" They're coming {words}."));
@@ -445,7 +478,7 @@ pub async fn accept(
         vars["note"] = json!(format!("\n\n\"{n}\""));
     }
     vendor_note(
-        &db,
+        db,
         &t,
         &vendor.name,
         "vendor_accepted",
@@ -457,7 +490,7 @@ pub async fn accept(
     )
     .await;
     crate::notify::notify_staff(
-        &db,
+        db,
         t.tenant_id,
         "maintenance:manage",
         "vendor_task_accepted",
@@ -467,8 +500,8 @@ pub async fn accept(
         None,
     )
     .await;
-    let (tasks, t, vendor) = by_token(&db, token).await?;
-    Ok(Json(job_dto(&db, tasks, t, vendor).await?))
+    let (tasks, t, vendor) = by_batch(db, key).await?;
+    Ok(Json(job_dto(db, tasks, t, vendor).await?))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -485,16 +518,24 @@ pub async fn decline(
     token: &str,
     body: Json<DeclineReq>,
 ) -> ApiResult<Json<VendorJob>> {
-    let (tasks, t, vendor) = by_token(&db, token).await?;
+    decline_for(&db, &BatchKey::Token(token), body.into_inner()).await
+}
+
+pub(crate) async fn decline_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+    body: DeclineReq,
+) -> ApiResult<Json<VendorJob>> {
+    let (tasks, t, vendor) = by_batch(db, key).await?;
     if tasks
         .iter()
         .any(|x| x.vendor_response.as_deref() == Some("done"))
     {
         return Err(ApiError::Conflict("this work is already done".into()));
     }
-    let reason = clean(body.into_inner().reason);
+    let reason = clean(body.reason);
     let now = Utc::now();
-    stamp(&db, &tasks, &vendor, "declined", reason.as_deref(), |am| {
+    stamp(db, &tasks, &vendor, "declined", reason.as_deref(), |am| {
         am.assignee_entity_id = Set(None);
         am.dispatched_at = Set(None);
         am.dispatch_via = Set(None);
@@ -504,7 +545,7 @@ pub async fn decline(
     })
     .await?;
     vendor_note(
-        &db,
+        db,
         &t,
         &vendor.name,
         "vendor_declined",
@@ -515,12 +556,12 @@ pub async fn decline(
         "internal",
     )
     .await;
-    let mut vars = staff_vars(&db, &t, &vendor.name).await;
+    let mut vars = staff_vars(db, &t, &vendor.name).await;
     if let Some(r) = &reason {
         vars["reason"] = json!(format!(" They said: \"{r}\""));
     }
     crate::notify::notify_staff(
-        &db,
+        db,
         t.tenant_id,
         "maintenance:manage",
         "vendor_task_declined",
@@ -530,8 +571,8 @@ pub async fn decline(
         None,
     )
     .await;
-    let (tasks, t, vendor) = by_token(&db, token).await?;
-    Ok(Json(job_dto(&db, tasks, t, vendor).await?))
+    let (tasks, t, vendor) = by_batch(db, key).await?;
+    Ok(Json(job_dto(db, tasks, t, vendor).await?))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -548,7 +589,15 @@ pub async fn done(
     token: &str,
     body: Json<DoneReq>,
 ) -> ApiResult<Json<VendorJob>> {
-    let (tasks, t, vendor) = by_token(&db, token).await?;
+    done_for(&db, &BatchKey::Token(token), body.into_inner()).await
+}
+
+pub(crate) async fn done_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+    body: DoneReq,
+) -> ApiResult<Json<VendorJob>> {
+    let (tasks, t, vendor) = by_batch(db, key).await?;
     if tasks
         .iter()
         .any(|x| x.vendor_response.as_deref() == Some("declined"))
@@ -557,9 +606,9 @@ pub async fn done(
             "this work was declined; ask the office to send it again".into(),
         ));
     }
-    let note = clean(body.into_inner().note);
+    let note = clean(body.note);
     let now = Utc::now();
-    stamp(&db, &tasks, &vendor, "done", note.as_deref(), |am| {
+    stamp(db, &tasks, &vendor, "done", note.as_deref(), |am| {
         am.assignee_entity_id = Set(Some(vendor.id));
         if !matches!(am.status.as_ref().as_str(), "done" | "skipped") {
             am.status = Set("done".into());
@@ -568,7 +617,7 @@ pub async fn done(
     })
     .await?;
     vendor_note(
-        &db,
+        db,
         &t,
         &vendor.name,
         "vendor_done",
@@ -584,9 +633,9 @@ pub async fn done(
         .filter(entity::expense::Column::MaintenanceTicketId.eq(t.id))
         .filter(entity::expense::Column::Vendor.eq(vendor.name.clone()))
         .filter(entity::expense::Column::RecordedBy.is_null())
-        .all(&db)
+        .all(db)
         .await?;
-    let mut vars = staff_vars(&db, &t, &vendor.name).await;
+    let mut vars = staff_vars(db, &t, &vendor.name).await;
     if let Some(n) = &note {
         vars["note"] = json!(format!(" \"{n}\""));
     }
@@ -595,7 +644,7 @@ pub async fn done(
         vars["invoice"] = json!(format!(" Their invoice: {}.", money(total)));
     }
     crate::notify::notify_staff(
-        &db,
+        db,
         t.tenant_id,
         "maintenance:manage",
         "vendor_task_done",
@@ -605,8 +654,8 @@ pub async fn done(
         None,
     )
     .await;
-    let (tasks, t, vendor) = by_token(&db, token).await?;
-    Ok(Json(job_dto(&db, tasks, t, vendor).await?))
+    let (tasks, t, vendor) = by_batch(db, key).await?;
+    Ok(Json(job_dto(db, tasks, t, vendor).await?))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -634,14 +683,22 @@ pub async fn upload(
     token: &str,
     body: Json<VendorUploadReq>,
 ) -> ApiResult<Json<VendorUploadResp>> {
-    let (tasks, t, _vendor) = by_token(&db, token).await?;
+    upload_for(&db, &BatchKey::Token(token), body.into_inner()).await
+}
+
+pub(crate) async fn upload_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+    body: VendorUploadReq,
+) -> ApiResult<Json<VendorUploadResp>> {
+    let (tasks, t, _vendor) = by_batch(db, key).await?;
     if tasks
         .iter()
         .any(|x| x.vendor_response.as_deref() == Some("declined"))
     {
         return Err(ApiError::Conflict("this work was declined".into()));
     }
-    let b = body.into_inner();
+    let b = body;
     let filename = b.filename.trim().to_string();
     if filename.is_empty() || filename.contains('/') || filename.contains('\\') {
         return Err(ApiError::BadRequest("invalid filename".into()));
@@ -691,7 +748,7 @@ pub async fn upload(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&db)
+    .insert(db)
     .await?;
     let signed = ObjectStore::from_env()?.signed_put_url(&key, SIGNED_URL_TTL_SECS)?;
     Ok(Json(VendorUploadResp {
@@ -726,14 +783,22 @@ pub async fn invoice(
     token: &str,
     body: Json<InvoiceReq>,
 ) -> ApiResult<Json<VendorJob>> {
-    let (tasks, t, vendor) = by_token(&db, token).await?;
+    invoice_for(&db, &BatchKey::Token(token), body.into_inner()).await
+}
+
+pub(crate) async fn invoice_for(
+    db: &crate::db::RequestDb,
+    key: &BatchKey<'_>,
+    body: InvoiceReq,
+) -> ApiResult<Json<VendorJob>> {
+    let (tasks, t, vendor) = by_batch(db, key).await?;
     if tasks
         .iter()
         .any(|x| x.vendor_response.as_deref() == Some("declined"))
     {
         return Err(ApiError::Conflict("this work was declined".into()));
     }
-    let b = body.into_inner();
+    let b = body;
     if b.amount_cents <= 0 {
         return Err(ApiError::BadRequest(
             "the amount must be more than zero".into(),
@@ -747,7 +812,7 @@ pub async fn invoice(
             Document::find_by_id(id)
                 .filter(entity::document::Column::OwnerType.eq("maintenance_ticket"))
                 .filter(entity::document::Column::OwnerId.eq(t.id))
-                .one(&db)
+                .one(db)
                 .await?
                 .ok_or_else(|| {
                     ApiError::BadRequest("upload the invoice to this work order first".into())
@@ -799,10 +864,10 @@ pub async fn invoice(
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
-    .insert(&db)
+    .insert(db)
     .await?;
     vendor_note(
-        &db,
+        db,
         &t,
         &vendor.name,
         "vendor_invoice",
@@ -814,8 +879,8 @@ pub async fn invoice(
         "internal",
     )
     .await;
-    let (tasks, t, vendor) = by_token(&db, token).await?;
-    Ok(Json(job_dto(&db, tasks, t, vendor).await?))
+    let (tasks, t, vendor) = by_batch(db, key).await?;
+    Ok(Json(job_dto(db, tasks, t, vendor).await?))
 }
 
 #[cfg(test)]

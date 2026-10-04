@@ -93,6 +93,13 @@ pub const PROFILE_TYPES: &[ProfileTypeMeta] = &[
         default_role: "landlord",
     },
     ProfileTypeMeta {
+        key: "vendor",
+        scope: "tenant",
+        label: "Vendor",
+        description: "An outside contractor using the vendor portal for the work sent to them.",
+        default_role: "vendor",
+    },
+    ProfileTypeMeta {
         key: "renter",
         scope: "tenant",
         label: "Renter",

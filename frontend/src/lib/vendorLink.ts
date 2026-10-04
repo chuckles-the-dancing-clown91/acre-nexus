@@ -49,46 +49,90 @@ export interface VendorJob {
   timezone: string;
 }
 
-const post = <T>(path: string, body: unknown) =>
-  request<T>(path, { method: "POST", body });
+/** The job API, from a vendor's link (`/public/vendor/<token>`, no sign-in)
+ * or from the vendor portal (`/vendor-portal/jobs/<batch>`, signed in). */
+export function vendorClient(base: string, auth: boolean) {
+  const post = <T>(path: string, body: unknown) =>
+    request<T>(`${base}${path}`, { method: "POST", body, auth });
+  return {
+    view: () => request<VendorJob>(base, { auth }),
+    accept: (body: { note?: string; start?: string; end?: string }) =>
+      post<VendorJob>("/accept", body),
+    decline: (reason?: string) => post<VendorJob>("/decline", { reason }),
+    done: (note?: string) => post<VendorJob>("/done", { note }),
+    invoice: (body: {
+      amount_cents: number;
+      description?: string;
+      document_id?: string;
+    }) => post<VendorJob>("/invoice", body),
+    upload: async (
+      file: File,
+      kind: "photo" | "invoice"
+    ): Promise<VendorFile> => {
+      const reg = await post<{ file: VendorFile; upload_url: string }>(
+        "/uploads",
+        {
+          filename: file.name || `${kind}.jpg`,
+          mime_type: file.type || "application/octet-stream",
+          size_bytes: file.size,
+          kind,
+        }
+      );
+      const res = await fetch(reg.upload_url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+      if (!res.ok)
+        throw new ApiError(res.status, "upload_failed", "upload failed");
+      return reg.file;
+    },
+  };
+}
 
-export const vendorLink = {
-  view: (token: string) => request<VendorJob>(`/public/vendor/${token}`),
-  accept: (
-    token: string,
-    body: { note?: string; start?: string; end?: string }
-  ) => post<VendorJob>(`/public/vendor/${token}/accept`, body),
-  decline: (token: string, reason?: string) =>
-    post<VendorJob>(`/public/vendor/${token}/decline`, { reason }),
-  done: (token: string, note?: string) =>
-    post<VendorJob>(`/public/vendor/${token}/done`, { note }),
-  invoice: (
-    token: string,
-    body: { amount_cents: number; description?: string; document_id?: string }
-  ) => post<VendorJob>(`/public/vendor/${token}/invoice`, body),
-  upload: async (
-    token: string,
-    file: File,
-    kind: "photo" | "invoice"
-  ): Promise<VendorFile> => {
-    const reg = await post<{ file: VendorFile; upload_url: string }>(
-      `/public/vendor/${token}/uploads`,
-      {
-        filename: file.name || `${kind}.jpg`,
-        mime_type: file.type || "application/octet-stream",
-        size_bytes: file.size,
-        kind,
-      }
-    );
-    const res = await fetch(reg.upload_url, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-    });
-    if (!res.ok)
-      throw new ApiError(res.status, "upload_failed", "upload failed");
-    return reg.file;
-  },
+export type VendorClient = ReturnType<typeof vendorClient>;
+
+/** A vendor's link. */
+export const linkClient = (token: string) =>
+  vendorClient(`/public/vendor/${token}`, false);
+
+/** A job in the signed-in vendor portal. */
+export const portalClient = (batch: string) =>
+  vendorClient(`/vendor-portal/jobs/${batch}`, true);
+
+export interface PortalJobRow {
+  batch: string;
+  ticket_id: string;
+  title: string;
+  property: string;
+  priority: string;
+  due_date: string | null;
+  tasks: number;
+  tasks_done: number;
+  response: string | null;
+  sent_at: string | null;
+  open: boolean;
+}
+
+export const vendorPortal = {
+  me: () =>
+    request<{
+      vendor_id: string;
+      vendor: string;
+      company: string;
+      open_jobs: number;
+    }>("/vendor-portal/me", { auth: true }),
+  jobs: () =>
+    request<{ open: PortalJobRow[]; closed: PortalJobRow[] }>(
+      "/vendor-portal/jobs",
+      { auth: true }
+    ),
+  invite: (entityId: string) =>
+    request<{
+      entity_id: string;
+      user_id: string;
+      outcome: "invited" | "linked";
+    }>(`/entities/${entityId}/portal-invite`, { method: "POST", auth: true }),
 };
 
 /** "$385.00" from cents typed as "385" or "385.5". */

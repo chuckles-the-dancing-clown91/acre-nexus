@@ -158,6 +158,7 @@ pub mod user_totp;
 pub mod vehicle;
 pub mod vendor_bill;
 pub mod vendor_insurance;
+pub mod vendor_portal_user;
 pub mod vendor_tax_profile;
 pub mod webhook_delivery;
 pub mod webhook_subscription;
