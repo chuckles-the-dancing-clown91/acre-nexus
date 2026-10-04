@@ -167,7 +167,9 @@ export default function GoLivePage() {
                         )}
                         {p.last_call_at
                           ? `Last call ${ago(p.last_call_at)}${p.last_call_ok ? "" : p.last_error ? `: ${p.last_error}` : ", failed"}`
-                          : p.live ? "No real calls in the last 30 days" : "No real calls yet (sample data only)"}
+                          : p.live
+                            ? "No real calls in the last 30 days"
+                            : "No real calls yet (sample data only)"}
                       </div>
                       {p.webhook_expected && (
                         <div className="flex items-center gap-2 text-fg-2">
