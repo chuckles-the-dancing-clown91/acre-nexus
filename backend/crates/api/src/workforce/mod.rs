@@ -233,6 +233,11 @@ pub async fn resolve_target(
                 .one(db)
                 .await?
                 .ok_or_else(|| ApiError::NotFound("work order not found".into()))?;
+            if !tk.track_time {
+                return Err(ApiError::BadRequest(
+                    "time tracking is off for this work order".into(),
+                ));
+            }
             t.maintenance_ticket_id = Some(tk.id);
             t.property_id = Some(tk.property_id);
         }

@@ -911,6 +911,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(db)
     .await?;
@@ -922,6 +923,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
+        task_id: Set(None),
         author_user_id: Set(Some(jordan)),
         kind: Set("comment".into()),
         visibility: Set("public".into()),
@@ -941,6 +943,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
+        task_id: Set(None),
         author_user_id: Set(Some(jordan)),
         kind: Set("comment".into()),
         visibility: Set("internal".into()),
@@ -2303,6 +2306,7 @@ async fn seed_ticket(
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(db)
     .await?;

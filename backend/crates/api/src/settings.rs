@@ -148,6 +148,8 @@ pub const TEXTS_MISSED_CALL_HOURS: &str = "texts.missed_call_hours";
 pub const TEXTS_FORWARD_NUMBER: &str = "texts.forward_number";
 /// What a caller hears before the call rings through or ends.
 pub const TEXTS_VOICE_GREETING: &str = "texts.voice_greeting";
+/// New work orders let the in-house crew log time on them.
+pub const MAINTENANCE_TIME_TRACKING: &str = "maintenance.time_tracking";
 /// Days before the rent day that residents hear rent is due (0 = off).
 pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
 /// Tell residents the day after rent was due and is still unpaid.
@@ -996,6 +998,15 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Team & payroll",
         kind: SettingKind::Int,
         default: || json!(0),
+    },
+    SettingDef {
+        key: MAINTENANCE_TIME_TRACKING,
+        label: "Track crew time on work orders",
+        description: "New work orders let the in-house crew log hours on them, which \
+                      feed the job's cost. Each work order can switch it off.",
+        group: "Team & payroll",
+        kind: SettingKind::Bool,
+        default: || json!(true),
     },
     SettingDef {
         key: WORKFORCE_MISSED_PUNCH_HOURS,

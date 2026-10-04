@@ -23,6 +23,8 @@ pub struct Model {
     pub action: Option<String>,
     /// Photos and files attached to this note (documents on the ticket).
     pub document_ids: Json,
+    /// The task this note is about, when it's about one.
+    pub task_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
 }
 

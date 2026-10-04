@@ -156,6 +156,7 @@ async fn integration_suite() {
     campground_flow(&c).await;
     family_plan_flow(&c).await;
     units_and_meters_flow(&c).await;
+    ticket_feed_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -4761,7 +4762,8 @@ async fn batch_c_texts(c: &Ctx) {
             Method::Patch,
             &format!("/tickets/{tid}"),
             &admin,
-            serde_json::json!({ "status": status }),
+            // Reopening a resolved work order says why.
+            serde_json::json!({ "status": status, "status_note": "The outlet is dead again" }),
         )
         .await;
         assert_eq!(st, Status::Ok);
@@ -6618,6 +6620,23 @@ async fn maintenance_actions_and_resident(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Ok);
+    // With other tasks still open, "Work complete" is refused, naming them.
+    if tasks.as_array().unwrap().len() > 1 {
+        let (st, e) = press("work_done", None).await;
+        assert_eq!(st, Status::BadRequest, "{e}");
+        for t in tasks.as_array().unwrap().iter().skip(1) {
+            let id = t["id"].as_str().unwrap();
+            let (st, _) = send_json(
+                c,
+                Method::Patch,
+                &format!("/tickets/{tid}/tasks/{id}"),
+                &staff,
+                serde_json::json!({ "status": "done" }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok);
+        }
+    }
     let (_, done) = press("work_done", None).await;
     assert_eq!(done["status"], "resolved");
     let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
@@ -10078,7 +10097,7 @@ async fn owner_approvals_flow(c: &Ctx) {
         Method::Patch,
         &format!("/tickets/{tid}"),
         &staff,
-        serde_json::json!({ "status": "resolved" }),
+        serde_json::json!({ "status": "resolved", "open_tasks_reason": "The vendor has the rest" }),
     )
     .await;
     assert_eq!(st, Status::Ok);
@@ -10966,6 +10985,201 @@ async fn units_and_meters_flow(c: &Ctx) {
         &format!("/properties/{cid}/units"),
         &staff,
         serde_json::json!({ "unit_number": "1" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+}
+
+/// A work order's status moves follow rules and leave lines on the feed; tasks
+/// have their own notes; time can be logged and switched off.
+async fn ticket_feed_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let crew = mint(
+        c,
+        Some(nw),
+        false,
+        &["property:read", "maintenance:read", "maintenance:manage"],
+    );
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &crew,
+        serde_json::json!({ "title": "Hallway light flickers" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    assert_eq!(t["track_time"], true);
+    let (st, task) = post_json(
+        c,
+        &format!("/tickets/{tid}/tasks"),
+        &crew,
+        serde_json::json!({ "title": "Swap the ballast" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{task}");
+    let task_id = task[0]["id"].as_str().unwrap().to_string();
+    let patch = |body: serde_json::Value| {
+        let crew = crew.clone();
+        let tid = tid.clone();
+        async move { send_json(c, Method::Patch, &format!("/tickets/{tid}"), &crew, body).await }
+    };
+    let feed = |query: &'static str| {
+        let crew = crew.clone();
+        let tid = tid.clone();
+        async move {
+            get_json(c, &format!("/tickets/{tid}/feed{query}"), &crew)
+                .await
+                .1
+        }
+    };
+
+    // Scheduling needs a date; with one, it's set and says so.
+    let (st, e) = patch(serde_json::json!({ "status": "scheduled" })).await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    let (st, t2) =
+        patch(serde_json::json!({ "status": "scheduled", "scheduled_for": "2031-05-06" })).await;
+    assert_eq!(st, Status::Ok, "{t2}");
+    assert_eq!(t2["due_date"], "2031-05-06");
+    let (st, _) =
+        patch(serde_json::json!({ "status": "in_progress", "status_note": "Rosa is on it." }))
+            .await;
+    assert_eq!(st, Status::Ok);
+    let f = feed("").await;
+    let lines: Vec<&str> = f
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "status")
+        .map(|i| i["title"].as_str().unwrap())
+        .collect();
+    assert!(lines.contains(&"Scheduled for 2031-05-06."), "{lines:?}");
+    assert!(lines.contains(&"Work started. Rosa is on it."), "{lines:?}");
+
+    // A note about a task shows on the work order's feed and on the task's own.
+    let (st, n) = post_json(c, &format!("/tickets/{tid}/comments"), &crew, serde_json::json!({ "body": "Ballast is a T8, need a new one", "visibility": "internal", "task_id": task_id })).await;
+    assert_eq!(st, Status::Ok, "{n}");
+    assert_eq!(n["task_id"], task_id);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/comments"),
+        &crew,
+        serde_json::json!({ "body": "Not about the task" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/comments"),
+        &crew,
+        serde_json::json!({ "body": "x", "task_id": uuid::Uuid::new_v4() }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let mine = get_json(c, &format!("/tickets/{tid}/feed?task_id={task_id}"), &crew)
+        .await
+        .1;
+    let notes: Vec<&str> = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "note")
+        .map(|i| i["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(notes, vec!["Ballast is a T8, need a new one"]);
+    let all = feed("").await;
+    assert!(all
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["body"] == "Not about the task"));
+
+    // Time and money land on the feed.
+    let (st, tt) = post_json(
+        c,
+        &format!("/tickets/{tid}/time"),
+        &crew,
+        serde_json::json!({ "minutes": 90, "notes": "Replaced the ballast" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{tt}");
+    assert_eq!(tt["total_minutes"], 90);
+    assert_eq!(tt["tracking"], true);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/expenses"),
+        &crew,
+        serde_json::json!({ "description": "T8 ballast", "amount_cents": 2450 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let all = feed("").await;
+    let kinds: Vec<&str> = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["kind"].as_str().unwrap())
+        .collect();
+    for k in ["time", "expense", "note", "status"] {
+        assert!(kinds.contains(&k), "{k} missing in {kinds:?}");
+    }
+
+    // Resolving needs the tasks done, or a reason they can stay open.
+    let (st, e) = patch(serde_json::json!({ "status": "resolved" })).await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 task is still open"),
+        "{e}"
+    );
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{task_id}"),
+        &crew,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "resolved" })).await;
+    assert_eq!(st, Status::Ok);
+    let all = feed("").await;
+    let resolved = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["title"].as_str().unwrap_or("").starts_with("Resolved:"))
+        .unwrap();
+    assert_eq!(
+        resolved["title"],
+        "Resolved: 1 of 1 tasks done, 1.5h, $24.50 spent."
+    );
+
+    // Closing follows resolved; reopening and cancelling say why.
+    let (st, _) = patch(serde_json::json!({ "status": "closed" })).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "in_progress" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) =
+        patch(serde_json::json!({ "status": "in_progress", "status_note": "Flickering again" }))
+            .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "cancelled" })).await;
+    assert_eq!(st, Status::BadRequest);
+
+    // Time tracking can be switched off for the work order.
+    let (st, off) = patch(serde_json::json!({ "track_time": false })).await;
+    assert_eq!(st, Status::Ok, "{off}");
+    assert_eq!(off["track_time"], false);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/time"),
+        &crew,
+        serde_json::json!({ "minutes": 10 }),
     )
     .await;
     assert_eq!(st, Status::BadRequest);

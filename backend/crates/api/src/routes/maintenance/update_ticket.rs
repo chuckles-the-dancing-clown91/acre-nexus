@@ -40,6 +40,23 @@ pub async fn update_ticket(
         Some(s) if !s.is_empty() && *s != existing.status => Some(s.clone()),
         _ => None,
     };
+    // Every move follows the flow rules and says what it did on the feed.
+    let mut plan: Option<crate::ticket_flow::Plan> = None;
+    if let Some(to) = &status_changed {
+        let facts = crate::ticket_feed::facts(
+            &db,
+            scope.tenant_id,
+            &existing,
+            b.scheduled_for.clone(),
+            b.status_note.clone(),
+            b.open_tasks_reason.clone(),
+        )
+        .await?;
+        plan = Some(
+            crate::ticket_flow::decide(&existing.status, to, &facts)
+                .map_err(ApiError::BadRequest)?,
+        );
+    }
     let priority_changed = match &b.priority {
         Some(p) if !p.is_empty() && *p != existing.priority => Some(p.clone()),
         _ => None,
@@ -205,6 +222,21 @@ pub async fn update_ticket(
     if let Some(v) = b.due_date {
         am.due_date = Set(Some(v));
     }
+    // Scheduling a work order sets its date.
+    if let Some(v) = b
+        .scheduled_for
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+    {
+        let day = chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d")
+            .map_err(|_| ApiError::BadRequest("scheduled_for must be YYYY-MM-DD".into()))?;
+        am.due_date = Set(Some(day.to_string()));
+    }
+    let track_off = b.track_time == Some(false);
+    if let Some(v) = b.track_time {
+        am.track_time = Set(v);
+    }
     if let Some(v) = b.cost_cents {
         am.cost_cents = Set(Some(v));
     }
@@ -287,6 +319,7 @@ pub async fn update_ticket(
             id: Set(Uuid::new_v4()),
             tenant_id: Set(scope.tenant_id),
             ticket_id: Set(saved.id),
+            task_id: Set(None),
             author_user_id: Set(Some(user.user_id)),
             kind: Set("status".to_string()),
             visibility: Set("internal".into()),
@@ -299,23 +332,39 @@ pub async fn update_ticket(
         }
     }
 
-    // Log the status transition on the ticket timeline (best-effort).
+    // Work that ends (or goes on hold, or stops being tracked) stops the clocks
+    // running on it.
+    let mut stopped: Vec<String> = vec![];
+    if plan.as_ref().is_some_and(|p| p.stop_clocks) || track_off {
+        stopped = crate::ticket_feed::stop_clocks(&db, scope.tenant_id, saved.id).await?;
+    }
+
+    // Log the status transition on the ticket timeline: the rule's line, with
+    // anything the person wrote. (On hold already logged its own note above,
+    // and a button that wrote its own line doesn't need another.)
     if let Some(new_status) = &status_changed {
-        let comment = entity::ticket_comment::ActiveModel {
-            action: Set(None),
-            document_ids: Set(serde_json::json!([])),
-            id: Set(Uuid::new_v4()),
-            tenant_id: Set(scope.tenant_id),
-            ticket_id: Set(saved.id),
-            author_user_id: Set(Some(user.user_id)),
-            kind: Set("status".to_string()),
-            visibility: Set("public".into()),
-            author_name: Set(None),
-            body: Set(format!("Status -> {}", new_status)),
-            created_at: Set(Utc::now().into()),
-        };
-        if let Err(e) = comment.insert(&db).await {
-            tracing::error!("failed to log status comment: {e}");
+        if let Some(plan) = plan.as_ref().filter(|_| !b.quiet && waiting_note.is_none()) {
+            let mut line = plan.line.clone();
+            if !stopped.is_empty() {
+                line.push_str(&format!(" Stopped the clock for {}.", stopped.join(", ")));
+            }
+            let comment = entity::ticket_comment::ActiveModel {
+                action: Set(None),
+                document_ids: Set(serde_json::json!([])),
+                id: Set(Uuid::new_v4()),
+                tenant_id: Set(scope.tenant_id),
+                ticket_id: Set(saved.id),
+                task_id: Set(None),
+                author_user_id: Set(Some(user.user_id)),
+                kind: Set("status".to_string()),
+                visibility: Set(if plan.public { "public" } else { "internal" }.into()),
+                author_name: Set(None),
+                body: Set(line),
+                created_at: Set(Utc::now().into()),
+            };
+            if let Err(e) = comment.insert(&db).await {
+                tracing::error!("failed to log status comment: {e}");
+            }
         }
 
         // A resident-reported request emails the resident on every status

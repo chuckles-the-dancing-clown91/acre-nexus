@@ -243,6 +243,7 @@ async fn thread_into_ticket(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         ticket_id: Set(ticket.id),
+        task_id: Set(None),
         author_user_id: Set(None),
         kind: Set("comment".into()),
         // Inbound email lands as an internal note; staff decide what to

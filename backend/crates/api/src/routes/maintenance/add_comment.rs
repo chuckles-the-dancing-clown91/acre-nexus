@@ -61,6 +61,16 @@ pub async fn add_comment(
         }
     }
 
+    // A note about a task has to be about a task on this work order.
+    if let Some(task_id) = b.task_id {
+        entity::prelude::TicketTask::find_by_id(task_id)
+            .filter(entity::ticket_task::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::ticket_task::Column::TicketId.eq(tid))
+            .one(&db)
+            .await?
+            .ok_or_else(|| ApiError::BadRequest("that task isn't on this work order".into()))?;
+    }
+
     // A staff comment is the first response when none is recorded yet.
     if ticket.first_response_at.is_none() {
         let mut am: entity::maintenance_ticket::ActiveModel = ticket.clone().into();
@@ -82,6 +92,7 @@ pub async fn add_comment(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(tid),
+        task_id: Set(b.task_id),
         author_user_id: Set(Some(user.user_id)),
         kind: Set("comment".to_string()),
         visibility: Set(visibility.to_string()),

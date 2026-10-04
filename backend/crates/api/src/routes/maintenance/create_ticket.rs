@@ -101,6 +101,12 @@ pub async fn create_ticket(
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(crate::settings::get_bool(
+            &db,
+            scope.tenant_id,
+            crate::settings::MAINTENANCE_TIME_TRACKING,
+        )
+        .await),
     };
     let saved = model.insert(&db).await?;
     crate::audit::change::created(
