@@ -63,7 +63,7 @@ export function CareSchedule({
     }
   }
 
-  async function useGuide(withText: boolean) {
+  async function applyGuide(withText: boolean) {
     const jobs = (care.data?.jobs ?? [])
       .filter((j) => !j.scheduled && (chosen[j.title] ?? true))
       .map((j) => j.title);
@@ -235,7 +235,7 @@ export function CareSchedule({
                       size="sm"
                       variant="secondary"
                       disabled={busy}
-                      onClick={() => void useGuide(true)}
+                      onClick={() => void applyGuide(true)}
                     >
                       Use these instructions
                     </Button>
@@ -244,7 +244,7 @@ export function CareSchedule({
                     <Button
                       size="sm"
                       disabled={busy}
-                      onClick={() => void useGuide(false)}
+                      onClick={() => void applyGuide(false)}
                     >
                       <CalendarClock />
                       Add jobs to the schedule
