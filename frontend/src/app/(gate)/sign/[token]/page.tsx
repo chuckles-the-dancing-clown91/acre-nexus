@@ -8,6 +8,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { CheckCircle2, FileSignature } from "lucide-react";
 import { api, DEFAULT_TENANT, type PublicSignView } from "@/lib/api";
+import { LeaseAgreement } from "@/components/lease/LeaseAgreement";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -171,13 +172,26 @@ function SignInner() {
               sha256:{view.body_hash.slice(0, 16)}…
             </span>
           </div>
-          <pre
-            onScroll={markViewed}
-            onTouchStart={markViewed}
-            className="max-h-[50dvh] overflow-auto p-4 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-fg"
-          >
-            {view.document_body}
-          </pre>
+          {view.document_sections ? (
+            <div
+              onScroll={markViewed}
+              onTouchStart={markViewed}
+              className="max-h-[60dvh] overflow-auto bg-stone-200/70 p-2 sm:p-4"
+            >
+              <LeaseAgreement
+                title={view.document_title}
+                sections={view.document_sections}
+              />
+            </div>
+          ) : (
+            <pre
+              onScroll={markViewed}
+              onTouchStart={markViewed}
+              className="max-h-[50dvh] overflow-auto p-4 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-fg"
+            >
+              {view.document_body}
+            </pre>
+          )}
         </Panel>
       )}
 

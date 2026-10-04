@@ -16,6 +16,8 @@ pub struct LeaseDocDto {
     pub signed_by: Option<String>,
     /// SHA-256 (hex) of the signed body — tamper-evidence for the signature.
     pub signed_hash: Option<String>,
+    /// The lease as articles and addenda, when generated that way.
+    pub sections: Option<Vec<crate::leasedoc::Section>>,
 }
 
 impl From<entity::lease_document::Model> for LeaseDocDto {
@@ -32,6 +34,7 @@ impl From<entity::lease_document::Model> for LeaseDocDto {
             signed_at: d.signed_at.map(|x| x.to_rfc3339()),
             signed_by: d.signed_by,
             signed_hash: d.signed_hash,
+            sections: d.sections.and_then(|v| serde_json::from_value(v).ok()),
         }
     }
 }

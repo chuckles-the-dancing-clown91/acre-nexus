@@ -36,3 +36,28 @@ residents with a lease or application on a property they reach, and
 
 `priya.nair@example.com` (Hearthside, dog and prior rental, full profile),
 `taylor@example.com` (Northwind). Password `password`.
+
+## The lease is written from the profile
+
+`POST /leases/<id>/document/generate` builds the lease from the lease, the
+property and unit, the resident's profile and the home's meters and equipment
+(`leasedoc::build`). The result is stored two ways: the signable text (`body`,
+what gets hashed and signed) and `sections` (articles and addenda) for layout.
+
+Articles: parties and premises, term, rent and charges, utilities and services,
+appliances and equipment, occupants and emergency contact, additional terms
+(from fees), pets, vehicles, late payments, privacy.
+
+Addenda, each on its own page with initials lines:
+
+- **Utility Agreement** when the home has meters: who pays for each service,
+  which meter, and the rules for tenant-paid and landlord-paid services.
+- **Pet Addendum** when the resident has pets, listing each one.
+- **Lead-Based Paint Disclosure** for homes built before 1978.
+- Your own addenda from the branding templates, `legal_templates.addenda`:
+  `[{ "title", "body", "when": "always" | "has_pet" | "has_vehicle" | "built_before_1978" }]`.
+  `{tenant}`, `{landlord}`, `{rent}` and the other lease placeholders work in
+  the body.
+
+The console lease page, the signing page and Print all show the laid-out
+agreement. Documents made before this change keep showing their plain text.

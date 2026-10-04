@@ -3722,7 +3722,7 @@ async fn hearthside(
                 occupied: 1,
                 rent_cents: *rent,
                 status: "Stabilized",
-                year: 2008 + i as i32 * 4,
+                year: if i == 2 { 1965 } else { 2008 + i as i32 * 4 },
                 manager: "Theo Grant",
             },
         )

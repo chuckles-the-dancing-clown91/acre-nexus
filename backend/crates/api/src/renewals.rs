@@ -96,6 +96,7 @@ pub async fn create_proposal(
         signed_hash: Set(None),
         signed_ip: Set(None),
         created_at: Set(now.into()),
+        sections: Set(None),
     }
     .insert(db)
     .await?;

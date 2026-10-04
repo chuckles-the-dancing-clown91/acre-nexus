@@ -76,15 +76,19 @@ async fn build_view(
         .map(|t| t.company_name)
         .unwrap_or_else(|| "Vantedge".into());
     // Voided envelopes hide the document text — the link is dead.
-    let document_body = if envelope.status == "voided" {
+    let doc = if envelope.status == "voided" {
         None
     } else {
         LeaseDocument::find_by_id(envelope.lease_document_id)
             .filter(entity::lease_document::Column::TenantId.eq(tenant_id))
             .one(db)
             .await?
-            .map(|d| d.body)
     };
+    let document_sections = doc
+        .as_ref()
+        .and_then(|d| d.sections.clone())
+        .and_then(|v| serde_json::from_value(v).ok());
+    let document_body = doc.map(|d| d.body);
     let co_signers = esign::envelope_signers(db, tenant_id, envelope.id)
         .await?
         .into_iter()
@@ -100,6 +104,7 @@ async fn build_view(
         envelope_status: envelope.status.clone(),
         document_title: envelope.title.clone(),
         document_body,
+        document_sections,
         body_hash: envelope.body_hash.clone(),
         message: envelope.message.clone(),
         signer: SignerDto::from(signer),

@@ -157,6 +157,7 @@ async fn integration_suite() {
     family_plan_flow(&c).await;
     units_and_meters_flow(&c).await;
     ticket_feed_flow(&c).await;
+    lease_document_flow(&c).await;
     resident_profile_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
@@ -11309,4 +11310,54 @@ async fn resident_profile_flow(c: &Ctx) {
     let other = mint(c, Some(nw), false, &["lease:read"]);
     let (st, _) = get_json(c, "/residents/profile?email=priya.nair@example.com", &other).await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// A generated lease is written from the resident's profile and the home: it
+/// carries the utility agreement, the pet addendum, the old-house disclosure and
+/// the home's equipment, and keeps its signable text.
+async fn lease_document_flow(c: &Ctx) {
+    let hs = tenant_id(c, "hearthside").await;
+    let pm = mint(
+        c,
+        Some(hs),
+        false,
+        &["lease:read", "lease:manage", "property:read"],
+    );
+    let (st, leases) = get_json(c, "/leases", &pm).await;
+    assert_eq!(st, Status::Ok, "{leases}");
+    let lease = leases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["tenant_email"] == "priya.nair@example.com")
+        .expect("priya's lease");
+    let lid = lease["id"].as_str().unwrap();
+    let (st, doc) = post_json(
+        c,
+        &format!("/leases/{lid}/document/generate"),
+        &pm,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{doc}");
+    let sections = doc["sections"].as_array().expect("structured sections");
+    let key = |k: &str| sections.iter().find(|s| s["key"] == k);
+    assert!(key("utilities").is_some(), "utilities article");
+    assert_eq!(key("utility_agreement").unwrap()["kind"], "addendum");
+    assert_eq!(key("pet_addendum").unwrap()["kind"], "addendum");
+    assert!(
+        key("lead_paint").is_none(),
+        "built in 2008, so no lead disclosure"
+    );
+    assert!(key("equipment").is_some(), "the home's equipment");
+    assert!(
+        key("household").is_some(),
+        "occupants and emergency contact"
+    );
+    let body = doc["body"].as_str().unwrap();
+    assert!(body.contains("UTILITY AGREEMENT"), "{body}");
+    assert!(body.contains("Biscuit (dog, Labrador, 62 lb)"), "{body}");
+    assert!(body.contains("Electricity | Tenant"), "{body}");
+    assert!(body.contains("Trash and recycling | Landlord"), "{body}");
+    assert!(body.contains("Emergency contact: Arun Nair"), "{body}");
 }

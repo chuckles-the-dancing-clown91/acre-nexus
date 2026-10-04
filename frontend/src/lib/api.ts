@@ -3202,6 +3202,23 @@ export interface LeaseDocDto {
   signed_at: string | null;
   signed_by: string | null;
   signed_hash: string | null;
+  /** The lease as articles and addenda, when generated that way. */
+  sections: LeaseSection[] | null;
+}
+
+export type LeaseBlock =
+  | { type: "p"; text: string }
+  | { type: "note"; text: string }
+  | { type: "facts"; rows: [string, string][] }
+  | { type: "table"; head: string[]; rows: string[][] }
+  | { type: "list"; items: string[] };
+
+export interface LeaseSection {
+  key: string;
+  title: string;
+  /** article | addendum */
+  kind: "article" | "addendum";
+  blocks: LeaseBlock[];
 }
 
 // ---- e-signature envelopes ----
@@ -3342,6 +3359,7 @@ export interface PublicSignView {
   envelope_status: string;
   document_title: string;
   document_body: string | null;
+  document_sections: LeaseSection[] | null;
   body_hash: string;
   message: string | null;
   signer: EsignSigner;
