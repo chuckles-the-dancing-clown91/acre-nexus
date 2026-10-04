@@ -147,6 +147,7 @@ async fn integration_suite() {
     attention_and_mandates(&c).await;
     routes_and_shopping(&c).await;
     follow_ups_go_out(&c).await;
+    analytics_and_map(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -8763,6 +8764,108 @@ async fn follow_ups_go_out(c: &Ctx) {
     )
     .await
     .unwrap();
+}
+
+/// Operations analytics and the portfolio map: three repairs on one water
+/// heater that cost more than half its price flag it to replace and make a
+/// repeat issue; the leasing funnel and the map answer; a reader without
+/// report:read is refused.
+async fn analytics_and_map(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, EntityTrait};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "property:read",
+            "report:read",
+        ],
+    );
+    let (st, heater) = post_json(
+        c,
+        "/assets",
+        &staff,
+        serde_json::json!({ "property_id": pid, "kind": "plumbing", "name": "Analytics water heater", "purchase_price_cents": 100000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{heater}");
+    let aid = uuid::Uuid::parse_str(heater["id"].as_str().unwrap()).unwrap();
+    for (i, cost) in [20000i64, 20000, 15000].iter().enumerate() {
+        let (st, t) = post_json(
+            c,
+            &format!("/properties/{pid}/tickets"),
+            &staff,
+            serde_json::json!({ "title": format!("Heater out again {i}"), "category": "water_heater_repeat" }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{t}");
+        let row = entity::prelude::MaintenanceTicket::find_by_id(
+            uuid::Uuid::parse_str(t["id"].as_str().unwrap()).unwrap(),
+        )
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+        let mut am: entity::maintenance_ticket::ActiveModel = row.into();
+        am.cost_cents = sea_orm::Set(Some(*cost));
+        am.asset_id = sea_orm::Set(Some(aid));
+        am.update(&c.db).await.unwrap();
+    }
+
+    let (st, ops) = get_json(
+        c,
+        &format!("/analytics/operations?months=3&property_id={pid}"),
+        &staff,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{ops}");
+    assert_eq!(ops["months"].as_array().unwrap().len(), 3);
+    assert_eq!(ops["properties"].as_array().unwrap().len(), 1);
+    assert!(ops["totals"]["tickets"]["opened"].as_u64().unwrap() >= 3);
+    let rep = ops["repeats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["category"] == "water_heater_repeat")
+        .expect("the repeat issue");
+    assert_eq!(rep["count"], 3);
+    assert_eq!(rep["spend_cents"], 55000);
+    let a = ops["appliances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["asset_id"] == aid.to_string())
+        .expect("the heater");
+    assert_eq!(a["replace"], true);
+    assert_eq!(a["share_pct"], 55);
+    assert_eq!(ops["replace_share_pct"], 50);
+    let this_month = ops["months"].as_array().unwrap().last().unwrap();
+    assert!(this_month["tickets"]["opened"].as_u64().unwrap() >= 3);
+    let (st, _) = get_json(c, "/analytics/operations?property_id=nope", &staff).await;
+    assert_eq!(st, Status::BadRequest);
+
+    let (st, funnel) = get_json(c, "/analytics/leasing?months=12", &staff).await;
+    assert_eq!(st, Status::Ok, "{funnel}");
+    assert!(funnel["listings"].is_array());
+    assert!(funnel["tours"].as_u64().is_some());
+
+    let (st, map) = get_json(c, "/portfolio/map", &staff).await;
+    assert_eq!(st, Status::Ok, "{map}");
+    let pin = map["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["property_id"] == pid.to_string())
+        .expect("the property on the map");
+    assert!(pin["open_tickets"].as_u64().unwrap() >= 3);
+
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/analytics/operations", &reader).await;
+    assert_eq!(st, Status::Forbidden);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

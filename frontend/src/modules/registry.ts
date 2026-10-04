@@ -68,6 +68,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/portfolio-map",
+        label: "Portfolio map",
+        icon: "earth",
+        permission: "property:read",
+      },
+      {
         href: "/console/properties/onboard",
         label: "Onboard",
         icon: "house-plus",

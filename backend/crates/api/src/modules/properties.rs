@@ -101,6 +101,7 @@ impl PlatformModule for PropertiesModule {
             crate::routes::property_records::action_items::update_action_item,
             crate::routes::property_records::action_items::delete_action_item,
             crate::routes::property_records::attention::attention,
+            crate::routes::analytics::portfolio_map,
             crate::routes::property_records::story::put_story,
             crate::routes::property_records::timeline::timeline,
         ]

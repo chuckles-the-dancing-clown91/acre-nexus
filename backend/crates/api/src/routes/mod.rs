@@ -11,6 +11,7 @@
 //! reference them (e.g. [`properties`] is wrapped by `modules::properties`).
 
 pub mod accounting;
+pub mod analytics;
 pub mod api_tokens;
 pub mod applications;
 pub mod appointments;

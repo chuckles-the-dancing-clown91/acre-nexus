@@ -43,11 +43,39 @@ unsupported `format` returns `400`.
 
 ---
 
+## Operations analytics and the portfolio map
+
+`api/src/routes/analytics.rs` (roadmap area 15, fix plan F20). All three read
+live data and are narrowed to the properties the caller can see.
+
+| Route | Gate | What |
+|-------|------|------|
+| `GET /analytics/operations?months=&property_id=` | `report:read` | Turns finished (count, average days from start to finish, average and total cost from the steps) and work orders opened (resolved, past their resolve target, average rating, average hours to resolve, spend) for each month and each property; work orders by kind; **repeat issues** (three or more of one kind at one property); and appliances whose repair spend in the window passed `analytics.replace_share_pct` (default 50) of their price, flagged **replace**. Also the turns and work orders open now. `months` is 1 to 36, default 12. |
+| `GET /analytics/leasing?months=` | `report:read` | Tour requests, applications, approvals and leases from those applications in the window, the two conversion rates, and every listing's days on market (to the first lease off one of its applications, or to today), longest first. |
+| `GET /portfolio/map` | `property:read` | Each property with its coordinates (from the property data), units and occupancy, open and urgent work orders, open turns, and its first site map. Properties with no coordinates are counted as unplaced; refreshing their property data geocodes them. |
+
+The aggregations are pure functions with unit tests (`turn_stats`,
+`ticket_stats`, `repeat_issues`, `appliance_spend`, `months_back`); the
+integration scenario `analytics_and_map` checks a water heater with three
+repairs worth 55% of its price comes back as a repeat issue and flagged to
+replace.
+
 ## Frontend
 
-`/console/reports` (nav: **Reports**) is a tabbed page — Rent roll · T-12 ·
-Aging · Delinquency · Owner statement · 1099 tax — each rendering the report as
-a table with **CSV** and **PDF** download buttons (fetched as an authenticated
-blob). T-12 and Owner statement have an LLC selector; 1099 has a year selector.
-Northwind's demo data (leases, ledger, outstanding payments, owner entities)
-makes the reports populate out of the box.
+`/console/reports` (nav: **Reports**) is a tabbed page: Operations · Leasing ·
+Rent roll · T-12 · Aging · Delinquency · Owner statement · 1099. The tab is in
+the address (`?tab=`). **Operations** has the period and property filters,
+four figures (days to turn, cost to turn, past target, rating), monthly charts,
+the replace-instead-of-repair table, repeat issues, work orders by kind, and a
+table by property. **Leasing** has the funnel figures and the listings by days
+on market. The standard reports render as tables with **CSV** and **PDF**
+downloads; T-12 and Owner statement have an LLC picker and 1099 a year picker.
+
+`/console/portfolio-map` (nav: **Portfolio map**) puts every property on one
+map, coloured by occupancy (95% and up, 85 to 94%, under 85%) or by open work
+(nothing open, work or a turn open, urgent work open), with a list and a detail
+panel linking to the property, its work orders and its site map. The map is a
+plain tile map (`components/map/TileMap.tsx`, math in `lib/tilemap.ts`) with no
+library; tiles come from OpenStreetMap unless `NEXT_PUBLIC_MAP_TILES` names a
+provider with a production plan (`{z}/{x}/{y}` placeholders). OpenStreetMap's
+own servers are for light use only.

@@ -23,11 +23,11 @@ server-rendered public site for search (`docs/SEO.md`).
 | 8 | Campground reservations (follows the map) | ☐ |
 | 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
-| 11 | Vendor portal and compliance (W-9, COI, 1099) | ☐ |
-| 12 | Owner portal and spend approvals | ☐ |
-| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☐ |
-| 14 | Listing media, map search, saved searches and listing feeds | ☐ |
-| 15 | Operations analytics and the portfolio map | ☐ |
+| 11 | Vendor portal and compliance (W-9, COI, 1099) | ◐ |
+| 12 | Owner portal and spend approvals | ☑ |
+| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ◐ |
+| 14 | Listing media, map search, saved searches and listing feeds | ◐ |
+| 15 | Operations analytics and the portfolio map | ☑ |
 | 16 | Spanish for everything a resident sees | ☐ |
 | 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
 
@@ -349,6 +349,11 @@ on/off switch and lead days, every send logged against the lease:
 
 ## 11. Vendor portal and compliance ◐
 
+Since: every batch sent to a vendor carries a no-account link to accept,
+decline, book, upload photos and an invoice, and mark it done
+([`SERVICE-DESK.md`](SERVICE-DESK.md), "The vendor's link"). A signed-in
+portal across all of a vendor's work is still to do.
+
 **Today.** Vendors are counterparties. There is a token API for vendor systems
 (`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into.
 W-9s and insurance certificates are now captured (fix plan F11 and F12): the 1099
@@ -366,7 +371,12 @@ current cover before dispatch. The portal (F13) is still to do.
   an override with a reason (audited).
 - Alpha vendors keep working through the partner link; the portal is for everyone else.
 
-## 12. Owner portal and spend approvals ☐
+## 12. Owner portal and spend approvals ☑
+
+Shipped: see [`OWNERS.md`](OWNERS.md). Work over the owner's limit waits for
+their approval by link, text or portal, with an audited staff override;
+finished billable work asks for sign-off; `/account/owner` has holdings, open
+work and a monthly statement as a page and PDF, emailed on the statement day.
 
 **Today.** Owners sign into the full console with the `landlord` role. The data
 already exists staff-side: owner statements, payouts, rent roll, T-12, open work
@@ -400,6 +410,9 @@ linking an unknown number to a person by hand, and missed-call text-back.
 
 ## 14. Listing media, map search and listing feeds ◐
 
+Since: Zillow (HotPads) and MITS listing feeds shipped
+([`LISTING-SYNDICATION.md`](LISTING-SYNDICATION.md)).
+
 **Today.** Listing photos shipped (fix plan F18): ordered, captioned, alt text
 required, feeding the listing page, cards, share image and JSON-LD. Resized
 variants are still to do. Search has filters but no map, no saved
@@ -416,7 +429,10 @@ is no Zillow or Apartments.com feed.
   for portals that accept a feed, plus availability updates when a unit leases.
   Self-showing and lockboxes stay out until a customer asks.
 
-## 15. Operations analytics and the portfolio map ☐
+## 15. Operations analytics and the portfolio map ☑
+
+Shipped: see [`REPORTS.md`](REPORTS.md), "Operations analytics and the
+portfolio map". The report builder is still deliberately not built.
 
 **Today.** Fixed reports exist (rent roll, T-12, aging, delinquency, owner
 statement, 1099) and a portfolio summary. Turns now record days vacant and cost;

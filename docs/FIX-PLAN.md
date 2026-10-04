@@ -159,12 +159,13 @@ group, and Settings → Schedule in the console. Covered by
 | ID | Fix | Size | Status |
 |----|-----|------|--------|
 | F18 | Listing photos feeding the page, share image and structured data | M | ☑ |
-| F19 | Owner portal and spend approvals | L | ☐ |
-| F20 | Operations dashboard and portfolio map | L | ☐ |
+| F19 | Owner portal and spend approvals | L | ☑ |
+| F20 | Operations dashboard and portfolio map | L | ☑ |
 | F21 | Language on people and Spanish message templates | L | ☐ |
 | F22 | Camera barcode fallback (zxing) for browsers without BarcodeDetector | S | ☑ |
 
-Details for these follow `ROADMAP-NEXT.md` areas 12, 14, 15 and 16.
+Details for these follow `ROADMAP-NEXT.md` areas 12, 14, 15 and 16. F19 is in
+`OWNERS.md`; F20 is in `REPORTS.md`.
 
 - **Shipped (F18).** Migration 062 adds `listing_photo` (alt text required,
   caption, position). Photos upload through the documents flow with

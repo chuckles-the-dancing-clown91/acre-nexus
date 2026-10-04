@@ -95,6 +95,8 @@ pub const FOLLOWUPS_VENDOR_HOURS: &str = "followups.vendor_hours";
 pub const FOLLOWUPS_OFFER_HOURS: &str = "followups.offer_hours";
 /// Days after a showing to nudge a prospect who hasn't applied (0 = off).
 pub const FOLLOWUPS_PROSPECT_DAYS: &str = "followups.prospect_days";
+/// Flag an appliance to replace once its repair spend passes this percent of its price.
+pub const ANALYTICS_REPLACE_SHARE_PCT: &str = "analytics.replace_share_pct";
 /// When a planned day starts, HH:MM in the workspace's zone.
 pub const ROUTES_DAY_START: &str = "routes.day_start";
 /// How long a planned day is, in minutes.
@@ -513,6 +515,14 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Helpdesk",
         kind: SettingKind::Int,
         default: || json!(14),
+    },
+    SettingDef {
+        key: ANALYTICS_REPLACE_SHARE_PCT,
+        label: "Replace instead of repair at (percent of price)",
+        description: "The operations dashboard flags an appliance once repairs in the window add up to this share of what it cost.",
+        group: "Maintenance",
+        kind: SettingKind::Int,
+        default: || json!(50),
     },
     SettingDef {
         key: FOLLOWUPS_RATING_HOURS,
