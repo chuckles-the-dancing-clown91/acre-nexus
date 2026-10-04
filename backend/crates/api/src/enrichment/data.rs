@@ -96,3 +96,71 @@ pub struct UtilityData {
     pub est_monthly_cost_cents: i64,
     pub phone: String,
 }
+
+/// One offense category's rates per 100,000 people over the period.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+pub struct CrimeOffense {
+    /// `violent-crime` | `property-crime` | `burglary` | `motor-vehicle-theft`.
+    pub key: String,
+    pub label: String,
+    /// Offenses the agency reported over the period.
+    pub agency: i64,
+    pub agency_rate: f64,
+    pub state_rate: f64,
+    pub us_rate: f64,
+    /// The agency's rate over the year before, when the data goes back that far.
+    pub prior_rate: Option<f64>,
+}
+
+/// Crime statistics for a property's area.
+pub struct CrimeData {
+    pub agency_ori: Option<String>,
+    pub agency_name: String,
+    pub agency_km: Option<f64>,
+    pub period_from: String,
+    pub period_to: String,
+    pub population: Option<i64>,
+    pub offenses: Vec<CrimeOffense>,
+}
+
+impl CrimeData {
+    /// How the area compares with its state on violent plus property crime:
+    /// `well_below` (under 60%), `below`, `about` (within 15%), `above`,
+    /// `well_above` (over 160%), or `unknown`.
+    pub fn verdict(&self) -> &'static str {
+        let (mut agency, mut state) = (0.0, 0.0);
+        for o in &self.offenses {
+            if o.key == "violent-crime" || o.key == "property-crime" {
+                agency += o.agency_rate;
+                state += o.state_rate;
+            }
+        }
+        if state <= 0.0 {
+            return "unknown";
+        }
+        let ratio = agency / state;
+        if ratio < 0.6 {
+            "well_below"
+        } else if ratio < 0.85 {
+            "below"
+        } else if ratio <= 1.15 {
+            "about"
+        } else if ratio <= 1.6 {
+            "above"
+        } else {
+            "well_above"
+        }
+    }
+}
+
+/// The verdict in words.
+pub fn verdict_words(v: &str) -> &'static str {
+    match v {
+        "well_below" => "Well below the state average",
+        "below" => "Below the state average",
+        "about" => "About the state average",
+        "above" => "Above the state average",
+        "well_above" => "Well above the state average",
+        _ => "No comparison yet",
+    }
+}

@@ -47,6 +47,7 @@ import { Insurance } from "@/components/property/Insurance";
 import { Parcel } from "@/components/property/Parcel";
 import { Permits } from "@/components/property/Permits";
 import { Plans } from "@/components/property/Plans";
+import { Safety } from "@/components/property/Safety";
 import { Area, Schools } from "@/components/property/Schools";
 import { Systems } from "@/components/property/Systems";
 import { cn } from "@/lib/utils";
@@ -255,6 +256,7 @@ function PropertyView() {
       {tab === "schools" && (
         <>
           <Area propertyId={id} />
+          <Safety propertyId={id} />
           <Schools propertyId={id} manage={write} />
         </>
       )}

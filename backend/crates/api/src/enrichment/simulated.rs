@@ -3,7 +3,9 @@
 //! seeded from the property so repeated runs are idempotent and tests are
 //! hermetic. Swapping in a real provider is a matter of replacing one function.
 
-use super::data::{GeoData, ParcelData, SchoolData, TaxYear, UtilityData, ValuationData};
+use super::data::{
+    CrimeData, CrimeOffense, GeoData, ParcelData, SchoolData, TaxYear, UtilityData, ValuationData,
+};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -263,6 +265,42 @@ pub fn utilities(rng: &mut Rng) -> Vec<UtilityData> {
             ),
         })
         .collect()
+}
+
+/// Deterministic **simulated** crime statistics: plausible yearly rates per
+/// 100,000 around the national picture, so the panel and its rules can be
+/// exercised without the FBI.
+pub fn crime(rng: &mut Rng, city: &str, _state: &str) -> CrimeData {
+    let factor = 0.6 + rng.range(0, 110) as f64 / 100.0; // 0.6x – 1.7x the state
+    let mut offenses = vec![];
+    for (key, label, state_rate, us_rate) in [
+        ("violent-crime", "Violent crime", 290.0, 365.0),
+        ("property-crime", "Property crime", 2700.0, 1950.0),
+        ("burglary", "Burglary", 340.0, 250.0),
+        ("motor-vehicle-theft", "Vehicle theft", 420.0, 310.0),
+    ] {
+        let agency_rate =
+            (state_rate * factor * (0.9 + rng.range(0, 20) as f64 / 100.0) * 10.0).round() / 10.0;
+        let prior = (agency_rate * (0.92 + rng.range(0, 16) as f64 / 100.0) * 10.0).round() / 10.0;
+        offenses.push(CrimeOffense {
+            key: key.into(),
+            label: label.into(),
+            agency: (agency_rate * 0.95).round() as i64,
+            agency_rate,
+            state_rate,
+            us_rate,
+            prior_rate: Some(prior),
+        });
+    }
+    CrimeData {
+        agency_ori: None,
+        agency_name: format!("{} Police Department", city.trim()),
+        agency_km: None,
+        period_from: "01-2025".into(),
+        period_to: "12-2025".into(),
+        population: Some(95_000 + rng.range(0, 400_000)),
+        offenses,
+    }
 }
 
 #[cfg(test)]

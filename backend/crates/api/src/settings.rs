@@ -83,6 +83,12 @@ pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 /// How long an offered window is when staff give only a start time.
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
+/// `fbi` (the FBI Crime Data Explorer) or `off`.
+pub const PROPERTY_DATA_CRIME_PROVIDER: &str = "property_data.crime_provider";
+/// `simulated` or `rentcast` for parcel, tax and valuation records.
+pub const PROPERTY_DATA_RECORDS_PROVIDER: &str = "property_data.records_provider";
+/// Re-fetch public records older than this many days (0 = never).
+pub const PROPERTY_DATA_REFRESH_DAYS: &str = "property_data.refresh_days";
 /// Where a vendor signs up for Alpha when we invite them.
 pub const PARTNERS_ALPHA_JOIN_URL: &str = "partners.alpha_join_url";
 /// Text (or email) the resident for a 1–5 rating when their repair resolves.
@@ -468,6 +474,36 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_CRIME_PROVIDER,
+        label: "Crime statistics",
+        description: "\"fbi\" reads the FBI Crime Data Explorer (free; put a data.gov key \
+                      in the vault as fbi.api_key, or the shared demo key is used) for the \
+                      nearest reporting agency's rates against the state and the country. \
+                      \"off\" keeps the simulated figures.",
+        group: "Property data",
+        kind: SettingKind::Text,
+        default: || json!("fbi"),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_RECORDS_PROVIDER,
+        label: "Public records provider",
+        description: "\"rentcast\" fetches the parcel, tax years and value estimate from \
+                      RentCast with the key in the vault as rentcast.api_key. \"simulated\" \
+                      uses deterministic stand-ins.",
+        group: "Property data",
+        kind: SettingKind::Text,
+        default: || json!("simulated"),
+    },
+    SettingDef {
+        key: PROPERTY_DATA_REFRESH_DAYS,
+        label: "Refresh public records every (days)",
+        description: "Properties whose records are older than this are re-fetched, a few \
+                      a night. 0 turns the nightly refresh off.",
+        group: "Property data",
+        kind: SettingKind::Int,
+        default: || json!(30),
     },
     SettingDef {
         key: PARTNERS_ALPHA_JOIN_URL,

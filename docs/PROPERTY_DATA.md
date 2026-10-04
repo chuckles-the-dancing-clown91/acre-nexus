@@ -68,6 +68,45 @@ scheduler. Real, credentialed vendors slot in per-source behind the same
 
 ---
 
+### Live providers and settings
+
+Two sources go live per workspace, chosen under **Settings → Property
+data** (`/console/settings`), with keys in the vault from the same page:
+
+- **Crime statistics** (`property_data.crime_provider`, default `fbi`): the
+  FBI Crime Data Explorer (`api.usa.gov/crime/fbi/cde`), free. The engine
+  lists the agencies in the property's state, picks the city's police
+  department by name, else the nearest agency to the property's
+  coordinates, else one in its county, then reads the last 12 complete
+  months (skipping the two most recent, which lag) plus the 12 before for
+  violent crime, property crime, burglary and vehicle theft. Monthly rates
+  per 100,000 are summed into yearly ones for the agency, the state and the
+  country. A data.gov key goes in the vault as `fbi.api_key`; without one
+  the shared `DEMO_KEY` is used once `fbi` is in `LIVE_PROVIDERS` (a few
+  dozen calls an hour, enough for a small portfolio's nightly refresh). The
+  result is one `property_crime` row per property: agency, period,
+  population, the four offenses, and a `verdict` of the agency's violent
+  plus property rate against the state's (`well_below` under 60%, `below`,
+  `about` within 15%, `above`, `well_above` over 160%). It shows as the
+  Safety panel on the profile's area tab, and `well_above` becomes the
+  `crime-high` attention suggestion. `off` keeps the simulation.
+- **Public records** (`property_data.records_provider`, default
+  `simulated`): `rentcast` fetches the parcel record (attributes, owner, last
+  sale, tax assessments and bills by year, coordinates) and the value and
+  rent estimates from RentCast with `rentcast.api_key` in the vault. Parcel
+  and tax runs share one record call; a thin record keeps what's already on
+  file rather than blanking it. Rows carry `source = rentcast`.
+
+Any live failure falls back to the simulation and records `fell_back` on
+the run, as before. `GET /property-data/live` reports which sources are
+live and whether keys are set.
+
+**Nightly refresh** (`property_data.refresh_days`, default 30; 0 = off):
+the `property_data_refresh` job runs once a day per workspace and queues the
+refreshable sources (parcel, tax, valuation, crime) for up to 10 properties
+whose records are older than the interval, oldest first, so a provider's
+monthly quota lasts.
+
 ## How it runs — the durable queue
 
 Work is driven by the Tokio scheduler's durable job queue (`background_job`),

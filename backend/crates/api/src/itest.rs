@@ -131,6 +131,7 @@ async fn integration_suite() {
     appointments_flow(&c).await;
     vendor_link_flow(&c).await;
     showings_flow(&c).await;
+    property_data_sources(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7791,6 +7792,106 @@ async fn showings_flow(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Conflict);
+}
+
+/// Property data settings and the crime source: the workspace's provider
+/// choices show in settings and the live status, the crime source files a row
+/// (simulated here, the FBI when live), the profile returns it, and an area
+/// well above the state's rate becomes an attention suggestion.
+async fn property_data_sources(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["property:read", "property:write", "tenant:manage"],
+    );
+    let (st, settings) = get_json(c, "/settings", &staff).await;
+    assert_eq!(st, Status::Ok, "{settings}");
+    let keys: Vec<&str> = settings
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["key"].as_str())
+        .collect();
+    for k in [
+        "property_data.crime_provider",
+        "property_data.records_provider",
+        "property_data.refresh_days",
+    ] {
+        assert!(keys.contains(&k), "setting {k} is in the catalog");
+    }
+    let (st, live) = get_json(c, "/property-data/live", &staff).await;
+    assert_eq!(st, Status::Ok, "{live}");
+    assert_eq!(live["crime_provider"], "fbi");
+    assert_eq!(live["records_provider"], "simulated");
+    assert_eq!(live["records_live"], false);
+    assert_eq!(live["crime_key_set"], false);
+
+    // The crime source runs (no key and no LIVE_PROVIDERS here: simulated).
+    let property = entity::prelude::Property::find_by_id(pid)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let out =
+        crate::enrichment::runner::run_source(&c.db, &property, crate::enrichment::Source::Crime)
+            .await
+            .unwrap();
+    assert_eq!(out.provider, "simulated");
+    assert!(!out.fell_back);
+    let (st, intel) = get_json(c, &format!("/properties/{pid}/intel"), &staff).await;
+    assert_eq!(st, Status::Ok, "{intel}");
+    let crime = &intel["crime"];
+    assert_eq!(crime["simulated"], true);
+    assert_eq!(crime["offenses"].as_array().unwrap().len(), 4);
+    assert!(crime["agency_name"].as_str().unwrap().contains("Police"));
+    assert!(crime["verdict_words"].as_str().unwrap().len() > 5);
+    // Running again replaces the row rather than adding one.
+    crate::enrichment::runner::run_source(&c.db, &property, crate::enrichment::Source::Crime)
+        .await
+        .unwrap();
+    let rows = entity::prelude::PropertyCrime::find()
+        .filter(entity::property_crime::Column::PropertyId.eq(pid))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+
+    // An area well above the state's rate is flagged on the profile.
+    let mut am: entity::property_crime::ActiveModel = rows[0].clone().into();
+    am.verdict = Set("well_above".into());
+    am.update(&c.db).await.unwrap();
+    let (st, att) = get_json(c, &format!("/properties/{pid}/attention"), &staff).await;
+    assert_eq!(st, Status::Ok, "{att}");
+    assert!(
+        att.as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["key"] == "crime-high"),
+        "{att}"
+    );
+
+    // The nightly refresh picks up stale properties, a few at a time, and
+    // skips a fresh one.
+    let due = crate::enrichment::refresh::due(&c.db, nw, 30, 3)
+        .await
+        .unwrap();
+    assert!(due.len() <= 3);
+    // Turning the refresh off makes the job a no-op.
+    let (st, _) = send_json(
+        c,
+        rocket::http::Method::Put,
+        "/settings/property_data.refresh_days",
+        &staff,
+        serde_json::json!({ "value": 0 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, live) = get_json(c, "/property-data/live", &staff).await;
+    assert_eq!(live["crime_provider"], "fbi");
 }
 
 async fn appointments_flow(c: &Ctx) {

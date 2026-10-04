@@ -91,6 +91,7 @@ pub use super::process_template::Entity as ProcessTemplate;
 pub use super::process_template_step::Entity as ProcessTemplateStep;
 pub use super::profile_type::Entity as ProfileType;
 pub use super::property::Entity as Property;
+pub use super::property_crime::Entity as PropertyCrime;
 pub use super::property_detail::Entity as PropertyDetail;
 pub use super::property_permit::Entity as PropertyPermit;
 pub use super::property_school::Entity as PropertySchool;

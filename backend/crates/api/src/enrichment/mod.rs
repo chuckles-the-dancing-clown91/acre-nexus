@@ -23,8 +23,12 @@
 //! output shapes + error), [`geocode`] (live), [`simulated`] (stand-ins), and
 //! [`runner`] (persist + summarise).
 
+pub mod crime;
 pub mod data;
 pub mod geocode;
+pub mod live;
+pub mod refresh;
+pub mod rentcast;
 pub mod runner;
 pub mod simulated;
 pub mod source;

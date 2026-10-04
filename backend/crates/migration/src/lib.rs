@@ -75,6 +75,7 @@ mod m20240101_000067_desk_queues;
 mod m20240101_000068_property_story;
 mod m20240101_000069_appointments;
 mod m20240101_000070_vendor_links;
+mod m20240101_000071_property_crime;
 
 pub struct Migrator;
 
@@ -152,6 +153,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000068_property_story::Migration),
             Box::new(m20240101_000069_appointments::Migration),
             Box::new(m20240101_000070_vendor_links::Migration),
+            Box::new(m20240101_000071_property_crime::Migration),
         ]
     }
 }

@@ -108,6 +108,7 @@ pub mod process_template;
 pub mod process_template_step;
 pub mod profile_type;
 pub mod property;
+pub mod property_crime;
 pub mod property_detail;
 pub mod property_permit;
 pub mod property_school;

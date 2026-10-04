@@ -17,6 +17,8 @@ pub enum Source {
     Schools,
     /// Utility providers + typical cost.
     Utilities,
+    /// Crime statistics for the area (FBI Crime Data Explorer).
+    Crime,
 }
 
 /// Orchestrator job kind: fans out into one child job per [`Source`].
@@ -34,6 +36,8 @@ pub const JOB_KINDS: &[&str] = &[
     "enrich_valuation",
     "enrich_schools",
     "enrich_utilities",
+    "enrich_crime",
+    super::refresh::REFRESH_KIND,
 ];
 
 impl Source {
@@ -46,6 +50,7 @@ impl Source {
             Source::Valuation => "valuation",
             Source::Schools => "schools",
             Source::Utilities => "utilities",
+            Source::Crime => "crime",
         }
     }
 
@@ -58,6 +63,7 @@ impl Source {
             Source::Valuation => "enrich_valuation",
             Source::Schools => "enrich_schools",
             Source::Utilities => "enrich_utilities",
+            Source::Crime => "enrich_crime",
         }
     }
 
@@ -66,13 +72,15 @@ impl Source {
     pub fn provider(self) -> &'static str {
         match self {
             Source::Geocode => "census_geocoder",
+            Source::Crime => "fbi_cde",
+            Source::Parcel | Source::Tax | Source::Valuation => "simulated",
             _ => "simulated",
         }
     }
 
     /// All sources, in the order the orchestrator schedules them (geocode first
     /// so downstream sources could use coordinates).
-    pub fn all() -> [Source; 6] {
+    pub fn all() -> [Source; 7] {
         [
             Source::Geocode,
             Source::Parcel,
@@ -80,6 +88,18 @@ impl Source {
             Source::Valuation,
             Source::Schools,
             Source::Utilities,
+            Source::Crime,
+        ]
+    }
+
+    /// The sources a nightly refresh re-runs: the ones that come from public
+    /// records and drift (not the geocode, which is stable once it resolved).
+    pub fn refreshable() -> [Source; 4] {
+        [
+            Source::Parcel,
+            Source::Tax,
+            Source::Valuation,
+            Source::Crime,
         ]
     }
 

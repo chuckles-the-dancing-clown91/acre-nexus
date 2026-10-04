@@ -203,6 +203,45 @@ impl From<entity::enrichment_run::Model> for EnrichmentRunDto {
     }
 }
 
+/// Crime statistics for the area.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct CrimeDto {
+    pub agency_ori: Option<String>,
+    pub agency_name: String,
+    pub agency_km: Option<f64>,
+    /// `MM-YYYY`.
+    pub period_from: String,
+    pub period_to: String,
+    pub population: Option<i64>,
+    pub offenses: Vec<crate::enrichment::data::CrimeOffense>,
+    /// `well_below` | `below` | `about` | `above` | `well_above` | `unknown`.
+    pub verdict: String,
+    pub verdict_words: String,
+    /// `fbi_cde` or `simulated`.
+    pub source: String,
+    pub simulated: bool,
+    pub fetched_at: String,
+}
+
+impl From<entity::property_crime::Model> for CrimeDto {
+    fn from(c: entity::property_crime::Model) -> Self {
+        CrimeDto {
+            verdict_words: crate::enrichment::data::verdict_words(&c.verdict).to_string(),
+            simulated: c.source == "simulated",
+            offenses: serde_json::from_value(c.offenses).unwrap_or_default(),
+            agency_ori: c.agency_ori,
+            agency_name: c.agency_name,
+            agency_km: c.agency_km,
+            period_from: c.period_from,
+            period_to: c.period_to,
+            population: c.population,
+            verdict: c.verdict,
+            source: c.source,
+            fetched_at: c.fetched_at.to_rfc3339(),
+        }
+    }
+}
+
 /// Aggregated property-intelligence payload for the detail page.
 #[derive(Serialize, schemars::JsonSchema)]
 pub struct IntelResp {
@@ -211,6 +250,7 @@ pub struct IntelResp {
     pub taxes: Vec<TaxDto>,
     pub schools: Vec<SchoolDto>,
     pub utilities: Vec<UtilityDto>,
+    pub crime: Option<CrimeDto>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

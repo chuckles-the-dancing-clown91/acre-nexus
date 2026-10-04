@@ -378,12 +378,54 @@ export interface PropertyUtility {
   phone: string | null;
 }
 
+export interface CrimeOffense {
+  /** violent-crime | property-crime | burglary | motor-vehicle-theft */
+  key: string;
+  label: string;
+  /** Offenses the agency reported over the period. */
+  agency: number;
+  /** Per 100,000 people a year. */
+  agency_rate: number;
+  state_rate: number;
+  us_rate: number;
+  prior_rate: number | null;
+}
+
+/** Crime statistics for the area, from the FBI or a simulation. */
+export interface CrimeStats {
+  agency_ori: string | null;
+  agency_name: string;
+  agency_km: number | null;
+  /** MM-YYYY */
+  period_from: string;
+  period_to: string;
+  population: number | null;
+  offenses: CrimeOffense[];
+  /** well_below | below | about | above | well_above | unknown */
+  verdict: string;
+  verdict_words: string;
+  source: string;
+  simulated: boolean;
+  fetched_at: string;
+}
+
 export interface PropertyIntel {
   detail: PropertyDetail | null;
   valuations: PropertyValuation[];
   taxes: PropertyTax[];
   schools: PropertySchool[];
   utilities: PropertyUtility[];
+  crime: CrimeStats | null;
+}
+
+/** Which property-data sources are live for the workspace. */
+export interface PropertyDataLive {
+  crime_provider: string;
+  crime_live: boolean;
+  crime_key_set: boolean;
+  records_provider: string;
+  records_live: boolean;
+  records_key_set: boolean;
 }
 
 export interface EnrichmentRun {
