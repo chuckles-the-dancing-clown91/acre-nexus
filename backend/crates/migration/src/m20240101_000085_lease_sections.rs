@@ -11,7 +11,9 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .get_connection()
-            .execute_unprepared("ALTER TABLE lease_document ADD COLUMN IF NOT EXISTS sections jsonb NULL;")
+            .execute_unprepared(
+                "ALTER TABLE lease_document ADD COLUMN IF NOT EXISTS sections jsonb NULL;",
+            )
             .await?;
         Ok(())
     }
