@@ -457,6 +457,16 @@ pub struct AssetDto {
     pub years_left: Option<i32>,
     pub warranty_provider: Option<String>,
     pub warranty_notes: Option<String>,
+    pub warranty_starts_on: Option<String>,
+    pub warranty_policy_number: Option<String>,
+    pub warranty_phone: Option<String>,
+    pub warranty_coverage: Option<String>,
+    pub warranty_transferable: bool,
+    /// Days until the warranty ends; negative once it has.
+    pub warranty_days_left: Option<i64>,
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
+    pub recall_checked_on: Option<String>,
     pub notes: Option<String>,
     /// `active` | `retired`.
     pub status: String,
@@ -492,6 +502,11 @@ impl From<entity::asset::Model> for AssetDto {
         let today = chrono::Utc::now().date_naive();
         AssetDto {
             warranty_state: warranty_state(a.warranty_expires.as_deref(), today).to_string(),
+            warranty_days_left: a
+                .warranty_expires
+                .as_deref()
+                .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+                .map(|d| (d - today).num_days()),
             years_left: years_left(
                 a.purchased_on.as_deref(),
                 a.install_date.as_deref(),
@@ -514,6 +529,14 @@ impl From<entity::asset::Model> for AssetDto {
             expected_life_years: a.expected_life_years,
             warranty_provider: a.warranty_provider,
             warranty_notes: a.warranty_notes,
+            warranty_starts_on: a.warranty_starts_on,
+            warranty_policy_number: a.warranty_policy_number,
+            warranty_phone: a.warranty_phone,
+            warranty_coverage: a.warranty_coverage,
+            warranty_transferable: a.warranty_transferable,
+            care_instructions: a.care_instructions,
+            manual_url: a.manual_url,
+            recall_checked_on: a.recall_checked_on,
             notes: a.notes,
             status: a.status,
             created_at: a.created_at.to_rfc3339(),
@@ -538,6 +561,14 @@ pub struct CreateAssetReq {
     pub expected_life_years: Option<i32>,
     pub warranty_provider: Option<String>,
     pub warranty_notes: Option<String>,
+    pub warranty_starts_on: Option<String>,
+    pub warranty_policy_number: Option<String>,
+    pub warranty_phone: Option<String>,
+    pub warranty_coverage: Option<String>,
+    pub warranty_transferable: Option<bool>,
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
+    pub recall_checked_on: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -556,6 +587,14 @@ pub struct UpdateAssetReq {
     pub expected_life_years: Option<i32>,
     pub warranty_provider: Option<String>,
     pub warranty_notes: Option<String>,
+    pub warranty_starts_on: Option<String>,
+    pub warranty_policy_number: Option<String>,
+    pub warranty_phone: Option<String>,
+    pub warranty_coverage: Option<String>,
+    pub warranty_transferable: Option<bool>,
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
+    pub recall_checked_on: Option<String>,
     pub notes: Option<String>,
     /// `active` | `retired`.
     pub status: Option<String>,

@@ -158,6 +158,7 @@ async fn integration_suite() {
     units_and_meters_flow(&c).await;
     ticket_feed_flow(&c).await;
     lease_document_flow(&c).await;
+    appliance_profile_flow(&c).await;
     resident_profile_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
@@ -11360,4 +11361,161 @@ async fn lease_document_flow(c: &Ctx) {
     assert!(body.contains("Electricity | Tenant"), "{body}");
     assert!(body.contains("Trash and recycling | Landlord"), "{body}");
     assert!(body.contains("Emergency contact: Arun Nair"), "{body}");
+
+    // The resident sees the agreement only once the office has sent it, with
+    // the utility terms and equipment that come with the home.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"priya.nair@example.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let me = toks["access_token"].as_str().unwrap().to_string();
+    let (st, home) = get_json(c, "/my/home", &me).await;
+    assert_eq!(st, Status::Ok, "{home}");
+    assert!(home["agreement"].is_null(), "a draft is not shown: {home}");
+    assert!(!home["utilities"].as_array().unwrap().is_empty());
+    assert!(!home["equipment"].as_array().unwrap().is_empty());
+    let did = uuid::Uuid::parse_str(doc["id"].as_str().unwrap()).unwrap();
+    let mut am: entity::lease_document::ActiveModel =
+        entity::prelude::LeaseDocument::find_by_id(did)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .into();
+    am.status = sea_orm::Set("sent".into());
+    am.update(&c.db).await.unwrap();
+    let (_, home) = get_json(c, "/my/home", &me).await;
+    assert_eq!(home["agreement"]["status"], "sent");
+    assert!(home["agreement"]["sections"].as_array().unwrap().len() > 5);
+}
+
+/// An appliance keeps its warranty and care with it: the care library suggests
+/// instructions and a schedule, applying them is idempotent, and crews limited
+/// to their properties reach only their own equipment.
+async fn appliance_profile_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pids = property_ids(c, nw).await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "maintenance:read",
+            "maintenance:manage",
+        ],
+    );
+    let (st, a) = post_json(
+        c,
+        "/assets",
+        &staff,
+        serde_json::json!({ "property_id": pids[0], "kind": "appliance", "name": "Water heater (garage)",
+            "make": "Rheem", "warranty_expires": "2099-01-01", "warranty_provider": "Rheem",
+            "warranty_policy_number": "RH-4471", "warranty_phone": "800-555-0100",
+            "warranty_coverage": "Tank 10 years, parts 6 years", "warranty_transferable": true,
+            "manual_url": "https://example.com/manual.pdf" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    let id = a["id"].as_str().unwrap().to_string();
+    assert_eq!(a["warranty_policy_number"], "RH-4471");
+    assert_eq!(a["warranty_transferable"], true);
+    assert!(a["warranty_days_left"].as_i64().unwrap() > 1000);
+
+    // A manual link must be a web link.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/assets/{id}"),
+        &staff,
+        serde_json::json!({ "manual_url": "javascript:alert(1)" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // The library matches it and offers its jobs.
+    let (st, care) = get_json(c, &format!("/assets/{id}/care"), &staff).await;
+    assert_eq!(st, Status::Ok, "{care}");
+    assert_eq!(care["key"], "water_heater");
+    assert_eq!(care["jobs"].as_array().unwrap().len(), 3);
+    assert!(care["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|j| j["scheduled"] == false));
+
+    // Applying puts the instructions on the appliance and two jobs on the schedule.
+    let body = serde_json::json!({ "instructions": true, "life": true,
+        "jobs": ["Flush the tank", "Test the pressure relief valve"] });
+    let (st, done) = post_json(c, &format!("/assets/{id}/care/apply"), &staff, body.clone()).await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(done["plans_created"], 2);
+    assert_eq!(done["instructions_set"], true);
+    let (_, again) = post_json(c, &format!("/assets/{id}/care/apply"), &staff, body).await;
+    assert_eq!(again["plans_created"], 0, "applying twice adds nothing");
+    let (st, bad) = post_json(
+        c,
+        &format!("/assets/{id}/care/apply"),
+        &staff,
+        serde_json::json!({ "jobs": ["Invent a job"] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{bad}");
+
+    let (_, hist) = get_json(c, &format!("/assets/{id}/history"), &staff).await;
+    assert_eq!(hist["plans"].as_array().unwrap().len(), 2);
+    assert!(hist["care_instructions"].as_str().unwrap().contains("120"));
+    assert_eq!(hist["expected_life_years"], 12);
+    let (_, care) = get_json(c, &format!("/assets/{id}/care"), &staff).await;
+    assert_eq!(
+        care["jobs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|j| j["scheduled"] == true)
+            .count(),
+        2
+    );
+
+    // A maintenance tech limited to two properties sees only equipment there.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"rosa@northwind.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let rosa = toks["access_token"].as_str().unwrap().to_string();
+    let (_, mine) = get_json(c, "/properties", &rosa).await;
+    let reach: Vec<String> = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_str().unwrap().to_string())
+        .collect();
+    let outside = pids
+        .iter()
+        .find(|p| !reach.contains(&p.to_string()))
+        .expect("a property outside her reach");
+    let (st, far) = post_json(
+        c,
+        "/assets",
+        &staff,
+        serde_json::json!({ "property_id": outside, "name": "Boiler", "kind": "hvac" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{far}");
+    let far_id = far["id"].as_str().unwrap();
+    let (st, list) = get_json(c, "/assets", &rosa).await;
+    assert_eq!(st, Status::Ok, "{list}");
+    assert!(list.as_array().unwrap().iter().all(|x| x["id"] != far_id));
+    let (st, _) = get_json(c, &format!("/assets/{far_id}/care"), &rosa).await;
+    assert_eq!(st, Status::NotFound, "equipment outside her properties");
 }

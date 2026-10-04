@@ -21,6 +21,29 @@ use sea_orm::{
 };
 use uuid::Uuid;
 
+/// A unit's own equipment, plus the house's when the property is one home.
+pub(crate) async fn equipment_for(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    lease: &entity::lease::Model,
+    property: &entity::property::Model,
+) -> ApiResult<Vec<entity::asset::Model>> {
+    let single = crate::property_kind::unit_mode(&property.property_type)
+        == crate::property_kind::UnitMode::Single;
+    let mut equipment = Asset::find()
+        .filter(entity::asset::Column::TenantId.eq(tenant_id))
+        .filter(entity::asset::Column::PropertyId.eq(lease.property_id))
+        .filter(entity::asset::Column::Status.eq("active"))
+        .order_by_asc(entity::asset::Column::Name)
+        .all(db)
+        .await?;
+    equipment.retain(|a| match a.unit_id {
+        Some(u) => Some(u) == lease.unit_id,
+        None => single,
+    });
+    Ok(equipment)
+}
+
 /// Render + persist a new draft lease document for `lease` — the shared core
 /// behind the explicit generate endpoint and conversion's auto-generation.
 pub(crate) async fn generate_for_lease(
@@ -75,20 +98,7 @@ pub(crate) async fn generate_for_lease(
     };
     let utilities =
         crate::utilities::terms(db, tenant_id, lease.property_id, lease.unit_id).await?;
-    // A unit's own equipment, plus the house's when the property is one home.
-    let single = crate::property_kind::unit_mode(&property.property_type)
-        == crate::property_kind::UnitMode::Single;
-    let mut equipment = Asset::find()
-        .filter(entity::asset::Column::TenantId.eq(tenant_id))
-        .filter(entity::asset::Column::PropertyId.eq(lease.property_id))
-        .filter(entity::asset::Column::Status.eq("active"))
-        .order_by_asc(entity::asset::Column::Name)
-        .all(db)
-        .await?;
-    equipment.retain(|a| match a.unit_id {
-        Some(u) => Some(u) == lease.unit_id,
-        None => single,
-    });
+    let equipment = equipment_for(db, tenant_id, lease, &property).await?;
 
     let built = leasedoc::build(&leasedoc::LeaseInput {
         templates: &templates,

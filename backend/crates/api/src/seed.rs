@@ -808,6 +808,14 @@ async fn run_base(db: &DatabaseConnection) -> anyhow::Result<()> {
             expected_life_years: Set(None),
             warranty_provider: Set(None),
             warranty_notes: Set(None),
+            warranty_starts_on: Set(None),
+            warranty_policy_number: Set(None),
+            warranty_phone: Set(None),
+            warranty_coverage: Set(None),
+            warranty_transferable: Set(false),
+            care_instructions: Set(None),
+            manual_url: Set(None),
+            recall_checked_on: Set(None),
             notes: Set(None),
             status: Set("active".into()),
             created_by: Set(Some(jordan)),
@@ -3598,6 +3606,7 @@ async fn seed_meter(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn seed_appliance(
     db: &DatabaseConnection,
     tenant_id: Uuid,
@@ -3606,6 +3615,8 @@ async fn seed_appliance(
     kind: &str,
     name: &str,
     make: &str,
+    install: &str,
+    warranty_to: &str,
 ) -> anyhow::Result<()> {
     let now = Utc::now();
     entity::asset::ActiveModel {
@@ -3617,15 +3628,27 @@ async fn seed_appliance(
         name: Set(name.into()),
         make: Set(Some(make.into())),
         model: Set(None),
-        serial_number: Set(None),
-        install_date: Set(None),
-        warranty_expires: Set(None),
+        serial_number: Set(Some(format!(
+            "{}-{:06}",
+            make[..2].to_uppercase(),
+            (name.len() * 7919) % 1_000_000
+        ))),
+        install_date: Set(Some(install.to_string())),
+        warranty_expires: Set(Some(warranty_to.to_string())),
         location: Set(None),
         purchased_on: Set(None),
         purchase_price_cents: Set(None),
-        expected_life_years: Set(None),
-        warranty_provider: Set(None),
+        expected_life_years: Set(crate::appliance_care::matching(name, kind).map(|c| c.life_years)),
+        warranty_provider: Set(Some(make.to_string())),
         warranty_notes: Set(None),
+        warranty_starts_on: Set(None),
+        warranty_policy_number: Set(Some(format!("W-{}", name.len() * 1031))),
+        warranty_phone: Set(None),
+        warranty_coverage: Set(Some("Parts and labor".into())),
+        warranty_transferable: Set(false),
+        care_instructions: Set(None),
+        manual_url: Set(None),
+        recall_checked_on: Set(None),
         notes: Set(None),
         status: Set("active".into()),
         created_by: Set(None),
@@ -3791,6 +3814,8 @@ async fn hearthside(
             "hvac",
             "Central AC and furnace",
             "Carrier",
+            "2021-05-10",
+            "2031-05-10",
         )
         .await?;
         seed_appliance(
@@ -3801,6 +3826,8 @@ async fn hearthside(
             "appliance",
             "Refrigerator",
             "Whirlpool",
+            "2022-03-01",
+            "2027-03-01",
         )
         .await?;
         seed_appliance(
@@ -3811,6 +3838,8 @@ async fn hearthside(
             "appliance",
             "Water heater",
             "Rheem",
+            "2016-09-20",
+            "2026-12-01",
         )
         .await?;
         assign_to(db, t, theo, "property", pid, "property_manager").await?;
@@ -3943,6 +3972,8 @@ async fn pinecrest(
             "plumbing",
             "Bath house water heater",
             "Rheem",
+            "2018-04-02",
+            "2028-04-02",
         )
         .await?;
 

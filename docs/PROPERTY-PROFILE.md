@@ -130,6 +130,37 @@ not. "Add all" puts every item that applies on the maintenance schedule as a
 routine; conditional ones (a pool, a boiler) are added one at a time. Click a
 title for what to do and the rule it comes from.
 
+### The appliance profile
+
+Each row opens the appliance's own page,
+`/console/properties/<id>/appliances/<asset_id>`:
+
+- **Overview**: make, model, serial, where it is, installed and bought dates,
+  price, expected life and a link to the manual. The **warranty** card holds the
+  provider, policy number, what it covers, start and end dates, whether it
+  transfers to a buyer and the claims phone (tap to call). It turns amber
+  90 days before it ends. **Recalls** records when the make and model were last
+  checked. When repairs have cost half of what it cost new, the page says
+  replacing it may be cheaper.
+- **Care and schedule**: the care instructions (editable), and the **care
+  guide**: a library for water heaters, furnaces and air conditioners,
+  dishwashers, refrigerators, ranges, microwaves, washers, dryers, disposals,
+  smoke and CO alarms, thermostats, garage door openers, sump pumps and ceiling
+  fans. It matches by name, offers how-to text and routine jobs (flush the
+  tank every year, replace the filter every 90 days), and **Use these
+  instructions** / **Add jobs to the schedule** apply them. Jobs already on the
+  schedule are skipped. Jobs come due as work orders against the appliance.
+  Add your own job, or pause one.
+- **Service history**: every work order on it with its cost, and the total spent.
+- **Parts**: the parts that fit and how many are in stock.
+- **Files**: manuals, warranty papers, receipts and photos.
+
+API: `GET /assets/<id>/history`, `GET /assets/<id>/care?key=`,
+`POST /assets/<id>/care/apply`, `PATCH /assets/<id>`. Property-limited people
+(a maintenance tech on two properties) reach only equipment there. Residents
+see the care instructions and manual link of what comes with their home on the
+lease page.
+
 ## Permits and plans
 
 **Permits** (`property_permit`): number, kind (building, electrical,

@@ -48,20 +48,34 @@ fn valid_date(label: &str, d: &Option<String>) -> Result<Option<String>, ApiErro
     }
 }
 
+/// A link to a manual: empty clears it, anything else must be http(s).
+fn clean_url(v: Option<String>) -> Result<Option<String>, ApiError> {
+    match clean(v) {
+        None => Ok(None),
+        Some(u) if u.starts_with("https://") || u.starts_with("http://") => Ok(Some(u)),
+        Some(_) => Err(ApiError::BadRequest(
+            "manual_url must start with http:// or https://".into(),
+        )),
+    }
+}
+
 /// `GET /assets?property_id&unit_id&status` — the equipment registry.
 #[rocket_okapi::openapi(tag = "Maintenance")]
 #[get("/assets?<property_id>&<unit_id>&<status>")]
 pub async fn list_assets(
-    _state: &State<AppState>,
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     property_id: Option<String>,
     unit_id: Option<String>,
     status: Option<String>,
 ) -> ApiResult<Json<Vec<AssetDto>>> {
     user.require(Permission::MaintenanceRead)?;
     let mut q = Asset::find().filter(entity::asset::Column::TenantId.eq(scope.tenant_id));
+    if let Some(ids) = access.property_ids() {
+        q = q.filter(entity::asset::Column::PropertyId.is_in(ids));
+    }
     if let Some(pid) = property_id.filter(|s| !s.trim().is_empty()) {
         let pid = Uuid::parse_str(&pid)
             .map_err(|_| ApiError::BadRequest("invalid property_id".into()))?;
@@ -87,10 +101,14 @@ pub async fn create_asset(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
     body: Json<CreateAssetReq>,
 ) -> ApiResult<Json<AssetDto>> {
     user.require(Permission::MaintenanceManage)?;
     let b = body.into_inner();
+    if !access.sees(b.property_id) {
+        return Err(ApiError::NotFound("property not found".into()));
+    }
     let name = b.name.trim().to_string();
     if name.is_empty() {
         return Err(ApiError::BadRequest("name is required".into()));
@@ -131,6 +149,14 @@ pub async fn create_asset(
         expected_life_years: Set(b.expected_life_years.filter(|y| *y > 0)),
         warranty_provider: Set(clean(b.warranty_provider)),
         warranty_notes: Set(clean(b.warranty_notes)),
+        warranty_starts_on: Set(valid_date("warranty_starts_on", &b.warranty_starts_on)?),
+        warranty_policy_number: Set(clean(b.warranty_policy_number)),
+        warranty_phone: Set(clean(b.warranty_phone)),
+        warranty_coverage: Set(clean(b.warranty_coverage)),
+        warranty_transferable: Set(b.warranty_transferable.unwrap_or(false)),
+        care_instructions: Set(clean(b.care_instructions)),
+        manual_url: Set(clean_url(b.manual_url)?),
+        recall_checked_on: Set(valid_date("recall_checked_on", &b.recall_checked_on)?),
         notes: Set(clean(b.notes)),
         status: Set("active".into()),
         created_by: Set(Some(user.user_id)),
@@ -226,6 +252,30 @@ pub async fn update_asset(
     }
     if let Some(v) = b.warranty_notes {
         am.warranty_notes = Set(clean(Some(v)));
+    }
+    if b.warranty_starts_on.is_some() {
+        am.warranty_starts_on = Set(valid_date("warranty_starts_on", &b.warranty_starts_on)?);
+    }
+    if let Some(v) = b.warranty_policy_number {
+        am.warranty_policy_number = Set(clean(Some(v)));
+    }
+    if let Some(v) = b.warranty_phone {
+        am.warranty_phone = Set(clean(Some(v)));
+    }
+    if let Some(v) = b.warranty_coverage {
+        am.warranty_coverage = Set(clean(Some(v)));
+    }
+    if let Some(v) = b.warranty_transferable {
+        am.warranty_transferable = Set(v);
+    }
+    if let Some(v) = b.care_instructions {
+        am.care_instructions = Set(clean(Some(v)));
+    }
+    if b.manual_url.is_some() {
+        am.manual_url = Set(clean_url(b.manual_url)?);
+    }
+    if b.recall_checked_on.is_some() {
+        am.recall_checked_on = Set(valid_date("recall_checked_on", &b.recall_checked_on)?);
     }
     am.updated_at = Set(Utc::now().into());
     let saved = am.update(&db).await?;

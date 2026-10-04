@@ -536,3 +536,90 @@ pub async fn update_resident(
         detail_for(&db, scope.tenant_id, &access, &b.email).await?,
     ))
 }
+
+// ---- my home: the agreement, utilities and equipment ----
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct MyAgreement {
+    pub title: String,
+    /// `sent` | `signed`
+    pub status: String,
+    pub generated_at: String,
+    pub signed_by: Option<String>,
+    pub signed_at: Option<String>,
+    pub sections: Option<Vec<crate::leasedoc::Section>>,
+    pub body: String,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct MyEquipment {
+    pub name: String,
+    pub kind: String,
+    pub make: Option<String>,
+    pub warranty_expires: Option<String>,
+    /// How to look after it.
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct MyHome {
+    /// The lease agreement once the office has sent it; never a draft.
+    pub agreement: Option<MyAgreement>,
+    pub utilities: Vec<crate::utilities::UtilityTerm>,
+    pub equipment: Vec<MyEquipment>,
+}
+
+/// `GET /my/home` — what the resident agreed to and what comes with the home.
+#[rocket_okapi::openapi(tag = "Renter Portal")]
+#[get("/my/home")]
+pub async fn my_home(
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+) -> ApiResult<Json<MyHome>> {
+    let lease = crate::payments::lease_for_user(&db, scope.tenant_id, user.user_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("no lease found for your account".into()))?;
+    let property = Property::find_by_id(lease.property_id)
+        .one(&db)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
+    let agreement = entity::prelude::LeaseDocument::find()
+        .filter(entity::lease_document::Column::TenantId.eq(scope.tenant_id))
+        .filter(entity::lease_document::Column::LeaseId.eq(lease.id))
+        .filter(entity::lease_document::Column::Purpose.eq("lease"))
+        .filter(entity::lease_document::Column::Status.ne("draft"))
+        .order_by_desc(entity::lease_document::Column::GeneratedAt)
+        .one(&db)
+        .await?
+        .map(|d| MyAgreement {
+            title: d.title,
+            status: d.status,
+            generated_at: d.generated_at.to_rfc3339(),
+            signed_by: d.signed_by,
+            signed_at: d.signed_at.map(|t| t.to_rfc3339()),
+            sections: d.sections.and_then(|v| serde_json::from_value(v).ok()),
+            body: d.body,
+        });
+    let utilities =
+        crate::utilities::terms(&db, scope.tenant_id, lease.property_id, lease.unit_id).await?;
+    let equipment =
+        crate::routes::lease_docs::generate::equipment_for(&db, scope.tenant_id, &lease, &property)
+            .await?
+            .into_iter()
+            .map(|a| MyEquipment {
+                name: a.name,
+                kind: a.kind,
+                make: a.make,
+                warranty_expires: a.warranty_expires,
+                care_instructions: a.care_instructions,
+                manual_url: a.manual_url,
+            })
+            .collect();
+    Ok(Json(MyHome {
+        agreement,
+        utilities,
+        equipment,
+    }))
+}

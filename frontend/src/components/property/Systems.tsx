@@ -212,7 +212,12 @@ export function Systems({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-medium text-fg">
-                        {a.name}
+                        <Link
+                          href={`/console/properties/${propertyId}/appliances/${a.id}`}
+                          className="hover:text-accent"
+                        >
+                          {a.name}
+                        </Link>
                         {a.location && (
                           <span className="font-normal text-fg-3">
                             {" "}
@@ -243,6 +248,13 @@ export function Systems({
                       {a.warranty_state === "expired" && (
                         <Badge>out of warranty</Badge>
                       )}
+                      {a.warranty_state === "active" &&
+                        a.warranty_days_left != null &&
+                        a.warranty_days_left <= 90 && (
+                          <Badge tone="warn">
+                            warranty ends in {a.warranty_days_left} days
+                          </Badge>
+                        )}
                       {manage && (
                         <Button
                           size="icon"

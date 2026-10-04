@@ -732,6 +732,28 @@ export const api = {
       auth: true,
       body,
     }),
+  // ---- appliance profile: history, care guide ----
+  assetHistory: (id: string) =>
+    request<AssetHistory>(`/assets/${id}/history`, { auth: true }),
+  careSuggestion: (id: string, key?: string) =>
+    request<CareSuggestion>(
+      `/assets/${id}/care${key ? `?key=${encodeURIComponent(key)}` : ""}`,
+      { auth: true }
+    ),
+  applyCare: (
+    id: string,
+    body: {
+      key?: string;
+      instructions?: boolean;
+      life?: boolean;
+      jobs: string[];
+    }
+  ) =>
+    request<{ instructions_set: boolean; plans_created: number }>(
+      `/assets/${id}/care/apply`,
+      { method: "POST", auth: true, body }
+    ),
+
   // ---- equipment registry (assets) ----
   assets: (
     params: { property_id?: string; unit_id?: string; status?: string } = {}
@@ -1482,6 +1504,8 @@ export const api = {
       auth: true,
       body,
     }),
+
+  myHome: () => request<MyHome>("/my/home", { auth: true }),
 
   tenantHistory: () =>
     request<TenantHistoryRow[]>("/tenant-history", { auth: true }),
@@ -4229,4 +4253,75 @@ export interface ResidentDetail {
   tenancies: (TenancySummary & { unit_number: string | null })[];
   applications: Application[];
   card: IdCard | null;
+}
+
+export interface UtilityTermView {
+  kind: string;
+  label: string;
+  paid_by: string;
+  paid_by_label: string;
+  provider: string | null;
+  meters: string[];
+  note: string | null;
+}
+
+/** What the resident agreed to and what comes with the home. */
+export interface MyHome {
+  agreement: {
+    title: string;
+    status: "sent" | "signed";
+    generated_at: string;
+    signed_by: string | null;
+    signed_at: string | null;
+    sections: LeaseSection[] | null;
+    body: string;
+  } | null;
+  utilities: UtilityTermView[];
+  equipment: {
+    name: string;
+    kind: string;
+    make: string | null;
+    warranty_expires: string | null;
+    care_instructions: string | null;
+    manual_url: string | null;
+  }[];
+}
+
+export interface CareJob {
+  title: string;
+  description: string;
+  cadence_days: number;
+  priority: string;
+  scheduled: boolean;
+}
+
+export interface CareSuggestion {
+  key: string | null;
+  label: string | null;
+  life_years: number | null;
+  instructions: string | null;
+  jobs: CareJob[];
+  library: { key: string; label: string }[];
+}
+
+/** One appliance's whole story. */
+export interface AssetHistory extends Asset {
+  property: string;
+  tickets: MaintenanceTicket[];
+  plans: MaintenancePlan[];
+  documents: DocumentEntry[];
+  parts: {
+    id: string;
+    inventory_item_id: string;
+    name: string;
+    sku: string | null;
+    quantity: number;
+    role: string | null;
+    note: string | null;
+    in_stock: number;
+    unit_cost_cents: number | null;
+  }[];
+  spend_cents: number;
+  spend_label: string;
+  last_serviced: string | null;
 }

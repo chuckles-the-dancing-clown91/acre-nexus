@@ -33,6 +33,19 @@ pub struct Model {
     pub warranty_provider: Option<String>,
     pub warranty_notes: Option<String>,
     pub notes: Option<String>,
+    /// ISO date the warranty begins.
+    pub warranty_starts_on: Option<String>,
+    pub warranty_policy_number: Option<String>,
+    /// Who to call to make a claim.
+    pub warranty_phone: Option<String>,
+    /// What the warranty covers (parts, labor, compressor ...).
+    pub warranty_coverage: Option<String>,
+    pub warranty_transferable: bool,
+    /// How to look after it, in the owner's words (or the care library's).
+    pub care_instructions: Option<String>,
+    pub manual_url: Option<String>,
+    /// ISO date it was last checked against recall lists.
+    pub recall_checked_on: Option<String>,
     /// `active` | `retired`.
     pub status: String,
     pub created_by: Option<Uuid>,
