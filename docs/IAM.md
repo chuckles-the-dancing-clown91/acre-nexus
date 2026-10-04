@@ -123,6 +123,19 @@ Client admins (tenant-scoped, `/members`):
 | `morgan@northwind.com` | Back-office | Northwind |
 | `lee@northwind.com` | Landlord | Northwind |
 | `priya@cascade.com` | Workspace Owner | Cascade |
+| `sam@northwind.com` | Property manager | Northwind (two buildings) |
+| `casey@northwind.com` | Leasing agent | Northwind (Maple Court, Birchwood) |
+| `rosa@northwind.com` | Maintenance | Northwind (field crew view) |
+| `hannah@hearthside.com` | Workspace Owner | Hearthside Homes (houses only) |
+| `theo@hearthside.com` | Property manager | Hearthside Homes |
+| `quinn@pinecrest.com` | Workspace Owner | Pinecrest Outdoors (campgrounds) |
+| `marco@pinecrest.com` | Property manager | Pinecrest Outdoors |
+| `jules@pinecrest.com` | Maintenance | Pinecrest Outdoors (field crew view) |
+
+Each company sees only the pages its property types need: Hearthside has no
+site maps or campgrounds, Pinecrest has no leasing pages, Northwind has the
+apartment set. The demo top-up in `seed.rs` is idempotent, so an existing dev
+database gains the new companies on the next boot.
 
 ## Workspaces & switching (multi-membership users)
 

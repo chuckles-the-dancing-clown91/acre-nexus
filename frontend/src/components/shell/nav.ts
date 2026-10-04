@@ -10,6 +10,7 @@ import { useModules } from "@/lib/modules";
 import { usePortfolioSummary } from "@/lib/queries";
 import { useHasTenantScope, useReach } from "./tenant-scope";
 import { MODULES } from "@/modules/registry";
+import { normalizeKind } from "@/lib/propertyKind";
 import type { Tone } from "@/components/ui/badge";
 
 export interface NavItem {
@@ -212,6 +213,54 @@ export function homeHref(can: (p: string) => boolean): string {
   return isFieldCrew(can) ? "/console/my-day" : DASHBOARD.href;
 }
 
+/**
+ * What a company rents decides what it sees. A company of campgrounds has no
+ * leases to manage; a company of houses has no campground bookings. Judged
+ * from the kinds of property in the person's reach.
+ */
+const RENTAL_PAGES = new Set([
+  "/console/leads",
+  "/console/applications",
+  "/console/showings",
+  "/console/listings",
+  "/console/leases",
+  "/console/tenant-history",
+  "/console/fees",
+  "/console/turns",
+]);
+const SITE_PAGES = new Set(["/console/campground"]);
+const LAYOUT_PAGES = new Set(["/console/maps"]);
+
+export interface Offer {
+  /** Leases, tenants, applications: single homes, apartments, suites. */
+  rentals: boolean;
+  /** Campground and RV park bookings. */
+  sites: boolean;
+  /** Apartment layouts or campground sites to draw. */
+  layouts: boolean;
+  foundation: boolean;
+}
+
+/** What to offer for the kinds of property someone can see (everything while
+ * they have none yet, so a new company can still set up). */
+export function offerFor(
+  kinds: string[] | undefined,
+  foundation: boolean | undefined
+): Offer {
+  const modes = (kinds ?? [])
+    .map((k) => normalizeKind(k)?.mode)
+    .filter((m): m is NonNullable<typeof m> => !!m);
+  if (modes.length === 0)
+    return { rentals: true, sites: true, layouts: true, foundation: true };
+  const has = (m: string) => modes.includes(m as never);
+  return {
+    rentals: has("single") || has("multi"),
+    sites: has("sites"),
+    layouts: has("multi") || has("sites"),
+    foundation: !!foundation,
+  };
+}
+
 export function isActive(item: NavItem, pathname: string): boolean {
   return item.exact
     ? pathname === item.href
@@ -243,6 +292,7 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
     }
 
     const field = isFieldCrew(can);
+    const offer = offerFor(summary?.kinds, summary?.foundation);
     const visible: (NavItem & { fallback: string })[] = MODULES.filter((m) =>
       isEnabled(m.key)
     ).flatMap((m) =>
@@ -250,6 +300,12 @@ export function useNav(): { dashboard: NavItem; groups: NavGroup[] } {
         .filter((item) => !item.permission || can(item.permission))
         .filter((item) => !propertyScoped || REACH_AWARE.has(item.href))
         .filter((item) => !field || FIELD_CREW_ALLOWED.has(item.href))
+        .filter((item) => offer.rentals || !RENTAL_PAGES.has(item.href))
+        .filter((item) => offer.sites || !SITE_PAGES.has(item.href))
+        .filter((item) => offer.layouts || !LAYOUT_PAGES.has(item.href))
+        .filter(
+          (item) => offer.foundation || item.href !== "/console/foundation"
+        )
         // Their home row is My day already.
         .filter((item) => !(field && item.href === "/console/my-day"))
         .map((item) => ({

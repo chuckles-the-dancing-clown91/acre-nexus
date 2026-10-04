@@ -289,6 +289,11 @@ export interface PortfolioSummary {
   pending_applications: number | null;
   upcoming_reminders: number | null;
   overdue_reminders: number | null;
+  /** The kinds of property in the viewer's reach (`single_family`,
+   * `multi_family`, `campground`, ...). */
+  kinds?: string[];
+  /** Any of them belongs to an LLC run as a foundation. */
+  foundation?: boolean;
 }
 
 export interface LlcGroup {

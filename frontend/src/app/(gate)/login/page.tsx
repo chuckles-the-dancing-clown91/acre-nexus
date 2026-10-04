@@ -14,14 +14,74 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { useTheme } from "@/theme/ThemeProvider";
 
-const DEMO_ACCOUNTS = [
-  { name: "Avery Stone", role: "Platform staff", email: "avery@acrehq.com" },
+const DEMO_GROUPS = [
   {
-    name: "Jordan Mills",
-    role: "Northwind admin",
-    email: "jordan@northwind.com",
+    company: "Vantedge HQ",
+    accounts: [
+      {
+        name: "Avery Stone",
+        role: "Platform admin",
+        email: "avery@acrehq.com",
+      },
+      { name: "Sam Okafor", role: "Platform support", email: "sam@acrehq.com" },
+    ],
   },
-  { name: "Priya Rao", role: "Cascade admin", email: "priya@cascade.com" },
+  {
+    company: "Northwind (apartments)",
+    accounts: [
+      { name: "Jordan Mills", role: "Owner", email: "jordan@northwind.com" },
+      {
+        name: "Morgan Lee",
+        role: "Back office",
+        email: "morgan@northwind.com",
+      },
+      {
+        name: "Sam Okafor",
+        role: "Property manager",
+        email: "sam@northwind.com",
+      },
+      {
+        name: "Casey Brooks",
+        role: "Leasing agent",
+        email: "casey@northwind.com",
+      },
+      { name: "Lee Carter", role: "Landlord", email: "lee@northwind.com" },
+      { name: "Rosa Diaz", role: "Maintenance", email: "rosa@northwind.com" },
+    ],
+  },
+  {
+    company: "Cascade Living",
+    accounts: [
+      { name: "Priya Rao", role: "Owner", email: "priya@cascade.com" },
+    ],
+  },
+  {
+    company: "Hearthside Homes (houses)",
+    accounts: [
+      { name: "Hannah Reyes", role: "Owner", email: "hannah@hearthside.com" },
+      {
+        name: "Theo Grant",
+        role: "Property manager",
+        email: "theo@hearthside.com",
+      },
+    ],
+  },
+  {
+    company: "Pinecrest Outdoors (campgrounds)",
+    accounts: [
+      { name: "Quinn Harper", role: "Owner", email: "quinn@pinecrest.com" },
+      {
+        name: "Marco Vidal",
+        role: "Park manager",
+        email: "marco@pinecrest.com",
+      },
+      {
+        name: "Jules Carter",
+        role: "Grounds crew",
+        email: "jules@pinecrest.com",
+      },
+    ],
+  },
 ];
 
 const PROVIDERS = [
@@ -250,28 +310,38 @@ export default function LoginPage() {
                   ›
                 </span>
               </summary>
-              <div className="space-y-1 px-1.5 pb-1.5">
-                {DEMO_ACCOUNTS.map((a) => (
-                  <button
-                    key={a.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(a.email);
-                      setPassword("password");
-                    }}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-fill-2"
+              <div className="max-h-80 space-y-1 overflow-y-auto px-1.5 pb-1.5">
+                {DEMO_GROUPS.flatMap((g) => [
+                  <p
+                    key={g.company}
+                    className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-fg-4"
                   >
-                    <span>
-                      <span className="block text-[13px] font-medium text-fg">
-                        {a.name}
+                    {g.company}
+                  </p>,
+                  ...g.accounts.map((a) => (
+                    <button
+                      key={a.email}
+                      type="button"
+                      onClick={() => {
+                        setEmail(a.email);
+                        setPassword("password");
+                      }}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-fill-2"
+                    >
+                      <span>
+                        <span className="block text-[13px] font-medium text-fg">
+                          {a.name}
+                        </span>
+                        <span className="block text-xs text-fg-3">
+                          {a.role}
+                        </span>
                       </span>
-                      <span className="block text-xs text-fg-3">{a.role}</span>
-                    </span>
-                    <span className="font-mono text-[11px] text-fg-4">
-                      {a.email}
-                    </span>
-                  </button>
-                ))}
+                      <span className="font-mono text-[11px] text-fg-4">
+                        {a.email}
+                      </span>
+                    </button>
+                  )),
+                ])}
               </div>
             </details>
           </motion.div>
