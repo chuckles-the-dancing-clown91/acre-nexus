@@ -266,6 +266,12 @@ export const MODULES: ModuleDef[] = [
         permission: "maintenance:read",
       },
       {
+        href: "/console/my-day",
+        label: "My day",
+        icon: "clock",
+        permission: "maintenance:read",
+      },
+      {
         href: "/console/maintenance/schedule",
         label: "Schedule",
         icon: "calendar",
@@ -343,8 +349,8 @@ export const MODULES: ModuleDef[] = [
         permission: "application:read",
       },
       {
-        href: "/console/tours",
-        label: "Tours",
+        href: "/console/showings",
+        label: "Showings",
         icon: "door",
         permission: "application:read",
       },

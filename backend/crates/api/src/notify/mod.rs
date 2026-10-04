@@ -79,6 +79,14 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
               We'll text you next steps shortly.",
     },
     DefaultTemplate {
+        key: "application_invite",
+        subject: "Apply with {company}",
+        body: "Hi {recipient},\n\nThanks for coming by. Here's the application; it takes a \
+               few minutes and your details are already filled in:\n{apply_url}{message}\n\n\
+               — {company}",
+        sms: "{company}: here's the application, your details are filled in: {apply_url}",
+    },
+    DefaultTemplate {
         key: "application_received",
         subject: "We received your application",
         body: "Hi {recipient},\n\nThanks for applying with {company}. Your application is in \

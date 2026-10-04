@@ -74,6 +74,21 @@ the kit's tasks and parts.
   The work list (`GET /tickets`) carries `assignee_name`, `assignee_kind`
   (`tech` or `vendor`), `tasks_total` and `tasks_done`.
 
+## My day (the tech's phone)
+
+`/console/my-day` is the technician's screen for the day, built for a phone:
+the visits booked with them today in time order, then the rest of their
+queue, one card per work order with its tasks. Each card has directions, the
+resident's number when there's a visit, "Nobody home" and "Visit done" on a
+confirmed visit, and a checkbox per task. People on the team (an employee
+profile) also get the clock: **Start the clock** on a card clocks them in on
+that work order (`POST /me/clock/in` with `kind: work_order`), **Switch
+here** moves a running clock to another job, **Stop** clocks out, and the
+card shows the minutes logged there today. The bar at the top shows today's
+and the week's hours and any missed punches. It composes existing routes:
+`GET /appointments?from&to&assignee`, `GET /ticket-queue`, `GET /me/clock`,
+`GET /me/time?from&to`.
+
 ## Scheduling the visit
 
 A work order's **Visit** panel offers up to four time windows

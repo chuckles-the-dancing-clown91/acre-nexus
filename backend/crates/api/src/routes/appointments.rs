@@ -11,7 +11,7 @@ use entity::prelude::{Appointment, Counterparty, MaintenanceTicket, Property, Us
 use rocket::serde::json::Json;
 use rocket::{get, patch, post};
 use schemars::JsonSchema;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -395,24 +395,47 @@ pub async fn create_appointment(
             if !access.sees(p.id) {
                 return Err(ApiError::NotFound("property not found".into()));
             }
-            let title = text(b.title.clone())
-                .ok_or_else(|| ApiError::BadRequest("say what the visit is for".into()))?;
+            // A showing for a lead: the prospect's details come from the lead.
+            let lead = match b.lead_id {
+                Some(lid) => Some(
+                    entity::prelude::Lead::find_by_id(lid)
+                        .filter(entity::lead::Column::TenantId.eq(scope.tenant_id))
+                        .one(&db)
+                        .await?
+                        .ok_or_else(|| ApiError::NotFound("lead not found".into()))?,
+                ),
+                None => None,
+            };
+            let title = match text(b.title.clone()) {
+                Some(t) => t,
+                None if lead.is_some() => format!("Showing: {}", p.name),
+                None => {
+                    return Err(ApiError::BadRequest("say what the visit is for".into()));
+                }
+            };
             let o = appt::Offer {
                 property_id: p.id,
                 unit_id: b.unit_id,
                 kind: "other".into(),
-                subject_type: if b.lead_id.is_some() {
+                subject_type: if lead.is_some() {
                     "lead".into()
                 } else {
                     "custom".into()
                 },
-                subject_id: b.lead_id,
+                subject_id: lead.as_ref().map(|l| l.id),
                 title,
                 windows,
-                with_name: None,
-                with_email: None,
-                with_phone: None,
-                with_role: "resident".into(),
+                with_name: lead.as_ref().map(|l| l.name.clone()),
+                with_email: lead
+                    .as_ref()
+                    .map(|l| l.email.clone())
+                    .filter(|e| !e.trim().is_empty()),
+                with_phone: lead.as_ref().and_then(|l| l.phone.clone()),
+                with_role: if lead.is_some() {
+                    "prospect".into()
+                } else {
+                    "resident".into()
+                },
                 assignee_user_id: Some(user.user_id),
                 vendor_entity_id: None,
                 note: None,
@@ -565,6 +588,23 @@ pub async fn update_appointment(
                     "internal",
                 )
                 .await;
+            }
+        }
+        // A showing that happened moves the lead along.
+        if s == "done" && a.subject_type == "lead" {
+            if let Some(lid) = a.subject_id {
+                if let Some(l) = entity::prelude::Lead::find_by_id(lid)
+                    .filter(entity::lead::Column::TenantId.eq(scope.tenant_id))
+                    .one(&db)
+                    .await?
+                {
+                    if matches!(l.status.as_str(), "new" | "contacted") {
+                        let mut lm: entity::lead::ActiveModel = l.into();
+                        lm.status = sea_orm::Set("toured".into());
+                        lm.updated_at = sea_orm::Set(now.into());
+                        lm.update(&db).await?;
+                    }
+                }
             }
         }
         am.status = sea_orm::Set(s);

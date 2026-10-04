@@ -72,6 +72,7 @@ impl PlatformModule for LeasingModule {
             leads::update::update_lead,
             leads::tour::schedule_tour,
             leads::convert::convert_lead,
+            leads::invite::invite,
             // applications: back-office inbox + intake
             applications::list::list,
             applications::create::create,

@@ -105,6 +105,9 @@ pub struct PublicTheme {
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct ApplyReq {
     pub listing_id: Option<Uuid>,
+    /// The lead this came from, when they followed an invitation link; the
+    /// application attaches to it and the lead moves to `applied`.
+    pub lead_id: Option<Uuid>,
     pub applicant_name: String,
     pub email: String,
     pub phone: Option<String>,

@@ -130,6 +130,7 @@ async fn integration_suite() {
     desk_queues_and_vendor_batches(&c).await;
     appointments_flow(&c).await;
     vendor_link_flow(&c).await;
+    showings_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7633,6 +7634,163 @@ async fn vendor_link_flow(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// A landlord on a phone: a walk-in lead gets a showing booked (the prospect's
+/// details come from the lead), the showing is marked done (the lead is
+/// toured), the application link goes out, and the public form filed from
+/// that link attaches to the lead.
+async fn showings_flow(c: &Ctx) {
+    use rocket::http::{Header, Method};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "application:read",
+            "application:write",
+            "property:read",
+        ],
+    );
+    let (st, lead) = post_json(
+        c,
+        "/leads",
+        &staff,
+        serde_json::json!({ "name": "Priya Natarajan", "email": "priya@example.com", "phone": "503-555-0142", "source": "walk_in" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lead}");
+    let lid = lead["id"].as_str().unwrap().to_string();
+
+    // Book the showing: no title or contact given; the lead supplies them.
+    let start = (chrono::Utc::now() + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(17, 0, 0)
+        .unwrap()
+        .and_utc()
+        .to_rfc3339();
+    let (st, a) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "property_id": pid, "lead_id": lid, "windows": [{ "start": start }] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["kind"], "showing");
+    assert_eq!(a["subject_type"], "lead");
+    assert_eq!(a["with_role"], "prospect");
+    assert_eq!(a["with_name"], "Priya Natarajan");
+    assert_eq!(a["with_email"], "priya@example.com");
+    assert!(a["title"].as_str().unwrap().starts_with("Showing: "));
+    let aid = a["id"].as_str().unwrap().to_string();
+    let (st, a) = send_json(
+        c,
+        Method::Patch,
+        &format!("/appointments/{aid}"),
+        &staff,
+        serde_json::json!({ "confirm": { "start": start } }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["status"], "confirmed");
+    // It's in the showings list.
+    let (_, list) = get_json(c, "/appointments?status=confirmed", &staff).await;
+    assert!(list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["id"] == aid.as_str() && x["kind"] == "showing"));
+
+    // They came: the lead is toured.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/appointments/{aid}"),
+        &staff,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, leads) = get_json(c, "/leads", &staff).await;
+    let l = leads["leads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == lid.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(l["status"], "toured");
+
+    // Send the application: email and text, with a prefilled link.
+    let (st, inv) = post_json(
+        c,
+        &format!("/leads/{lid}/invite"),
+        &staff,
+        serde_json::json!({ "message": "Great meeting you" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    let url = inv["apply_url"].as_str().unwrap().to_string();
+    assert!(url.contains("/apply?tenant=northwind&lead="), "{url}");
+    assert!(url.contains("email=priya%40example.com"), "{url}");
+    let sent = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| j.payload["template"] == "application_invite")
+        .count();
+    assert!(sent >= 2, "email and text went out, got {sent}");
+
+    // Priya applies from the link: the application attaches to the lead.
+    let resp = c
+        .client
+        .post("/public/applications")
+        .header(Header::new("X-Tenant", "northwind"))
+        .header(ContentType::JSON)
+        .body(
+            serde_json::json!({
+                "lead_id": lid,
+                "applicant_name": "Priya Natarajan",
+                "email": "priya@example.com",
+                "phone": "503-555-0142",
+                "annual_income_cents": 9_600_000,
+                "move_in": "2026-11-01",
+                "screening_consent": true
+            })
+            .to_string(),
+        )
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let applied: serde_json::Value = resp.into_json().await.unwrap();
+    let app_id = applied["application_id"].as_str().unwrap().to_string();
+    let (_, leads) = get_json(c, "/leads", &staff).await;
+    let l = leads["leads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == lid.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(l["status"], "applied");
+    assert_eq!(l["application_id"], app_id.as_str());
+    // Inviting again is refused: they've applied.
+    let (st, _) = post_json(
+        c,
+        &format!("/leads/{lid}/invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
 }
 
 async fn appointments_flow(c: &Ctx) {

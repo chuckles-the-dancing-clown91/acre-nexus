@@ -130,6 +130,34 @@ So a prospect moves lead → toured → applied entirely in-console, and the lin
 application then rides the pipeline below. `lead` gains `application_id`
 (migration `m20240101_000041`).
 
+## Showings on a phone
+
+`/console/showings` is the landlord's screen between showings. Today's and
+upcoming showings (appointments with `kind: showing`) sit at the top with
+the prospect's name, one-tap call, text, email and map links, and **Showed
+it** / **No-show**; leads without a showing sit below with **Book a
+showing**, and **New lead** takes a walk-in in three fields.
+
+- **Book a showing** creates an appointment for the lead
+  (`POST /appointments` with `property_id` and `lead_id`): the prospect's
+  name, email and phone come from the lead, the kind is `showing`, the role
+  `prospect`, the title "Showing: <property>". "We already agreed on this
+  time" confirms it at once; otherwise the prospect picks from the link.
+  Marking it done moves the lead to `toured`.
+- **Send application** (`POST /leads/<id>/invite`, `application:write`)
+  emails and texts the prospect the `application_invite` template with a
+  link to the public form, `/apply?tenant=<slug>&lead=<id>&name&email&phone`,
+  so it opens filled in. The link comes back too, to copy or show. The
+  public form (`POST /public/applications`) now takes `lead_id`: the
+  application attaches to the lead, which moves to `applied`. A lead that
+  has applied can't be invited again.
+- **Write the lease** appears once the lead's application is `Approved`
+  (`lease:manage`): property, rent, deposit, start and term in one dialog,
+  then convert-to-lease, generate the document, and send the envelope in a
+  row. The signing links come back for copying or texting; the prospect and
+  the landlord each get theirs by email as well. Signers land on the public
+  page `/sign/<token>?tenant=<slug>`.
+
 ## Application workflow (pipeline)
 
 An application's `status` is a stage in a validated state machine
