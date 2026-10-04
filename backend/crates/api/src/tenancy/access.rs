@@ -215,6 +215,9 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Get, "/attention"),
     (Method::Get, "/to-schedule"),
     (Method::Get, "/mandates"),
+    (Method::Get, "/shopping"),
+    (Method::Post, "/routes/propose"),
+    (Method::Post, "/routes/accept"),
 ];
 
 /// Property routes a scoped person may not use even on their own properties:

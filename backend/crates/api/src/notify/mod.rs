@@ -221,6 +221,18 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{vendor} finished {title} at {property}.{invoice}",
     },
     DefaultTemplate {
+        key: "route_parts_needed",
+        subject: "{assignee}'s route for {when}: what to order",
+        body: "Hi {recipient},\n\n{assignee}'s day for {when} is set: {stops} stops.\n\n               {to_order}{from_stock}{low}\n\nOrder from the close-out, or open the plan: {link}\n\n— {company}",
+        sms: "{assignee}'s route for {when} is set; see what to order: {link}",
+    },
+    DefaultTemplate {
+        key: "route_assigned",
+        subject: "Your day for {when} is planned",
+        body: "Hi {recipient},\n\n{by} planned your {when}: {stops} stops, in order, on My day.\n\n{link}\n\n— {company}",
+        sms: "Your {when} is planned: {stops} stops. {link}",
+    },
+    DefaultTemplate {
         key: "alpha_invite",
         subject: "{company} invites you to Alpha",
         body: "Hi {recipient},\n\n{company} sends work orders through Alpha. With a free \

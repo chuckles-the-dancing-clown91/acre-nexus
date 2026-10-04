@@ -145,6 +145,7 @@ async fn integration_suite() {
     property_data_sources(&c).await;
     owner_approvals_flow(&c).await;
     attention_and_mandates(&c).await;
+    routes_and_shopping(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -8150,6 +8151,237 @@ async fn attention_and_mandates(c: &Ctx) {
     let nobody = mint(c, Some(nw), false, &["property:read"]);
     let (st, _) = get_json(c, "/to-schedule", &nobody).await;
     assert_eq!(st, Status::Forbidden);
+}
+
+/// Plan the day: a route proposed from the work due, with times from the
+/// tasks and the supply run first; accepting books the visits, assigns the
+/// work, settles parts and sets their need-by; the shopping list groups
+/// what's left to buy by day and store.
+async fn routes_and_shopping(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    let jordan = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("jordan@northwind.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded admin");
+    let props = entity::prelude::Property::find()
+        .filter(entity::property::Column::TenantId.eq(nw))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let pid = props[0].id;
+    let pid2 = props.get(1).map(|p| p.id).unwrap_or(pid);
+    // A day well ahead of anything else in the suite.
+    let day = (chrono::Utc::now() + chrono::Duration::days(40)).date_naive();
+
+    // Two work orders due that day: one with tasks (90 minutes) and a part to
+    // buy, one unassigned with no tasks (the default length).
+    let (st, a) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/tickets"),
+        &staff,
+        serde_json::json!({
+            "title": "Replace kitchen faucet",
+            "category": "plumbing",
+            "priority": "high",
+            "due_date": day.to_string(),
+            "assignee_user_id": jordan.id,
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    let a_id = a["id"].as_str().unwrap().to_string();
+    for (title, minutes) in [("Pull the old faucet", 30), ("Fit the new one", 60)] {
+        let (st, r) = send_json(
+            c,
+            Method::Post,
+            &format!("/tickets/{a_id}/tasks"),
+            &staff,
+            serde_json::json!({ "title": title, "trade": "plumbing", "est_minutes": minutes }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{r}");
+    }
+    let (st, part) = send_json(
+        c,
+        Method::Post,
+        &format!("/tickets/{a_id}/parts"),
+        &staff,
+        serde_json::json!({ "name": "Moen Adler faucet", "quantity": 1 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{part}");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/parts/{}", part["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "url": "https://www.homedepot.com/p/Moen-Adler/1001" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, b) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid2}/tickets"),
+        &staff,
+        serde_json::json!({ "title": "Patch hallway drywall", "category": "general", "due_date": day.to_string() }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{b}");
+    let b_id = b["id"].as_str().unwrap().to_string();
+
+    // Propose Jordan's day: the supply run first, the faucet job 90 minutes,
+    // the unassigned drywall job offered too.
+    let (st, route) = send_json(
+        c,
+        Method::Post,
+        "/routes/propose",
+        &staff,
+        serde_json::json!({ "date": day.to_string(), "assignee_user_id": jordan.id, "start": "08:00" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{route}");
+    let stops = route["stops"].as_array().unwrap();
+    assert_eq!(stops[0]["kind"], "store", "{route}");
+    // Overdue unassigned work from earlier scenarios is offered too, so the
+    // day can fill; what doesn't fit is listed as unplaced.
+    let all: Vec<serde_json::Value> = stops
+        .iter()
+        .chain(route["unplaced"].as_array().unwrap().iter())
+        .cloned()
+        .collect();
+    let faucet = all
+        .iter()
+        .find(|s| s["ticket_id"] == a_id)
+        .expect("the faucet job is on the route");
+    assert_eq!(faucet["minutes"], 90);
+    assert_eq!(faucet["to_buy"], 1);
+    assert!(
+        all.iter().any(|s| s["ticket_id"] == b_id),
+        "unassigned work is offered: {route}"
+    );
+    let hd = route["stores"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["store"] == "Home Depot")
+        .expect("a Home Depot run");
+    assert!(hd["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["name"] == "Moen Adler faucet"));
+    assert!(faucet["start"].as_str().unwrap() >= stops[0]["end"].as_str().unwrap());
+
+    // Reading needs maintenance:read; booking needs manage.
+    let reader = mint(c, Some(nw), false, &["maintenance:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Post,
+        "/routes/accept",
+        &reader,
+        serde_json::json!({ "date": day.to_string(), "assignee_user_id": jordan.id, "stops": [] }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Accept: visits booked, the drywall job now Jordan's, parts settled.
+    let accept_stops: Vec<serde_json::Value> = all
+        .iter()
+        .filter(|s| s["ticket_id"] == a_id || s["ticket_id"] == b_id)
+        .map(|s| serde_json::json!({ "ticket_id": s["ticket_id"], "start": s["start"], "end": s["end"] }))
+        .collect();
+    assert_eq!(accept_stops.len(), 2);
+    let (st, done) = send_json(
+        c,
+        Method::Post,
+        "/routes/accept",
+        &staff,
+        serde_json::json!({ "date": day.to_string(), "assignee_user_id": jordan.id, "stops": accept_stops }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{done}");
+    assert_eq!(
+        done["booked"].as_u64().unwrap() as usize,
+        accept_stops.len()
+    );
+    assert!(done["to_order"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|g| g["store"] == "Home Depot"));
+    let (_, t) = get_json(c, &format!("/tickets/{b_id}"), &staff).await;
+    assert_eq!(t["assignee_user_id"], jordan.id.to_string());
+    assert_eq!(t["status"], "scheduled");
+    let (_, t) = get_json(c, &format!("/tickets/{a_id}"), &staff).await;
+    assert_eq!(t["status"], "scheduled");
+    assert_eq!(t["due_date"], day.to_string());
+    let (_, visits) = get_json(
+        c,
+        &format!("/appointments?from={day}&to={day}&assignee={}", jordan.id),
+        &staff,
+    )
+    .await;
+    let mine: Vec<_> = visits
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| {
+            v["status"] == "confirmed" && (v["subject_id"] == a_id || v["subject_id"] == b_id)
+        })
+        .collect();
+    assert_eq!(mine.len(), 2, "{visits}");
+    let (_, parts) = get_json(c, &format!("/tickets/{a_id}/parts"), &staff).await;
+    let p = &parts.as_array().unwrap()[0];
+    assert_eq!(p["status"], "to_order");
+    assert_eq!(p["need_by"], (day - chrono::Duration::days(1)).to_string());
+
+    // Accepting again keeps the visits that match instead of rebooking.
+    let (st, again) = send_json(
+        c,
+        Method::Post,
+        "/routes/accept",
+        &staff,
+        serde_json::json!({ "date": day.to_string(), "assignee_user_id": jordan.id, "stops": [{ "ticket_id": a_id, "start": faucet["start"], "end": faucet["end"] }] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{again}");
+    assert_eq!(again["kept"], 1);
+    assert_eq!(again["booked"], 0);
+
+    // The shopping list for that day: Home Depot, the faucet, on that day.
+    let (st, shop) = get_json(c, &format!("/shopping?from={day}&to={day}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{shop}");
+    let d = shop["days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["day"] == day.to_string())
+        .expect("that day on the list");
+    let hd = d["stores"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["store"] == "Home Depot")
+        .expect("Home Depot that day");
+    assert!(hd["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["ticket_id"] == a_id));
+    let (st, _) = get_json(c, "/shopping?from=2026-02-02&to=2026-01-01", &staff).await;
+    assert_eq!(st, Status::BadRequest);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

@@ -192,6 +192,33 @@ state.
   the schedule and under To schedule, and the schedule page and the property
   profile's Appliances tab have the panel. Local code is the final word; the
   catalog names the common rules.
+- **Plan the day** (`/console/maintenance/plan`, `routes/maintenance/dayplan.rs`):
+  pick a day and a person; `POST /routes/propose` lays the day out. The work
+  is what's due that day (or overdue and still open) or has a visit booked
+  that day, theirs plus unassigned work when a person is picked. Each job's
+  time on site comes from its unfinished tasks' minutes (else
+  `routes.job_minutes`, default 60); driving between stops from the
+  properties' coordinates at city speed (else `routes.drive_minutes`, 20);
+  booked visits keep their times and the rest go nearest first between them,
+  urgent work ahead when distance ties; a supply run (`routes.store_minutes`,
+  30) leads the day when anything has to be bought. The day starts at
+  `routes.day_start` (08:00) and runs `routes.day_minutes` (480); what doesn't
+  fit is listed as unplaced. The proposal carries what to buy by store, what
+  to pull from the shelf, and what runs low after that. **Accept the route**
+  (`POST /routes/accept`, `maintenance:manage`) books each stop as a confirmed
+  visit with the person on it (the resident hears the time; an older offer or
+  booking on the work order is cancelled), hands unassigned work to them,
+  runs each work order's parts list against stock, gives parts to buy a
+  need-by of the day before, tells managers what to order and what's low
+  (`route_parts_needed`), and tells the person their day is set
+  (`route_assigned`). Ordering itself stays in the close-out.
+- **Shopping** (`GET /shopping?from&to`, the page's second tab): parts still
+  wanted on open work orders, by the day the work is on (a confirmed visit's
+  day, else the due date; overdue work lands on the first day), then by store
+  (the part's store from its link, its vendor, or "Any store"), with an
+  estimate where costs are known; what's on the shelf is listed as pulls, and
+  stock that would run below its reorder level is flagged. Parts on work
+  orders with no date yet sit in their own group.
 - **Make-ready / turnover**: completing a **move-out inspection** (Phase 5)
   auto-opens a high-priority "Turnover / make-ready" ticket on the unit and
   flips the unit's status to `make_ready` — gated by the
@@ -238,6 +265,9 @@ runs an external desk, and nothing here precludes it.
 | GET | `/mandates?property_id=` | `maintenance:read` |
 | POST | `/properties/{id}/mandates` | `maintenance:manage` |
 | GET | `/attention` | `property:read` |
+| GET | `/shopping?from&to` | `maintenance:read` |
+| POST | `/routes/propose` | `maintenance:read` |
+| POST | `/routes/accept` | `maintenance:manage` |
 
 Quotes ride along on `GET /tickets/{id}`.
 

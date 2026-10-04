@@ -85,6 +85,16 @@ pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
 /// Days before a routine's due date it shows as "to schedule".
 pub const HELPDESK_PLAN_LEAD_DAYS: &str = "helpdesk.plan_lead_days";
+/// When a planned day starts, HH:MM in the workspace's zone.
+pub const ROUTES_DAY_START: &str = "routes.day_start";
+/// How long a planned day is, in minutes.
+pub const ROUTES_DAY_MINUTES: &str = "routes.day_minutes";
+/// Driving between stops when a property has no coordinates, in minutes.
+pub const ROUTES_DRIVE_MINUTES: &str = "routes.drive_minutes";
+/// The supply run at the start of a day with parts to buy, in minutes.
+pub const ROUTES_STORE_MINUTES: &str = "routes.store_minutes";
+/// Time on site for a work order whose tasks carry no estimate, in minutes.
+pub const ROUTES_JOB_MINUTES: &str = "routes.job_minutes";
 /// Work estimated at or over this many cents waits for the owner's approval
 /// before it's sent out (0 = never ask).
 pub const MAINTENANCE_OWNER_APPROVAL_CENTS: &str = "maintenance.owner_approval_cents";
@@ -493,6 +503,47 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Helpdesk",
         kind: SettingKind::Int,
         default: || json!(14),
+    },
+    SettingDef {
+        key: ROUTES_DAY_START,
+        label: "Planned day starts at",
+        description:
+            "When a technician's planned day starts (HH:MM, in the workspace's time zone).",
+        group: "Helpdesk",
+        kind: SettingKind::Text,
+        default: || json!("08:00"),
+    },
+    SettingDef {
+        key: ROUTES_DAY_MINUTES,
+        label: "Planned day length (minutes)",
+        description: "Work past this goes to the next day when a route is proposed.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(480),
+    },
+    SettingDef {
+        key: ROUTES_DRIVE_MINUTES,
+        label: "Driving between stops (minutes)",
+        description: "Used when a property has no coordinates; otherwise the distance decides.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(20),
+    },
+    SettingDef {
+        key: ROUTES_STORE_MINUTES,
+        label: "Supply run (minutes)",
+        description: "The stop at the store at the start of a day with parts to buy.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(30),
+    },
+    SettingDef {
+        key: ROUTES_JOB_MINUTES,
+        label: "Time on site without an estimate (minutes)",
+        description: "A work order whose tasks carry no minutes is planned at this length.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(60),
     },
     SettingDef {
         key: MAINTENANCE_OWNER_APPROVAL_CENTS,

@@ -5,6 +5,7 @@
 pub mod add_comment;
 pub mod assets;
 pub mod create_ticket;
+pub mod dayplan;
 pub mod desk;
 pub mod dto;
 pub mod get_ticket;
