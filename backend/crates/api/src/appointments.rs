@@ -237,6 +237,24 @@ pub async fn offer(
     Ok((saved, raw))
 }
 
+/// Send the offer again with a fresh link: for someone who hasn't picked.
+pub async fn resend_offer(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    a: entity::appointment::Model,
+) -> ApiResult<()> {
+    let raw = crate::auth::random_secret(24);
+    let mut am: entity::appointment::ActiveModel = a.into();
+    am.token_hash = Set(Some(crate::auth::hash_secret(&raw)));
+    am.updated_at = Set(Utc::now().into());
+    let saved = am.update(db).await?;
+    let mut vars = person_vars(db, tenant_id, &saved).await;
+    vars["windows"] = json!(offered_words(db, tenant_id, &saved).await);
+    vars["link"] = json!(book_url(&raw));
+    send_both(db, tenant_id, &saved, "appointment_offer_reminder", vars).await;
+    Ok(())
+}
+
 async fn offered_words(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,

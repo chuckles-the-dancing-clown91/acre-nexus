@@ -66,6 +66,7 @@ const GROUP_ORDER = [
   "Reminders",
   "Texts",
   "Helpdesk",
+  "Follow-ups",
   "Team & payroll",
 ];
 

@@ -121,6 +121,23 @@ staff get a `ticket_follow_up` notification (once per ticket per date —
 re-dating the follow-up re-arms it). Leaving on-hold clears the waiting
 state.
 
+## Follow-ups the scheduler sends
+
+`api/src/followups.rs`, run from the hourly helpdesk scan. Each goes out once
+(the notice log keeps the key) and only while it still makes sense; each has
+a setting under **Follow-ups** (0 turns it off):
+
+| What | To whom | When | Setting (default) | Template |
+| --- | --- | --- | --- | --- |
+| How did it go? Rate it or say what's wrong, with the request link | the resident on the lease (email and text) | the work order has been resolved or closed this long and has no rating | `followups.rating_hours` (24) | `ticket_rating_request` |
+| Still fixed? Reply to reopen | the resident | this long after it was finished | `followups.checkin_days` (7) | `ticket_checkin` |
+| Still need your answer, with a fresh link | a vendor sent tasks by email who hasn't answered from their link (tasks not done) | this long after dispatch, once per batch; an internal note lands on the work order | `followups.vendor_hours` (48) | `vendor_task_nudge` |
+| Pick a time, with a fresh link | the person offered visit windows who hasn't picked | this long after the offer, while a window is still ahead | `followups.offer_hours` (24) | `appointment_offer_reminder` |
+| Ready to apply? with the prefilled application link | a prospect marked toured with no application | this long after the tour | `followups.prospect_days` (2) | `lead_after_showing` |
+
+The scan summary carries the counts (`follow_ups`). Older items age out
+(finished work after 60 days, dispatches and offers after 30, tours after 45).
+
 ## Resident updates & reviews
 
 - **Updates pushed and emailed**: every resident-facing event — staff public

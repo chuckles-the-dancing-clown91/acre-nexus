@@ -146,6 +146,7 @@ async fn integration_suite() {
     owner_approvals_flow(&c).await;
     attention_and_mandates(&c).await;
     routes_and_shopping(&c).await;
+    follow_ups_go_out(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -8382,6 +8383,386 @@ async fn routes_and_shopping(c: &Ctx) {
         .any(|i| i["ticket_id"] == a_id));
     let (st, _) = get_json(c, "/shopping?from=2026-02-02&to=2026-01-01", &staff).await;
     assert_eq!(st, Status::BadRequest);
+}
+
+/// Follow-ups the scheduler sends on its own: the resident after finished
+/// work (rate it, then still fixed?), a quiet vendor, an unanswered offer of
+/// times, and a prospect who toured. Each once, each only while due.
+async fn follow_ups_go_out(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "property:read",
+            "application:read",
+            "application:write",
+        ],
+    );
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("the seeded resident");
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+    let now = chrono::Utc::now();
+    let ago = |h: i64| -> sea_orm::prelude::DateTimeWithTimeZone {
+        (now - chrono::Duration::hours(h)).into()
+    };
+
+    // Nothing is due yet: the first run sends nothing for these.
+    let (st, t) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Porch light flickers", "category": "electrical" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}"),
+        &staff,
+        serde_json::json!({ "status": "resolved" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let _ = crate::followups::run(&c.db, nw).await.unwrap();
+    let rating_key = format!("followup:rating:{tid}");
+    assert!(!crate::notices::claimed(&c.db, nw, &rating_key)
+        .await
+        .unwrap());
+
+    // Two days on: the rating ask goes out, once; the check-in waits for a week.
+    {
+        let t =
+            entity::prelude::MaintenanceTicket::find_by_id(uuid::Uuid::parse_str(&tid).unwrap())
+                .one(&c.db)
+                .await
+                .unwrap()
+                .unwrap();
+        let mut am: entity::maintenance_ticket::ActiveModel = t.into();
+        am.resolved_at = sea_orm::Set(Some(ago(48)));
+        am.update(&c.db).await.unwrap();
+    }
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert!(out["rating_requests"].as_u64().unwrap() >= 1, "{out}");
+    assert!(crate::notices::claimed(&c.db, nw, &rating_key)
+        .await
+        .unwrap());
+    assert!(
+        !crate::notices::claimed(&c.db, nw, &format!("followup:checkin:{tid}"))
+            .await
+            .unwrap()
+    );
+    let sms = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_sms"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| {
+            j.payload["template"] == "ticket_rating_request" && j.payload["owner_id"] == tid
+        })
+        .count();
+    let email = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .any(|j| j.payload["template"] == "ticket_rating_request" && j.payload["owner_id"] == tid);
+    assert!(sms >= 1 || email, "the resident was asked by text or email");
+    let out2 = crate::followups::run(&c.db, nw).await.unwrap();
+    let again = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_sms"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|j| {
+            j.payload["template"] == "ticket_rating_request" && j.payload["owner_id"] == tid
+        })
+        .count();
+    assert_eq!(again, sms, "not asked twice: {out2}");
+    // Eight days on: the check-in.
+    {
+        let t =
+            entity::prelude::MaintenanceTicket::find_by_id(uuid::Uuid::parse_str(&tid).unwrap())
+                .one(&c.db)
+                .await
+                .unwrap()
+                .unwrap();
+        let mut am: entity::maintenance_ticket::ActiveModel = t.into();
+        am.resolved_at = sea_orm::Set(Some(ago(24 * 8)));
+        am.update(&c.db).await.unwrap();
+    }
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert!(out["checkins"].as_u64().unwrap() >= 1, "{out}");
+    assert!(
+        crate::notices::claimed(&c.db, nw, &format!("followup:checkin:{tid}"))
+            .await
+            .unwrap()
+    );
+
+    // A vendor sent two tasks by email three days ago with no answer: one
+    // nudge for the batch, a fresh link, and a note on the work order.
+    let (st, vendor) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Quiet Electric", "contact_name": "Q",
+            "email": "quiet@electric.example", "trades": ["electrical"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{vendor}");
+    let vid = vendor["id"].as_str().unwrap().to_string();
+    let (st, t2) = post_json(
+        c,
+        &format!("/properties/{}/tickets", t["property_id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "title": "Panel buzzes", "category": "electrical", "priority": "high" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t2}");
+    let tid2 = t2["id"].as_str().unwrap().to_string();
+    let mut ids = vec![];
+    for title in ["Open the panel", "Torque the breakers"] {
+        let (_, tasks) = post_json(
+            c,
+            &format!("/tickets/{tid2}/tasks"),
+            &staff,
+            serde_json::json!({ "title": title, "trade": "electrical", "needs_contractor": true }),
+        )
+        .await;
+        ids.push(
+            tasks
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|x| x["title"] == title)
+                .unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    let (st, sent) = post_json(
+        c,
+        &format!("/tickets/{tid2}/dispatch-tasks"),
+        &staff,
+        serde_json::json!({ "task_ids": ids, "entity_id": vid }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{sent}");
+    let before: Vec<entity::ticket_task::Model> = entity::prelude::TicketTask::find()
+        .filter(entity::ticket_task::Column::TicketId.eq(uuid::Uuid::parse_str(&tid2).unwrap()))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let old_hash = before[0]
+        .vendor_token_hash
+        .clone()
+        .expect("a link was minted");
+    for t in before {
+        let mut am: entity::ticket_task::ActiveModel = t.into();
+        am.dispatched_at = sea_orm::Set(Some(ago(72)));
+        am.update(&c.db).await.unwrap();
+    }
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert_eq!(out["vendor_nudges"], 1, "{out}");
+    let after: Vec<entity::ticket_task::Model> = entity::prelude::TicketTask::find()
+        .filter(entity::ticket_task::Column::TicketId.eq(uuid::Uuid::parse_str(&tid2).unwrap()))
+        .all(&c.db)
+        .await
+        .unwrap();
+    assert!(after
+        .iter()
+        .all(|t| t.vendor_token_hash.as_deref() != Some(old_hash.as_str())));
+    assert_eq!(
+        after[0].vendor_token_hash, after[1].vendor_token_hash,
+        "one link for the batch"
+    );
+    let nudge = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|j| j.payload["template"] == "vendor_task_nudge")
+        .expect("the vendor nudge email");
+    assert_eq!(nudge.payload["to"], "quiet@electric.example");
+    let link = nudge.payload["vars"]["vendor_link"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(link.contains("/vendor/"));
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert_eq!(out["vendor_nudges"], 0, "once per batch");
+    let (_, full) = get_json(c, &format!("/tickets/{tid2}"), &staff).await;
+    assert!(
+        full["comments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["body"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("Nudged Quiet Electric")),
+        "{full}"
+    );
+
+    // Times offered two days ago for a visit next week, not picked: the link
+    // goes again, once; an offer whose times have passed is left alone.
+    let (st, t3) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Closet door off its track", "category": "general" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t3}");
+    let tid3 = t3["id"].as_str().unwrap().to_string();
+    let next_week = (now + chrono::Duration::days(7)).to_rfc3339();
+    let (st, offer) = post_json(
+        c,
+        "/appointments",
+        &staff,
+        serde_json::json!({ "ticket_id": tid3, "windows": [{ "start": next_week }] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{offer}");
+    let aid = uuid::Uuid::parse_str(offer["id"].as_str().unwrap()).unwrap();
+    {
+        let a = entity::prelude::Appointment::find_by_id(aid)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let old = a.token_hash.clone();
+        let mut am: entity::appointment::ActiveModel = a.into();
+        am.created_at = sea_orm::Set(ago(48));
+        am.update(&c.db).await.unwrap();
+        let out = crate::followups::run(&c.db, nw).await.unwrap();
+        assert_eq!(out["offer_reminders"], 1, "{out}");
+        let a = entity::prelude::Appointment::find_by_id(aid)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(a.token_hash, old, "a fresh link");
+        assert_eq!(a.status, "proposed");
+        let out = crate::followups::run(&c.db, nw).await.unwrap();
+        assert_eq!(out["offer_reminders"], 0);
+    }
+
+    // A prospect who toured three days ago and hasn't applied hears once.
+    let (st, lead) = post_json(
+        c,
+        "/leads",
+        &staff,
+        serde_json::json!({ "name": "Omar Haddad", "email": "omar@example.com", "phone": "503-555-0199", "source": "walk_in" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lead}");
+    let lid = uuid::Uuid::parse_str(lead["id"].as_str().unwrap()).unwrap();
+    {
+        let l = entity::prelude::Lead::find_by_id(lid)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut am: entity::lead::ActiveModel = l.into();
+        am.status = sea_orm::Set("toured".into());
+        am.updated_at = sea_orm::Set(ago(72));
+        am.update(&c.db).await.unwrap();
+    }
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert_eq!(out["prospect_nudges"], 1, "{out}");
+    let nudge = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_email"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|j| j.payload["template"] == "lead_after_showing")
+        .expect("the prospect email");
+    assert_eq!(nudge.payload["to"], "omar@example.com");
+    assert!(nudge.payload["vars"]["link"]
+        .as_str()
+        .unwrap()
+        .contains("/apply?tenant=northwind&lead="));
+    let out = crate::followups::run(&c.db, nw).await.unwrap();
+    assert_eq!(out["prospect_nudges"], 0, "once");
+
+    // Turned off, nothing goes: a second finished work order with the hours at 0.
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::FOLLOWUPS_RATING_HOURS,
+        serde_json::json!(0),
+    )
+    .await
+    .unwrap();
+    let (st, t4) = post_json(
+        c,
+        "/my/tickets",
+        &res,
+        serde_json::json!({ "title": "Doorbell dead", "category": "electrical" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t4}");
+    let tid4 = t4["id"].as_str().unwrap().to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid4}"),
+        &staff,
+        serde_json::json!({ "status": "resolved" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    {
+        let t =
+            entity::prelude::MaintenanceTicket::find_by_id(uuid::Uuid::parse_str(&tid4).unwrap())
+                .one(&c.db)
+                .await
+                .unwrap()
+                .unwrap();
+        let mut am: entity::maintenance_ticket::ActiveModel = t.into();
+        am.resolved_at = sea_orm::Set(Some(ago(48)));
+        am.update(&c.db).await.unwrap();
+    }
+    let _ = crate::followups::run(&c.db, nw).await.unwrap();
+    assert!(
+        !crate::notices::claimed(&c.db, nw, &format!("followup:rating:{tid4}"))
+            .await
+            .unwrap()
+    );
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::FOLLOWUPS_RATING_HOURS,
+        serde_json::json!(24),
+    )
+    .await
+    .unwrap();
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

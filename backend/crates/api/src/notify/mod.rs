@@ -221,6 +221,44 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "{vendor} finished {title} at {property}.{invoice}",
     },
     DefaultTemplate {
+        key: "ticket_rating_request",
+        subject: "How did we do on \"{title}\"?",
+        body: "Hi {name},\n\nWe marked \"{title}\" finished. Did it go well? A quick rating \
+               helps us do better, and if anything isn't right, tell us there and we'll \
+               come back.\n\n{link}\n\n— {company}",
+        sms: "{company}: how did we do on \"{title}\"? Rate it or tell us what's wrong: {link}",
+    },
+    DefaultTemplate {
+        key: "ticket_checkin",
+        subject: "Still fixed? \"{title}\"",
+        body: "Hi {name},\n\nIt's been a week since we finished \"{title}\". Is everything \
+               still working? If not, reply on the request and we'll reopen it.\n\n{link}\n\n— {company}",
+        sms: "{company}: a week on, is \"{title}\" still fixed? If not: {link}",
+    },
+    DefaultTemplate {
+        key: "vendor_task_nudge",
+        subject: "Still need an answer: {title}",
+        body: "Hi {vendor},\n\nWe sent you {count} task(s) on \"{title}\" {days} day(s) ago and \
+               haven't heard back:\n{tasks}\n\nCan you take it? Accept, decline or say when \
+               from this link (no account needed):\n{vendor_link}\n\n— {company}",
+        sms: "{company}: still need your answer on \"{title}\" ({count} tasks): {vendor_link}",
+    },
+    DefaultTemplate {
+        key: "appointment_offer_reminder",
+        subject: "Pick a time for {title}",
+        body: "Hi {name},\n\nWe offered times for {title} at {property} and haven't heard \
+               which works:\n{windows}\n\nPick one here, or tell us a better time:\n{link}\n\n— {company}",
+        sms: "{company}: pick a time for {title}: {link}",
+    },
+    DefaultTemplate {
+        key: "lead_after_showing",
+        subject: "Ready to apply?",
+        body: "Hi {name},\n\nThanks for coming to see the place. If it felt right, the \
+               application takes a few minutes and your details are already filled in:\n\n{link}\n\n\
+               Questions? Just reply.\n\n— {company}",
+        sms: "{company}: thanks for the tour. Ready to apply? {link}",
+    },
+    DefaultTemplate {
         key: "route_parts_needed",
         subject: "{assignee}'s route for {when}: what to order",
         body: "Hi {recipient},\n\n{assignee}'s day for {when} is set: {stops} stops.\n\n               {to_order}{from_stock}{low}\n\nOrder from the close-out, or open the plan: {link}\n\n— {company}",

@@ -173,6 +173,10 @@ pub async fn handle_scan_job(
         Ok(n) => summary["low_stock_notified"] = json!(n),
         Err(e) => tracing::error!("helpdesk: low-stock scan failed: {e}"),
     }
+    match crate::followups::run(db, tenant_id).await {
+        Ok(v) => summary["follow_ups"] = v,
+        Err(e) => tracing::error!("helpdesk: follow-ups failed: {e}"),
+    }
     match crate::owner_approvals::nudge_pending(db, tenant_id).await {
         Ok(n) => summary["owner_nudges"] = json!(n),
         Err(e) => tracing::error!("helpdesk: owner nudges failed: {e}"),

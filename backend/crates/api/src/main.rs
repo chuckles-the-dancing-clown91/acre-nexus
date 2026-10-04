@@ -40,6 +40,7 @@ mod enrichment;
 mod error;
 mod esign;
 mod finance;
+mod followups;
 mod geo;
 mod google_places;
 mod guards;

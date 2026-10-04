@@ -85,6 +85,16 @@ pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
 /// Days before a routine's due date it shows as "to schedule".
 pub const HELPDESK_PLAN_LEAD_DAYS: &str = "helpdesk.plan_lead_days";
+/// Hours after a work order is finished to ask the resident how it went (0 = off).
+pub const FOLLOWUPS_RATING_HOURS: &str = "followups.rating_hours";
+/// Days after a work order is finished to ask the resident if it's still fixed (0 = off).
+pub const FOLLOWUPS_CHECKIN_DAYS: &str = "followups.checkin_days";
+/// Hours after sending tasks to a vendor by email to nudge them if they haven't answered (0 = off).
+pub const FOLLOWUPS_VENDOR_HOURS: &str = "followups.vendor_hours";
+/// Hours after offering visit times to remind the person if they haven't picked (0 = off).
+pub const FOLLOWUPS_OFFER_HOURS: &str = "followups.offer_hours";
+/// Days after a showing to nudge a prospect who hasn't applied (0 = off).
+pub const FOLLOWUPS_PROSPECT_DAYS: &str = "followups.prospect_days";
 /// When a planned day starts, HH:MM in the workspace's zone.
 pub const ROUTES_DAY_START: &str = "routes.day_start";
 /// How long a planned day is, in minutes.
@@ -503,6 +513,46 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Helpdesk",
         kind: SettingKind::Int,
         default: || json!(14),
+    },
+    SettingDef {
+        key: FOLLOWUPS_RATING_HOURS,
+        label: "Ask the resident to rate finished work after (hours)",
+        description: "Email and text once the work order has been finished this long and nobody has rated it. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(24),
+    },
+    SettingDef {
+        key: FOLLOWUPS_CHECKIN_DAYS,
+        label: "Check in on finished work after (days)",
+        description: "Ask the resident whether it's still fixed, once. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(7),
+    },
+    SettingDef {
+        key: FOLLOWUPS_VENDOR_HOURS,
+        label: "Nudge a quiet vendor after (hours)",
+        description: "Tasks sent by email with no answer from the vendor's link get one reminder with a fresh link. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(48),
+    },
+    SettingDef {
+        key: FOLLOWUPS_OFFER_HOURS,
+        label: "Remind about offered visit times after (hours)",
+        description: "The person offered times gets the link again once, while the times are still ahead. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(24),
+    },
+    SettingDef {
+        key: FOLLOWUPS_PROSPECT_DAYS,
+        label: "Nudge a prospect after a showing (days)",
+        description: "A prospect who toured and hasn't applied gets the application link once. 0 turns it off.",
+        group: "Follow-ups",
+        kind: SettingKind::Int,
+        default: || json!(2),
     },
     SettingDef {
         key: ROUTES_DAY_START,
