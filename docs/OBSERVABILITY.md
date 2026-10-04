@@ -54,4 +54,14 @@ at `/metrics` **and** POSTs to the error webhook within seconds, carrying the
 | Var | Effect |
 |---|---|
 | `LOG_FORMAT=json` | newline-delimited JSON logs (for aggregators) |
+| `NO_COLOR` | never colour the console output (it's already plain when stdout isn't a terminal) |
 | `ERROR_WEBHOOK_URL` | error/panic reports POSTed here (unset = metrics only) |
+
+## Request log
+
+Each request is one line, `METHOD /path status Nms requestid`, from
+`httplog.rs`; the request id joins it to its `audit_log` row. 4xx lines are
+warnings and 5xx are errors. Preflights, `/health`, `/metrics` and the unread
+badge poll are left out unless they fail. Rocket's own five-line-per-request
+output is turned off (`rocket::server=off`), colour is off unless stdout is a
+terminal, and `RUST_LOG` still overrides all of it.

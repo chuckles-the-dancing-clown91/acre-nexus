@@ -47,6 +47,7 @@ mod geo;
 mod google_places;
 mod guards;
 mod helpdesk;
+mod httplog;
 mod imports;
 mod kit_catalog;
 mod language;
@@ -124,10 +125,16 @@ async fn rocket() -> _ {
     // when present, see `error::ApiError`'s Responder — joins it to the matching
     // `audit_log` row written by `AuditFairing`); anything else stays
     // human-readable `fmt` output for local development.
+    // Rocket's own request lines (five per request) are replaced by one line
+    // from `httplog`; its launch banner stays.
     let env_filter = || {
         tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "info,sqlx=warn".into())
+            .unwrap_or_else(|_| "info,sqlx=warn,rocket::server=off,rocket::shield=warn".into())
     };
+    // Colour only when a person is reading a terminal, so files and
+    // aggregators never see escape codes (`NO_COLOR` turns it off outright).
+    let ansi = std::io::IsTerminal::is_terminal(&std::io::stdout())
+        && std::env::var_os("NO_COLOR").is_none();
     let json_logs = std::env::var("LOG_FORMAT")
         .map(|v| v.eq_ignore_ascii_case("json"))
         .unwrap_or(false);
@@ -138,6 +145,7 @@ async fn rocket() -> _ {
             .try_init()
     } else {
         tracing_subscriber::fmt()
+            .with_ansi(ansi)
             .with_env_filter(env_filter())
             .try_init()
     };
@@ -195,13 +203,15 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
     // (`String`, 1 MiB) both exceed Rocket's 8 KiB defaults.
     let figment = rocket::Config::figment()
         .merge(("limits.bytes", "100MiB"))
-        .merge(("limits.string", "1MiB"));
+        .merge(("limits.string", "1MiB"))
+        .merge(("cli_colors", false));
     let mut app = rocket::custom(figment)
         .manage(state)
         .attach(ratelimit::RateLimiter::from_env())
         .attach(cors::Cors)
         .attach(db::TxCommit)
-        .attach(audit::AuditFairing);
+        .attach(audit::AuditFairing)
+        .attach(httplog::HttpLog);
 
     let (core_routes, core_spec) = routes::core_api();
     if let Err(e) = merge_specs(&mut spec, &"", &core_spec) {
