@@ -297,8 +297,9 @@ relative to `backend/crates/api/src` unless they start with `frontend/`.
 
 ## 9. Go-live hardening ◐
 
-Shipped: list limits and Settings → Schedule (job history, run now). Left:
-backups and the restore drill, Playwright journeys, the provider go-live page.
+Shipped: list limits and Settings → Schedule (job history, run now), encrypted
+backups with a timed restore drill, and the provider go-live page
+([`DEPLOYMENT.md`](DEPLOYMENT.md)). Left: Playwright journeys.
 
 **Today.** `GET /applications`, `GET /my/applications` and `GET /public/listings`
 return every row (`routes/applications/list.rs`, `routes/applications/portal.rs`,

@@ -149,6 +149,7 @@ async fn integration_suite() {
     follow_ups_go_out(&c).await;
     analytics_and_map(&c).await;
     texts_round_two(&c).await;
+    go_live_page(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -9048,6 +9049,74 @@ async fn texts_round_two(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// The go-live page: every provider listed with its needs, a vault key
+/// counting as present, backups and drills recorded by the scripts showing up,
+/// and only integrations managers allowed in.
+async fn go_live_page(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(c, Some(nw), false, &["integrations:manage"]);
+    crate::secrets::store(&c.db, Some(nw), "checkr.api_key", "test-key-1234", None)
+        .await
+        .unwrap();
+    let (st, page) = get_json(c, "/go-live", &admin).await;
+    assert_eq!(st, Status::Ok, "{page}");
+    let providers = page["providers"].as_array().unwrap();
+    assert_eq!(providers.len(), crate::routes::go_live::PROVIDERS.len());
+    let checkr = providers.iter().find(|p| p["key"] == "checkr").unwrap();
+    assert_eq!(checkr["readiness"], "simulated");
+    assert!(checkr["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["label"] == "checkr.api_key in the vault" && r["present"] == true));
+    assert!(checkr["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["label"]
+            .as_str()
+            .unwrap()
+            .starts_with("webhook.checkr.secret")
+            && r["present"] == false));
+    let backup = |ok: bool, hours: i64| entity::backup_run::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        kind: Set(if hours < 0 {
+            "restore_drill".into()
+        } else {
+            "backup".into()
+        }),
+        started_at: Set((chrono::Utc::now() - chrono::Duration::hours(hours.abs())).into()),
+        finished_at: Set(Some(chrono::Utc::now().into())),
+        ok: Set(ok),
+        bytes: Set(Some(123_456)),
+        location: Set(Some("/var/backups/acre/acre-test.dump.age".into())),
+        detail: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+    };
+    backup(true, 5).insert(&c.db).await.unwrap();
+    backup(false, 1).insert(&c.db).await.unwrap();
+    backup(true, -2).insert(&c.db).await.unwrap();
+    let (_, page) = get_json(c, "/go-live", &admin).await;
+    assert_eq!(page["last_backup"]["ok"], false, "the newest run failed");
+    assert!(page["last_good_backup_at"].is_string());
+    let check = |k: &str| {
+        page["platform"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["key"] == k)
+            .unwrap()["ok"]
+            .clone()
+    };
+    assert_eq!(check("backup"), true);
+    assert_eq!(check("drill"), true);
+    assert_eq!(check("production"), false);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/go-live", &reader).await;
+    assert_eq!(st, Status::Forbidden);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

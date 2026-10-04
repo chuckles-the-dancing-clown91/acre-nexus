@@ -99,6 +99,7 @@ impl PlatformModule for IntegrationsModule {
             texts::twilio::inbound,
             texts::twilio::status,
             texts::twilio::voice,
+            crate::routes::go_live::go_live,
             texts::twilio::voice_after,
             // document service
             documents::upload::upload,

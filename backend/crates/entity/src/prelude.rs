@@ -10,6 +10,7 @@ pub use super::asset_part::Entity as AssetPart;
 pub use super::assignment::Entity as Assignment;
 pub use super::audit_log::Entity as AuditLog;
 pub use super::background_job::Entity as BackgroundJob;
+pub use super::backup_run::Entity as BackupRun;
 pub use super::bank_account::Entity as BankAccount;
 pub use super::bank_txn::Entity as BankTxn;
 pub use super::business_profile::Entity as BusinessProfile;

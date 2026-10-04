@@ -212,6 +212,9 @@ async fn record_call<C: ConnectionTrait + Sync>(
             "provider": provider_key,
             "status": status,
             "error": error,
+            // Simulated calls are audited too; the go-live page counts only
+            // these real ones.
+            "live": is_live(provider_key),
         })),
     )
     .await;

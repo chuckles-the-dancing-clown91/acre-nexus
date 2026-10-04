@@ -441,6 +441,12 @@ export const MODULES: ModuleDef[] = [
         icon: "plug",
         permission: "integrations:manage",
       },
+      {
+        href: "/console/go-live",
+        label: "Go live",
+        icon: "rocket",
+        permission: "integrations:manage",
+      },
     ],
   },
   {

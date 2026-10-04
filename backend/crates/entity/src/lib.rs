@@ -27,6 +27,7 @@ pub mod asset_part;
 pub mod assignment;
 pub mod audit_log;
 pub mod background_job;
+pub mod backup_run;
 pub mod bank_account;
 pub mod bank_txn;
 pub mod business_profile;

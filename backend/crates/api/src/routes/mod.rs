@@ -32,6 +32,7 @@ pub mod entities;
 pub mod esign;
 pub mod fees;
 pub mod geo;
+pub mod go_live;
 pub mod hoa;
 pub mod iam;
 pub mod imports;
