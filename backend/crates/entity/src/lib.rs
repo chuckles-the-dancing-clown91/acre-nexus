@@ -92,6 +92,8 @@ pub mod maintenance_ticket;
 pub mod membership;
 pub mod message;
 pub mod message_thread;
+pub mod meter;
+pub mod meter_reading;
 pub mod mortgage;
 pub mod notice_log;
 pub mod notification;

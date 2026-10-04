@@ -75,6 +75,8 @@ pub use super::maintenance_ticket::Entity as MaintenanceTicket;
 pub use super::membership::Entity as Membership;
 pub use super::message::Entity as Message;
 pub use super::message_thread::Entity as MessageThread;
+pub use super::meter::Entity as Meter;
+pub use super::meter_reading::Entity as MeterReading;
 pub use super::mortgage::Entity as Mortgage;
 pub use super::notice_log::Entity as NoticeLog;
 pub use super::notification::Entity as Notification;

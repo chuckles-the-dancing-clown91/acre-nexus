@@ -155,6 +155,7 @@ async fn integration_suite() {
     vendor_portal_flow(&c).await;
     campground_flow(&c).await;
     family_plan_flow(&c).await;
+    units_and_meters_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -329,6 +330,16 @@ fn mint(c: &Ctx, tenant: Option<Uuid>, staff: bool, perms: &[&str]) -> String {
         perms.iter().map(|s| s.to_string()).collect(),
     )
     .expect("mint access token")
+}
+
+/// A unit of a property, for tests that put a lease on a building.
+async fn a_unit(c: &Ctx, property_id: Uuid) -> Option<Uuid> {
+    entity::prelude::Unit::find()
+        .filter(entity::unit::Column::PropertyId.eq(property_id))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .map(|u| u.id)
 }
 
 async fn tenant_id(c: &Ctx, slug: &str) -> Uuid {
@@ -4177,6 +4188,7 @@ async fn batch_a_limits_jobs_and_reminders(c: &Ctx) {
         &format!("/properties/{pid}/leases"),
         &admin,
         serde_json::json!({
+            "unit_id": a_unit(c, pid).await,
             "tenant_name": "Rita Reminder",
             "tenant_email": "rita.reminder@example.com",
             "rent_cents": 150000,
@@ -4719,6 +4731,7 @@ async fn batch_c_texts(c: &Ctx) {
         &format!("/properties/{pid}/leases"),
         &admin,
         serde_json::json!({
+            "unit_id": a_unit(c, pid).await,
             "tenant_name": "Tess Texter",
             "tenant_email": "tess.texter@example.com",
             "tenant_phone": "(760) 555-0142",
@@ -10764,4 +10777,196 @@ async fn family_plan_flow(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Ok);
+}
+
+/// A house is one unit, a building has many, a campground has none; each unit
+/// carries its own equipment and meters, and the lease follows the unit.
+async fn units_and_meters_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:read",
+            "lease:manage",
+            "maintenance:read",
+            "maintenance:manage",
+        ],
+    );
+    let new_property = |name: &str, ty: &str, units: i32| serde_json::json!({ "name": name, "address": "1 Test Way", "city": "Portland", "units": units, "occupied_units": 0, "monthly_rent_cents": 0, "property_type": ty });
+
+    // A house: one unit, made for it, and no second.
+    let (st, house) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Oak House", "Single Family", 1),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{house}");
+    assert_eq!(house["property_type"], "single_family");
+    let hid = house["id"].as_str().unwrap().to_string();
+    let (_, units) = get_json(c, &format!("/properties/{hid}/units"), &staff).await;
+    assert_eq!(units.as_array().unwrap().len(), 1);
+    assert_eq!(units[0]["unit_number"], "Home");
+    let (st, err) = post_json(
+        c,
+        &format!("/properties/{hid}/units"),
+        &staff,
+        serde_json::json!({ "unit_number": "B" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{err}");
+    // A lease on the house lands on its unit without being told.
+    let (st, lease) = post_json(c, &format!("/properties/{hid}/leases"), &staff, serde_json::json!({ "tenant_name": "Casey Rivers", "rent_cents": 210000, "start_date": "2031-01-01" })).await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    assert_eq!(lease["unit_id"], units[0]["id"]);
+
+    // A building: units are added one by one, and a lease has to say which.
+    let (st, apts) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Elm Flats", "Apartments", 2),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{apts}");
+    assert_eq!(apts["property_type"], "multi_family");
+    let aid = apts["id"].as_str().unwrap().to_string();
+    let mut unit_ids = vec![];
+    for n in ["1A", "1B"] {
+        let (st, u) = post_json(
+            c,
+            &format!("/properties/{aid}/units"),
+            &staff,
+            serde_json::json!({ "unit_number": n, "beds": 2, "floor": 1 }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{u}");
+        unit_ids.push(u["id"].as_str().unwrap().to_string());
+    }
+    let (st, _) = post_json(c, &format!("/properties/{aid}/leases"), &staff, serde_json::json!({ "tenant_name": "No Unit", "rent_cents": 100000, "start_date": "2031-01-01" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, lease) = post_json(c, &format!("/properties/{aid}/leases"), &staff, serde_json::json!({ "tenant_name": "Sam Lee", "rent_cents": 150000, "start_date": "2031-01-01", "unit_id": unit_ids[0] })).await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    // A building can't be turned into a house while it has two units.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{aid}"),
+        &staff,
+        serde_json::json!({ "property_type": "single_family" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{aid}"),
+        &staff,
+        serde_json::json!({ "property_type": "castle" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // Equipment and meters belong to a unit.
+    let (st, fridge) = post_json(c, "/assets", &staff, serde_json::json!({ "property_id": aid, "unit_id": unit_ids[0], "kind": "appliance", "name": "Refrigerator" })).await;
+    assert_eq!(st, Status::Ok, "{fridge}");
+    let (st, em) = post_json(c, "/meters", &staff, serde_json::json!({ "property_id": aid, "unit_id": unit_ids[0], "kind": "electric", "meter_number": "E-1A", "provider": "PGE", "paid_by": "tenant", "unit_of_measure": "kWh" })).await;
+    assert_eq!(st, Status::Ok, "{em}");
+    let eid = em["id"].as_str().unwrap().to_string();
+    assert_eq!(em["label"], "1A Electricity");
+    let (st, _) = post_json(c, "/meters", &staff, serde_json::json!({ "property_id": aid, "kind": "water", "paid_by": "landlord", "provider": "City water" })).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        "/meters",
+        &staff,
+        serde_json::json!({ "property_id": aid, "kind": "plasma" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    // Readings only count up.
+    let (st, r) = post_json(c, &format!("/meters/{eid}/readings"), &staff, serde_json::json!({ "reading": 1200.0, "read_on": "2031-01-01", "reason": "move_in", "lease_id": lease["id"] })).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let (st, r) = post_json(
+        c,
+        &format!("/meters/{eid}/readings"),
+        &staff,
+        serde_json::json!({ "reading": 1450.5, "read_on": "2031-02-01" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["used"], 250.5);
+    let (st, _) = post_json(
+        c,
+        &format!("/meters/{eid}/readings"),
+        &staff,
+        serde_json::json!({ "reading": 10.0 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, list) = get_json(c, &format!("/meters?unit_id={}", unit_ids[0]), &staff).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["last_reading"], 1450.5);
+
+    // The units list counts it all, and names who lives there.
+    let (_, units) = get_json(c, &format!("/properties/{aid}/units"), &staff).await;
+    let a = units
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["unit_number"] == "1A")
+        .unwrap();
+    assert_eq!(a["appliances"], 1);
+    assert_eq!(a["meters"], 1);
+    assert_eq!(a["tenant_name"], "Sam Lee");
+
+    // The utility agreement: the unit's own electric meter, the building's water.
+    let (_, terms) = get_json(
+        c,
+        &format!("/properties/{aid}/utilities?unit_id={}", unit_ids[0]),
+        &staff,
+    )
+    .await;
+    let t = terms.as_array().unwrap();
+    let electric = t.iter().find(|x| x["kind"] == "electric").unwrap();
+    let water = t.iter().find(|x| x["kind"] == "water").unwrap();
+    assert_eq!(electric["paid_by"], "tenant");
+    assert_eq!(water["paid_by"], "landlord");
+    // The other unit has no electric meter of its own, so no electric term.
+    let (_, other) = get_json(
+        c,
+        &format!("/properties/{aid}/utilities?unit_id={}", unit_ids[1]),
+        &staff,
+    )
+    .await;
+    assert!(other
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["kind"] != "electric"));
+
+    // A campground has sites on its map, not units.
+    let (st, camp) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Pine Camp", "campground", 0),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    let cid = camp["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("/properties/{cid}/units"),
+        &staff,
+        serde_json::json!({ "unit_number": "1" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
 }

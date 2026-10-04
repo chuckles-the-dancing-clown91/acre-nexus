@@ -20,6 +20,8 @@ pub struct Model {
     pub market_rent_cents: Option<i64>,
     /// `occupied` | `vacant` | `make_ready` | `down`.
     pub status: String,
+    pub floor: Option<i32>,
+    pub notes: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

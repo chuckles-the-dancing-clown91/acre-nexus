@@ -22,6 +22,15 @@ pub struct UnitDto {
     pub market_rent_cents: Option<i64>,
     pub market_rent_label: Option<String>,
     pub status: String,
+    pub floor: Option<i32>,
+    pub notes: Option<String>,
+    /// Who lives there now, and on which lease (only for people who may see
+    /// leases), plus how much equipment is on the unit.
+    pub tenant_name: Option<String>,
+    pub lease_id: Option<Uuid>,
+    pub appliances: Option<i64>,
+    pub meters: Option<i64>,
+    pub open_tickets: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -39,6 +48,13 @@ impl From<entity::unit::Model> for UnitDto {
             sqft: u.sqft,
             market_rent_cents: u.market_rent_cents,
             status: u.status,
+            floor: u.floor,
+            notes: u.notes,
+            tenant_name: None,
+            lease_id: None,
+            appliances: None,
+            meters: None,
+            open_tickets: None,
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
         }
@@ -53,6 +69,8 @@ pub struct CreateUnitReq {
     pub sqft: Option<i32>,
     pub market_rent_cents: Option<i64>,
     pub status: Option<String>,
+    pub floor: Option<i32>,
+    pub notes: Option<String>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -63,6 +81,8 @@ pub struct UpdateUnitReq {
     pub sqft: Option<i32>,
     pub market_rent_cents: Option<i64>,
     pub status: Option<String>,
+    pub floor: Option<i32>,
+    pub notes: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

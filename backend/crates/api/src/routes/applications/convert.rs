@@ -46,11 +46,13 @@ pub async fn convert(
         ));
     }
     // The lease's property must belong to the tenant.
-    Property::find_by_id(b.property_id)
+    let property = Property::find_by_id(b.property_id)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
+    let unit_id =
+        crate::property_kind::resolve_unit(&db, scope.tenant_id, &property, b.unit_id).await?;
 
     // Idempotency: never convert the same application twice (would duplicate the
     // lease and steal the first lease's vehicles).
@@ -80,7 +82,7 @@ pub async fn convert(
         id: Set(lease_id),
         tenant_id: Set(scope.tenant_id),
         property_id: Set(b.property_id),
-        unit_id: Set(b.unit_id),
+        unit_id: Set(unit_id),
         application_id: Set(Some(aid)),
         tenant_name: Set(app.applicant_name.clone()),
         tenant_email: Set(Some(app.email.clone())),

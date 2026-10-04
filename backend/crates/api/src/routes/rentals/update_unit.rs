@@ -47,6 +47,13 @@ pub async fn update_unit(
     if let Some(v) = b.market_rent_cents {
         am.market_rent_cents = Set(Some(v));
     }
+    if let Some(v) = b.floor {
+        am.floor = Set(Some(v));
+    }
+    if let Some(v) = b.notes {
+        let v = v.trim().to_string();
+        am.notes = Set((!v.is_empty()).then_some(v));
+    }
     if let Some(v) = b.status {
         // A unit cannot go back on the market while its turn has required
         // steps open: finish the turn (or finish it with an override) first.

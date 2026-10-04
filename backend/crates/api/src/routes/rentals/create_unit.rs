@@ -24,12 +24,25 @@ pub async fn create_unit(
 ) -> ApiResult<Json<UnitDto>> {
     user.require(Permission::LeaseManage)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
-    Property::find_by_id(pid)
+    let property = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
+    // A house is one unit, and campground sites aren't units: the property's
+    // type says what can be added.
+    let existing = crate::property_kind::unit_count(&db, pid).await?;
+    let kind = crate::property_kind::effective_kind(
+        &property.property_type,
+        (existing as i64).max(property.units as i64),
+    );
+    if let Some(why) = crate::property_kind::bar_to_adding_unit(kind, existing) {
+        return Err(ApiError::BadRequest(why));
+    }
     let b = body.into_inner();
+    if b.unit_number.trim().is_empty() {
+        return Err(ApiError::BadRequest("unit number is required".into()));
+    }
     let now = Utc::now();
     let status = match b.status {
         Some(s) if !s.trim().is_empty() => s,
@@ -39,12 +52,14 @@ pub async fn create_unit(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         property_id: Set(pid),
-        unit_number: Set(b.unit_number),
+        unit_number: Set(b.unit_number.trim().to_string()),
         beds: Set(b.beds),
         baths: Set(b.baths),
         sqft: Set(b.sqft),
         market_rent_cents: Set(b.market_rent_cents),
         status: Set(status),
+        floor: Set(b.floor),
+        notes: Set(b.notes.clone()),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     };

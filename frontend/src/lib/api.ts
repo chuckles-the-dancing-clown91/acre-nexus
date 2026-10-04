@@ -33,6 +33,7 @@ import type {
   CreateOwnershipInput,
   CreateTicketInput,
   CreateUnitInput,
+  UpdateUnitInput,
   EnrichmentRun,
   EnrichResponse,
   Lease,
@@ -587,6 +588,17 @@ export const api = {
   // ---- rentals: units ----
   units: (propertyId: string) =>
     request<Unit[]>(`/properties/${propertyId}/units`, { auth: true }),
+  updateUnit: (id: string, body: UpdateUnitInput) =>
+    request<Unit>(`/units/${id}`, { method: "PATCH", auth: true, body }),
+  updateProperty: (
+    id: string,
+    body: { property_type?: string; name?: string }
+  ) =>
+    request<Property>(`/properties/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
   createUnit: (propertyId: string, body: CreateUnitInput) =>
     request<Unit>(`/properties/${propertyId}/units`, {
       method: "POST",

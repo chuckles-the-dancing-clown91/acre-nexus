@@ -2024,6 +2024,8 @@ async fn seed_unit(
         sqft: Set(None),
         market_rent_cents: Set(Some(rent_cents)),
         status: Set("occupied".into()),
+        floor: Set(None),
+        notes: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

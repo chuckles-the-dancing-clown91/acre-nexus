@@ -39,6 +39,12 @@ impl PlatformModule for PropertiesModule {
         openapi_get_routes_spec![
             crate::routes::properties::autofill::get_autofill,
             crate::routes::properties::checklist::checklist,
+            crate::routes::meters::list,
+            crate::routes::meters::create,
+            crate::routes::meters::update,
+            crate::routes::meters::readings,
+            crate::routes::meters::add_reading,
+            crate::routes::meters::property_utilities,
             crate::routes::campground::list,
             crate::routes::campground::detail,
             crate::routes::campground::set_config,

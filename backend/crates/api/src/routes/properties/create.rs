@@ -22,6 +22,8 @@ pub async fn create(
 ) -> ApiResult<Json<PropertyResp>> {
     user.require(Permission::PropertyWrite)?;
     let b = body.into_inner();
+    let property_type =
+        crate::property_kind::parse_for_save(b.property_type.as_deref().unwrap_or(""))?;
     let model = entity::property::ActiveModel {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
@@ -36,7 +38,7 @@ pub async fn create(
         status: Set(b.status.unwrap_or_else(|| "Stabilized".into())),
         year_built: Set(b.year_built.unwrap_or(0)),
         manager: Set(b.manager.unwrap_or_default()),
-        property_type: Set(b.property_type.unwrap_or_default()),
+        property_type: Set(property_type.clone()),
         strategy: Set(b.strategy.unwrap_or_else(|| "rental".into())),
         workflow_stage: Set(String::new()),
         purchase_price_cents: Set(None),
@@ -50,6 +52,12 @@ pub async fn create(
         created_at: Set(Utc::now().into()),
     };
     let saved = model.insert(&db).await?;
+    // A house, townhome or condo is rented as one unit; make it now.
+    if crate::property_kind::unit_mode(&property_type) == crate::property_kind::UnitMode::Single
+        && !property_type.is_empty()
+    {
+        crate::property_kind::ensure_home_unit(&db, scope.tenant_id, saved.id).await?;
+    }
     crate::geo::queue_fetch(&db, scope.tenant_id, saved.id).await;
     crate::audit::change::created(
         &db,

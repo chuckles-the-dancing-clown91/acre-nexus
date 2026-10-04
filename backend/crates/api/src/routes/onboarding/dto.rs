@@ -57,9 +57,24 @@ pub struct OnboardReq {
     /// assignment also grants that person `property:{id}`-scoped access.
     #[serde(default)]
     pub assignments: Vec<crate::routes::assignments::CreateAssignmentReq>,
+    /// The units to set up: a building's apartments or suites. For a house the
+    /// one unit is made for you, and an entry here fills in its layout.
+    #[serde(default)]
+    pub unit_list: Vec<OnboardUnit>,
     /// Whether to kick off automated enrichment after onboarding (default true).
     #[serde(default = "default_true")]
     pub enrich: bool,
+}
+
+/// One unit to create while onboarding.
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct OnboardUnit {
+    pub unit_number: String,
+    pub floor: Option<i32>,
+    pub beds: Option<i32>,
+    pub baths: Option<f64>,
+    pub sqft: Option<i32>,
+    pub market_rent_cents: Option<i64>,
 }
 
 fn default_true() -> bool {
@@ -74,6 +89,7 @@ pub struct OnboardResp {
     pub mortgages_created: usize,
     pub lenders_created: usize,
     pub assignments_created: usize,
+    pub units_created: usize,
     /// The enrichment orchestrator job, if enrichment was requested.
     pub enrich_job_id: Option<Uuid>,
 }

@@ -408,6 +408,8 @@ async fn unit_for(
         sqft: Set(cell(t, row, m, "sqft").and_then(int).filter(|s| *s > 0)),
         market_rent_cents: Set(rent),
         status: Set("vacant".into()),
+        floor: Set(None),
+        notes: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
