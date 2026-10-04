@@ -144,6 +144,7 @@ async fn integration_suite() {
     showings_flow(&c).await;
     property_data_sources(&c).await;
     owner_approvals_flow(&c).await;
+    attention_and_mandates(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -7904,6 +7905,251 @@ async fn property_data_sources(c: &Ctx) {
     assert_eq!(st, Status::Ok);
     let (_, live) = get_json(c, "/property-data/live", &staff).await;
     assert_eq!(live["crime_provider"], "fbi");
+}
+
+/// Needs attention everywhere: the code-required items catalog seeds routines
+/// per property, routines coming due and work orders with no date show under
+/// "To schedule", a routine can be opened early, and the portfolio rollup
+/// carries it all.
+async fn attention_and_mandates(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &["maintenance:read", "maintenance:manage", "property:read"],
+    );
+    // A Northwind property made into an eight-unit Portland, OR building from
+    // 2016, so the catalog's rules have something to bite on.
+    let maple = {
+        use sea_orm::ActiveModelTrait;
+        let p = entity::prelude::Property::find()
+            .filter(entity::property::Column::TenantId.eq(nw))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .expect("a seeded property");
+        let mut am: entity::property::ActiveModel = p.into();
+        am.city = sea_orm::Set("Portland, OR".into());
+        am.state = sea_orm::Set("OR".into());
+        am.units = sea_orm::Set(8);
+        am.year_built = sea_orm::Set(2016);
+        am.update(&c.db).await.unwrap()
+    };
+    let pid = maple.id;
+    let pname = maple.name.clone();
+
+    // The catalog, narrowed to what applies.
+    let (st, items) = get_json(c, &format!("/mandates?property_id={pid}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{items}");
+    let keys: Vec<&str> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["key"].as_str().unwrap())
+        .collect();
+    assert!(keys.contains(&"smoke-co-test"), "{keys:?}");
+    assert!(
+        keys.contains(&"water-heater-straps"),
+        "Oregon is seismic: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"fire-extinguishers"),
+        "eight units: {keys:?}"
+    );
+    assert!(!keys.contains(&"lead-paint-visual"), "built 2016: {keys:?}");
+    assert!(!keys.contains(&"repaint-cycle"), "not New York: {keys:?}");
+    assert!(items
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|m| m["plan_id"].is_null()));
+    let wanted = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m["conditional"] == false)
+        .count();
+
+    // Add all: one routine per item, the conditional ones aside; again adds none.
+    let (st, r) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/mandates"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["created"].as_u64().unwrap() as usize, wanted);
+    let on = r["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| !m["plan_id"].is_null())
+        .count();
+    assert_eq!(on, wanted);
+    let (_, r) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/mandates"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(r["created"], 0);
+    // A conditional item, by key.
+    let (st, r) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/mandates"),
+        &staff,
+        serde_json::json!({ "keys": ["boiler-inspection"] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["created"], 1);
+    let (st, r) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/mandates"),
+        &staff,
+        serde_json::json!({ "keys": ["no-such-item"] }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{r}");
+
+    // The routines carry the key and a kit where the catalog names one.
+    let (_, plans) = get_json(c, "/maintenance-plans", &staff).await;
+    let smoke = plans
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["property_id"] == pid.to_string() && p["mandate_key"] == "smoke-co-test")
+        .cloned()
+        .expect("the alarm routine");
+    let hvac = plans
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["property_id"] == pid.to_string() && p["mandate_key"] == "hvac-service")
+        .cloned()
+        .expect("the HVAC routine");
+    assert!(
+        !hvac["issue_template_id"].is_null(),
+        "service-hvac kit: {hvac}"
+    );
+
+    // First due 30 days out, so nothing is "to schedule" yet with a 14-day lead.
+    let today = chrono::Utc::now().date_naive();
+    let (st, ts) = get_json(c, "/to-schedule", &staff).await;
+    assert_eq!(st, Status::Ok, "{ts}");
+    assert_eq!(ts["lead_days"], 14);
+    let listed = |ts: &serde_json::Value, id: &str| {
+        ts["plans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["plan"]["id"] == id)
+    };
+    assert!(!listed(&ts, smoke["id"].as_str().unwrap()));
+    // Move the alarm check to three days out: now it needs scheduling.
+    let soon = (today + chrono::Duration::days(3)).to_string();
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/maintenance-plans/{}", smoke["id"].as_str().unwrap()),
+        &staff,
+        serde_json::json!({ "next_due_date": soon }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (_, ts) = get_json(c, "/to-schedule", &staff).await;
+    let row = ts["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["plan"]["id"] == smoke["id"])
+        .cloned()
+        .expect("the alarm routine is due soon");
+    assert_eq!(row["days"], 3);
+    assert_eq!(row["mandate"], true);
+    assert_eq!(row["property_name"], pname);
+
+    // A work order with no date and no visit shows too.
+    let (st, tk) = send_json(
+        c,
+        Method::Post,
+        &format!("/properties/{pid}/tickets"),
+        &staff,
+        serde_json::json!({ "title": "Hall light out", "category": "electrical", "priority": "low" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{tk}");
+    let (_, ts) = get_json(c, "/to-schedule", &staff).await;
+    assert!(ts["tickets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["id"] == tk["id"]));
+
+    // Open the routine early: a work order with its due date, then the plan
+    // drops off the list and can't be opened twice while it's open.
+    let (st, opened) = send_json(
+        c,
+        Method::Post,
+        &format!(
+            "/maintenance-plans/{}/run-now",
+            smoke["id"].as_str().unwrap()
+        ),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{opened}");
+    assert_eq!(
+        opened["title"],
+        "Test smoke and CO alarms, replace batteries"
+    );
+    assert_eq!(opened["due_date"], soon);
+    let (_, ts) = get_json(c, "/to-schedule", &staff).await;
+    assert!(!listed(&ts, smoke["id"].as_str().unwrap()));
+    let (st, again) = send_json(
+        c,
+        Method::Post,
+        &format!(
+            "/maintenance-plans/{}/run-now",
+            smoke["id"].as_str().unwrap()
+        ),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{again}");
+
+    // The portfolio rollup carries the undated work order.
+    let (st, all) = get_json(c, "/attention", &staff).await;
+    assert_eq!(st, Status::Ok, "{all}");
+    let undated = all["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["kind"] == "unscheduled" && i["key"] == tk["id"])
+        .cloned()
+        .expect("the undated work order");
+    assert_eq!(undated["property_name"], pname);
+    assert_eq!(
+        undated["href"],
+        format!("/console/maintenance/{}", tk["id"].as_str().unwrap())
+    );
+    assert!(all["counts"]["unscheduled"].as_u64().unwrap() >= 1);
+
+    // Reading needs maintenance:read; a stranger gets nothing.
+    let nobody = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/to-schedule", &nobody).await;
+    assert_eq!(st, Status::Forbidden);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

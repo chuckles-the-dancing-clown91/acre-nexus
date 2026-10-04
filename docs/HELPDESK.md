@@ -162,6 +162,36 @@ state.
   category/priority, `cadence_days`, and `next_due_date`. CRUD at
   `GET/POST /maintenance-plans` + `PATCH /maintenance-plans/{id}`
   (`maintenance:read` / `maintenance:manage`); pause/resume via `active`.
+- **To schedule** (`GET /to-schedule`, `maintenance:read`, narrowed by reach):
+  the routines due within their lead time (`lead_days` on the plan, else the
+  `helpdesk.plan_lead_days` setting, default 14) whose last work order isn't
+  still open, and the open or triage work orders with no due date and no
+  visit booked. The service desk shows it as a panel and a count;
+  **Open now** (`POST /maintenance-plans/{id}/run-now`, `maintenance:manage`)
+  opens the routine's work order early with the kit's tasks and parts and
+  moves the plan on a cadence from today (409 while its last work order is
+  still open). **Book** on a work order goes to its Visit panel.
+- **Required by code** (`api/src/mandates.rs`): a catalog of 25 checks
+  landlords owe by law or common code, each with the rule it comes from, a
+  cadence, a category and priority, a job kit where one fits, and who it
+  applies to (everyone, buildings with more than one unit, built before a
+  year, listed states, or multifamily in listed states). Smoke and CO alarm
+  tests, alarm replacement, extinguishers, fire alarm and sprinkler tests,
+  emergency lighting, water heater straps in seismic states, dryer vents,
+  HVAC service, GFCI tests, locks and window latches, lead paint checks for
+  pre-1978 buildings, carpet review on HUD's seven-year life, New York's
+  three-year repaint, window guards and bed bug report, boilers, elevators,
+  backflow, radon in disclosure states, gutters, moisture and mold, pools,
+  septic and chimneys. Items that only matter when the property has the thing
+  (pool, boiler, elevator, septic, backflow, chimney, sprinklers) are
+  `conditional` and added one at a time. `GET /mandates?property_id=` lists
+  what applies with where each stands; `POST /properties/{id}/mandates`
+  (`maintenance:manage`, body `{ "keys": [] }`) adds routines for the missing
+  items, every non-conditional one when `keys` is empty, first due 30 days
+  out. Routines made this way carry `mandate_key`, show "required by code" on
+  the schedule and under To schedule, and the schedule page and the property
+  profile's Appliances tab have the panel. Local code is the final word; the
+  catalog names the common rules.
 - **Make-ready / turnover**: completing a **move-out inspection** (Phase 5)
   auto-opens a high-priority "Turnover / make-ready" ticket on the unit and
   flips the unit's status to `make_ready` — gated by the
@@ -203,6 +233,11 @@ runs an external desk, and nothing here precludes it.
 | GET | `/maintenance-plans` | `maintenance:read` |
 | POST | `/maintenance-plans` | `maintenance:manage` |
 | PATCH | `/maintenance-plans/{id}` | `maintenance:manage` |
+| POST | `/maintenance-plans/{id}/run-now` | `maintenance:manage` |
+| GET | `/to-schedule` | `maintenance:read` |
+| GET | `/mandates?property_id=` | `maintenance:read` |
+| POST | `/properties/{id}/mandates` | `maintenance:manage` |
+| GET | `/attention` | `property:read` |
 
 Quotes ride along on `GET /tickets/{id}`.
 

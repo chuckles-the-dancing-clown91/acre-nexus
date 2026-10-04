@@ -245,6 +245,9 @@ pub struct MaintenancePlanDto {
     /// The job kit each routine work order starts with.
     pub issue_template_id: Option<Uuid>,
     pub created_at: String,
+    /// The code-required item this plan came from, if any.
+    pub mandate_key: Option<String>,
+    pub lead_days: Option<i32>,
 }
 
 impl From<entity::maintenance_plan::Model> for MaintenancePlanDto {
@@ -264,6 +267,8 @@ impl From<entity::maintenance_plan::Model> for MaintenancePlanDto {
             last_ticket_id: p.last_ticket_id,
             issue_template_id: p.issue_template_id,
             created_at: p.created_at.to_rfc3339(),
+            mandate_key: p.mandate_key,
+            lead_days: p.lead_days,
         }
     }
 }

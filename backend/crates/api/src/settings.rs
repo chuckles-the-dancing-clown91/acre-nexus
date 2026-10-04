@@ -83,6 +83,8 @@ pub const COMPLIANCE_REQUIRE_COI: &str = "compliance.require_coi";
 pub const APPOINTMENT_REMINDER_HOURS: &str = "appointments.reminder_hours";
 /// How long an offered window is when staff give only a start time.
 pub const APPOINTMENT_WINDOW_MINUTES: &str = "appointments.window_minutes";
+/// Days before a routine's due date it shows as "to schedule".
+pub const HELPDESK_PLAN_LEAD_DAYS: &str = "helpdesk.plan_lead_days";
 /// Work estimated at or over this many cents waits for the owner's approval
 /// before it's sent out (0 = never ask).
 pub const MAINTENANCE_OWNER_APPROVAL_CENTS: &str = "maintenance.owner_approval_cents";
@@ -481,6 +483,16 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Calendar",
         kind: SettingKind::Bool,
         default: || json!(true),
+    },
+    SettingDef {
+        key: HELPDESK_PLAN_LEAD_DAYS,
+        label: "Schedule routines this many days ahead",
+        description: "A routine (filters, inspections, code-required checks) shows under \
+                      \"To schedule\" this many days before it's due, so the visit can be \
+                      booked before the work order opens on the day.",
+        group: "Helpdesk",
+        kind: SettingKind::Int,
+        default: || json!(14),
     },
     SettingDef {
         key: MAINTENANCE_OWNER_APPROVAL_CENTS,

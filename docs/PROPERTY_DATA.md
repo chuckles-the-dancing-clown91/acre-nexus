@@ -82,8 +82,8 @@ data** (`/console/settings`), with keys in the vault from the same page:
   violent crime, property crime, burglary and vehicle theft. Monthly rates
   per 100,000 are summed into yearly ones for the agency, the state and the
   country. A data.gov key goes in the vault as `fbi.api_key`; without one
-  the shared `DEMO_KEY` is used once `fbi` is in `LIVE_PROVIDERS` (a few
-  dozen calls an hour, enough for a small portfolio's nightly refresh). The
+  the shared `DEMO_KEY` is used once `fbi` is in `LIVE_PROVIDERS` (10 calls
+  an hour: two properties a night; a free key of their own lifts that). The
   result is one `property_crime` row per property: agency, period,
   population, the four offenses, and a `verdict` of the agency's violent
   plus property rate against the state's (`well_below` under 60%, `below`,

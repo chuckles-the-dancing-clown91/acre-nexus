@@ -62,6 +62,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/attention",
+        label: "Needs attention",
+        icon: "alert",
+        permission: "property:read",
+      },
+      {
         href: "/console/properties/onboard",
         label: "Onboard",
         icon: "house-plus",

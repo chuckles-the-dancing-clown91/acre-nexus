@@ -49,6 +49,7 @@ mod kit_catalog;
 mod leasedoc;
 mod listing_sync;
 mod mail;
+mod mandates;
 mod metrics;
 mod mfa;
 mod modules;

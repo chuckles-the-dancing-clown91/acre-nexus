@@ -210,6 +210,11 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Post, "/issue-templates/<id>/generate"),
     (Method::Get, "/maintenance-plans"),
     (Method::Post, "/maintenance-plans"),
+    // Needs attention, To schedule and the code-required items: narrowed by
+    // reach in the handler.
+    (Method::Get, "/attention"),
+    (Method::Get, "/to-schedule"),
+    (Method::Get, "/mandates"),
 ];
 
 /// Property routes a scoped person may not use even on their own properties:

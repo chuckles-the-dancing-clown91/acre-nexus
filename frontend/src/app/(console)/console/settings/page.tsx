@@ -38,7 +38,7 @@ const KNOWN_KEYS: { key: string; label: string; hint: string }[] = [
   {
     key: "fbi.api_key",
     label: "FBI Crime Data Explorer (data.gov)",
-    hint: "Free at api.data.gov/signup. Without one, the shared demo key is used, which allows a few dozen calls an hour.",
+    hint: "Free at api.data.gov/signup. Without one, the shared demo key is used, which allows 10 calls an hour.",
   },
   {
     key: "rentcast.api_key",

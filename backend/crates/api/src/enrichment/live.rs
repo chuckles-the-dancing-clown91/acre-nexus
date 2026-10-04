@@ -4,7 +4,7 @@
 //!
 //! - Crime: the FBI Crime Data Explorer, free. A data.gov key goes in the
 //!   vault as `fbi.api_key`; without one, the shared `DEMO_KEY` is used (a
-//!   few dozen calls an hour), so it works out of the box once `fbi` is in
+//!   10 calls an hour), so it works out of the box once `fbi` is in
 //!   `LIVE_PROVIDERS`.
 //! - Records (parcel, taxes, valuation): RentCast, with a key in the vault
 //!   as `rentcast.api_key` and `rentcast` chosen as the records provider.

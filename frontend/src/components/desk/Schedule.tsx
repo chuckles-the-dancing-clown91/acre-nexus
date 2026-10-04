@@ -175,7 +175,7 @@ export function Schedule({
   }
 
   return (
-    <Panel>
+    <Panel id="visit">
       <PanelHeader
         title="Visit"
         description={

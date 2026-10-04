@@ -873,6 +873,10 @@ export interface MaintenancePlan {
   last_ticket_id: string | null;
   /** The job kit each routine work order starts with. */
   issue_template_id?: string | null;
+  /** Set when the routine came from the code-required items catalog. */
+  mandate_key?: string | null;
+  /** Days before the due date it shows under "To schedule"; null uses the workspace setting. */
+  lead_days?: number | null;
   created_at: string;
 }
 

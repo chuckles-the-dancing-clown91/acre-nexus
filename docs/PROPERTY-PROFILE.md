@@ -15,6 +15,16 @@ a listing page: photos on the left, a summary card on the right, then tabs.
   and insurance (the latest on file, over twelve months), leaving what's
   left before upkeep and management.
 
+## Needs attention, across the portfolio
+
+`/console/attention` (`GET /attention`, `property:read`, narrowed to the
+properties in reach) is one list of everything waiting on someone: owner
+approvals and sign-offs not yet answered, work orders with no date and no
+visit, routines due within their lead time, the per-property suggestions
+below for every property, and (for people who see the whole company) vendors
+with W-9 or insurance problems. Each line goes where it gets done. Items sort
+high first, then by date; the chips at the top filter by kind.
+
 ## Overview
 
 **To do** comes first: the property's action items and what needs attention.
@@ -81,6 +91,12 @@ life left and warranty. "Replace" or "Service" opens a new work order with
 the matching kit already picked (`/console/maintenance/new?property=…&kit=…`):
 dishwasher, water heater, thermostat, refrigerator, range, disposal, toilet,
 smoke and CO detectors, HVAC, ceiling fan, faucet, blinds.
+
+Below it, **Required by code**: the checks this property owes by law or
+common code (see HELPDESK.md, "Required by code"), each on the schedule or
+not. "Add all" puts every item that applies on the maintenance schedule as a
+routine; conditional ones (a pool, a boiler) are added one at a time. Click a
+title for what to do and the rule it comes from.
 
 ## Permits and plans
 

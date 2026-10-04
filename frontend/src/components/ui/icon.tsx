@@ -3,6 +3,7 @@
 
 import {
   ArrowDownUp,
+  TriangleAlert,
   BadgeCheck,
   Bell,
   Blocks,
@@ -58,6 +59,7 @@ export const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   building: Building2,
   "house-plus": HousePlus,
+  alert: TriangleAlert,
   map: Map,
   workflow: Workflow,
   landmark: Landmark,

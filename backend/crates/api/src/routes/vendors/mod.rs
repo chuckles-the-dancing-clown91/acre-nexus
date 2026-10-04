@@ -112,7 +112,7 @@ async fn vendor(
         .ok_or_else(|| ApiError::NotFound("vendor not found".into()))
 }
 
-async fn compliance(
+pub(crate) async fn compliance(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     c: &entity::counterparty::Model,

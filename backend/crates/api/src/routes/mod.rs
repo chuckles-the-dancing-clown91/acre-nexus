@@ -15,6 +15,7 @@ pub mod api_tokens;
 pub mod applications;
 pub mod appointments;
 pub mod assignments;
+pub mod attention;
 pub mod audit_trail;
 pub mod auth;
 pub mod backoffice;
