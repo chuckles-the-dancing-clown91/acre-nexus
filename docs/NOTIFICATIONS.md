@@ -149,3 +149,38 @@ re-submitting the same event can't re-notify the same user. Every send
 audits as `notification.send` (template + channel + status, never the
 rendered body); provider CRUD audits as `notification_provider.*`; push
 subscriptions as `push.subscribe` / `push.unsubscribe`.
+
+## Spanish
+
+Roadmap area 16. A person's language is stored against each address we reach
+them at (`contact_language`, migration 076: an email lowercased or a phone in
+E.164), so the notification job picks it from the recipient alone; a job can
+also carry `lang`. In-app and push messages go by the user's email.
+
+- **Which messages.** The 32 that reach residents, applicants and prospects
+  have Spanish versions in `api/src/notify/es.rs` (rent due and past due,
+  autopay and payment failures, receipts, late fees, the deposit statement,
+  maintenance updates and replies, ratings and the repair link, visit offers,
+  confirmations and reminders, inspection reminders, e-signature requests,
+  application receipts and decisions, the FCRA adverse-action notice,
+  invites and password links). A unit test holds every Spanish template to
+  exactly the placeholders of its English original. Staff messages stay
+  English.
+- **Order.** Spanish reader: the workspace's override keyed `<key>.es`, then
+  the built-in Spanish, then English for a message with neither. An English
+  override never leaks into a Spanish message.
+- **Setting it.** Staff: the "Messages in" picker on a lease
+  (`GET`/`PUT /leases/<id>/language`, `lease:manage`, audited as
+  `language.set`), which covers the lease's email and phone. Residents:
+  Profile → Messages in (`GET`/`PUT /my/language`), which covers their
+  account email and their leases' addresses. Applicants and prospects:
+  `language` on `POST /public/applications` and `/public/tour-requests`
+  (the apply page offers English or Español, defaulting to the browser's
+  language), stored before the receipt is queued.
+- **Missed calls.** The default missed-call text goes in Spanish to a Spanish
+  reader; a workspace's own wording is sent as written.
+- **Not yet.** Values the caller fills in (a status word, a visit window, an
+  inspection kind) are still English, and the portal screens, the public site
+  and lease and notice PDFs are English. Have the adverse-action translation
+  reviewed by counsel before relying on it.
+

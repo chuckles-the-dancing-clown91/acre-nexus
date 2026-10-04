@@ -26,6 +26,10 @@ pub struct TextThreadDto {
     pub assigned_user_id: Option<Uuid>,
     /// Consent on file for marketing texts.
     pub marketing_consent: bool,
+    /// A prospect this number belongs to.
+    pub lead_id: Option<Uuid>,
+    /// A vendor this number belongs to.
+    pub counterparty_id: Option<Uuid>,
 }
 
 impl From<entity::sms_thread::Model> for TextThreadDto {
@@ -42,6 +46,8 @@ impl From<entity::sms_thread::Model> for TextThreadDto {
             opted_out: t.opted_out_at.is_some(),
             assigned_user_id: t.assigned_user_id,
             marketing_consent: t.marketing_opt_in_at.is_some(),
+            lead_id: t.lead_id,
+            counterparty_id: t.counterparty_id,
         }
     }
 }
@@ -95,6 +101,19 @@ pub struct UpdateTextThreadReq {
     pub assignee: Option<String>,
     /// Record (true) or withdraw (false) consent to marketing texts.
     pub marketing_consent: Option<bool>,
+    /// Say whose number this is: a resident's lease, a prospect, a vendor, or
+    /// nobody.
+    pub link: Option<ThreadLinkReq>,
+    /// What to call them in the inbox (`""` clears it).
+    pub display_name: Option<String>,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub struct ThreadLinkReq {
+    /// `resident` | `lead` | `vendor` | `none`
+    pub kind: String,
+    /// The lease, lead or counterparty id (not needed for `none`).
+    pub id: Option<Uuid>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -138,6 +157,9 @@ pub struct TextsStatusDto {
     pub inbound_webhook_url: String,
     /// Where to point Twilio's status callback.
     pub status_webhook_url: String,
+    /// Where to point the number's "A call comes in" webhook (missed-call
+    /// text-back and ringing the office).
+    pub voice_webhook_url: String,
     /// Open threads with unread texts.
     pub unread_threads: i64,
 }

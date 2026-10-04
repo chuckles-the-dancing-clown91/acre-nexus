@@ -68,6 +68,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/portfolio-map",
+        label: "Portfolio map",
+        icon: "earth",
+        permission: "property:read",
+      },
+      {
         href: "/console/properties/onboard",
         label: "Onboard",
         icon: "house-plus",
@@ -77,6 +83,12 @@ export const MODULES: ModuleDef[] = [
         href: "/console/maps",
         label: "Site maps",
         icon: "map",
+        permission: "property:read",
+      },
+      {
+        href: "/console/campground",
+        label: "Campgrounds",
+        icon: "tent",
         permission: "property:read",
       },
       {
@@ -168,6 +180,12 @@ export const MODULES: ModuleDef[] = [
         icon: "bill",
         permission: "payable:read",
       },
+      {
+        href: "/console/related-party",
+        label: "Related parties",
+        icon: "scale",
+        permission: "payable:read",
+      },
     ],
   },
   {
@@ -253,6 +271,12 @@ export const MODULES: ModuleDef[] = [
         href: "/console/tenant-history",
         label: "Tenant history",
         icon: "history",
+        permission: "lease:read",
+      },
+      {
+        href: "/console/foundation",
+        label: "Foundation",
+        icon: "hand-heart",
         permission: "lease:read",
       },
     ],
@@ -419,7 +443,7 @@ export const MODULES: ModuleDef[] = [
     key: "integrations",
     label: "Integrations",
     description:
-      "Credential vault, document storage, notifications (email/SMS), and inbound webhooks.",
+      "Business profile, Google reviews, website widgets, Alpha sign-on and vendors, documents, and the sent log.",
     group: "platform",
     defaultEnabled: true,
     nav: [
@@ -433,6 +457,12 @@ export const MODULES: ModuleDef[] = [
         href: "/console/integrations",
         label: "Integrations",
         icon: "plug",
+        permission: "integrations:manage",
+      },
+      {
+        href: "/console/go-live",
+        label: "Go live",
+        icon: "rocket",
         permission: "integrations:manage",
       },
     ],

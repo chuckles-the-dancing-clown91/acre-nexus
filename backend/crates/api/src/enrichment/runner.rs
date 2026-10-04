@@ -113,6 +113,7 @@ fn parcel_on_file(d: &entity::property_detail::Model) -> ParcelData {
         last_sale_date: d.last_sale_date.clone().unwrap_or_default(),
         last_sale_price_cents: d.last_sale_price_cents.unwrap_or(0),
         lot_size_sqft: d.lot_size_sqft.unwrap_or(0),
+        year_built: d.year_built.unwrap_or(0),
         property_type: d.property_type.clone().unwrap_or_default(),
         beds: d.beds.unwrap_or(0),
         baths: d.baths.unwrap_or(0.0),
@@ -160,6 +161,7 @@ pub(crate) async fn load_or_init_detail<C: ConnectionTrait>(
         baths: Set(None),
         sqft: Set(None),
         lot_size_sqft: Set(None),
+        year_built: Set(None),
         property_type: Set(None),
         stories: Set(None),
         parking_spaces: Set(None),
@@ -286,6 +288,9 @@ async fn run_parcel<C: ConnectionTrait>(
     am.last_sale_date = Set(opt(parcel.last_sale_date));
     am.last_sale_price_cents = Set(Some(parcel.last_sale_price_cents));
     am.lot_size_sqft = Set(Some(parcel.lot_size_sqft));
+    if parcel.year_built > 0 {
+        am.year_built = Set(Some(parcel.year_built));
+    }
     am.property_type = Set(opt(parcel.property_type));
     am.beds = Set(Some(parcel.beds));
     am.baths = Set(Some(parcel.baths));

@@ -32,6 +32,8 @@ pub async fn create(
         state: Set(b.state.unwrap_or_default()),
         entity_type: Set(b.entity_type.unwrap_or_else(|| "llc".into())),
         registered_agent: Set(b.registered_agent),
+        foundation: Set(false),
+        fee_basis: Set("percent".into()),
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     };

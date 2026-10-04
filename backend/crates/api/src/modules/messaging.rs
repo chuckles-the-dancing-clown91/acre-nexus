@@ -41,6 +41,7 @@ impl PlatformModule for MessagingModule {
             texts::replies::update,
             texts::replies::remove,
             texts::console::simulate,
+            texts::console::simulate_call,
             messages::console::list_threads,
             messages::console::get_thread,
             messages::console::reply_thread,

@@ -39,6 +39,9 @@ pub async fn approve_payable(
         )));
     }
 
+    // A bill from one of the family's own needs its review approved first.
+    crate::family::guard_bill(&db, scope.tenant_id, &bill, user.user_id).await?;
+
     // Accrue first: if the posting is rejected (unbalanced books, missing
     // entity), the approval fails with it — the request transaction rolls
     // both back together.

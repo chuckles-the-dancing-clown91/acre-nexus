@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, DEFAULT_TENANT } from "@/lib/api";
+import { browserLanguage, type Language } from "@/lib/language";
 import { dollarsToCents } from "@/lib/showings";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -38,6 +39,9 @@ function ApplyForm() {
   const [petDetails, setPetDetails] = useState("");
   const [military, setMilitary] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [lang, setLang] = useState<Language>(() =>
+    q.get("lang") === "es" ? "es" : browserLanguage()
+  );
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const incomeCents = dollarsToCents(income);
@@ -61,6 +65,7 @@ function ApplyForm() {
           pet_details: pet ? petDetails.trim() || undefined : undefined,
           is_military: military,
           screening_consent: consent,
+          language: lang,
         },
         tenant
       );
@@ -114,6 +119,17 @@ function ApplyForm() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
+            <label className="block text-[12px] text-fg-3">
+              We&apos;ll write to you in
+              <select
+                className={cn(field, "mt-1 w-full")}
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Language)}
+              >
+                <option value="en">English</option>
+                <option value="es">Español</option>
+              </select>
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <label className="text-[12px] text-fg-3">
                 Move-in date

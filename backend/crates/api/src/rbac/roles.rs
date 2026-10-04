@@ -341,4 +341,13 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
                       expose unpublished drafts via GET /listings).",
         permissions: &[VehicleRead, VehicleManage],
     },
+    SystemRole {
+        key: "vendor",
+        scope: SCOPE_TENANT,
+        name: "Vendor",
+        description: "Outside contractor portal access. Vendors see only the work \
+                      sent to them, through the /vendor-portal routes, so they \
+                      hold no console permissions.",
+        permissions: &[],
+    },
 ];

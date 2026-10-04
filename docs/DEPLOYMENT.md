@@ -86,6 +86,54 @@ ROLLBACK;
 If this returns other tenants' rows, the app is connected as a superuser/owner —
 fix the role before going live.
 
+## Backups and the restore drill
+
+Two scripts in `backend/deploy/`, run by the host's scheduler (cron, a
+systemd timer, or the platform's job runner) as the owner role:
+
+```bash
+# Nightly, e.g. 03:15
+OWNER_DATABASE_URL=... BACKUP_RECIPIENT=age1... \
+BACKUP_DIR=/var/backups/acre BACKUP_S3_URI=s3://acre-backups/prod BACKUP_KEEP_DAYS=30 \
+  backend/deploy/backup.sh
+
+# Monthly (and after any restore-affecting change)
+OWNER_DATABASE_URL=... SCRATCH_ADMIN_URL=postgres://owner@db/postgres \
+BACKUP_IDENTITY=/secure/acre-backup.key BACKUP_DIR=/var/backups/acre \
+  backend/deploy/restore-drill.sh
+```
+
+- **`backup.sh`** runs `pg_dump --format=custom`, encrypts the stream with
+  [age](https://age-encryption.org) to `BACKUP_RECIPIENT` (generate the pair
+  once with `age-keygen`; keep the private key off the database host), checks
+  the file isn't suspiciously small, copies it to `BACKUP_S3_URI` when set,
+  deletes local dumps older than `BACKUP_KEEP_DAYS` (30), and records the run
+  in `backup_run`. Give the bucket its own 30-day lifecycle rule.
+- **`restore-drill.sh`** decrypts the newest dump (or `BACKUP_FILE`), restores
+  it into a throwaway `acre_restore_drill` database, checks migrations,
+  workspaces, properties, leases and work orders came back, records the time
+  it took in `backup_run`, and drops the scratch database. A failed decrypt or
+  restore is recorded as a failed drill and exits non-zero.
+
+Both write to `backup_run` (migration 075), so **Admin → Go live** shows the
+newest backup and drill and turns red when the last good backup is older than
+36 hours or the last drill older than 90 days. On the demo data the drill
+restores in about a second (75 migrations, 2 workspaces, 8 properties).
+
+## Go live
+
+**Admin → Go live** (`GET /go-live`, `integrations:manage`) lists every
+provider (email, texts, Stripe, Plaid, Checkr, Gusto, Google Maps, FBI crime
+data, RentCast) with whether `LIVE_PROVIDERS` switches it on, which vault keys
+or environment variables it needs and whether they're present (names only),
+its last **real** call and failures this week (simulated calls are audited
+with `live: false` and don't count), and for Stripe, Checkr and Twilio when
+the last signed webhook arrived. Each is **ready**, **live, not used yet**,
+**failing**, **missing setup** or **simulated**. The deploy checks are
+production mode, https public addresses, a backup in the last 36 hours and a
+restore drill in the last 90 days. The page never calls out; test email and
+texts from Notifications.
+
 ## Observability
 
 The backend exposes Prometheus metrics at `/metrics` and correlates errors to

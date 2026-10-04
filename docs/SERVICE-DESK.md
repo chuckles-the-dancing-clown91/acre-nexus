@@ -209,3 +209,31 @@ back on the work order.
 Property managers, leasing agents and maintenance see and work only their
 assigned properties (see `ACCESS-AND-BRANDING.md`). The kit catalog is the
 company's; anyone on the desk can use it, but only company-wide roles edit it.
+
+## The vendor portal
+
+For vendors who'd rather sign in than chase links (fix plan F13). On a
+contractor's page, **Vendor portal → Invite to the portal**
+(`POST /entities/<id>/portal-invite`, `entity:manage` and `member:manage`,
+audited as `vendor.portal_invite`) gives the vendor's email a login with the
+**vendor** persona and role, which hold no console permissions, links it to
+the vendor (`vendor_portal_user`, migration 078) and emails a link to set a
+password; an existing account is linked instead. Signing in lands on
+`/account/vendor`, and the console sends a vendor-only login there too.
+
+- `GET /vendor-portal/me`: the vendor, the workspace, and how many jobs wait.
+- `GET /vendor-portal/jobs`: every batch of tasks sent to them, open first
+  (still needs something, on an open work order), each with the property,
+  priority, tasks done, their answer and when it was sent.
+- `GET /vendor-portal/jobs/<batch>` and `POST …/accept`, `…/decline`,
+  `…/done`, `…/uploads`, `…/invoice`: the same job screen and actions as the
+  link. A batch is named by its stored link hash; every call checks it's this
+  vendor's and answers 404 otherwise.
+
+The link and the portal share one implementation (`vendor_link.rs`, each
+action an inner function taking either the token or the batch) and one
+screen (`components/vendor/JobView.tsx`). Emailed links keep working, and
+Alpha vendors keep the partner link. The catalog sync now also creates a
+system role added since a database was seeded, which is how existing
+workspaces get the vendor role.
+

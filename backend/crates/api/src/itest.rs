@@ -147,6 +147,14 @@ async fn integration_suite() {
     attention_and_mandates(&c).await;
     routes_and_shopping(&c).await;
     follow_ups_go_out(&c).await;
+    analytics_and_map(&c).await;
+    texts_round_two(&c).await;
+    go_live_page(&c).await;
+    spanish_messages(&c).await;
+    onboarding_checklist(&c).await;
+    vendor_portal_flow(&c).await;
+    campground_flow(&c).await;
+    family_plan_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -732,6 +740,8 @@ async fn create_llc(c: &Ctx, tenant: Uuid) -> Uuid {
         entity_type: Set("llc".into()),
         registered_agent: Set(None),
         status: Set("active".into()),
+        foundation: Set(false),
+        fee_basis: Set("percent".into()),
         created_at: Set(chrono::Utc::now().into()),
     }
     .insert(&c.db)
@@ -8765,6 +8775,1074 @@ async fn follow_ups_go_out(c: &Ctx) {
     .unwrap();
 }
 
+/// Operations analytics and the portfolio map: three repairs on one water
+/// heater that cost more than half its price flag it to replace and make a
+/// repeat issue; the leasing funnel and the map answer; a reader without
+/// report:read is refused.
+async fn analytics_and_map(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, EntityTrait};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "property:read",
+            "report:read",
+        ],
+    );
+    let (st, heater) = post_json(
+        c,
+        "/assets",
+        &staff,
+        serde_json::json!({ "property_id": pid, "kind": "plumbing", "name": "Analytics water heater", "purchase_price_cents": 100000 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{heater}");
+    let aid = uuid::Uuid::parse_str(heater["id"].as_str().unwrap()).unwrap();
+    for (i, cost) in [20000i64, 20000, 15000].iter().enumerate() {
+        let (st, t) = post_json(
+            c,
+            &format!("/properties/{pid}/tickets"),
+            &staff,
+            serde_json::json!({ "title": format!("Heater out again {i}"), "category": "water_heater_repeat" }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{t}");
+        let row = entity::prelude::MaintenanceTicket::find_by_id(
+            uuid::Uuid::parse_str(t["id"].as_str().unwrap()).unwrap(),
+        )
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+        let mut am: entity::maintenance_ticket::ActiveModel = row.into();
+        am.cost_cents = sea_orm::Set(Some(*cost));
+        am.asset_id = sea_orm::Set(Some(aid));
+        am.update(&c.db).await.unwrap();
+    }
+
+    let (st, ops) = get_json(
+        c,
+        &format!("/analytics/operations?months=3&property_id={pid}"),
+        &staff,
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{ops}");
+    assert_eq!(ops["months"].as_array().unwrap().len(), 3);
+    assert_eq!(ops["properties"].as_array().unwrap().len(), 1);
+    assert!(ops["totals"]["tickets"]["opened"].as_u64().unwrap() >= 3);
+    let rep = ops["repeats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["category"] == "water_heater_repeat")
+        .expect("the repeat issue");
+    assert_eq!(rep["count"], 3);
+    assert_eq!(rep["spend_cents"], 55000);
+    let a = ops["appliances"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["asset_id"] == aid.to_string())
+        .expect("the heater");
+    assert_eq!(a["replace"], true);
+    assert_eq!(a["share_pct"], 55);
+    assert_eq!(ops["replace_share_pct"], 50);
+    let this_month = ops["months"].as_array().unwrap().last().unwrap();
+    assert!(this_month["tickets"]["opened"].as_u64().unwrap() >= 3);
+    let (st, _) = get_json(c, "/analytics/operations?property_id=nope", &staff).await;
+    assert_eq!(st, Status::BadRequest);
+
+    let (st, funnel) = get_json(c, "/analytics/leasing?months=12", &staff).await;
+    assert_eq!(st, Status::Ok, "{funnel}");
+    assert!(funnel["listings"].is_array());
+    assert!(funnel["tours"].as_u64().is_some());
+
+    let (st, map) = get_json(c, "/portfolio/map", &staff).await;
+    assert_eq!(st, Status::Ok, "{map}");
+    let pin = map["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["property_id"] == pid.to_string())
+        .expect("the property on the map");
+    assert!(pin["open_tickets"].as_u64().unwrap() >= 3);
+
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/analytics/operations", &reader).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// Texts, round two: a prospect's number names the conversation; a missed
+/// call is filed and texted back once per window (not after STOP, not when
+/// turned off); staff link an unknown number to a vendor or to nobody.
+async fn texts_round_two(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "message:read",
+            "message:manage",
+            "application:read",
+            "application:write",
+            "entity:read",
+            "entity:manage",
+        ],
+    );
+    // A prospect texts: the conversation is theirs.
+    let (st, lead) = post_json(
+        c,
+        "/leads",
+        &staff,
+        serde_json::json!({ "name": "Nadia Okafor", "email": "nadia@example.com", "phone": "(503) 555-0177", "source": "website" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lead}");
+    let (st, t) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0177", "body": "Is the 2 bed still available?" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    assert_eq!(t["thread"]["display_name"], "Nadia Okafor", "{t}");
+    assert_eq!(t["thread"]["lead_id"], lead["id"]);
+
+    // A stranger calls and nobody answers: filed, texted back, once.
+    let (st, call) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0188" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{call}");
+    assert_eq!(call["texted_back"], true, "{call}");
+    let msgs = call["thread"]["messages"].as_array().unwrap();
+    assert!(msgs
+        .iter()
+        .any(|m| m["body"] == "Missed call" && m["direction"] == "in"));
+    let back = msgs
+        .iter()
+        .find(|m| m["direction"] == "out")
+        .expect("the text-back is filed");
+    assert!(
+        back["body"].as_str().unwrap().contains("Northwind"),
+        "{back}"
+    );
+    let tid = call["thread"]["thread"]["id"].as_str().unwrap().to_string();
+    let queued = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_sms"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .any(|j| j.payload["trigger"] == "missed_call" && j.payload["to"] == "+15035550188");
+    assert!(queued, "the text-back is queued");
+    let (_, again) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0188" }),
+    )
+    .await;
+    assert_eq!(again["texted_back"], false, "once per window");
+    assert!(again["thread"]["thread"]["unread_count"].as_i64().unwrap() >= 2);
+
+    // Someone who texted STOP isn't texted back.
+    let (_, _) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0199", "body": "STOP" }),
+    )
+    .await;
+    let (_, stopped) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0199" }),
+    )
+    .await;
+    assert_eq!(stopped["texted_back"], false);
+
+    // Turned off: filed, no text.
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::TEXTS_MISSED_CALL_REPLY_ON,
+        serde_json::json!(false),
+    )
+    .await
+    .unwrap();
+    let (_, off) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0166" }),
+    )
+    .await;
+    assert_eq!(off["texted_back"], false);
+    assert!(off["thread"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["body"] == "Missed call"));
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::TEXTS_MISSED_CALL_REPLY_ON,
+        serde_json::json!(true),
+    )
+    .await
+    .unwrap();
+
+    // Staff say whose number it is.
+    let (st, vendor) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Ruiz Roofing", "email": "ruiz@roof.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{vendor}");
+    let (st, linked) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "vendor", "id": vendor["id"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{linked}");
+    assert_eq!(linked["counterparty_id"], vendor["id"]);
+    assert_eq!(linked["display_name"], "Ruiz Roofing");
+    let (st, renamed) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "none" }, "display_name": "Unknown roofer" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{renamed}");
+    assert!(renamed["counterparty_id"].is_null());
+    assert_eq!(renamed["display_name"], "Unknown roofer");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "landlord", "id": vendor["id"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "resident", "id": uuid::Uuid::new_v4() } }),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+}
+
+/// The go-live page: every provider listed with its needs, a vault key
+/// counting as present, backups and drills recorded by the scripts showing up,
+/// and only integrations managers allowed in.
+async fn go_live_page(c: &Ctx) {
+    use sea_orm::{ActiveModelTrait, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let admin = mint(c, Some(nw), false, &["integrations:manage"]);
+    crate::secrets::store(&c.db, Some(nw), "checkr.api_key", "test-key-1234", None)
+        .await
+        .unwrap();
+    let (st, page) = get_json(c, "/go-live", &admin).await;
+    assert_eq!(st, Status::Ok, "{page}");
+    let providers = page["providers"].as_array().unwrap();
+    assert_eq!(providers.len(), crate::routes::go_live::PROVIDERS.len());
+    let checkr = providers.iter().find(|p| p["key"] == "checkr").unwrap();
+    assert_eq!(checkr["readiness"], "simulated");
+    assert!(checkr["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["label"] == "checkr.api_key in the vault" && r["present"] == true));
+    assert!(checkr["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["label"]
+            .as_str()
+            .unwrap()
+            .starts_with("webhook.checkr.secret")
+            && r["present"] == false));
+    let backup = |ok: bool, hours: i64| entity::backup_run::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        kind: Set(if hours < 0 {
+            "restore_drill".into()
+        } else {
+            "backup".into()
+        }),
+        started_at: Set((chrono::Utc::now() - chrono::Duration::hours(hours.abs())).into()),
+        finished_at: Set(Some(chrono::Utc::now().into())),
+        ok: Set(ok),
+        bytes: Set(Some(123_456)),
+        location: Set(Some("/var/backups/acre/acre-test.dump.age".into())),
+        detail: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+    };
+    backup(true, 5).insert(&c.db).await.unwrap();
+    backup(false, 1).insert(&c.db).await.unwrap();
+    backup(true, -2).insert(&c.db).await.unwrap();
+    let (_, page) = get_json(c, "/go-live", &admin).await;
+    assert_eq!(page["last_backup"]["ok"], false, "the newest run failed");
+    assert!(page["last_good_backup_at"].is_string());
+    let check = |k: &str| {
+        page["platform"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["key"] == k)
+            .unwrap()["ok"]
+            .clone()
+    };
+    assert_eq!(check("backup"), true);
+    assert_eq!(check("drill"), true);
+    assert_eq!(check("production"), false);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = get_json(c, "/go-live", &reader).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// Spanish for residents: staff set a resident's language on the lease, the
+/// resident sets their own from the portal, an applicant picks it on the
+/// public form, and messages to each come out in Spanish (English for anyone
+/// else, and for messages with no Spanish version).
+async fn spanish_messages(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["lease:read", "lease:manage"]);
+    let leases = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(nw))
+        .filter(entity::lease::Column::TenantEmail.is_not_null())
+        .order_by_asc(entity::lease::Column::CreatedAt)
+        .all(&c.db)
+        .await
+        .unwrap();
+    let (es_lease, en_lease) = (&leases[0], &leases[1]);
+    let (st, set) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &staff,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{set}");
+    assert_eq!(set["language"], "es");
+    let (_, got) = get_json(c, &format!("/leases/{}/language", es_lease.id), &staff).await;
+    assert_eq!(got["language"], "es");
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &staff,
+        serde_json::json!({ "language": "fr" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let reader = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &reader,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Render a real rent reminder to each.
+    async fn rendered(
+        c: &Ctx,
+        tenant: uuid::Uuid,
+        to: &str,
+        template: &str,
+    ) -> entity::notification::Model {
+        let job_id = crate::scheduler::enqueue(
+            &c.db,
+            tenant,
+            "auto_email",
+            serde_json::json!({
+                "template": template,
+                "to": to,
+                "vars": { "amount": "$1,850", "due_date": "2026-11-01", "pay_url": "https://x/pay" },
+                "trigger": format!("es-test:{}", uuid::Uuid::new_v4()),
+            }),
+            0,
+        )
+        .await
+        .unwrap();
+        let job = entity::prelude::BackgroundJob::find_by_id(job_id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let _ = crate::notify::handle_job(&c.db, &job).await;
+        entity::prelude::Notification::find()
+            .filter(entity::notification::Column::BackgroundJobId.eq(job_id))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .expect("rendered and filed")
+    }
+    let es = rendered(c, nw, es_lease.tenant_email.as_deref().unwrap(), "rent_due").await;
+    assert!(
+        es.subject
+            .as_deref()
+            .unwrap()
+            .starts_with("El alquiler de $1,850 vence"),
+        "{:?}",
+        es.subject
+    );
+    assert!(es.body.as_deref().unwrap().contains("Pague en línea"));
+    let en = rendered(c, nw, en_lease.tenant_email.as_deref().unwrap(), "rent_due").await;
+    assert!(
+        en.subject
+            .as_deref()
+            .unwrap()
+            .starts_with("Rent of $1,850 is due"),
+        "{:?}",
+        en.subject
+    );
+    // No Spanish version of a staff message: English, even to a Spanish reader.
+    let staffish = rendered(
+        c,
+        nw,
+        es_lease.tenant_email.as_deref().unwrap(),
+        "test_notification",
+    )
+    .await;
+    assert!(!staffish.body.as_deref().unwrap_or("").contains("Hola"));
+
+    // The resident chooses for themselves.
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+    let (st, mine) = send_json(
+        c,
+        Method::Put,
+        "/my/language",
+        &res,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert!(mine["addresses"].as_u64().unwrap() >= 1);
+    let (_, mine) = get_json(c, "/my/language", &res).await;
+    assert_eq!(mine["language"], "es");
+    let t = rendered(c, nw, "taylor@example.com", "payment_receipt").await;
+    assert!(
+        t.subject.as_deref().unwrap().starts_with("Pago recibido"),
+        "{:?}",
+        t.subject
+    );
+    let (_, _) = send_json(
+        c,
+        Method::Put,
+        "/my/language",
+        &res,
+        serde_json::json!({ "language": "en" }),
+    )
+    .await;
+    let t = rendered(c, nw, "taylor@example.com", "payment_receipt").await;
+    assert!(t
+        .subject
+        .as_deref()
+        .unwrap()
+        .starts_with("Payment received"));
+
+    // An applicant picks Spanish on the public form.
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "lucia@example.com").await,
+        "en"
+    );
+    let resp = c
+        .client
+        .post("/public/applications?tenant=northwind")
+        .header(rocket::http::ContentType::JSON)
+        .body(
+            serde_json::json!({
+                "applicant_name": "Lucía Romero",
+                "email": "Lucia@Example.com",
+                "phone": "503-555-0144",
+                "screening_consent": true,
+                "language": "es-MX",
+            })
+            .to_string(),
+        )
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok, "{:?}", resp.into_string().await);
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "lucia@example.com").await,
+        "es"
+    );
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "+15035550144").await,
+        "es"
+    );
+}
+
+/// House onboarding: a new property's checklist starts empty and fills in
+/// from the data; the record's year built and the rent estimate are proposed
+/// and applied only when chosen.
+async fn onboarding_checklist(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let (st, prop) = send_json(
+        c,
+        Method::Post,
+        "/properties",
+        &staff,
+        serde_json::json!({ "name": "Checklist Cottage", "address": "9 Fern Ln", "city": "Portland", "state": "OR", "postal_code": "97202", "units": 1, "occupied_units": 0, "monthly_rent_cents": 0, "property_type": "single_family" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{prop}");
+    let pid = prop["id"].as_str().unwrap().to_string();
+    let (st, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(st, Status::Ok, "{list}");
+    assert_eq!(list["steps"].as_array().unwrap().len(), 11);
+    assert_eq!(list["next"], "address");
+    assert_eq!(list["required"], 10);
+    let step = |l: &serde_json::Value, k: &str| -> serde_json::Value {
+        l["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["key"] == k)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(step(&list, "owner")["done"], false);
+
+    // The record arrives with a year built; a rent estimate is on file.
+    let puid = uuid::Uuid::parse_str(&pid).unwrap();
+    let now = chrono::Utc::now();
+    let existing = entity::prelude::PropertyDetail::find()
+        .filter(entity::property_detail::Column::PropertyId.eq(puid))
+        .one(&c.db)
+        .await
+        .unwrap();
+    match existing {
+        Some(d) => {
+            let mut am: entity::property_detail::ActiveModel = d.into();
+            am.year_built = Set(Some(1948));
+            am.latitude = Set(Some(45.48));
+            am.longitude = Set(Some(-122.65));
+            am.last_enriched_at = Set(Some(now.into()));
+            am.update(&c.db).await.unwrap();
+        }
+        None => {
+            entity::property_detail::ActiveModel {
+                property_id: Set(puid),
+                tenant_id: Set(nw),
+                year_built: Set(Some(1948)),
+                latitude: Set(Some(45.48)),
+                longitude: Set(Some(-122.65)),
+                last_enriched_at: Set(Some(now.into())),
+                features: Set(serde_json::json!([])),
+                created_at: Set(now.into()),
+                updated_at: Set(now.into()),
+                ..Default::default()
+            }
+            .insert(&c.db)
+            .await
+            .unwrap();
+        }
+    }
+    entity::property_valuation::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        tenant_id: Set(nw),
+        property_id: Set(puid),
+        as_of: Set(now.date_naive().to_string()),
+        estimated_value_cents: Set(Some(52_000_000)),
+        value_low_cents: Set(None),
+        value_high_cents: Set(None),
+        estimated_rent_cents: Set(Some(214_960)),
+        confidence: Set(Some(80)),
+        source: Set("test".into()),
+        created_at: Set(now.into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    let (_, auto) = get_json(c, &format!("/properties/{pid}/autofill"), &staff).await;
+    let fields: Vec<&str> = auto["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["field"].as_str().unwrap())
+        .collect();
+    assert!(fields.contains(&"year_built"), "{auto}");
+    let has_unit = entity::prelude::Unit::find()
+        .filter(entity::unit::Column::PropertyId.eq(puid))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .len()
+        == 1;
+    if has_unit {
+        assert!(fields.contains(&"unit_market_rent"), "{auto}");
+    }
+    let (_, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(step(&list, "address")["done"], true);
+    assert_eq!(
+        step(&list, "record")["done"],
+        false,
+        "suggestions to review"
+    );
+    let (st, applied) = post_json(
+        c,
+        &format!("/properties/{pid}/autofill/apply"),
+        &staff,
+        serde_json::json!({ "fields": fields }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{applied}");
+    assert!(
+        applied["proposals"].as_array().unwrap().is_empty(),
+        "{applied}"
+    );
+    let p = entity::prelude::Property::find_by_id(puid)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(p.year_built, 1948);
+    let (_, list) = get_json(c, &format!("/properties/{pid}/checklist"), &staff).await;
+    assert_eq!(step(&list, "record")["done"], true, "{list}");
+    if has_unit {
+        assert_eq!(step(&list, "rent")["done"], true, "{list}");
+    }
+    let reader = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = get_json(c, &format!("/properties/{pid}/checklist"), &reader).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// The vendor portal: staff invite a vendor; signed in, the vendor sees the
+/// job sent to them and accepts it there; another vendor's job stays hidden;
+/// the login opens nothing in the console.
+async fn vendor_portal_flow(c: &Ctx) {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "maintenance:read",
+            "maintenance:manage",
+            "entity:read",
+            "entity:manage",
+            "member:manage",
+            "property:read",
+        ],
+    );
+    let make_vendor = |name: &'static str, email: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let (st, v) = post_json(
+                c,
+                "/entities",
+                &staff,
+                serde_json::json!({ "kind": "contractor", "name": name, "email": email, "trades": ["plumbing"] }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok, "{v}");
+            v["id"].as_str().unwrap().to_string()
+        }
+    };
+    let pipes = make_vendor("Portal Pipes", "portal.pipes@example.com").await;
+    let other = make_vendor("Other Drains", "other.drains@example.com").await;
+    let send = |vendor: String, title: &'static str| {
+        let staff = staff.clone();
+        async move {
+            let (_, t) = post_json(
+                c,
+                &format!("/properties/{pid}/tickets"),
+                &staff,
+                serde_json::json!({ "title": title, "category": "plumbing" }),
+            )
+            .await;
+            let tid = t["id"].as_str().unwrap().to_string();
+            let (_, tasks) = post_json(
+                c,
+                &format!("/tickets/{tid}/tasks"),
+                &staff,
+                serde_json::json!({ "title": "Clear the line", "trade": "plumbing", "needs_contractor": true }),
+            )
+            .await;
+            let task = tasks.as_array().unwrap().last().unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let (st, sent) = post_json(
+                c,
+                &format!("/tickets/{tid}/dispatch-tasks"),
+                &staff,
+                serde_json::json!({ "task_ids": [task], "entity_id": vendor }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok, "{sent}");
+            tid
+        }
+    };
+    let mine_tid = send(pipes.clone(), "Portal: main line backs up").await;
+    let theirs_tid = send(other.clone(), "Portal: other vendor's job").await;
+
+    let (st, inv) = post_json(
+        c,
+        &format!("/entities/{pipes}/portal-invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{inv}");
+    assert_eq!(inv["outcome"], "invited");
+    let uid = uuid::Uuid::parse_str(inv["user_id"].as_str().unwrap()).unwrap();
+    let (st, again) = post_json(
+        c,
+        &format!("/entities/{pipes}/portal-invite"),
+        &staff,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{again}");
+    let tok = crate::auth::issue_access_token(&c.config, uid, Some(nw), false, vec![]).unwrap();
+
+    let (st, me) = get_json(c, "/vendor-portal/me", &tok).await;
+    assert_eq!(st, Status::Ok, "{me}");
+    assert_eq!(me["vendor"], "Portal Pipes");
+    assert!(me["open_jobs"].as_u64().unwrap() >= 1);
+    let (_, jobs) = get_json(c, "/vendor-portal/jobs", &tok).await;
+    let job = jobs["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["ticket_id"] == mine_tid)
+        .expect("my job is listed")
+        .clone();
+    assert!(jobs["open"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|j| j["ticket_id"] != theirs_tid));
+    let batch = job["batch"].as_str().unwrap().to_string();
+    let (st, detail) = get_json(c, &format!("/vendor-portal/jobs/{batch}"), &tok).await;
+    assert_eq!(st, Status::Ok, "{detail}");
+    assert_eq!(detail["title"], "Portal: main line backs up");
+    let (st, acc) = post_json(
+        c,
+        &format!("/vendor-portal/jobs/{batch}/accept"),
+        &tok,
+        serde_json::json!({ "note": "Tomorrow morning" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{acc}");
+    assert_eq!(acc["response"], "accepted");
+
+    // Someone else's job, by its batch: not found.
+    let other_task = entity::prelude::TicketTask::find()
+        .filter(
+            entity::ticket_task::Column::TicketId.eq(uuid::Uuid::parse_str(&theirs_tid).unwrap()),
+        )
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let other_batch = other_task.vendor_token_hash.unwrap();
+    let (st, _) = get_json(c, &format!("/vendor-portal/jobs/{other_batch}"), &tok).await;
+    assert_eq!(st, Status::NotFound);
+    let (st, _) = post_json(
+        c,
+        &format!("/vendor-portal/jobs/{other_batch}/accept"),
+        &tok,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
+
+    // The vendor login opens nothing in the console; staff aren't vendors.
+    let (st, _) = get_json(c, "/properties", &tok).await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = get_json(c, "/vendor-portal/me", &staff).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// Campground reservations: a published campground map with two sites, a
+/// season and add-ons; staff and a guest book; the same nights can't be
+/// taken twice; a stay goes from request to cleaned; the guest cancels by
+/// link; nothing public answers until booking is open.
+async fn campground_flow(c: &Ctx) {
+    use rocket::http::{ContentType, Method};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let (st, map) = post_json(
+        c,
+        "/site-maps",
+        &staff,
+        serde_json::json!({ "property_id": pid, "name": "Pine Hollow", "kind": "campground", "base_layer": "grid", "center_lng": -122.6, "center_lat": 45.5, "zoom": 17 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{map}");
+    let mid = map["id"].as_str().unwrap().to_string();
+    let (st, saved) = send_json(
+        c,
+        Method::Put,
+        &format!("/site-maps/{mid}/features"),
+        &staff,
+        serde_json::json!({ "features": [
+            { "kind": "site", "name": "A1", "geometry": { "type": "Point", "coordinates": [-122.6, 45.5] },
+              "attrs": { "site_type": "rv", "max_length_ft": 35, "max_guests": 6, "rate_cents_night": 4500, "rate_cents_week": 25000 } },
+            { "kind": "site", "name": "T1", "geometry": { "type": "Point", "coordinates": [-122.6005, 45.5005] },
+              "attrs": { "site_type": "tent", "max_guests": 4, "rate_cents_night": 2500 } }
+        ] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{saved}");
+    let (_, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/site-maps/{mid}"),
+        &staff,
+        serde_json::json!({ "published": true }),
+    )
+    .await;
+
+    let (st, camp) = get_json(c, &format!("/campgrounds/{mid}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    let a1 = camp["sites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "A1")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let t1 = camp["sites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "T1")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Not bookable by the public until it's opened.
+    let resp = c
+        .client
+        .get(format!("/public/campgrounds/{mid}?tenant=northwind"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::NotFound);
+    let (st, cfg) = send_json(
+        c,
+        Method::Put,
+        &format!("/campgrounds/{mid}/config"),
+        &staff,
+        serde_json::json!({ "booking_open": true, "deposit_pct": 20, "check_in_time": "14:00", "check_out_time": "11:00", "max_nights": 60,
+            "addons": [{ "key": "firewood", "label": "Firewood", "price_cents": 800, "per": "stay" }], "policies": "Quiet hours 10 PM to 7 AM." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{cfg}");
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/seasons"), &staff, serde_json::json!({ "name": "Peak", "start_md": "01-01", "end_md": "12-31", "adjust_pct": 10, "min_nights": 2 })).await;
+    assert_eq!(st, Status::Ok);
+
+    let day = |n: i64| {
+        (chrono::Utc::now() + chrono::Duration::days(n))
+            .date_naive()
+            .to_string()
+    };
+    let (st, q) = post_json(c, &format!("/campgrounds/{mid}/quote"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(13), "addons": [["firewood", 1]] })).await;
+    assert_eq!(st, Status::Ok, "{q}");
+    assert_eq!(q["base_cents"], 13500);
+    assert_eq!(q["stay_cents"], 14850);
+    assert_eq!(q["total_cents"], 15650);
+    assert_eq!(q["deposit_cents"], 3130);
+    let (st, short) = post_json(
+        c,
+        &format!("/campgrounds/{mid}/quote"),
+        &staff,
+        serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(11) }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{short}");
+
+    // Staff book A1; the same nights can't be taken again; a rig too long is refused.
+    let (st, stay) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(13), "guest_name": "Dana Ortiz", "email": "dana@example.com", "guests": 2, "rig_length_ft": 30 })).await;
+    assert_eq!(st, Status::Ok, "{stay}");
+    assert_eq!(stay["status"], "confirmed");
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(12), "check_out": day(14), "guest_name": "Late Larry" })).await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(13), "check_out": day(15), "guest_name": "Big Rig", "rig_length_ft": 45 })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, back) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(13), "check_out": day(15), "guest_name": "Next Nadia" })).await;
+    assert_eq!(
+        st,
+        Status::Ok,
+        "the check-out day is free for the next guest: {back}"
+    );
+
+    // The public sees T1 free and A1 taken for those nights, and requests T1.
+    let resp = c
+        .client
+        .get(format!(
+            "/public/campgrounds/{mid}?tenant=northwind&from={}&to={}",
+            day(10),
+            day(12)
+        ))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let pubc: serde_json::Value = resp.into_json().await.unwrap();
+    let free = |name: &str| {
+        pubc["sites"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["site"]["name"] == name)
+            .unwrap()["free"]
+            .clone()
+    };
+    assert_eq!(free("A1"), false);
+    assert_eq!(free("T1"), true);
+    let resp = c
+        .client
+        .post(format!("/public/campgrounds/{mid}/stays?tenant=northwind"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "site_id": t1, "check_in": day(10), "check_out": day(12), "guest_name": "Sam Lee", "email": "sam@example.com", "guests": 2, "addons": [["firewood", 2]] }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let req: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(req["stay"]["status"], "held");
+    let link = req["link"].as_str().unwrap().to_string();
+    let token = link.rsplit('/').next().unwrap().to_string();
+    let resp = c
+        .client
+        .get(format!("/public/stays/{token}"))
+        .dispatch()
+        .await;
+    let g: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(g["can_cancel"], true);
+    assert_eq!(g["stay"]["site_name"], "T1");
+
+    // The front desk: the request shows; confirm, pay, check in, out, clean.
+    let (_, b) = get_json(
+        c,
+        &format!("/campgrounds/{mid}/board?date={}", day(10)),
+        &staff,
+    )
+    .await;
+    assert!(b["requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["guest_name"] == "Sam Lee"));
+    assert!(b["arriving"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["guest_name"] == "Dana Ortiz"));
+    let sid = stay["id"].as_str().unwrap();
+    for (action, extra) in [
+        ("check_in", serde_json::json!({})),
+        ("payment", serde_json::json!({ "amount_cents": 15650 })),
+        ("check_out", serde_json::json!({})),
+        ("cleaned", serde_json::json!({})),
+    ] {
+        let mut body = extra.clone();
+        body["action"] = serde_json::json!(action);
+        let (st, r) = send_json(c, Method::Patch, &format!("/stays/{sid}"), &staff, body).await;
+        assert_eq!(st, Status::Ok, "{action}: {r}");
+    }
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("/stays/{sid}"),
+        &staff,
+        serde_json::json!({ "action": "check_in" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{done}");
+    let row = entity::prelude::Stay::find_by_id(uuid::Uuid::parse_str(sid).unwrap())
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            row.status.as_str(),
+            row.paid_cents,
+            row.cleaned_at.is_some()
+        ),
+        ("checked_out", 15650, true)
+    );
+
+    // The guest cancels their request by link; T1 is free again.
+    let resp = c
+        .client
+        .post(format!("/public/stays/{token}/cancel"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let (_, avail) = get_json(
+        c,
+        &format!(
+            "/campgrounds/{mid}/availability?from={}&to={}",
+            day(10),
+            day(12)
+        ),
+        &staff,
+    )
+    .await;
+    let t1row = avail
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["site"]["name"] == "T1")
+        .unwrap();
+    assert_eq!(t1row["free"], true);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &reader, serde_json::json!({ "site_id": t1, "check_in": day(20), "check_out": day(22), "guest_name": "X" })).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
 /// Owner approvals: work over the owner's limit can't go to a vendor until
 /// the owner says yes from their link; finished billable work asks them to
 /// sign off; the owner portal shows their holdings, asks and statement.
@@ -9354,4 +10432,336 @@ async fn appointments_flow(c: &Ctx) {
     );
     let (st, _) = get_json(c, &format!("/appointments/{aid3}"), &outsider).await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// Area 17: a bill from the family's own maintenance company waits for a
+/// market-rate note and a decision by someone who isn't a party; foundation
+/// mode splits rent with a voucher, certifies income, and charges at cost.
+async fn family_plan_flow(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let mint_as = |uid: Uuid, perms: &[&str]| {
+        crate::auth::issue_access_token(
+            &c.config,
+            uid,
+            Some(nw),
+            false,
+            perms.iter().map(|s| s.to_string()).collect(),
+        )
+        .unwrap()
+    };
+    let all = [
+        "payable:read",
+        "payable:manage",
+        "payable:approve",
+        "entity:manage",
+        "tenant:manage",
+        "lease:read",
+        "lease:manage",
+    ];
+    let (clerk_id, family_id, trustee_id) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let clerk = mint_as(clerk_id, &all);
+    let family = mint_as(family_id, &all);
+    let trustee = mint_as(trustee_id, &all);
+
+    // An active lease on a property an LLC holds: that LLC pays, and goes
+    // foundation later.
+    let lease = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(nw))
+        .filter(entity::lease::Column::Status.eq("active"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let mut picked = None;
+    for l in lease {
+        let p = Property::find_by_id(l.property_id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        if let Some(llc) = p.llc_id {
+            picked = Some((l, llc));
+            break;
+        }
+    }
+    let (lease, payer) = picked.expect("a lease on an LLC's property");
+
+    // The family's maintenance company, owned by a family member who is a user.
+    let (st, maint) = post_json(
+        c,
+        "/llcs",
+        &clerk,
+        serde_json::json!({ "name": "Family Maintenance LLC" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{maint}");
+    let maint_id: Uuid = maint["id"].as_str().unwrap().parse().unwrap();
+    let owner = entity::owner::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(nw),
+        kind: Set("individual".into()),
+        name: Set("Pat Family".into()),
+        email: Set(None),
+        phone: Set(None),
+        notes: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        user_id: Set(Some(family_id)),
+        approval_limit_cents: Set(None),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    entity::entity_ownership::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(nw),
+        entity_id: Set(maint_id),
+        owner_id: Set(owner.id),
+        ownership_bps: Set(10_000),
+        role: Set("member".into()),
+        created_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+
+    // The vendor record for that company, marked related.
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &clerk,
+        serde_json::json!({ "kind": "contractor", "name": "Family Maintenance" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let vid = v["id"].as_str().unwrap().to_string();
+    let (st, v) = send_json(
+        c,
+        Method::Put,
+        &format!("/entities/{vid}/related"),
+        &clerk,
+        serde_json::json!({ "related_llc_id": maint_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["related_llc_id"], maint_id.to_string());
+
+    // A bill from it is flagged the moment it's raised.
+    let (st, bill) = post_json(c, "/payables", &clerk, serde_json::json!({ "counterparty_id": vid, "entity_id": payer, "amount_cents": 90_000, "memo": "Water heater swap" })).await;
+    assert_eq!(st, Status::Ok, "{bill}");
+    let bid = bill["id"].as_str().unwrap().to_string();
+    let (_, open) = get_json(c, "/related-party?status=open", &clerk).await;
+    let review = open
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["subject_id"] == bid)
+        .expect("bill review")
+        .clone();
+    let rid = review["id"].as_str().unwrap().to_string();
+    assert_eq!(review["parties"][0]["name"], "Pat Family");
+    assert_eq!(review["amount_cents"], 90_000);
+
+    let (st, _) = post_json(
+        c,
+        &format!("/payables/{bid}/submit"),
+        &clerk,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    // Not approvable while the review is open.
+    let (st, err) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &trustee,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{err}");
+
+    // The family member can't decide it; the clerk who raised it can't either.
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &family,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &clerk,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    // The trustee needs the market-rate note first.
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &trustee,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, r) = send_json(c, Method::Patch, &format!("/related-party/{rid}"), &clerk, serde_json::json!({ "market_cents": 110_000, "market_note": "Two outside quotes: $1,100 and $1,250." })).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let (st, r) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &trustee,
+        serde_json::json!({ "approve": true, "note": "Below market." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["status"], "approved");
+
+    // A party still can't approve the bill; the trustee can.
+    let (st, _) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &family,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, b) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &trustee,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{b}");
+    assert_eq!(b["status"], "approved");
+
+    // A lease to a relative, flagged by hand.
+    let (st, f) = post_json(c, "/related-party", &clerk, serde_json::json!({ "subject_type": "lease", "subject_id": lease.id, "entity_id": payer, "summary": "Lease to a cousin", "amount_cents": lease.rent_cents, "party_owner_ids": [owner.id] })).await;
+    assert_eq!(st, Status::Ok, "{f}");
+    let (st, _) = post_json(
+        c,
+        "/related-party",
+        &clerk,
+        serde_json::json!({ "subject_type": "lease", "subject_id": lease.id, "summary": "Again" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // ---- foundation mode ----
+    let (st, l) = send_json(
+        c,
+        Method::Put,
+        &format!("/llcs/{payer}/foundation"),
+        &clerk,
+        serde_json::json!({ "foundation": true, "fee_basis": "at_cost" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{l}");
+    assert_eq!(l["fee_basis"], "at_cost");
+
+    let lid = lease.id;
+    let (st, _) = send_json(c, Method::Put, &format!("/leases/{lid}/voucher"), &clerk, serde_json::json!({ "authority": "County Housing Authority", "hap_cents": lease.rent_cents + 1, "starts_on": "2020-01-01" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let hap = lease.rent_cents - 30_000;
+    let (st, a) = send_json(c, Method::Put, &format!("/leases/{lid}/voucher"), &clerk, serde_json::json!({ "authority": "County Housing Authority", "contract_number": "HAP-2207", "hap_cents": hap, "starts_on": "2020-01-01" })).await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["foundation"], true);
+    assert_eq!(a["resident_share_cents"], 30_000);
+    assert_eq!(a["certification"], "missing");
+
+    // 60% of an $80,000 AMI is $48,000: $45,000 qualifies.
+    let (st, a) = post_json(c, &format!("/leases/{lid}/income-certifications"), &clerk, serde_json::json!({ "effective_on": "2031-01-01", "household_size": 3, "annual_income_cents": 4_500_000, "ami_cents": 8_000_000, "limit_pct": 60 })).await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["certifications"][0]["qualified"], true);
+    assert_eq!(a["certifications"][0]["expires_on"], "2032-01-01");
+    assert_eq!(a["certifications"][0]["limit_cents"], 4_800_000);
+    let (_, rows) = get_json(c, "/foundation/compliance", &clerk).await;
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["lease_id"] == lid.to_string())
+        .expect("compliance row")
+        .clone();
+    assert_eq!(row["authority"], "County Housing Authority");
+
+    // The rent run splits the month: the resident's share and the HAP.
+    crate::billing::raise_rent_receivables(
+        &c.db,
+        nw,
+        chrono::NaiveDate::from_ymd_opt(2031, 3, 15).unwrap(),
+    )
+    .await
+    .unwrap();
+    let rows = entity::prelude::LeasePayment::find()
+        .filter(entity::lease_payment::Column::LeaseId.eq(lid))
+        .filter(entity::lease_payment::Column::DueDate.like("2031-03-%"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let rent: i64 = rows
+        .iter()
+        .filter(|p| p.kind == "rent")
+        .map(|p| p.amount_cents)
+        .sum();
+    let haps: Vec<_> = rows.iter().filter(|p| p.kind == "hap").collect();
+    assert_eq!(haps.len(), 1, "{rows:?}");
+    assert_eq!(haps[0].amount_cents, hap);
+    assert!(rent >= 30_000, "resident share {rent}");
+    let (st, a) = post_json(
+        c,
+        &format!("/lease-payments/{}/hap-received", haps[0].id),
+        &clerk,
+        serde_json::json!({ "paid_date": "2031-03-05" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert!(a["hap_due"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|h| h["payment_id"] != haps[0].id.to_string()));
+    let (st, _) = post_json(
+        c,
+        &format!("/lease-payments/{}/hap-received", haps[0].id),
+        &clerk,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // At cost: two hours on the property at $30 an hour, plus burden.
+    c.db.execute(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DbBackend::Postgres,
+        "INSERT INTO time_entry (id, tenant_id, user_id, kind, property_id, started_at, ended_at, pay_rate_cents) \
+         VALUES ($1, $2, $3, 'work_order', $4, '2031-03-10T17:00:00Z', '2031-03-10T19:00:00Z', 3000)",
+        [Uuid::new_v4().into(), nw.into(), Uuid::new_v4().into(), lease.property_id.into()],
+    ))
+    .await
+    .unwrap();
+    let s = crate::routes::reports::owner_statement::build(
+        &c.db,
+        nw,
+        payer,
+        "2031-03-01",
+        "2031-03-31",
+    )
+    .await
+    .unwrap();
+    assert_eq!(s.mgmt_fee_basis, "at_cost");
+    assert!(s.mgmt_fee_cents >= 6_000, "fee {}", s.mgmt_fee_cents);
+    assert!(s.rent_collected_cents >= hap);
+
+    // Put it back so later scenarios see a plain LLC.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/llcs/{payer}/foundation"),
+        &clerk,
+        serde_json::json!({ "foundation": false, "fee_basis": "percent" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
 }

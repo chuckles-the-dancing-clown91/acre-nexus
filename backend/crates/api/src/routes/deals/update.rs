@@ -51,6 +51,28 @@ pub async fn update(
     if let Some(v) = b.property_type {
         m.property_type = Set(Some(v));
     }
+    if let Some(v) = b.acres {
+        if v <= 0.0 {
+            return Err(ApiError::BadRequest("acres must be more than zero".into()));
+        }
+        m.acres = Set(Some(v));
+    }
+    let text = |v: String| {
+        let t = v.trim().to_string();
+        (!t.is_empty()).then_some(t)
+    };
+    if let Some(v) = b.zoning {
+        m.zoning = Set(text(v));
+    }
+    if let Some(v) = b.water_access {
+        m.water_access = Set(text(v));
+    }
+    if let Some(v) = b.power_access {
+        m.power_access = Set(text(v));
+    }
+    if let Some(v) = b.road_access {
+        m.road_access = Set(text(v));
+    }
     if let Some(v) = b.source {
         m.source = Set(Some(v));
     }

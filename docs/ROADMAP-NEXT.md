@@ -19,17 +19,17 @@ server-rendered public site for search (`docs/SEO.md`).
 | 4 | Issue catalog → generate ticket → parts → shopping list | ☑ |
 | 5 | Site maps: apartment layouts and campgrounds | ☑ |
 | 6 | Tenant home search | ◐ |
-| 7 | House onboarding with autofill | ◐ |
-| 8 | Campground reservations (follows the map) | ☐ |
+| 7 | House onboarding with autofill | ☑ |
+| 8 | Campground reservations (follows the map) | ☑ |
 | 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
-| 11 | Vendor portal and compliance (W-9, COI, 1099) | ☐ |
-| 12 | Owner portal and spend approvals | ☐ |
-| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☐ |
-| 14 | Listing media, map search, saved searches and listing feeds | ☐ |
-| 15 | Operations analytics and the portfolio map | ☐ |
-| 16 | Spanish for everything a resident sees | ☐ |
-| 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
+| 11 | Vendor portal and compliance (W-9, COI, 1099) | ☑ |
+| 12 | Owner portal and spend approvals | ☑ |
+| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☑ |
+| 14 | Listing media, map search, saved searches and listing feeds | ◐ |
+| 15 | Operations analytics and the portfolio map | ☑ |
+| 16 | Spanish for everything a resident sees | ◐ |
+| 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☑ |
 
 The concrete fixes, sized and in build order, are in [`FIX-PLAN.md`](FIX-PLAN.md).
 
@@ -225,7 +225,12 @@ with alerts, tours without phone tag, and commute time.
 6. Favourites and compare (local first, account later).
 7. Commute-time filter (a routing provider call, cached).
 
-## 7. House onboarding with autofill ◐
+## 7. House onboarding with autofill ☑
+
+Shipped: year built and a market rent proposed from the record and the rent
+estimate, and a per-house checklist ticked from the data
+([`PROPERTY-PROFILE.md`](PROPERTY-PROFILE.md), "Getting this house ready").
+Utilities and schools already come from enrichment.
 
 **Today.** A three-step wizard with address autocomplete; the property, loans,
 assignments and an enrichment job are created in one call. But enrichment is
@@ -249,7 +254,9 @@ live provider; parcel, tax, valuation, schools and utilities are simulated.
   engine as turnover (area 3).
 - One-click "new property in a new LLC" (already modelled).
 
-## 8. Campground reservations ☐
+## 8. Campground reservations ☑
+
+Shipped: see [CAMPGROUNDS.md](CAMPGROUNDS.md).
 
 The map makes sites bookable; this makes them rentable. Availability calendar per
 site, stays (check-in/out, nights, guests, vehicle), nightly/weekly/monthly rate
@@ -286,7 +293,13 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
   baths and square feet are proposed and applied only when ticked, with an audit
   entry. Left: year built and lot from a live parcel provider, utilities and
   schools, and proposing a rent from comparables.
-- **8 Campground reservations** ☐. Follows the map.
+- **8 Campground reservations** ☑. Any published campground or RV park map
+  takes bookings: nightly, weekly and monthly rates from the site, seasons that
+  move the price and set a minimum stay, add-ons, a deposit, a guest booking page
+  with request and a stay link (cancel before arrival), a front desk (requests,
+  arriving, leaving, in house, to clean, payments) and a two-week calendar.
+  Double booking is blocked per site. Left: card payment of the deposit online,
+  booking from the drawn map itself, and site turns on the step engine.
 
 ---
 
@@ -297,8 +310,9 @@ relative to `backend/crates/api/src` unless they start with `frontend/`.
 
 ## 9. Go-live hardening ◐
 
-Shipped: list limits and Settings → Schedule (job history, run now). Left:
-backups and the restore drill, Playwright journeys, the provider go-live page.
+Shipped: list limits and Settings → Schedule (job history, run now), encrypted
+backups with a timed restore drill, and the provider go-live page
+([`DEPLOYMENT.md`](DEPLOYMENT.md)). Left: Playwright journeys.
 
 **Today.** `GET /applications`, `GET /my/applications` and `GET /public/listings`
 return every row (`routes/applications/list.rs`, `routes/applications/portal.rs`,
@@ -347,7 +361,13 @@ on/off switch and lead days, every send logged against the lease:
 - **Morning digest** for managers: rent late, leases expiring, tickets past SLA,
   turns past target, tours booked today. One email, skipped when empty.
 
-## 11. Vendor portal and compliance ◐
+## 11. Vendor portal and compliance ☑
+
+Since: every batch sent to a vendor carries a no-account link to accept,
+decline, book, upload photos and an invoice, and mark it done
+([`SERVICE-DESK.md`](SERVICE-DESK.md), "The vendor's link"). The signed-in vendor portal
+across all of a vendor's work shipped too ([`SERVICE-DESK.md`](SERVICE-DESK.md),
+"The vendor portal").
 
 **Today.** Vendors are counterparties. There is a token API for vendor systems
 (`routes/vendor`) and the Alpha link, but no portal for a vendor to sign into.
@@ -366,7 +386,12 @@ current cover before dispatch. The portal (F13) is still to do.
   an override with a reason (audited).
 - Alpha vendors keep working through the partner link; the portal is for everyone else.
 
-## 12. Owner portal and spend approvals ☐
+## 12. Owner portal and spend approvals ☑
+
+Shipped: see [`OWNERS.md`](OWNERS.md). Work over the owner's limit waits for
+their approval by link, text or portal, with an audited staff override;
+finished billable work asks for sign-off; `/account/owner` has holdings, open
+work and a monthly statement as a page and PDF, emailed on the statement day.
 
 **Today.** Owners sign into the full console with the `landlord` role. The data
 already exists staff-side: owner statements, payouts, rent roll, T-12, open work
@@ -381,7 +406,10 @@ orders, documents. There is no approval threshold on spending.
   text reply, with an emergency override for staff (audited).
 - Monthly statement email with the PDF, from the existing report.
 
-## 13. Texts, round 2 ◐
+## 13. Texts, round 2 ☑
+
+Shipped: linking an unknown number to a resident, prospect or vendor, and
+missed-call text-back ([`TEXTS.md`](TEXTS.md)).
 
 **Today.** Two-way texts, STOP/START and a shared inbox are shipped. Fix plan
 F14–F17 added rating by text, text to work order links, saved replies, assigning
@@ -400,6 +428,9 @@ linking an unknown number to a person by hand, and missed-call text-back.
 
 ## 14. Listing media, map search and listing feeds ◐
 
+Since: Zillow (HotPads) and MITS listing feeds shipped
+([`LISTING-SYNDICATION.md`](LISTING-SYNDICATION.md)).
+
 **Today.** Listing photos shipped (fix plan F18): ordered, captioned, alt text
 required, feeding the listing page, cards, share image and JSON-LD. Resized
 variants are still to do. Search has filters but no map, no saved
@@ -416,7 +447,10 @@ is no Zillow or Apartments.com feed.
   for portals that accept a feed, plus availability updates when a unit leases.
   Self-showing and lockboxes stay out until a customer asks.
 
-## 15. Operations analytics and the portfolio map ☐
+## 15. Operations analytics and the portfolio map ☑
+
+Shipped: see [`REPORTS.md`](REPORTS.md), "Operations analytics and the
+portfolio map". The report builder is still deliberately not built.
 
 **Today.** Fixed reports exist (rent roll, T-12, aging, delinquency, owner
 statement, 1099) and a portfolio summary. Turns now record days vacant and cost;
@@ -433,7 +467,12 @@ broke. None of it is summarised. The portfolio map (#57) is not built.
   work, with the site maps one click away.
 - A saved-view report builder only after these show which questions repeat.
 
-## 16. Spanish for everything a resident sees ☐
+## 16. Spanish for everything a resident sees ◐
+
+Shipped: a language per person and Spanish versions of the 32 messages
+residents, applicants and prospects get ([`NOTIFICATIONS.md`](NOTIFICATIONS.md),
+"Spanish"). Left: the portal screens, the public site, and lease and notice
+PDFs.
 
 **Today.** No i18n at all; only the Spanish STOP words are handled.
 
@@ -442,9 +481,13 @@ per language with English fallback, the resident portal and public site translat
 lease and notice PDFs per language. Staff screens stay English. Start with the
 templates that send most (rent, maintenance, renewals).
 
-## 17. Family-plan features ☐
+## 17. Family-plan features ☑
 
-From the partnership letter; none started.
+Shipped: see [FAMILY-PLAN.md](FAMILY-PLAN.md). Left: flagging leases and
+deals automatically (they're flagged by hand today), the HUD income-limit
+table instead of typing AMI, and a HAP contract file per voucher.
+
+From the partnership letter:
 - **Related-party guard**: flag transactions between the family's entities; each
   needs a market-rate note and an approver who isn't a party to it.
 - **Foundation mode**: income-limit certifications, voucher (HAP) payments split

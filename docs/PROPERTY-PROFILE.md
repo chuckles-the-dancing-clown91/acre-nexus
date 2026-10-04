@@ -25,6 +25,38 @@ below for every property, and (for people who see the whole company) vendors
 with W-9 or insurance problems. Each line goes where it gets done. Items sort
 high first, then by date; the chips at the top filter by kind.
 
+## Getting this house ready
+
+The top of the Overview tab (`components/property/Readiness.tsx`) shows the
+house onboarding checklist from `GET /properties/<id>/checklist`
+(`property:read`, narrowed to reach). Every step is ticked from the data, in
+order, each linking to where it gets done; the first open required step is
+marked **next**:
+
+| Step | Done when |
+| --- | --- |
+| Address placed on the map | the property data has coordinates |
+| Property record filled in | the record was fetched and no suggested value is waiting |
+| A photo | the property has an image |
+| Units set up | units exist, at least as many as the property says it has |
+| Owner LLC | an LLC owns it |
+| Financing (optional) | a loan is on file |
+| Insurance | a policy on file that isn't cancelled or expired |
+| Utilities | a utility provider on file |
+| A manager assigned | someone is assigned to the property |
+| Market rent set | every unit has a market rent |
+| Leased or listed | every unit has a current lease, or the property has a public listing |
+
+The same panel lists **suggestions from the property record** with a box to
+tick each and **Apply** (`GET /properties/<id>/autofill`,
+`POST /properties/<id>/autofill/apply`, `property:write`, audited as
+`property.autofill`): property type, **year built** (now read from the
+records provider into `property_detail.year_built`, migration 077), and for
+a single-unit property the unit's beds, baths and square feet and a
+**market rent** from the latest rent estimate. Nothing is written until
+someone applies it. When every required step is done and nothing is waiting,
+the panel shrinks to one "Ready" line.
+
 ## Overview
 
 **To do** comes first: the property's action items and what needs attention.

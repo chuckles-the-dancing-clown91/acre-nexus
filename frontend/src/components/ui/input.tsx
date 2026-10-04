@@ -75,3 +75,7 @@ export function Field({
     </div>
   );
 }
+
+/** Classes for a plain select or input inside a toolbar. */
+export const fieldClass =
+  "rounded-xl border border-line bg-surface px-3 py-2 text-[13px] text-fg outline-none focus:border-accent";

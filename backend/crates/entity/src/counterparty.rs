@@ -37,6 +37,10 @@ pub struct Model {
     pub partner_error: Option<String>,
     /// When we last invited this vendor to sign up for Alpha.
     pub alpha_invited_at: Option<DateTimeWithTimeZone>,
+    /// Set when this counterparty is one of the family's own entities.
+    pub related_llc_id: Option<Uuid>,
+    /// Set when this counterparty is a family member (an owner).
+    pub related_owner_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

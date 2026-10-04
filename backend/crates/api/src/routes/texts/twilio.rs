@@ -143,3 +143,138 @@ pub async fn status(
     }
     Ok(RawXml(EMPTY_TWIML))
 }
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// What Twilio does with a call to the texting number: say the greeting,
+/// then ring `forward` for 20 seconds and report back to `after_url`, or
+/// hang up when there's nothing to ring.
+pub fn voice_twiml(greeting: &str, forward: Option<&str>, after_url: &str) -> String {
+    let say = if greeting.trim().is_empty() {
+        String::new()
+    } else {
+        format!("<Say>{}</Say>", xml_escape(greeting.trim()))
+    };
+    match forward {
+        Some(n) => format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?><Response>{say}<Dial timeout="20" action="{}" method="POST"><Number>{}</Number></Dial></Response>"#,
+            xml_escape(after_url),
+            xml_escape(n)
+        ),
+        None => {
+            format!(r#"<?xml version="1.0" encoding="UTF-8"?><Response>{say}<Hangup/></Response>"#)
+        }
+    }
+}
+
+/// Did the rung phone pick up? (`DialCallStatus` from Twilio.)
+pub fn answered(dial_status: Option<&str>) -> bool {
+    dial_status == Some("completed")
+}
+
+async fn greeting_and_forward(state: &AppState, tenant_id: uuid::Uuid) -> (String, Option<String>) {
+    use crate::settings as cfg;
+    let company = entity::prelude::Tenant::find_by_id(tenant_id)
+        .one(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|t| t.name)
+        .unwrap_or_default();
+    let greeting = cfg::get_string(&state.db, tenant_id, cfg::TEXTS_VOICE_GREETING)
+        .await
+        .replace("{company}", &company);
+    let forward = texts::normalize_phone(
+        &cfg::get_string(&state.db, tenant_id, cfg::TEXTS_FORWARD_NUMBER).await,
+    );
+    (greeting, forward)
+}
+
+/// `POST /webhooks/twilio/voice?tenant=<slug>` — someone called the texting
+/// number. Rings the office phone when one is set; otherwise the call is
+/// missed and the caller is texted back.
+#[rocket_okapi::openapi(skip)]
+#[post("/webhooks/twilio/voice", data = "<body>")]
+pub async fn voice(
+    state: &State<AppState>,
+    tenant: PublicTenant,
+    twilio: TwilioRequest,
+    body: String,
+) -> ApiResult<RawXml<String>> {
+    let form = verified_form(state, tenant.tenant_id, &twilio, &body).await?;
+    let (greeting, forward) = greeting_and_forward(state, tenant.tenant_id).await;
+    let query = twilio
+        .origin
+        .split_once('?')
+        .map(|(_, q)| format!("?{q}"))
+        .unwrap_or_default();
+    let after = format!(
+        "{}/webhooks/twilio/voice/after{query}",
+        crate::oauth::public_api_url()
+    );
+    if forward.is_none() {
+        let from = field(&form, "From").unwrap_or_default();
+        let sid = field(&form, "CallSid").map(|s| format!("twilio-call:{s}"));
+        texts::record_missed_call(&state.db, tenant.tenant_id, from, sid).await?;
+    }
+    Ok(RawXml(voice_twiml(&greeting, forward.as_deref(), &after)))
+}
+
+/// `POST /webhooks/twilio/voice/after?tenant=<slug>` — how the rung phone
+/// answered. Anything but a completed call is a missed call.
+#[rocket_okapi::openapi(skip)]
+#[post("/webhooks/twilio/voice/after", data = "<body>")]
+pub async fn voice_after(
+    state: &State<AppState>,
+    tenant: PublicTenant,
+    twilio: TwilioRequest,
+    body: String,
+) -> ApiResult<RawXml<&'static str>> {
+    let form = verified_form(state, tenant.tenant_id, &twilio, &body).await?;
+    if !answered(field(&form, "DialCallStatus")) {
+        let from = field(&form, "From").unwrap_or_default();
+        let sid = field(&form, "CallSid").map(|s| format!("twilio-call:{s}"));
+        texts::record_missed_call(&state.db, tenant.tenant_id, from, sid).await?;
+    }
+    Ok(RawXml(
+        r#"<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>"#,
+    ))
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    #[test]
+    fn rings_then_reports_back() {
+        let x = voice_twiml(
+            "Thanks for calling A & B.",
+            Some("+15035550100"),
+            "https://api.example/webhooks/twilio/voice/after?tenant=nw",
+        );
+        assert!(x.contains("<Say>Thanks for calling A &amp; B.</Say>"));
+        assert!(x.contains(r#"<Dial timeout="20" action="https://api.example/webhooks/twilio/voice/after?tenant=nw" method="POST"><Number>+15035550100</Number></Dial>"#));
+    }
+
+    #[test]
+    fn hangs_up_with_nothing_to_ring() {
+        let x = voice_twiml("", None, "x");
+        assert!(x.ends_with("<Response><Hangup/></Response>"));
+        assert!(!x.contains("<Say>"));
+    }
+
+    #[test]
+    fn only_completed_is_answered() {
+        assert!(answered(Some("completed")));
+        for s in ["no-answer", "busy", "failed", "canceled"] {
+            assert!(!answered(Some(s)));
+        }
+        assert!(!answered(None));
+    }
+}

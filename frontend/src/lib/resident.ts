@@ -14,6 +14,15 @@ export function isResidentOnly(
   return active.length > 0 && active.every((m) => m.profile_type === "renter");
 }
 
+/** Signed in only as a vendor of a workspace (the vendor portal). */
+export function isVendorOnly(
+  user: Pick<User, "is_platform_staff" | "memberships"> | null | undefined
+): boolean {
+  if (!user || user.is_platform_staff) return false;
+  const active = user.memberships.filter((m) => m.status !== "revoked");
+  return active.length > 0 && active.every((m) => m.profile_type === "vendor");
+}
+
 /** Status words a resident reads. */
 export function residentStatus(status: string, waitingOn?: string | null) {
   switch (status) {
@@ -70,5 +79,6 @@ export function landingFor(
   )
     return next;
   if (isOwnerOnly(user)) return "/account/owner";
+  if (isVendorOnly(user)) return "/account/vendor";
   return isResidentOnly(user) ? "/account/maintenance" : "/console";
 }

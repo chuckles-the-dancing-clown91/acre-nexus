@@ -35,6 +35,8 @@ pub struct OwnerStatementResp {
     pub expenses_label: String,
     pub mgmt_fee_cents: i64,
     pub mgmt_fee_label: String,
+    /// `percent` of collected rent, or `at_cost` (staff time at cost).
+    pub mgmt_fee_basis: String,
     pub net_cents: i64,
     pub net_label: String,
 }
@@ -76,10 +78,17 @@ pub async fn build(
 
     let act =
         crate::payouts::gather_period(db, tenant_id, entity_id, period_start, period_end).await?;
-    let mgmt_fee_bps =
-        crate::settings::get_i64(db, tenant_id, crate::settings::PAYOUT_MGMT_FEE_BPS).await;
+    let (fee, basis) = crate::family::mgmt_fee(
+        db,
+        tenant_id,
+        entity_id,
+        period_start,
+        period_end,
+        act.rent_collected_cents,
+    )
+    .await?;
     let amounts =
-        crate::payouts::compute_amounts(act.rent_collected_cents, act.expenses_cents, mgmt_fee_bps);
+        crate::payouts::amounts_with_fee(act.rent_collected_cents, act.expenses_cents, fee);
 
     Ok(OwnerStatementResp {
         generated_at: super::today().to_string(),
@@ -102,6 +111,7 @@ pub async fn build(
         expenses_label: usd(amounts.expenses_cents),
         mgmt_fee_cents: amounts.mgmt_fee_cents,
         mgmt_fee_label: usd(amounts.mgmt_fee_cents),
+        mgmt_fee_basis: basis.to_string(),
         net_cents: amounts.net_cents,
         net_label: usd(amounts.net_cents),
     })

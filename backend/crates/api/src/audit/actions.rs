@@ -226,6 +226,14 @@ pub const OWNER_BILL_CREATE: &str = "owner_bill.create";
 pub const OWNER_APPROVAL_OVERRIDE: &str = "owner_approval.override";
 /// A thread was marked done / reopened.
 pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
+/// A person's message language was set.
+pub const LANGUAGE_SET: &str = "language.set";
+/// A vendor was given a vendor-portal login.
+pub const VENDOR_PORTAL_INVITE: &str = "vendor.portal_invite";
+/// A campground stay was booked by staff.
+pub const STAY_CREATE: &str = "stay.create";
+/// A stay was confirmed, checked in or out, cancelled, cleaned or paid.
+pub const STAY_UPDATE: &str = "stay.update";
 /// Staff triggered a test delivery (provider test or own-device push test).
 pub const NOTIFICATION_TEST: &str = "notification.test";
 /// Inbox entries marked read (self-service; count in metadata).
@@ -446,3 +454,19 @@ pub const IMPORT_COMMIT: &str = "import.commit";
 pub const IMPORT_UNDO: &str = "import.undo";
 pub const DATA_EXPORT: &str = "data.export";
 pub const SYNDICATION_SAVE: &str = "syndication.save";
+/// A related-party transaction was flagged for review (auto or by hand).
+pub const RELATED_PARTY_FLAG: &str = "related_party.flag";
+/// Its market-rate note changed.
+pub const RELATED_PARTY_NOTE: &str = "related_party.note";
+/// Someone who isn't a party approved or rejected it.
+pub const RELATED_PARTY_DECIDE: &str = "related_party.decide";
+/// A counterparty was linked to (or unlinked from) a family entity or owner.
+pub const COUNTERPARTY_RELATED: &str = "counterparty.related";
+/// An LLC's foundation mode or fee basis changed.
+pub const LLC_FOUNDATION: &str = "llc.foundation";
+/// A lease's housing voucher was set or removed.
+pub const VOUCHER_SET: &str = "voucher.set";
+/// A household's income was certified.
+pub const INCOME_CERTIFY: &str = "income.certify";
+/// A housing authority's payment (HAP) was received.
+pub const HAP_RECEIVED: &str = "hap.received";

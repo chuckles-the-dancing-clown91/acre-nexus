@@ -6,9 +6,20 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, CreditCard, FileText, LogOut, Wrench } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  HardHat,
+  LogOut,
+  MessageSquare,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { isOwnerOnly } from "@/lib/owner";
+import { isVendorOnly } from "@/lib/resident";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
@@ -16,6 +27,9 @@ import { cn } from "@/lib/utils";
 const RESIDENT_NAV = [
   { href: "/account/maintenance", label: "Repairs", icon: Wrench },
   { href: "/account/payments", label: "Rent", icon: CreditCard },
+  { href: "/account/lease", label: "Lease", icon: FileText },
+  { href: "/account/messages", label: "Messages", icon: MessageSquare },
+  { href: "/account/applications", label: "Applications", icon: ClipboardList },
 ];
 const OWNER_NAV = [
   { href: "/account/owner/statement", label: "Statements", icon: FileText },
@@ -27,9 +41,15 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const path = usePathname();
   const ownerSide = isOwnerOnly(user) || path.startsWith("/account/owner");
-  const NAV = ownerSide
-    ? [{ href: "/account/owner", label: "Home", icon: Building2 }, ...OWNER_NAV]
-    : RESIDENT_NAV;
+  const vendorSide = isVendorOnly(user) || path.startsWith("/account/vendor");
+  const NAV = vendorSide
+    ? [{ href: "/account/vendor", label: "Jobs", icon: HardHat }]
+    : ownerSide
+      ? [
+          { href: "/account/owner", label: "Home", icon: Building2 },
+          ...OWNER_NAV,
+        ]
+      : RESIDENT_NAV;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -44,7 +64,13 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4">
           <Link
-            href={ownerSide ? "/account/owner" : "/account/maintenance"}
+            href={
+              vendorSide
+                ? "/account/vendor"
+                : ownerSide
+                  ? "/account/owner"
+                  : "/account/maintenance"
+            }
             className="flex min-w-0 items-center gap-2"
           >
             {brand.logo_url ? (
@@ -76,10 +102,27 @@ export function AccountShell({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   <n.icon className="size-4" />
-                  <span className="hidden sm:inline">{n.label}</span>
+                  <span className="hidden md:inline">{n.label}</span>
                 </Link>
               );
             })}
+            {user && !ownerSide && !vendorSide && (
+              <Link
+                href="/account/profile"
+                aria-label="Profile"
+                aria-current={
+                  path.startsWith("/account/profile") ? "page" : undefined
+                }
+                className={cn(
+                  "ml-1 rounded-lg p-1.5 transition",
+                  path.startsWith("/account/profile")
+                    ? "bg-fill text-fg"
+                    : "text-fg-3 hover:text-fg"
+                )}
+              >
+                <UserRound className="size-4" />
+              </Link>
+            )}
             {user && (
               <button
                 type="button"

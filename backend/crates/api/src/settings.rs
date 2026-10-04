@@ -95,6 +95,8 @@ pub const FOLLOWUPS_VENDOR_HOURS: &str = "followups.vendor_hours";
 pub const FOLLOWUPS_OFFER_HOURS: &str = "followups.offer_hours";
 /// Days after a showing to nudge a prospect who hasn't applied (0 = off).
 pub const FOLLOWUPS_PROSPECT_DAYS: &str = "followups.prospect_days";
+/// Flag an appliance to replace once its repair spend passes this percent of its price.
+pub const ANALYTICS_REPLACE_SHARE_PCT: &str = "analytics.replace_share_pct";
 /// When a planned day starts, HH:MM in the workspace's zone.
 pub const ROUTES_DAY_START: &str = "routes.day_start";
 /// How long a planned day is, in minutes.
@@ -136,6 +138,16 @@ pub const TEXTS_QUIET_START: &str = "texts.quiet_start_hour";
 pub const TEXTS_QUIET_END: &str = "texts.quiet_end_hour";
 /// The time zone quiet hours are kept in.
 pub const TEXTS_TIMEZONE: &str = "texts.timezone";
+/// Text back a caller nobody answered.
+pub const TEXTS_MISSED_CALL_REPLY_ON: &str = "texts.missed_call_reply_on";
+/// What the missed-call text says; `{company}` is filled in.
+pub const TEXTS_MISSED_CALL_REPLY: &str = "texts.missed_call_reply";
+/// Text the same caller back at most once in this many hours.
+pub const TEXTS_MISSED_CALL_HOURS: &str = "texts.missed_call_hours";
+/// Ring this number first when someone calls the texting number (blank: don't ring).
+pub const TEXTS_FORWARD_NUMBER: &str = "texts.forward_number";
+/// What a caller hears before the call rings through or ends.
+pub const TEXTS_VOICE_GREETING: &str = "texts.voice_greeting";
 /// Days before the rent day that residents hear rent is due (0 = off).
 pub const REMINDERS_RENT_DUE_DAYS: &str = "reminders.rent_due_days";
 /// Tell residents the day after rent was due and is still unpaid.
@@ -515,6 +527,14 @@ pub const CATALOG: &[SettingDef] = &[
         default: || json!(14),
     },
     SettingDef {
+        key: ANALYTICS_REPLACE_SHARE_PCT,
+        label: "Replace instead of repair at (percent of price)",
+        description: "The operations dashboard flags an appliance once repairs in the window add up to this share of what it cost.",
+        group: "Maintenance",
+        kind: SettingKind::Int,
+        default: || json!(50),
+    },
+    SettingDef {
         key: FOLLOWUPS_RATING_HOURS,
         label: "Ask the resident to rate finished work after (hours)",
         description: "Email and text once the work order has been finished this long and nobody has rated it. 0 turns it off.",
@@ -737,6 +757,50 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Texts",
         kind: SettingKind::Int,
         default: || json!(8),
+    },
+    SettingDef {
+        key: TEXTS_MISSED_CALL_REPLY_ON,
+        label: "Text back missed calls",
+        description: "When someone calls the texting number and nobody answers, \
+                      text them so the conversation can carry on in the inbox.",
+        group: "Texts",
+        kind: SettingKind::Bool,
+        default: || json!(true),
+    },
+    SettingDef {
+        key: TEXTS_MISSED_CALL_REPLY,
+        label: "Missed-call text",
+        description: "{company} is replaced with the workspace name.",
+        group: "Texts",
+        kind: SettingKind::Text,
+        default: || json!("Sorry we missed your call. This is {company}. Text us here and we'll get right back to you."),
+    },
+    SettingDef {
+        key: TEXTS_MISSED_CALL_HOURS,
+        label: "Text the same caller back at most every (hours)",
+        description: "Someone who calls three times in a row gets one text.",
+        group: "Texts",
+        kind: SettingKind::Int,
+        default: || json!(4),
+    },
+    SettingDef {
+        key: TEXTS_FORWARD_NUMBER,
+        label: "Ring this phone first",
+        description: "Calls to the texting number ring here for 20 seconds; if \
+                      nobody answers, the caller gets the text. Leave blank to \
+                      skip ringing.",
+        group: "Texts",
+        kind: SettingKind::Text,
+        default: || json!(""),
+    },
+    SettingDef {
+        key: TEXTS_VOICE_GREETING,
+        label: "What callers hear",
+        description: "Said before the call rings through, or before it ends \
+                      when nothing is set to ring. {company} is filled in.",
+        group: "Texts",
+        kind: SettingKind::Text,
+        default: || json!("Thanks for calling {company}."),
     },
     SettingDef {
         key: TEXTS_TIMEZONE,

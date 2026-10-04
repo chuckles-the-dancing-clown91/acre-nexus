@@ -451,6 +451,10 @@ pub struct OwnerDto {
     pub last_contact_at: Option<String>,
     pub open_follow_ups: usize,
     pub follow_ups_due: usize,
+    /// The owner's portal login, once invited.
+    pub user_id: Option<Uuid>,
+    /// The owner's own approval limit; `None` uses the workspace's.
+    pub approval_limit_cents: Option<i64>,
 }
 
 /// `GET /crm/owners` — every owner with what they own and where things stand.
@@ -540,6 +544,8 @@ pub async fn owners(
                 email: o.email,
                 phone: o.phone,
                 notes: o.notes,
+                user_id: o.user_id,
+                approval_limit_cents: o.approval_limit_cents,
             }
         })
         .collect();

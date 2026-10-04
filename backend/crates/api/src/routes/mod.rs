@@ -11,6 +11,7 @@
 //! reference them (e.g. [`properties`] is wrapped by `modules::properties`).
 
 pub mod accounting;
+pub mod analytics;
 pub mod api_tokens;
 pub mod applications;
 pub mod appointments;
@@ -22,6 +23,7 @@ pub mod backoffice;
 pub mod banking;
 pub mod billing;
 pub mod business;
+pub mod campground;
 pub mod cap_table;
 pub mod crm;
 pub mod deals;
@@ -29,8 +31,10 @@ pub mod documents;
 pub mod domains;
 pub mod entities;
 pub mod esign;
+pub mod family;
 pub mod fees;
 pub mod geo;
+pub mod go_live;
 pub mod hoa;
 pub mod iam;
 pub mod imports;
@@ -181,5 +185,10 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // Self-service profile (renter portal / any signed-in user)
         iam::self_profile::my_profile,
         iam::self_profile::update_my_profile,
+        // The language messages to a resident use
+        crate::language::lease_language,
+        crate::language::set_lease_language,
+        crate::language::my_language,
+        crate::language::set_my_language,
     ]
 }

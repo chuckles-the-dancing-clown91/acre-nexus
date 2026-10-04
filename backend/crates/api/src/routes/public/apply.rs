@@ -29,6 +29,16 @@ pub async fn apply(
 ) -> ApiResult<Json<ApplyResp>> {
     let b = body.into_inner();
     let email = b.email.trim().to_lowercase();
+    // Before anything is sent to them, so the receipt is in their language.
+    if let Some(lang) = b.language.as_deref().and_then(crate::language::parse) {
+        crate::language::set(
+            &db,
+            tenant.tenant_id,
+            &[Some(&email), b.phone.as_deref()],
+            lang,
+        )
+        .await?;
+    }
 
     // Reuse: if the workspace allows it and this applicant already has a recent
     // *approved* application, carry that screening result forward — the new

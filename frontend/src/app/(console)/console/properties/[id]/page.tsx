@@ -6,6 +6,7 @@
 // The company decides who is assigned; the people assigned see the property
 // but not the controls.
 
+import { Readiness } from "@/components/property/Readiness";
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -275,6 +276,7 @@ function PropertyView() {
       {tab === "overview" && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="space-y-4">
+            <Readiness propertyId={id} manage={write} />
             <ActionItems propertyId={id} manage={write} />
             <Facts property={p} propertyId={id} manage={write} />
             {can("lease:read") && (

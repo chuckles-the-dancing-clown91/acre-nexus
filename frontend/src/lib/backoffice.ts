@@ -884,6 +884,10 @@ export interface OwnerRow {
   last_contact_at: string | null;
   open_follow_ups: number;
   follow_ups_due: number;
+  /** The owner's portal login, once invited. */
+  user_id: string | null;
+  /** The owner's own approval limit; null uses the workspace's. */
+  approval_limit_cents: number | null;
 }
 
 export type LeadStatus = "new" | "contacted" | "proposal" | "won" | "lost";

@@ -245,6 +245,10 @@ export interface TextThread {
   assigned_user_id: string | null;
   /** Consent on file for marketing texts. */
   marketing_consent: boolean;
+  /** A prospect this number belongs to. */
+  lead_id: string | null;
+  /** A vendor this number belongs to. */
+  counterparty_id: string | null;
 }
 
 export interface SavedReply {
@@ -258,7 +262,7 @@ export interface TextMessage {
   id: string;
   direction: "in" | "out";
   body: string;
-  status: "received" | "queued" | "sent" | "failed" | "blocked";
+  status: "received" | "queued" | "sent" | "failed" | "blocked" | "missed_call";
   template_key: string | null;
   sent_by: string | null;
   media_count: number;
@@ -278,6 +282,8 @@ export interface TextsStatus {
   provider_configured: boolean;
   inbound_webhook_url: string;
   status_webhook_url: string;
+  /** "A call comes in": missed-call text-back and ringing the office. */
+  voice_webhook_url: string;
   unread_threads: number;
 }
 
@@ -353,6 +359,10 @@ export const api = {
       /** A teammate's user id, or "" to clear. */
       assignee?: string;
       marketing_consent?: boolean;
+      /** Whose number this is. */
+      link?: { kind: "resident" | "lead" | "vendor" | "none"; id?: string };
+      /** What to call them; "" clears it. */
+      display_name?: string;
     }
   ) =>
     request<TextThread>(`/texts/${id}`, {
@@ -372,6 +382,12 @@ export const api = {
       method: "DELETE",
       auth: true,
     }),
+  /** Test mode only: act as if `phone` called and nobody answered. */
+  simulateCall: (phone: string) =>
+    request<{ texted_back: boolean; thread: TextThreadDetail }>(
+      "/texts/simulate-call",
+      { method: "POST", auth: true, body: { phone } }
+    ),
   /** Test mode only: act as if `phone` texted `body` in. */
   simulateText: (phone: string, body: string) =>
     request<TextThreadDetail>("/texts/simulate", {
@@ -2424,6 +2440,14 @@ export interface FlipDeal {
   source: string | null;
   broker_id: string | null;
   notes: string | null;
+  /** Raw land: acreage, zoning, utilities and road, price per acre. */
+  acres?: number | null;
+  zoning?: string | null;
+  water_access?: string | null;
+  power_access?: string | null;
+  road_access?: string | null;
+  price_per_acre_cents?: number | null;
+  price_per_acre_label?: string | null;
   asking_price_cents: number | null;
   asking_price_label: string | null;
   offer_price_cents: number | null;
@@ -2493,6 +2517,11 @@ export interface CreateDealInput {
 /** Deal patch + underwriting assumptions. Every field optional. */
 export interface UpdateDealInput {
   name?: string;
+  acres?: number;
+  zoning?: string;
+  water_access?: string;
+  power_access?: string;
+  road_access?: string;
   address?: string;
   city?: string;
   strategy?: string;
@@ -2524,6 +2553,11 @@ export interface UpdateDealInput {
 export type UnderwriteInput = Omit<
   UpdateDealInput,
   | "name"
+  | "acres"
+  | "zoning"
+  | "water_access"
+  | "power_access"
+  | "road_access"
   | "address"
   | "city"
   | "strategy"
@@ -3343,6 +3377,9 @@ export interface LegalEntity {
   entity_type: string;
   registered_agent: string | null;
   status: string;
+  /** Foundation mode: income certifications, vouchers, at-cost fee. */
+  foundation?: boolean;
+  fee_basis?: "percent" | "at_cost";
 }
 
 /** A stage in a strategy's workflow template. */

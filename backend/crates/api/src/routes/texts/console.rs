@@ -181,6 +181,7 @@ pub async fn status(
             .is_some(),
         inbound_webhook_url: format!("{base}/webhooks/twilio/sms?tenant={slug}"),
         status_webhook_url: format!("{base}/webhooks/twilio/status?tenant={slug}"),
+        voice_webhook_url: format!("{base}/webhooks/twilio/voice?tenant={slug}"),
         unread_threads,
     }))
 }
@@ -340,6 +341,63 @@ pub async fn update(
         detail.insert("marketing_consent".into(), serde_json::json!(consent));
     }
 
+    if let Some(link) = b.link {
+        let t = scope.tenant_id;
+        let (lease, lead, vendor, name) = match (link.kind.as_str(), link.id) {
+            ("none", _) => (None, None, None, None),
+            ("resident", Some(id)) => {
+                let l = entity::prelude::Lease::find_by_id(id)
+                    .one(&db)
+                    .await?
+                    .filter(|l| l.tenant_id == t)
+                    .ok_or_else(|| ApiError::NotFound("lease not found".into()))?;
+                (Some(l.id), None, None, Some(l.tenant_name))
+            }
+            ("lead", Some(id)) => {
+                let l = entity::prelude::Lead::find_by_id(id)
+                    .one(&db)
+                    .await?
+                    .filter(|l| l.tenant_id == t)
+                    .ok_or_else(|| ApiError::NotFound("prospect not found".into()))?;
+                (None, Some(l.id), None, Some(l.name))
+            }
+            ("vendor", Some(id)) => {
+                let c = entity::prelude::Counterparty::find_by_id(id)
+                    .one(&db)
+                    .await?
+                    .filter(|c| c.tenant_id == t)
+                    .ok_or_else(|| ApiError::NotFound("vendor not found".into()))?;
+                (None, None, Some(c.id), Some(c.name))
+            }
+            ("resident" | "lead" | "vendor", None) => {
+                return Err(ApiError::BadRequest("say which one to link".into()))
+            }
+            _ => {
+                return Err(ApiError::BadRequest(
+                    "link kind must be resident, lead, vendor or none".into(),
+                ))
+            }
+        };
+        am.lease_id = Set(lease);
+        am.lead_id = Set(lead);
+        am.counterparty_id = Set(vendor);
+        if name.is_some() && b.display_name.is_none() {
+            am.display_name = Set(name);
+        }
+        detail.insert(
+            "link".into(),
+            serde_json::json!({ "kind": link.kind, "id": link.id }),
+        );
+    }
+
+    if let Some(name) = b.display_name.map(|s| s.trim().to_string()) {
+        if name.chars().count() > 120 {
+            return Err(ApiError::BadRequest("that name is too long".into()));
+        }
+        am.display_name = Set((!name.is_empty()).then_some(name.clone()));
+        detail.insert("display_name".into(), serde_json::json!(name));
+    }
+
     if detail.is_empty() {
         return Err(ApiError::BadRequest("nothing to change".into()));
     }
@@ -372,6 +430,42 @@ pub async fn update(
         }
     }
     Ok(Json(thread.into()))
+}
+
+/// `POST /texts/simulate-call` — test mode only: act as if `phone` called
+/// and nobody answered, so the missed-call text-back can be tried.
+#[rocket_okapi::openapi(tag = "Texts")]
+#[post("/texts/simulate-call", data = "<body>")]
+pub async fn simulate_call(
+    db: crate::db::RequestDb,
+    user: AuthUser,
+    scope: TenantScope,
+    body: Json<SimulateCallReq>,
+) -> ApiResult<Json<SimulatedCall>> {
+    user.require(Permission::MessageManage)?;
+    if crate::providers::is_live("sms") {
+        return Err(ApiError::Conflict(
+            "texts are live — calls arrive through Twilio".into(),
+        ));
+    }
+    let (thread, outcome) = texts::record_missed_call(&db, scope.tenant_id, &body.phone, None)
+        .await?
+        .ok_or_else(|| ApiError::BadRequest("that doesn't look like a phone number".into()))?;
+    Ok(Json(SimulatedCall {
+        texted_back: outcome == texts::MissedCall::TextedBack,
+        thread: detail(&db, thread).await?,
+    }))
+}
+
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct SimulateCallReq {
+    pub phone: String,
+}
+
+#[derive(serde::Serialize, schemars::JsonSchema)]
+pub struct SimulatedCall {
+    pub texted_back: bool,
+    pub thread: TextThreadDetailDto,
 }
 
 /// `POST /texts/simulate` — test mode only: act as if `phone` texted `body`

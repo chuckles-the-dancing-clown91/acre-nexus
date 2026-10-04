@@ -562,6 +562,7 @@ mod tests {
             baths: None,
             sqft: None,
             lot_size_sqft: None,
+            year_built: None,
             property_type: None,
             stories: None,
             parking_spaces: None,

@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { isOwnerOnly } from "@/lib/owner";
+import { isVendorOnly } from "@/lib/resident";
 import { Skeleton } from "@/components/ui/misc";
 
 export default function AccountHome() {
@@ -15,7 +16,11 @@ export default function AccountHome() {
   useEffect(() => {
     if (loading) return;
     router.replace(
-      isOwnerOnly(user) ? "/account/owner" : "/account/maintenance"
+      isOwnerOnly(user)
+        ? "/account/owner"
+        : isVendorOnly(user)
+          ? "/account/vendor"
+          : "/account/maintenance"
     );
   }, [user, loading, router]);
   return <Skeleton className="h-32" />;

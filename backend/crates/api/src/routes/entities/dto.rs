@@ -17,6 +17,10 @@ pub struct CounterpartyDto {
     pub partner_status: Option<String>,
     /// The trades this vendor covers (`plumbing`, `electrical`, …).
     pub trades: Vec<String>,
+    /// One of the family's own entities (related party).
+    pub related_llc_id: Option<Uuid>,
+    /// A family member, by owner record (related party).
+    pub related_owner_id: Option<Uuid>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -36,6 +40,8 @@ impl From<entity::counterparty::Model> for CounterpartyDto {
             partner_kind: c.partner_kind,
             partner_status: c.partner_status,
             trades: serde_json::from_value(c.trades).unwrap_or_default(),
+            related_llc_id: c.related_llc_id,
+            related_owner_id: c.related_owner_id,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }

@@ -42,6 +42,8 @@ impl PlatformModule for ReportsModule {
             reports::owner_statement::owner_statement_export,
             reports::tax_1099::tax_1099,
             reports::tax_1099::tax_1099_export,
+            crate::routes::analytics::operations,
+            crate::routes::analytics::leasing,
         ]
     }
 }

@@ -36,6 +36,8 @@ use uuid::Uuid;
 pub const KIND_RENT: &str = "rent";
 pub const KIND_DEPOSIT: &str = "deposit";
 pub const KIND_FEE: &str = "fee";
+/// The housing authority's part of the rent under a voucher (HAP).
+pub const KIND_HAP: &str = "hap";
 
 /// The legal entity (LLC) whose books a property posts to, if assigned.
 pub async fn entity_for_property(
@@ -560,6 +562,7 @@ pub fn receipt_text(
     let kind_label = match kind {
         KIND_DEPOSIT => "Security deposit",
         KIND_FEE => "Fee",
+        KIND_HAP => "Housing assistance payment",
         _ => "Rent",
     };
     format!(

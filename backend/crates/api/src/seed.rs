@@ -1732,6 +1732,11 @@ async fn seed_deal(
         exit_cap_rate_bps: Set(opt_bps(exit_cap_bps)),
         selling_costs_bps: Set(Some(700)),
         hold_years: Set(Some(5)),
+        acres: Set(None),
+        zoning: Set(None),
+        water_access: Set(None),
+        power_access: Set(None),
+        road_access: Set(None),
         checklist: Set(checklist),
         converted_property_id: Set(None),
         created_by: Set(None),
@@ -1859,6 +1864,8 @@ async fn seed_rehab(
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),
+        related_llc_id: Set(None),
+        related_owner_id: Set(None),
         alpha_invited_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -2390,6 +2397,8 @@ async fn seed_counterparty(
         partner_linked_at: Set(None),
         partner_status: Set(None),
         partner_error: Set(None),
+        related_llc_id: Set(None),
+        related_owner_id: Set(None),
         alpha_invited_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -2521,15 +2530,30 @@ async fn ensure_catalogs(db: &DatabaseConnection) -> anyhow::Result<()> {
         }
     }
     // Built-in roles gain any permission the code now grants them (new
-    // features' permissions reach existing workspaces). Only ever adds.
+    // features' permissions reach existing workspaces), and a built-in role
+    // added since a database was seeded is created. Only ever adds.
     for sr in SYSTEM_ROLES {
-        let Some(role) = entity::role::Entity::find()
+        let found = entity::role::Entity::find()
             .filter(entity::role::Column::Key.eq(sr.key))
             .filter(entity::role::Column::IsSystem.eq(true))
             .one(db)
-            .await?
-        else {
-            continue;
+            .await?;
+        let role = match found {
+            Some(r) => r,
+            None => {
+                tracing::info!(role = sr.key, "seed: created new system role");
+                entity::role::ActiveModel {
+                    id: Set(Uuid::new_v4()),
+                    tenant_id: Set(None),
+                    scope: Set(sr.scope.into()),
+                    key: Set(sr.key.into()),
+                    name: Set(sr.name.into()),
+                    description: Set(sr.description.into()),
+                    is_system: Set(true),
+                }
+                .insert(db)
+                .await?
+            }
         };
         let have: std::collections::HashSet<String> = entity::role_permission::Entity::find()
             .filter(entity::role_permission::Column::RoleId.eq(role.id))
@@ -2717,6 +2741,8 @@ async fn seed_llc(
         state: Set(state.into()),
         entity_type: Set("llc".into()),
         registered_agent: Set(None),
+        foundation: Set(false),
+        fee_basis: Set("percent".into()),
         status: Set("active".into()),
         created_at: Set(Utc::now().into()),
     }

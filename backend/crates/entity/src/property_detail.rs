@@ -21,6 +21,8 @@ pub struct Model {
     pub baths: Option<f64>,
     pub sqft: Option<i32>,
     pub lot_size_sqft: Option<i64>,
+    /// From the property record, when it gives one.
+    pub year_built: Option<i32>,
     /// `single_family` | `multi_family` | `condo` | `townhome` | `commercial` …
     pub property_type: Option<String>,
     pub stories: Option<i32>,

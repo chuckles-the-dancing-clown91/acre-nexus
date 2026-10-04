@@ -196,7 +196,179 @@ async fn match_lease(
     Ok(matches.into_iter().next())
 }
 
-/// Find or open the thread for `phone` (E.164), matching it to a resident.
+fn same_number(raw: Option<&str>, phone: &str) -> bool {
+    raw.and_then(normalize_phone).as_deref() == Some(phone)
+}
+
+/// The newest prospect with this number.
+async fn match_lead(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    phone: &str,
+) -> Result<Option<entity::lead::Model>, DbErr> {
+    let mut leads: Vec<entity::lead::Model> = entity::prelude::Lead::find()
+        .filter(entity::lead::Column::TenantId.eq(tenant_id))
+        .filter(entity::lead::Column::Phone.is_not_null())
+        .all(db)
+        .await?
+        .into_iter()
+        .filter(|l| same_number(l.phone.as_deref(), phone))
+        .collect();
+    leads.sort_by_key(|l| std::cmp::Reverse(l.created_at));
+    Ok(leads.into_iter().next())
+}
+
+/// A vendor or other counterparty with this number.
+async fn match_vendor(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    phone: &str,
+) -> Result<Option<entity::counterparty::Model>, DbErr> {
+    Ok(entity::prelude::Counterparty::find()
+        .filter(entity::counterparty::Column::TenantId.eq(tenant_id))
+        .filter(entity::counterparty::Column::Phone.is_not_null())
+        .all(db)
+        .await?
+        .into_iter()
+        .find(|c| same_number(c.phone.as_deref(), phone)))
+}
+
+/// What the missed-call text-back did.
+#[derive(Debug, PartialEq, Eq)]
+pub enum MissedCall {
+    /// Filed and texted back.
+    TextedBack,
+    /// Filed; no text (turned off, opted out, or texted back recently).
+    Filed,
+}
+
+/// A call nobody answered: file it in the caller's conversation, tell the
+/// office, and text the caller back once in `texts.missed_call_hours`
+/// (unless they texted STOP or the text-back is off). `Ok(None)` for a
+/// number that can't be read (a blocked caller ID).
+pub async fn record_missed_call(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    from: &str,
+    provider_call_id: Option<String>,
+) -> Result<Option<(entity::sms_thread::Model, MissedCall)>, DbErr> {
+    use crate::settings as cfg;
+    let Some(phone) = normalize_phone(from) else {
+        return Ok(None);
+    };
+    let thread = ensure_thread(db, tenant_id, &phone).await?;
+    let now = Utc::now();
+    let message = entity::sms_message::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        thread_id: Set(thread.id),
+        direction: Set("in".into()),
+        body: Set("Missed call".into()),
+        status: Set("missed_call".into()),
+        provider_message_id: Set(provider_call_id),
+        template_key: Set(None),
+        sent_by_user_id: Set(None),
+        media_count: Set(0),
+        media: Set(serde_json::json!([])),
+        error: Set(None),
+        created_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    let mut am: entity::sms_thread::ActiveModel = thread.clone().into();
+    am.unread_count = Set(thread.unread_count + 1);
+    am.status = Set("open".into());
+    am.last_preview = Set(Some("Missed call".into()));
+    am.last_message_at = Set(Some(now.into()));
+    am.updated_at = Set(now.into());
+    let thread = am.update(db).await?;
+    let who = thread
+        .display_name
+        .clone()
+        .unwrap_or_else(|| thread.phone.clone());
+    crate::notify::notify_staff(
+        db,
+        tenant_id,
+        "message:read",
+        "text_missed_call",
+        serde_json::json!({ "sender": who }),
+        Some(("sms_message", message.id)),
+        "missed_call",
+        None,
+    )
+    .await;
+
+    if !cfg::get_bool(db, tenant_id, cfg::TEXTS_MISSED_CALL_REPLY_ON).await
+        || thread.opted_out_at.is_some()
+    {
+        return Ok(Some((thread, MissedCall::Filed)));
+    }
+    // Once per window per number, however many times they call.
+    let hours = cfg::get_i64(db, tenant_id, cfg::TEXTS_MISSED_CALL_HOURS)
+        .await
+        .clamp(1, 24 * 7);
+    let bucket = now.timestamp() / (hours * 3600);
+    if !crate::notices::claim(db, tenant_id, &format!("missed_call:{phone}:{bucket}")).await? {
+        return Ok(Some((thread, MissedCall::Filed)));
+    }
+    let company = entity::prelude::Tenant::find_by_id(tenant_id)
+        .one(db)
+        .await?
+        .map(|t| t.name)
+        .unwrap_or_default();
+    let body = cfg::get_string(db, tenant_id, cfg::TEXTS_MISSED_CALL_REPLY)
+        .await
+        .replace("{company}", &company);
+    const DEFAULT_EN: &str = "Sorry we missed your call. This is {company}. Text us here and we'll get right back to you.";
+    let customized = !body.trim().is_empty() && body != DEFAULT_EN.replace("{company}", &company);
+    let body = if customized {
+        body
+    } else if crate::language::for_contact(db, tenant_id, &phone).await == "es" {
+        format!("Perdón, no pudimos atender su llamada. Somos {company}. Escríbanos aquí y le respondemos enseguida.")
+    } else {
+        DEFAULT_EN.replace("{company}", &company)
+    };
+    let Some(out) = record_outbound(
+        db,
+        tenant_id,
+        Outbound {
+            to: &phone,
+            body: &body,
+            status: "queued",
+            provider_message_id: None,
+            template_key: Some("missed_call_reply".into()),
+            sent_by_user_id: None,
+            error: None,
+        },
+    )
+    .await?
+    else {
+        return Ok(Some((thread, MissedCall::Filed)));
+    };
+    if let Err(e) = crate::scheduler::enqueue(
+        db,
+        tenant_id,
+        "auto_sms",
+        serde_json::json!({
+            "template": "direct_text",
+            "to": phone,
+            "vars": { "text": body },
+            "owner_type": "sms_message",
+            "owner_id": out.id.to_string(),
+            "trigger": "missed_call",
+            "sms_message_id": out.id.to_string(),
+        }),
+        0,
+    )
+    .await
+    {
+        tracing::error!("failed to queue the missed-call text: {e}");
+    }
+    Ok(Some((thread, MissedCall::TextedBack)))
+}
+
+/// Find or open the thread for `phone` (E.164), matching it to a resident,
+/// else a prospect, else a vendor.
 pub async fn ensure_thread(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
@@ -206,6 +378,23 @@ pub async fn ensure_thread(
         return Ok(t);
     }
     let lease = match_lease(db, tenant_id, phone).await?;
+    // Not a resident: maybe a prospect, or a vendor.
+    let (lead, vendor) = if lease.is_some() {
+        (None, None)
+    } else {
+        let lead = match_lead(db, tenant_id, phone).await?;
+        let vendor = if lead.is_some() {
+            None
+        } else {
+            match_vendor(db, tenant_id, phone).await?
+        };
+        (lead, vendor)
+    };
+    let name = lease
+        .as_ref()
+        .map(|l| l.tenant_name.clone())
+        .or_else(|| lead.as_ref().map(|l| l.name.clone()))
+        .or_else(|| vendor.as_ref().map(|v| v.name.clone()));
     let now = Utc::now();
     entity::sms_thread::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -213,7 +402,7 @@ pub async fn ensure_thread(
         phone: Set(phone.to_string()),
         lease_id: Set(lease.as_ref().map(|l| l.id)),
         user_id: Set(None),
-        display_name: Set(lease.map(|l| l.tenant_name)),
+        display_name: Set(name),
         status: Set("open".into()),
         unread_count: Set(0),
         last_preview: Set(None),
@@ -221,6 +410,8 @@ pub async fn ensure_thread(
         opted_out_at: Set(None),
         assigned_user_id: Set(None),
         marketing_opt_in_at: Set(None),
+        lead_id: Set(lead.map(|l| l.id)),
+        counterparty_id: Set(vendor.map(|v| v.id)),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }

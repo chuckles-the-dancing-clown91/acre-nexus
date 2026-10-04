@@ -9,7 +9,8 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct Proposal {
-    /// `property_type` | `unit_beds` | `unit_baths` | `unit_sqft`.
+    /// `property_type` | `year_built` | `unit_beds` | `unit_baths` |
+    /// `unit_sqft` | `unit_market_rent`.
     pub field: String,
     pub label: String,
     pub current: Option<String>,
@@ -54,6 +55,9 @@ pub struct Facts<'a> {
     pub unit_baths: Option<f64>,
     pub unit_sqft: Option<i32>,
     pub single_unit: bool,
+    /// The property's year built (0 when unknown) and the record's.
+    pub property_year_built: i32,
+    pub detail_year_built: Option<i32>,
 }
 
 fn baths(b: f64) -> String {
@@ -86,6 +90,14 @@ pub fn proposals(f: &Facts, source: &str) -> Vec<Proposal> {
             t.to_string(),
         );
     }
+    if let Some(y) = f.detail_year_built.filter(|y| (1700..=2100).contains(y)) {
+        add(
+            "year_built",
+            "Year built",
+            (f.property_year_built > 0).then(|| f.property_year_built.to_string()),
+            y.to_string(),
+        );
+    }
     if f.single_unit {
         if let Some(b) = f.detail_beds.filter(|b| *b >= 0) {
             add(
@@ -110,6 +122,29 @@ pub fn proposals(f: &Facts, source: &str) -> Vec<Proposal> {
     out
 }
 
+/// A market rent for a single-unit property from the latest rent estimate,
+/// in whole dollars, when it differs from what's set.
+pub fn rent_proposal(
+    single_unit: bool,
+    unit_market_rent_cents: Option<i64>,
+    estimated_rent_cents: Option<i64>,
+    source: &str,
+) -> Option<Proposal> {
+    if !single_unit {
+        return None;
+    }
+    let est = estimated_rent_cents.filter(|c| *c > 0)?;
+    let dollars = (est + 50) / 100;
+    let current = unit_market_rent_cents.map(|c| ((c + 50) / 100).to_string());
+    (current.as_deref() != Some(dollars.to_string().as_str())).then(|| Proposal {
+        field: "unit_market_rent".into(),
+        label: "Market rent (a month)".into(),
+        current,
+        proposed: dollars.to_string(),
+        source: source.into(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +160,8 @@ mod tests {
             unit_baths: None,
             unit_sqft: Some(1200),
             single_unit: true,
+            property_year_built: 0,
+            detail_year_built: None,
         }
     }
 
@@ -170,5 +207,30 @@ mod tests {
         f.unit_baths = Some(2.5);
         f.unit_sqft = Some(1400);
         assert!(proposals(&f, "x").is_empty());
+    }
+
+    #[test]
+    fn year_built_when_the_record_has_it() {
+        let mut f = facts();
+        f.detail_year_built = Some(1962);
+        let p = proposals(&f, "x");
+        let y = p.iter().find(|x| x.field == "year_built").unwrap();
+        assert_eq!((y.current.as_deref(), y.proposed.as_str()), (None, "1962"));
+        f.property_year_built = 1962;
+        assert!(proposals(&f, "x").iter().all(|x| x.field != "year_built"));
+        f.detail_year_built = Some(12);
+        assert!(proposals(&f, "x").iter().all(|x| x.field != "year_built"));
+    }
+
+    #[test]
+    fn rent_from_the_estimate() {
+        let r = rent_proposal(true, Some(170_000), Some(184_960), "rent estimate").unwrap();
+        assert_eq!(
+            (r.current.as_deref(), r.proposed.as_str()),
+            (Some("1700"), "1850")
+        );
+        assert!(rent_proposal(true, Some(185_000), Some(184_960), "x").is_none());
+        assert!(rent_proposal(false, None, Some(184_960), "x").is_none());
+        assert!(rent_proposal(true, None, None, "x").is_none());
     }
 }

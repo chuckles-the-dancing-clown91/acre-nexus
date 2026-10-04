@@ -42,6 +42,7 @@ export const DASHBOARD: NavItem = {
 const REACH_AWARE = new Set([
   "/console/properties",
   "/console/attention",
+  "/console/portfolio-map",
   "/console/leases",
   "/console/maintenance",
   "/console/maintenance/schedule",
