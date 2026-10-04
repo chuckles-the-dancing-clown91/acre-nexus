@@ -72,6 +72,7 @@ pub mod reminders;
 pub mod renewals;
 pub mod rentals;
 pub mod reports;
+pub mod residents;
 pub mod search;
 pub mod settings;
 pub mod sitemaps;

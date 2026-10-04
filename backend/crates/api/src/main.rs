@@ -81,6 +81,7 @@ mod rbac;
 mod reminders;
 mod renewals;
 mod rentals_occupancy;
+mod resident;
 mod resident_reminders;
 mod routes;
 mod saas;

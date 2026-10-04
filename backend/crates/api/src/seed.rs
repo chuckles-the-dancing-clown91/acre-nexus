@@ -3414,6 +3414,7 @@ async fn top_up(db: &DatabaseConnection) -> anyhow::Result<()> {
     northwind_leasing_agent(db, &role_ids, northwind, &pw).await?;
     hearthside(db, &role_ids, &pw).await?;
     pinecrest(db, &role_ids, &pw).await?;
+    demo_residents(db, &role_ids, &pw).await?;
     Ok(())
 }
 
@@ -4024,6 +4025,175 @@ async fn pinecrest(
             .insert(db)
             .await?;
         }
+    }
+    Ok(())
+}
+
+/// Residents with a portal login and a filled-in profile: pets, work, a prior
+/// rental or two, an emergency contact. Skipped for anyone who already has one.
+async fn demo_residents(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    pw: &str,
+) -> anyhow::Result<()> {
+    use crate::resident::{Extras, Occupant, Pet, PriorRental};
+    let people: Vec<(&str, &str, &str, &str, &str, i64, Extras)> = vec![
+        (
+            "northwind",
+            "taylor@example.com",
+            "Taylor",
+            "Brooks",
+            "(503) 555-0142",
+            7_800_000,
+            Extras {
+                employer: Some("Providence Health".into()),
+                job_title: Some("Nurse".into()),
+                employer_phone: Some("(503) 555-0100".into()),
+                emergency_contact_name: Some("Morgan Brooks".into()),
+                emergency_contact_phone: Some("(503) 555-0177".into()),
+                emergency_contact_relation: Some("Sister".into()),
+                occupants: vec![],
+                pets: vec![Pet {
+                    name: "Miso".into(),
+                    kind: "cat".into(),
+                    breed: Some("Tabby".into()),
+                    weight_lb: Some(11.0),
+                    vaccinated_through: Some("2027-03-01".into()),
+                    ..Default::default()
+                }],
+                prior_rentals: vec![PriorRental {
+                    address: "410 NE Alberta St, Portland, OR".into(),
+                    landlord_name: Some("Alberta Court Apartments".into()),
+                    landlord_phone: Some("(503) 555-0123".into()),
+                    rent_cents: Some(139_500),
+                    from: Some("2022-06-01".into()),
+                    to: Some("2024-05-31".into()),
+                    reason_for_leaving: Some("Closer to work".into()),
+                }],
+            },
+        ),
+        (
+            "hearthside",
+            "priya.nair@example.com",
+            "Priya",
+            "Nair",
+            "(512) 555-0191",
+            9_600_000,
+            Extras {
+                employer: Some("Dell Technologies".into()),
+                job_title: Some("Product manager".into()),
+                emergency_contact_name: Some("Arun Nair".into()),
+                emergency_contact_phone: Some("(512) 555-0102".into()),
+                emergency_contact_relation: Some("Brother".into()),
+                occupants: vec![Occupant {
+                    name: "Dev Nair".into(),
+                    relation: Some("Son".into()),
+                    age: Some(9),
+                }],
+                pets: vec![Pet {
+                    name: "Biscuit".into(),
+                    kind: "dog".into(),
+                    breed: Some("Labrador".into()),
+                    weight_lb: Some(62.0),
+                    vaccinated_through: Some("2027-01-15".into()),
+                    ..Default::default()
+                }],
+                prior_rentals: vec![PriorRental {
+                    address: "88 Barton Springs Rd, Austin, TX".into(),
+                    landlord_name: Some("Springs Property Mgmt".into()),
+                    rent_cents: Some(189_000),
+                    from: Some("2021-08-01".into()),
+                    to: Some("2025-12-31".into()),
+                    reason_for_leaving: Some("Needed a yard".into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        ),
+        (
+            "hearthside",
+            "marcus.webb@example.com",
+            "Marcus",
+            "Webb",
+            "(512) 555-0166",
+            8_200_000,
+            Extras {
+                employer: Some("City of Round Rock".into()),
+                job_title: Some("Civil engineer".into()),
+                emergency_contact_name: Some("Dana Webb".into()),
+                emergency_contact_phone: Some("(512) 555-0140".into()),
+                emergency_contact_relation: Some("Spouse".into()),
+                occupants: vec![Occupant {
+                    name: "Dana Webb".into(),
+                    relation: Some("Spouse".into()),
+                    age: Some(34),
+                }],
+                ..Default::default()
+            },
+        ),
+        (
+            "hearthside",
+            "elena.soto@example.com",
+            "Elena",
+            "Soto",
+            "(512) 555-0155",
+            7_100_000,
+            Extras {
+                employer: Some("Cedar Park ISD".into()),
+                job_title: Some("Teacher".into()),
+                emergency_contact_name: Some("Rosa Soto".into()),
+                emergency_contact_phone: Some("(512) 555-0188".into()),
+                emergency_contact_relation: Some("Mother".into()),
+                ..Default::default()
+            },
+        ),
+    ];
+    for (slug, email, first, last, phone, income, extras) in people {
+        let Some(t) = Tenant::find()
+            .filter(entity::tenant::Column::Slug.eq(slug))
+            .one(db)
+            .await?
+            .map(|t| t.id)
+        else {
+            continue;
+        };
+        let uid = match User::find()
+            .filter(entity::user::Column::Email.eq(email))
+            .one(db)
+            .await?
+        {
+            Some(u) => u.id,
+            None => {
+                let id =
+                    seed_user(db, Some(t), email, &format!("{first} {last}"), pw, false).await?;
+                seed_membership(
+                    db,
+                    role_ids,
+                    id,
+                    "tenant",
+                    Some(t),
+                    "renter",
+                    Some("Resident"),
+                )
+                .await?;
+                seed_profile(db, id, first, last).await?;
+                id
+            }
+        };
+        if ResidentProfile::find_by_id(uid).one(db).await?.is_some() {
+            continue;
+        }
+        if let Some(p) = UserProfile::find_by_id(uid).one(db).await? {
+            let mut am: entity::user_profile::ActiveModel = p.into();
+            am.phone = Set(Some(phone.into()));
+            am.annual_income_cents = Set(Some(income));
+            am.has_pet = Set(!extras.pets.is_empty());
+            am.pet_details = Set(crate::resident::pet_details(&extras.pets));
+            am.update(db).await?;
+        }
+        crate::resident::save(db, t, uid, uid, extras, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e:?}"))?;
     }
     Ok(())
 }

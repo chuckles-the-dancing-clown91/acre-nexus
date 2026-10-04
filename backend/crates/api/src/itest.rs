@@ -157,6 +157,7 @@ async fn integration_suite() {
     family_plan_flow(&c).await;
     units_and_meters_flow(&c).await;
     ticket_feed_flow(&c).await;
+    resident_profile_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -11183,4 +11184,129 @@ async fn ticket_feed_flow(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::BadRequest);
+}
+
+/// A resident keeps a profile (pets, work, rentals) that fills "Apply now" and
+/// is their ID card; a property manager can read and edit the same profile.
+async fn resident_profile_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let hs = tenant_id(c, "hearthside").await;
+    // The renter signs in as themselves.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"priya.nair@example.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok, "seeded renter should sign in");
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let me = toks["access_token"].as_str().unwrap().to_string();
+
+    let (st, mine) = get_json(c, "/my/resident", &me).await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert_eq!(mine["extras"]["pets"][0]["name"], "Biscuit");
+    assert!(mine["card"]["code"].as_str().unwrap().starts_with("RES-"));
+    assert_eq!(mine["card"]["standing"], "active");
+    assert_eq!(mine["card"]["residence"]["property"], "14 Willow Bend");
+    assert_eq!(mine["prefill"]["employer"], "Dell Technologies");
+    assert_eq!(mine["prefill"]["has_pet"], true);
+    let missing = mine["prefill"]["missing"].as_array().unwrap();
+    assert!(
+        !missing.iter().any(|m| m == "Employer"),
+        "employer is on file, so it is not missing"
+    );
+
+    // She adds a second pet and the account pet flag follows.
+    let mut extras = mine["extras"].clone();
+    extras["pets"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "name": "Pepper", "kind": "cat", "weight_lb": 9
+        }));
+    let (st, saved) = send_json(c, Method::Put, "/my/resident", &me, extras.clone()).await;
+    assert_eq!(st, Status::Ok, "{saved}");
+    assert_eq!(saved["extras"]["pets"].as_array().unwrap().len(), 2);
+    let (_, profile) = get_json(c, "/my/profile", &me).await;
+    let details = profile["profile"]["pet_details"].as_str().unwrap();
+    assert!(
+        details.contains("Biscuit") && details.contains("Pepper"),
+        "{details}"
+    );
+
+    // A pet needs a name.
+    extras["pets"][1]["name"] = serde_json::json!(" ");
+    let (st, _) = send_json(c, Method::Put, "/my/resident", &me, extras).await;
+    assert_eq!(st, Status::BadRequest);
+
+    // The property manager sees the same person, with tenancies, and edits it.
+    let pm = mint(
+        c,
+        Some(hs),
+        false,
+        &["lease:read", "lease:manage", "property:read"],
+    );
+    let (st, d) = get_json(c, "/residents/profile?email=priya.nair@example.com", &pm).await;
+    assert_eq!(st, Status::Ok, "{d}");
+    assert_eq!(d["extras"]["pets"].as_array().unwrap().len(), 2);
+    assert_eq!(d["tenancies"].as_array().unwrap().len(), 1);
+    assert_eq!(d["tenancies"][0]["property_name"], "14 Willow Bend");
+    assert!(d["user_id"].is_string());
+    let (st, upd) = send_json(
+        c,
+        Method::Put,
+        "/residents/profile",
+        &pm,
+        serde_json::json!({
+            "email": "priya.nair@example.com",
+            "staff_notes": "Pays early. Asked about a fence.",
+            "extras": { "employer": "Dell", "pets": [] }
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{upd}");
+    assert_eq!(upd["staff_notes"], "Pays early. Asked about a fence.");
+    assert_eq!(upd["extras"]["pets"].as_array().unwrap().len(), 0);
+    let (_, after) = get_json(c, "/my/resident", &me).await;
+    assert_eq!(after["prefill"]["has_pet"], false);
+    assert!(
+        after["extras"].get("staff_notes").is_none() && after.get("staff_notes").is_none(),
+        "staff notes never reach the resident"
+    );
+
+    // Read-only for staff who cannot manage leases; unknown people are 404.
+    let reader = mint(c, Some(hs), false, &["lease:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        "/residents/profile",
+        &reader,
+        serde_json::json!({ "email": "priya.nair@example.com", "extras": {} }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = get_json(c, "/residents/profile?email=nobody@example.com", &pm).await;
+    assert_eq!(st, Status::NotFound);
+    // A property manager limited to their houses reads the same profile and
+    // sees only their own residents in the history.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"theo@hearthside.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let theo = toks["access_token"].as_str().unwrap().to_string();
+    let (st, d) = get_json(c, "/residents/profile?email=priya.nair@example.com", &theo).await;
+    assert_eq!(st, Status::Ok, "{d}");
+    let (st, hist) = get_json(c, "/tenant-history", &theo).await;
+    assert_eq!(st, Status::Ok, "{hist}");
+    assert_eq!(hist.as_array().unwrap().len(), 3);
+    // Another company cannot see this resident.
+    let nw = tenant_id(c, "northwind").await;
+    let other = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = get_json(c, "/residents/profile?email=priya.nair@example.com", &other).await;
+    assert_eq!(st, Status::NotFound);
 }

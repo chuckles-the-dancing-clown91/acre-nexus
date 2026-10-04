@@ -12,6 +12,7 @@ import {
   CreditCard,
   FileText,
   HardHat,
+  IdCard,
   LogOut,
   MessageSquare,
   UserRound,
@@ -30,6 +31,7 @@ const RESIDENT_NAV = [
   { href: "/account/lease", label: "Lease", icon: FileText },
   { href: "/account/messages", label: "Messages", icon: MessageSquare },
   { href: "/account/applications", label: "Applications", icon: ClipboardList },
+  { href: "/account/id", label: "My ID", icon: IdCard },
 ];
 const OWNER_NAV = [
   { href: "/account/owner/statement", label: "Statements", icon: FileText },

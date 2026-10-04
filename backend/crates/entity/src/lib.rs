@@ -94,6 +94,7 @@ pub mod message;
 pub mod message_thread;
 pub mod meter;
 pub mod meter_reading;
+pub mod resident_profile;
 pub mod mortgage;
 pub mod notice_log;
 pub mod notification;

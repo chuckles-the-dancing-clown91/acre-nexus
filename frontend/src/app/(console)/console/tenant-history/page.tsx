@@ -137,9 +137,18 @@ export default function TenantHistoryPage() {
                     .join("")}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold text-fg">
-                    {r.tenant_name}
-                  </div>
+                  {r.tenant_email ? (
+                    <Link
+                      href={`/console/residents?email=${encodeURIComponent(r.tenant_email)}`}
+                      className="block truncate text-[15px] font-semibold text-fg hover:text-accent"
+                    >
+                      {r.tenant_name}
+                    </Link>
+                  ) : (
+                    <div className="truncate text-[15px] font-semibold text-fg">
+                      {r.tenant_name}
+                    </div>
+                  )}
                   <div className="truncate text-xs text-fg-3">
                     {r.tenant_email ?? "No email"}
                     {r.tenant_phone ? ` · ${r.tenant_phone}` : ""}

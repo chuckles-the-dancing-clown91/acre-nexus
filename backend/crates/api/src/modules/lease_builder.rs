@@ -7,7 +7,8 @@
 use super::{JobContext, JobOutcome, ModuleManifest, PlatformModule};
 use crate::rbac::Permission;
 use crate::routes::{
-    applications, esign, fees, lease_charges, lease_docs, renewals, tenant_history, vehicles,
+    applications, esign, fees, lease_charges, lease_docs, renewals, residents, tenant_history,
+    vehicles,
 };
 use rocket::Route;
 use rocket_okapi::okapi::openapi3::OpenApi;
@@ -81,6 +82,11 @@ impl PlatformModule for LeaseBuilderModule {
             esign::public::decline,
             // application -> lease
             applications::convert::convert,
+            // resident profile + mobile ID card
+            residents::my_resident,
+            residents::update_my_resident,
+            residents::resident_profile,
+            residents::update_resident,
             // tenant history
             tenant_history::list::list,
             tenant_history::property::property_history,
