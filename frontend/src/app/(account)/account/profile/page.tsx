@@ -1,7 +1,7 @@
 "use client";
 
 // The resident's profile: the one record applications fill themselves in
-// from (contact, pets, military, income, ID, vehicles), plus how they sign
+// from (contact, work, household, pets, rental history, military, income, ID, vehicles), plus how they sign
 // in (password, two-step codes) and push notifications on this device.
 
 import { MyLanguage } from "@/components/language/LanguagePicker";
@@ -32,6 +32,7 @@ import {
   pushSupported,
 } from "@/lib/push";
 import { parseIncomeCents } from "@/lib/portal-format";
+import { ExtrasForm } from "@/components/resident/ExtrasForm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -69,6 +70,7 @@ export default function ProfilePage() {
       {profile.data && (
         <>
           <ProfileForm view={profile.data} />
+          <ResidentSections />
           <Vehicles vehicles={profile.data.vehicles} />
         </>
       )}
@@ -86,6 +88,36 @@ export default function ProfilePage() {
       <TwoStepPanel />
       <PushPanel />
     </div>
+  );
+}
+
+function ResidentSections() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["my-resident"], queryFn: api.myResident });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!q.data) return q.isLoading ? <Skeleton className="h-40" /> : null;
+  return (
+    <ExtrasForm
+      value={q.data.extras}
+      busy={busy}
+      error={error}
+      saveLabel="Save household and history"
+      onSave={async (x) => {
+        setBusy(true);
+        setError(null);
+        try {
+          const v = await api.saveMyResident(x);
+          qc.setQueryData(["my-resident"], v);
+          qc.invalidateQueries({ queryKey: ["my-profile"] });
+          toast.success("Saved.");
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Couldn't save");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
   );
 }
 
@@ -122,8 +154,6 @@ function formFrom(v: MyProfileView): ProfileInput {
     postal_code: p.postal_code ?? undefined,
     country: p.country ?? undefined,
     gov_id_type: p.gov_id_type ?? undefined,
-    has_pet: p.has_pet,
-    pet_details: p.pet_details ?? undefined,
     is_military: p.is_military,
   };
 }
@@ -260,22 +290,6 @@ function ProfileForm({ view }: { view: MyProfileView }) {
             />
           </Labeled>
           <div className="space-y-2 rounded-xl border border-line bg-fill/40 p-3 text-[13px]">
-            <label className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={form.has_pet ?? false}
-                onChange={(e) => set("has_pet", e.target.checked)}
-              />
-              <span className="text-fg">I have pets</span>
-            </label>
-            {(form.has_pet ?? false) && (
-              <input
-                {...text("pet_details")}
-                aria-label="Pet details"
-                placeholder="e.g. One 30 lb corgi, house-trained"
-              />
-            )}
             <label className="flex items-start gap-2">
               <input
                 type="checkbox"

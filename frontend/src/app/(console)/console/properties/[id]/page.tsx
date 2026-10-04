@@ -52,12 +52,18 @@ import { Plans } from "@/components/property/Plans";
 import { Safety } from "@/components/property/Safety";
 import { Area, Schools } from "@/components/property/Schools";
 import { Systems } from "@/components/property/Systems";
+import { Meters } from "@/components/property/Meters";
+import { UnitsTab } from "@/components/property/UnitsTab";
+import { KindCard } from "@/components/property/KindCard";
+import { kindOf, tabsFor } from "@/lib/propertyKind";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { key: "overview", label: "Overview" },
+  { key: "units", label: "Units" },
   { key: "parcel", label: "Parcel and money" },
   { key: "systems", label: "Appliances and systems" },
+  { key: "meters", label: "Meters and utilities" },
   { key: "permits", label: "Permits and plans" },
   { key: "history", label: "History" },
   { key: "schools", label: "Schools and area" },
@@ -89,24 +95,29 @@ function PropertyView() {
   const { can } = useAuth();
   const params = useSearchParams();
   const router = useRouter();
-  const tab = TABS.some((t) => t.key === params.get("tab"))
-    ? (params.get("tab") as (typeof TABS)[number]["key"])
-    : "overview";
+  const wanted = params.get("tab");
   const write = can("property:write");
-  const intel = useQuery({
-    queryKey: ["intel", id],
-    queryFn: () => api.propertyIntel(id),
-    enabled: tab === "insurance",
-  });
   const property = useQuery({
     queryKey: queryKeys.property(id),
     queryFn: () => api.property(id),
     retry: (n, e) => !(e instanceof ApiError && e.status < 500) && n < 2,
   });
+  const kind = kindOf(property.data);
+  // Each kind of property has its own tabs: a house has no units tab, a
+  // campground has sites instead.
+  const tabKeys = tabsFor(kind);
+  const tabs = TABS.filter((t) => tabKeys.includes(t.key));
+  const tab = (tabs.find((t) => t.key === wanted)?.key ??
+    "overview") as (typeof TABS)[number]["key"];
+  const intel = useQuery({
+    queryKey: ["intel", id],
+    queryFn: () => api.propertyIntel(id),
+    enabled: tab === "insurance",
+  });
   const units = useQuery({
     queryKey: ["properties", id, "units"],
     queryFn: () => api.units(id),
-    enabled: property.isSuccess && can("lease:read"),
+    enabled: property.isSuccess && can("property:read"),
   });
   const tickets = useQuery({
     queryKey: ["properties", id, "tickets"],
@@ -222,7 +233,7 @@ function PropertyView() {
         className="-mx-1 flex gap-1 overflow-x-auto border-b border-line px-1"
         aria-label="Property sections"
       >
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -245,9 +256,47 @@ function PropertyView() {
       </nav>
 
       {tab === "parcel" && <Parcel propertyId={id} />}
+      {tab === "units" && (
+        <UnitsTab
+          propertyId={id}
+          kind={kind}
+          manage={can("lease:manage")}
+          canSeeLeases={can("lease:read")}
+        />
+      )}
+      {tab === "meters" && (
+        <Meters
+          propertyId={id}
+          unitId={kind.mode === "multi" ? null : undefined}
+          manage={write || can("maintenance:manage")}
+          title={
+            kind.mode === "multi" ? "Building meters" : "Meters and utilities"
+          }
+          description={
+            kind.mode === "multi"
+              ? "Meters that serve the whole building. Each unit's own meters are on its page."
+              : "Who pays for each utility, and the last reading."
+          }
+        />
+      )}
       {tab === "systems" && (
         <div className="space-y-4">
-          <Systems propertyId={id} canOrder={can("maintenance:manage")} />
+          <Systems
+            propertyId={id}
+            canOrder={can("maintenance:manage")}
+            manage={can("maintenance:manage")}
+            unitId={kind.mode === "multi" ? null : undefined}
+            title={
+              kind.mode === "multi"
+                ? "Building systems"
+                : "Appliances and systems"
+            }
+            description={
+              kind.mode === "multi"
+                ? "What serves the whole building: boilers, roof, common areas. A unit's appliances are on its own page."
+                : "Age, warranty and life left. Replace or service one straight from here."
+            }
+          />
           <Mandates propertyId={id} manage={can("maintenance:manage")} />
         </div>
       )}
@@ -276,10 +325,11 @@ function PropertyView() {
       {tab === "overview" && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <div className="space-y-4">
+            <KindCard property={p} propertyId={id} manage={write} />
             <Readiness propertyId={id} manage={write} />
             <ActionItems propertyId={id} manage={write} />
             <Facts property={p} propertyId={id} manage={write} />
-            {can("lease:read") && (
+            {kind.mode === "multi" && can("property:read") && (
               <Panel>
                 <PanelHeader
                   title="Units"

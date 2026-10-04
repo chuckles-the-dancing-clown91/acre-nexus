@@ -24,12 +24,14 @@ pub async fn create_lease(
 ) -> ApiResult<Json<LeaseDto>> {
     user.require(Permission::LeaseManage)?;
     let pid = Uuid::parse_str(id).map_err(|_| ApiError::BadRequest("invalid id".into()))?;
-    Property::find_by_id(pid)
+    let property = Property::find_by_id(pid)
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".into()))?;
     let b = body.into_inner();
+    let unit_id =
+        crate::property_kind::resolve_unit(&db, scope.tenant_id, &property, b.unit_id).await?;
     let now = Utc::now();
     let status = match b.status {
         Some(s) if !s.trim().is_empty() => s,
@@ -43,7 +45,7 @@ pub async fn create_lease(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         property_id: Set(pid),
-        unit_id: Set(b.unit_id),
+        unit_id: Set(unit_id),
         application_id: Set(None),
         tenant_name: Set(b.tenant_name),
         tenant_email: Set(b.tenant_email),

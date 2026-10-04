@@ -289,6 +289,11 @@ export interface PortfolioSummary {
   pending_applications: number | null;
   upcoming_reminders: number | null;
   overdue_reminders: number | null;
+  /** The kinds of property in the viewer's reach (`single_family`,
+   * `multi_family`, `campground`, ...). */
+  kinds?: string[];
+  /** Any of them belongs to an LLC run as a foundation. */
+  foundation?: boolean;
 }
 
 export interface LlcGroup {
@@ -599,6 +604,15 @@ export interface OnboardInput {
   acquired_on?: string;
   mortgages: OnboardMortgageInput[];
   assignments?: CreateAssignmentInput[];
+  /** A building's units (or a house's one layout). */
+  unit_list?: {
+    unit_number: string;
+    floor?: number;
+    beds?: number;
+    baths?: number;
+    sqft?: number;
+    market_rent_cents?: number;
+  }[];
   enrich: boolean;
 }
 
@@ -609,6 +623,7 @@ export interface OnboardResponse {
   mortgages_created: number;
   lenders_created: number;
   assignments_created: number;
+  units_created: number;
   enrich_job_id: string | null;
 }
 
@@ -716,6 +731,15 @@ export interface Unit {
   market_rent_cents: number | null;
   market_rent_label: string | null;
   status: string;
+  floor?: number | null;
+  notes?: string | null;
+  /** Who lives there and on which lease (only for people who may see leases),
+   * and how much equipment, how many meters and open work orders it has. */
+  tenant_name?: string | null;
+  lease_id?: string | null;
+  appliances?: number | null;
+  meters?: number | null;
+  open_tickets?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -727,7 +751,11 @@ export interface CreateUnitInput {
   sqft?: number;
   market_rent_cents?: number;
   status?: string;
+  floor?: number;
+  notes?: string;
 }
+
+export type UpdateUnitInput = Partial<CreateUnitInput>;
 
 export interface Lease {
   id: string;
@@ -844,6 +872,8 @@ export interface MaintenanceTicket {
   partner_job_id: string | null;
   partner_status: string | null;
   partner_synced_at: string | null;
+  /** Whether the crew can log time on this work order. */
+  track_time?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -898,6 +928,8 @@ export interface TicketComment {
   /** The action button or event behind the note (`on_my_way`, `task_done`,
    * `resident_comment`, ...); null for a typed note. */
   action?: string | null;
+  /** The task the note is about, if it's about one. */
+  task_id?: string | null;
   created_at: string;
 }
 
@@ -1093,6 +1125,14 @@ export interface UpdateTicketInput {
   follow_up_note?: string;
   due_date?: string;
   cost_cents?: number;
+  /** What to put on the feed with a status move. */
+  status_note?: string;
+  /** For `scheduled`: the day the work is set for. */
+  scheduled_for?: string;
+  /** To resolve with tasks still open: why they can stay open. */
+  open_tasks_reason?: string;
+  /** Whether the crew can log time on this work order. */
+  track_time?: boolean;
 }
 
 // ---- Title: ownership + liens ----------------------------------------------

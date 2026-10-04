@@ -22,12 +22,14 @@ pub async fn list(
     db: crate::db::RequestDb,
     user: AuthUser,
     scope: TenantScope,
+    access: crate::tenancy::Access,
 ) -> ApiResult<Json<Vec<TenantHistoryRow>>> {
     user.require(Permission::LeaseRead)?;
-    let leases = Lease::find()
-        .filter(entity::lease::Column::TenantId.eq(scope.tenant_id))
-        .all(&db)
-        .await?;
+    let mut query = Lease::find().filter(entity::lease::Column::TenantId.eq(scope.tenant_id));
+    if let Some(ids) = access.property_ids() {
+        query = query.filter(entity::lease::Column::PropertyId.is_in(ids));
+    }
+    let leases = query.all(&db).await?;
     let prop_names: HashMap<_, _> = Property::find()
         .filter(entity::property::Column::TenantId.eq(scope.tenant_id))
         .all(&db)

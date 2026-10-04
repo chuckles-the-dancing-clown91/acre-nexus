@@ -198,6 +198,10 @@ const SELF_FILTERED: &[(Method, &str)] = &[
     (Method::Get, "/search"),
     (Method::Get, "/tickets"),
     (Method::Get, "/leases"),
+    // Residents: narrowed to the people leasing or applying in reach.
+    (Method::Get, "/tenant-history"),
+    (Method::Get, "/residents/profile"),
+    (Method::Put, "/residents/profile"),
     // The service desk: the kit catalog (company-wide, no property data), a
     // work order from a kit and a routine on a property (the handlers check
     // the property is in reach), and the schedule (narrowed by reach).

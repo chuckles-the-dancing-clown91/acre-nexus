@@ -166,6 +166,7 @@ pub async fn update_ticket(
             id: Set(uuid::Uuid::new_v4()),
             tenant_id: Set(principal.tenant_id),
             ticket_id: Set(saved.id),
+            task_id: Set(None),
             author_user_id: Set(None),
             kind: Set(if changed.is_some() {
                 "status"

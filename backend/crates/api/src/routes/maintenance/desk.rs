@@ -232,6 +232,20 @@ async fn ticket(
         .ok_or_else(|| ApiError::NotFound("work order not found".into()))
 }
 
+/// A work order, if it's on a property the caller can see.
+pub(crate) async fn ticket_in_reach(
+    db: &impl ConnectionTrait,
+    tenant_id: Uuid,
+    access: &crate::tenancy::Access,
+    id: &str,
+) -> ApiResult<entity::maintenance_ticket::Model> {
+    let t = ticket(db, tenant_id, id).await?;
+    if !access.sees(t.property_id) {
+        return Err(ApiError::NotFound("work order not found".into()));
+    }
+    Ok(t)
+}
+
 async fn task(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
@@ -1632,6 +1646,7 @@ pub async fn action_comment(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(tenant_id),
         ticket_id: Set(ticket_id),
+        task_id: Set(None),
         author_user_id: Set(Some(user.user_id)),
         kind: Set("action".into()),
         visibility: Set(visibility.into()),
@@ -1720,6 +1735,10 @@ pub async fn press_action(
             waiting_on: def.waiting_on.map(str::to_string),
             follow_up_date: def.waiting_on.map(|_| follow_up.clone()),
             follow_up_note: def.waiting_on.map(|_| line.clone()),
+            // A return visit is scheduled for the day given (or in three days).
+            scheduled_for: (def.status == Some("scheduled")).then(|| follow_up.clone()),
+            // The button already wrote its own line.
+            quiet: true,
             ..Default::default()
         };
         return super::update_ticket::update_ticket(state, db, user, scope, id, Json(req)).await;

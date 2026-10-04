@@ -29,6 +29,7 @@ import {
   type VendorOption,
 } from "@/lib/servicedesk";
 import { KitPreview } from "@/components/desk/KitPreview";
+import { TaskDetail } from "@/components/desk/TaskDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ export function TaskList({
   tasks,
   manage,
   onChange,
+  onNote,
 }: {
   ticketId: string;
   /** For offering the people on this property first. */
@@ -57,6 +59,8 @@ export function TaskList({
   tasks: Task[];
   manage: boolean;
   onChange: () => void;
+  /** Open the add-a-note wizard about a task. */
+  onNote?: (taskId: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
@@ -72,6 +76,9 @@ export function TaskList({
     enabled: manage,
   });
   const [kitOpen, setKitOpen] = useState(false);
+  const [detail, setDetail] = useState<string | null>(null);
+  // One box per row: ticking a task done, or (when picking) choosing it for a vendor.
+  const [selectMode, setSelectMode] = useState(false);
 
   async function run(fn: () => Promise<unknown>, ok?: string) {
     setBusy(true);
@@ -101,6 +108,18 @@ export function TaskList({
         action={
           manage && (
             <div className="flex gap-2">
+              {tasks.length > 1 && (
+                <Button
+                  size="sm"
+                  variant={selectMode ? "secondary" : "ghost"}
+                  onClick={() => {
+                    setSelectMode((m) => !m);
+                    setPicked([]);
+                  }}
+                >
+                  {selectMode ? "Done picking" : "Pick for a vendor"}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -161,10 +180,13 @@ export function TaskList({
         <ul className="divide-y divide-line">
           {tasks.map((t) => (
             <li key={t.id} className="flex items-center gap-3 px-3 py-2.5">
-              {manage && t.status !== "done" && t.status !== "skipped" && (
+              {selectMode &&
+              manage &&
+              t.status !== "done" &&
+              t.status !== "skipped" ? (
                 <input
                   type="checkbox"
-                  aria-label={`Select ${t.title}`}
+                  aria-label={`Pick ${t.title} for a vendor`}
                   checked={picked.includes(t.id)}
                   onChange={(e) =>
                     setPicked((p) =>
@@ -173,34 +195,47 @@ export function TaskList({
                         : p.filter((x) => x !== t.id)
                     )
                   }
-                  className="size-4 shrink-0 accent-[var(--accent)]"
+                  className="size-5 shrink-0 accent-[var(--accent)]"
                 />
+              ) : (
+                <button
+                  type="button"
+                  disabled={!manage || busy}
+                  onClick={() =>
+                    run(() =>
+                      desk.updateTask(ticketId, t.id, {
+                        status: t.status === "done" ? "todo" : "done",
+                      })
+                    )
+                  }
+                  aria-label={
+                    t.status === "done"
+                      ? `Reopen ${t.title}`
+                      : `Mark ${t.title} done`
+                  }
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-md border transition",
+                    t.status === "done"
+                      ? "border-accent bg-accent text-accent-fg"
+                      : "border-line-strong hover:border-accent"
+                  )}
+                >
+                  {t.status === "done" && <Check className="size-3.5" />}
+                </button>
               )}
-              <button
-                type="button"
-                disabled={!manage || busy}
-                onClick={() =>
-                  run(() =>
-                    desk.updateTask(ticketId, t.id, {
-                      status: t.status === "done" ? "todo" : "done",
-                    })
-                  )
-                }
-                aria-label={
-                  t.status === "done"
-                    ? `Reopen ${t.title}`
-                    : `Mark ${t.title} done`
-                }
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-md border transition",
-                  t.status === "done"
-                    ? "border-accent bg-accent text-accent-fg"
-                    : "border-line-strong hover:border-accent"
-                )}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${t.title}`}
+                onClick={() => setDetail(t.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDetail(t.id);
+                  }
+                }}
+                className="min-w-0 flex-1 cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
-                {t.status === "done" && <Check className="size-3.5" />}
-              </button>
-              <div className="min-w-0 flex-1">
                 <div
                   className={cn(
                     "truncate text-[13px]",
@@ -393,6 +428,27 @@ export function TaskList({
         )}
       </div>
 
+      {detail && tasks.find((t) => t.id === detail) && (
+        <TaskDetail
+          ticketId={ticketId}
+          task={tasks.find((t) => t.id === detail)!}
+          manage={manage}
+          onClose={() => setDetail(null)}
+          onChange={onChange}
+          onSend={(t) => {
+            setDetail(null);
+            setDispatching([t]);
+          }}
+          onNote={
+            onNote
+              ? (id) => {
+                  setDetail(null);
+                  onNote(id);
+                }
+              : undefined
+          }
+        />
+      )}
       {dispatching && (
         <DispatchDialog
           ticketId={ticketId}

@@ -85,6 +85,11 @@ mod m20240101_000077_detail_year_built;
 mod m20240101_000078_vendor_portal;
 mod m20240101_000079_campground;
 mod m20240101_000080_family_plan;
+mod m20240101_000081_maintenance_role;
+mod m20240101_000082_units_meters;
+mod m20240101_000083_ticket_feed;
+mod m20240101_000084_resident_profile;
+mod m20240101_000085_lease_sections;
 
 pub struct Migrator;
 
@@ -172,6 +177,11 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000078_vendor_portal::Migration),
             Box::new(m20240101_000079_campground::Migration),
             Box::new(m20240101_000080_family_plan::Migration),
+            Box::new(m20240101_000081_maintenance_role::Migration),
+            Box::new(m20240101_000082_units_meters::Migration),
+            Box::new(m20240101_000083_ticket_feed::Migration),
+            Box::new(m20240101_000084_resident_profile::Migration),
+            Box::new(m20240101_000085_lease_sections::Migration),
         ]
     }
 }

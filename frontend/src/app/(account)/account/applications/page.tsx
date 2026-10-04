@@ -34,6 +34,9 @@ export default function ApplicationsPage() {
         <p className="text-[13px] text-fg-3">
           Screening runs on its own and we email you at each step.
         </p>
+        <Button asChild size="sm" className="mt-3">
+          <Link href="/account/apply">Apply now</Link>
+        </Button>
       </div>
 
       {apps.isLoading && <Skeleton className="h-40" />}

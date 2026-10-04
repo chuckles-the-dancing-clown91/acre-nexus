@@ -39,6 +39,25 @@ pub async fn update(
     if let Some(v) = b.name {
         am.name = Set(v);
     }
+    if let Some(raw) = b.property_type.as_deref() {
+        let kind = crate::property_kind::parse_for_save(raw)?;
+        let units = crate::property_kind::unit_count(&db, pid).await?;
+        // A house is one unit: it can't take that type while it has several.
+        if crate::property_kind::unit_mode(&kind) == crate::property_kind::UnitMode::Single
+            && units > 1
+        {
+            return Err(ApiError::Conflict(format!(
+                "this property has {units} units, so it can't be a {}",
+                crate::property_kind::label(&kind).to_lowercase()
+            )));
+        }
+        am.property_type = Set(kind.clone());
+        if crate::property_kind::unit_mode(&kind) == crate::property_kind::UnitMode::Single
+            && !kind.is_empty()
+        {
+            crate::property_kind::ensure_home_unit(&db, scope.tenant_id, pid).await?;
+        }
+    }
     let mut address_changed = false;
     if let Some(v) = b
         .address

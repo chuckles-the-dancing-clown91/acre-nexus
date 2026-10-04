@@ -206,6 +206,8 @@ pub struct UpdatePropertyReq {
     pub occupied_units: Option<i32>,
     pub monthly_rent_cents: Option<i64>,
     pub manager: Option<String>,
+    /// `single_family`, `multi_family`, `campground` … see `property_kind`.
+    pub property_type: Option<String>,
     /// Set/replace the hero photo URL. Pass an empty string to clear it.
     pub image_url: Option<String>,
 }

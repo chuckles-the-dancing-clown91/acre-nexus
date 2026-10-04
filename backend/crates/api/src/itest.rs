@@ -155,6 +155,10 @@ async fn integration_suite() {
     vendor_portal_flow(&c).await;
     campground_flow(&c).await;
     family_plan_flow(&c).await;
+    units_and_meters_flow(&c).await;
+    ticket_feed_flow(&c).await;
+    lease_document_flow(&c).await;
+    resident_profile_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -329,6 +333,16 @@ fn mint(c: &Ctx, tenant: Option<Uuid>, staff: bool, perms: &[&str]) -> String {
         perms.iter().map(|s| s.to_string()).collect(),
     )
     .expect("mint access token")
+}
+
+/// A unit of a property, for tests that put a lease on a building.
+async fn a_unit(c: &Ctx, property_id: Uuid) -> Option<Uuid> {
+    entity::prelude::Unit::find()
+        .filter(entity::unit::Column::PropertyId.eq(property_id))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .map(|u| u.id)
 }
 
 async fn tenant_id(c: &Ctx, slug: &str) -> Uuid {
@@ -4177,6 +4191,7 @@ async fn batch_a_limits_jobs_and_reminders(c: &Ctx) {
         &format!("/properties/{pid}/leases"),
         &admin,
         serde_json::json!({
+            "unit_id": a_unit(c, pid).await,
             "tenant_name": "Rita Reminder",
             "tenant_email": "rita.reminder@example.com",
             "rent_cents": 150000,
@@ -4719,6 +4734,7 @@ async fn batch_c_texts(c: &Ctx) {
         &format!("/properties/{pid}/leases"),
         &admin,
         serde_json::json!({
+            "unit_id": a_unit(c, pid).await,
             "tenant_name": "Tess Texter",
             "tenant_email": "tess.texter@example.com",
             "tenant_phone": "(760) 555-0142",
@@ -4748,7 +4764,8 @@ async fn batch_c_texts(c: &Ctx) {
             Method::Patch,
             &format!("/tickets/{tid}"),
             &admin,
-            serde_json::json!({ "status": status }),
+            // Reopening a resolved work order says why.
+            serde_json::json!({ "status": status, "status_note": "The outlet is dead again" }),
         )
         .await;
         assert_eq!(st, Status::Ok);
@@ -6605,6 +6622,23 @@ async fn maintenance_actions_and_resident(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Ok);
+    // With other tasks still open, "Work complete" is refused, naming them.
+    if tasks.as_array().unwrap().len() > 1 {
+        let (st, e) = press("work_done", None).await;
+        assert_eq!(st, Status::BadRequest, "{e}");
+        for t in tasks.as_array().unwrap().iter().skip(1) {
+            let id = t["id"].as_str().unwrap();
+            let (st, _) = send_json(
+                c,
+                Method::Patch,
+                &format!("/tickets/{tid}/tasks/{id}"),
+                &staff,
+                serde_json::json!({ "status": "done" }),
+            )
+            .await;
+            assert_eq!(st, Status::Ok);
+        }
+    }
     let (_, done) = press("work_done", None).await;
     assert_eq!(done["status"], "resolved");
     let (_, detail) = get_json(c, &format!("/tickets/{tid}"), &staff).await;
@@ -10065,7 +10099,7 @@ async fn owner_approvals_flow(c: &Ctx) {
         Method::Patch,
         &format!("/tickets/{tid}"),
         &staff,
-        serde_json::json!({ "status": "resolved" }),
+        serde_json::json!({ "status": "resolved", "open_tasks_reason": "The vendor has the rest" }),
     )
     .await;
     assert_eq!(st, Status::Ok);
@@ -10764,4 +10798,566 @@ async fn family_plan_flow(c: &Ctx) {
     )
     .await;
     assert_eq!(st, Status::Ok);
+}
+
+/// A house is one unit, a building has many, a campground has none; each unit
+/// carries its own equipment and meters, and the lease follows the unit.
+async fn units_and_meters_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "property:read",
+            "property:write",
+            "lease:read",
+            "lease:manage",
+            "maintenance:read",
+            "maintenance:manage",
+        ],
+    );
+    let new_property = |name: &str, ty: &str, units: i32| serde_json::json!({ "name": name, "address": "1 Test Way", "city": "Portland", "units": units, "occupied_units": 0, "monthly_rent_cents": 0, "property_type": ty });
+
+    // A house: one unit, made for it, and no second.
+    let (st, house) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Oak House", "Single Family", 1),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{house}");
+    assert_eq!(house["property_type"], "single_family");
+    let hid = house["id"].as_str().unwrap().to_string();
+    let (_, units) = get_json(c, &format!("/properties/{hid}/units"), &staff).await;
+    assert_eq!(units.as_array().unwrap().len(), 1);
+    assert_eq!(units[0]["unit_number"], "Home");
+    let (st, err) = post_json(
+        c,
+        &format!("/properties/{hid}/units"),
+        &staff,
+        serde_json::json!({ "unit_number": "B" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{err}");
+    // A lease on the house lands on its unit without being told.
+    let (st, lease) = post_json(c, &format!("/properties/{hid}/leases"), &staff, serde_json::json!({ "tenant_name": "Casey Rivers", "rent_cents": 210000, "start_date": "2031-01-01" })).await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    assert_eq!(lease["unit_id"], units[0]["id"]);
+
+    // A building: units are added one by one, and a lease has to say which.
+    let (st, apts) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Elm Flats", "Apartments", 2),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{apts}");
+    assert_eq!(apts["property_type"], "multi_family");
+    let aid = apts["id"].as_str().unwrap().to_string();
+    let mut unit_ids = vec![];
+    for n in ["1A", "1B"] {
+        let (st, u) = post_json(
+            c,
+            &format!("/properties/{aid}/units"),
+            &staff,
+            serde_json::json!({ "unit_number": n, "beds": 2, "floor": 1 }),
+        )
+        .await;
+        assert_eq!(st, Status::Ok, "{u}");
+        unit_ids.push(u["id"].as_str().unwrap().to_string());
+    }
+    let (st, _) = post_json(c, &format!("/properties/{aid}/leases"), &staff, serde_json::json!({ "tenant_name": "No Unit", "rent_cents": 100000, "start_date": "2031-01-01" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, lease) = post_json(c, &format!("/properties/{aid}/leases"), &staff, serde_json::json!({ "tenant_name": "Sam Lee", "rent_cents": 150000, "start_date": "2031-01-01", "unit_id": unit_ids[0] })).await;
+    assert_eq!(st, Status::Ok, "{lease}");
+    // A building can't be turned into a house while it has two units.
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{aid}"),
+        &staff,
+        serde_json::json!({ "property_type": "single_family" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/properties/{aid}"),
+        &staff,
+        serde_json::json!({ "property_type": "castle" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // Equipment and meters belong to a unit.
+    let (st, fridge) = post_json(c, "/assets", &staff, serde_json::json!({ "property_id": aid, "unit_id": unit_ids[0], "kind": "appliance", "name": "Refrigerator" })).await;
+    assert_eq!(st, Status::Ok, "{fridge}");
+    let (st, em) = post_json(c, "/meters", &staff, serde_json::json!({ "property_id": aid, "unit_id": unit_ids[0], "kind": "electric", "meter_number": "E-1A", "provider": "PGE", "paid_by": "tenant", "unit_of_measure": "kWh" })).await;
+    assert_eq!(st, Status::Ok, "{em}");
+    let eid = em["id"].as_str().unwrap().to_string();
+    assert_eq!(em["label"], "1A Electricity");
+    let (st, _) = post_json(c, "/meters", &staff, serde_json::json!({ "property_id": aid, "kind": "water", "paid_by": "landlord", "provider": "City water" })).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        "/meters",
+        &staff,
+        serde_json::json!({ "property_id": aid, "kind": "plasma" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    // Readings only count up.
+    let (st, r) = post_json(c, &format!("/meters/{eid}/readings"), &staff, serde_json::json!({ "reading": 1200.0, "read_on": "2031-01-01", "reason": "move_in", "lease_id": lease["id"] })).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let (st, r) = post_json(
+        c,
+        &format!("/meters/{eid}/readings"),
+        &staff,
+        serde_json::json!({ "reading": 1450.5, "read_on": "2031-02-01" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["used"], 250.5);
+    let (st, _) = post_json(
+        c,
+        &format!("/meters/{eid}/readings"),
+        &staff,
+        serde_json::json!({ "reading": 10.0 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (_, list) = get_json(c, &format!("/meters?unit_id={}", unit_ids[0]), &staff).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["last_reading"], 1450.5);
+
+    // The units list counts it all, and names who lives there.
+    let (_, units) = get_json(c, &format!("/properties/{aid}/units"), &staff).await;
+    let a = units
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["unit_number"] == "1A")
+        .unwrap();
+    assert_eq!(a["appliances"], 1);
+    assert_eq!(a["meters"], 1);
+    assert_eq!(a["tenant_name"], "Sam Lee");
+
+    // The utility agreement: the unit's own electric meter, the building's water.
+    let (_, terms) = get_json(
+        c,
+        &format!("/properties/{aid}/utilities?unit_id={}", unit_ids[0]),
+        &staff,
+    )
+    .await;
+    let t = terms.as_array().unwrap();
+    let electric = t.iter().find(|x| x["kind"] == "electric").unwrap();
+    let water = t.iter().find(|x| x["kind"] == "water").unwrap();
+    assert_eq!(electric["paid_by"], "tenant");
+    assert_eq!(water["paid_by"], "landlord");
+    // The other unit has no electric meter of its own, so no electric term.
+    let (_, other) = get_json(
+        c,
+        &format!("/properties/{aid}/utilities?unit_id={}", unit_ids[1]),
+        &staff,
+    )
+    .await;
+    assert!(other
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["kind"] != "electric"));
+
+    // A campground has sites on its map, not units.
+    let (st, camp) = post_json(
+        c,
+        "/properties",
+        &staff,
+        new_property("Pine Camp", "campground", 0),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    let cid = camp["id"].as_str().unwrap().to_string();
+    let (st, _) = post_json(
+        c,
+        &format!("/properties/{cid}/units"),
+        &staff,
+        serde_json::json!({ "unit_number": "1" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+}
+
+/// A work order's status moves follow rules and leave lines on the feed; tasks
+/// have their own notes; time can be logged and switched off.
+async fn ticket_feed_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let crew = mint(
+        c,
+        Some(nw),
+        false,
+        &["property:read", "maintenance:read", "maintenance:manage"],
+    );
+    let (st, t) = post_json(
+        c,
+        &format!("/properties/{pid}/tickets"),
+        &crew,
+        serde_json::json!({ "title": "Hallway light flickers" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+    assert_eq!(t["track_time"], true);
+    let (st, task) = post_json(
+        c,
+        &format!("/tickets/{tid}/tasks"),
+        &crew,
+        serde_json::json!({ "title": "Swap the ballast" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{task}");
+    let task_id = task[0]["id"].as_str().unwrap().to_string();
+    let patch = |body: serde_json::Value| {
+        let crew = crew.clone();
+        let tid = tid.clone();
+        async move { send_json(c, Method::Patch, &format!("/tickets/{tid}"), &crew, body).await }
+    };
+    let feed = |query: &'static str| {
+        let crew = crew.clone();
+        let tid = tid.clone();
+        async move {
+            get_json(c, &format!("/tickets/{tid}/feed{query}"), &crew)
+                .await
+                .1
+        }
+    };
+
+    // Scheduling needs a date; with one, it's set and says so.
+    let (st, e) = patch(serde_json::json!({ "status": "scheduled" })).await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    let (st, t2) =
+        patch(serde_json::json!({ "status": "scheduled", "scheduled_for": "2031-05-06" })).await;
+    assert_eq!(st, Status::Ok, "{t2}");
+    assert_eq!(t2["due_date"], "2031-05-06");
+    let (st, _) =
+        patch(serde_json::json!({ "status": "in_progress", "status_note": "Rosa is on it." }))
+            .await;
+    assert_eq!(st, Status::Ok);
+    let f = feed("").await;
+    let lines: Vec<&str> = f
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "status")
+        .map(|i| i["title"].as_str().unwrap())
+        .collect();
+    assert!(lines.contains(&"Scheduled for 2031-05-06."), "{lines:?}");
+    assert!(lines.contains(&"Work started. Rosa is on it."), "{lines:?}");
+
+    // A note about a task shows on the work order's feed and on the task's own.
+    let (st, n) = post_json(c, &format!("/tickets/{tid}/comments"), &crew, serde_json::json!({ "body": "Ballast is a T8, need a new one", "visibility": "internal", "task_id": task_id })).await;
+    assert_eq!(st, Status::Ok, "{n}");
+    assert_eq!(n["task_id"], task_id);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/comments"),
+        &crew,
+        serde_json::json!({ "body": "Not about the task" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/comments"),
+        &crew,
+        serde_json::json!({ "body": "x", "task_id": uuid::Uuid::new_v4() }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let mine = get_json(c, &format!("/tickets/{tid}/feed?task_id={task_id}"), &crew)
+        .await
+        .1;
+    let notes: Vec<&str> = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "note")
+        .map(|i| i["body"].as_str().unwrap())
+        .collect();
+    assert_eq!(notes, vec!["Ballast is a T8, need a new one"]);
+    let all = feed("").await;
+    assert!(all
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["body"] == "Not about the task"));
+
+    // Time and money land on the feed.
+    let (st, tt) = post_json(
+        c,
+        &format!("/tickets/{tid}/time"),
+        &crew,
+        serde_json::json!({ "minutes": 90, "notes": "Replaced the ballast" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{tt}");
+    assert_eq!(tt["total_minutes"], 90);
+    assert_eq!(tt["tracking"], true);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/expenses"),
+        &crew,
+        serde_json::json!({ "description": "T8 ballast", "amount_cents": 2450 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let all = feed("").await;
+    let kinds: Vec<&str> = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["kind"].as_str().unwrap())
+        .collect();
+    for k in ["time", "expense", "note", "status"] {
+        assert!(kinds.contains(&k), "{k} missing in {kinds:?}");
+    }
+
+    // Resolving needs the tasks done, or a reason they can stay open.
+    let (st, e) = patch(serde_json::json!({ "status": "resolved" })).await;
+    assert_eq!(st, Status::BadRequest, "{e}");
+    assert!(
+        e["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 task is still open"),
+        "{e}"
+    );
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/tickets/{tid}/tasks/{task_id}"),
+        &crew,
+        serde_json::json!({ "status": "done" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "resolved" })).await;
+    assert_eq!(st, Status::Ok);
+    let all = feed("").await;
+    let resolved = all
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["title"].as_str().unwrap_or("").starts_with("Resolved:"))
+        .unwrap();
+    assert_eq!(
+        resolved["title"],
+        "Resolved: 1 of 1 tasks done, 1.5h, $24.50 spent."
+    );
+
+    // Closing follows resolved; reopening and cancelling say why.
+    let (st, _) = patch(serde_json::json!({ "status": "closed" })).await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "in_progress" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) =
+        patch(serde_json::json!({ "status": "in_progress", "status_note": "Flickering again" }))
+            .await;
+    assert_eq!(st, Status::Ok);
+    let (st, _) = patch(serde_json::json!({ "status": "cancelled" })).await;
+    assert_eq!(st, Status::BadRequest);
+
+    // Time tracking can be switched off for the work order.
+    let (st, off) = patch(serde_json::json!({ "track_time": false })).await;
+    assert_eq!(st, Status::Ok, "{off}");
+    assert_eq!(off["track_time"], false);
+    let (st, _) = post_json(
+        c,
+        &format!("/tickets/{tid}/time"),
+        &crew,
+        serde_json::json!({ "minutes": 10 }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+}
+
+/// A resident keeps a profile (pets, work, rentals) that fills "Apply now" and
+/// is their ID card; a property manager can read and edit the same profile.
+async fn resident_profile_flow(c: &Ctx) {
+    use rocket::http::Method;
+    let hs = tenant_id(c, "hearthside").await;
+    // The renter signs in as themselves.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"priya.nair@example.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok, "seeded renter should sign in");
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let me = toks["access_token"].as_str().unwrap().to_string();
+
+    let (st, mine) = get_json(c, "/my/resident", &me).await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert_eq!(mine["extras"]["pets"][0]["name"], "Biscuit");
+    assert!(mine["card"]["code"].as_str().unwrap().starts_with("RES-"));
+    assert_eq!(mine["card"]["standing"], "active");
+    assert_eq!(mine["card"]["residence"]["property"], "14 Willow Bend");
+    assert_eq!(mine["prefill"]["employer"], "Dell Technologies");
+    assert_eq!(mine["prefill"]["has_pet"], true);
+    let missing = mine["prefill"]["missing"].as_array().unwrap();
+    assert!(
+        !missing.iter().any(|m| m == "Employer"),
+        "employer is on file, so it is not missing"
+    );
+
+    // She adds a second pet and the account pet flag follows.
+    let mut extras = mine["extras"].clone();
+    extras["pets"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "name": "Pepper", "kind": "cat", "weight_lb": 9
+        }));
+    let (st, saved) = send_json(c, Method::Put, "/my/resident", &me, extras.clone()).await;
+    assert_eq!(st, Status::Ok, "{saved}");
+    assert_eq!(saved["extras"]["pets"].as_array().unwrap().len(), 2);
+    let (_, profile) = get_json(c, "/my/profile", &me).await;
+    let details = profile["profile"]["pet_details"].as_str().unwrap();
+    assert!(
+        details.contains("Biscuit") && details.contains("Pepper"),
+        "{details}"
+    );
+
+    // A pet needs a name.
+    extras["pets"][1]["name"] = serde_json::json!(" ");
+    let (st, _) = send_json(c, Method::Put, "/my/resident", &me, extras).await;
+    assert_eq!(st, Status::BadRequest);
+
+    // The property manager sees the same person, with tenancies, and edits it.
+    let pm = mint(
+        c,
+        Some(hs),
+        false,
+        &["lease:read", "lease:manage", "property:read"],
+    );
+    let (st, d) = get_json(c, "/residents/profile?email=priya.nair@example.com", &pm).await;
+    assert_eq!(st, Status::Ok, "{d}");
+    assert_eq!(d["extras"]["pets"].as_array().unwrap().len(), 2);
+    assert_eq!(d["tenancies"].as_array().unwrap().len(), 1);
+    assert_eq!(d["tenancies"][0]["property_name"], "14 Willow Bend");
+    assert!(d["user_id"].is_string());
+    let (st, upd) = send_json(
+        c,
+        Method::Put,
+        "/residents/profile",
+        &pm,
+        serde_json::json!({
+            "email": "priya.nair@example.com",
+            "staff_notes": "Pays early. Asked about a fence.",
+            "extras": { "employer": "Dell", "pets": [] }
+        }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{upd}");
+    assert_eq!(upd["staff_notes"], "Pays early. Asked about a fence.");
+    assert_eq!(upd["extras"]["pets"].as_array().unwrap().len(), 0);
+    let (_, after) = get_json(c, "/my/resident", &me).await;
+    assert_eq!(after["prefill"]["has_pet"], false);
+    assert!(
+        after["extras"].get("staff_notes").is_none() && after.get("staff_notes").is_none(),
+        "staff notes never reach the resident"
+    );
+
+    // Read-only for staff who cannot manage leases; unknown people are 404.
+    let reader = mint(c, Some(hs), false, &["lease:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        "/residents/profile",
+        &reader,
+        serde_json::json!({ "email": "priya.nair@example.com", "extras": {} }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = get_json(c, "/residents/profile?email=nobody@example.com", &pm).await;
+    assert_eq!(st, Status::NotFound);
+    // A property manager limited to their houses reads the same profile and
+    // sees only their own residents in the history.
+    let resp = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"theo@hearthside.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    let toks: serde_json::Value = resp.into_json().await.unwrap();
+    let theo = toks["access_token"].as_str().unwrap().to_string();
+    let (st, d) = get_json(c, "/residents/profile?email=priya.nair@example.com", &theo).await;
+    assert_eq!(st, Status::Ok, "{d}");
+    let (st, hist) = get_json(c, "/tenant-history", &theo).await;
+    assert_eq!(st, Status::Ok, "{hist}");
+    assert_eq!(hist.as_array().unwrap().len(), 3);
+    // Another company cannot see this resident.
+    let nw = tenant_id(c, "northwind").await;
+    let other = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = get_json(c, "/residents/profile?email=priya.nair@example.com", &other).await;
+    assert_eq!(st, Status::NotFound);
+}
+
+/// A generated lease is written from the resident's profile and the home: it
+/// carries the utility agreement, the pet addendum, the old-house disclosure and
+/// the home's equipment, and keeps its signable text.
+async fn lease_document_flow(c: &Ctx) {
+    let hs = tenant_id(c, "hearthside").await;
+    let pm = mint(
+        c,
+        Some(hs),
+        false,
+        &["lease:read", "lease:manage", "property:read"],
+    );
+    let (st, leases) = get_json(c, "/leases", &pm).await;
+    assert_eq!(st, Status::Ok, "{leases}");
+    let lease = leases
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["tenant_email"] == "priya.nair@example.com")
+        .expect("priya's lease");
+    let lid = lease["id"].as_str().unwrap();
+    let (st, doc) = post_json(
+        c,
+        &format!("/leases/{lid}/document/generate"),
+        &pm,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{doc}");
+    let sections = doc["sections"].as_array().expect("structured sections");
+    let key = |k: &str| sections.iter().find(|s| s["key"] == k);
+    assert!(key("utilities").is_some(), "utilities article");
+    assert_eq!(key("utility_agreement").unwrap()["kind"], "addendum");
+    assert_eq!(key("pet_addendum").unwrap()["kind"], "addendum");
+    assert!(
+        key("lead_paint").is_none(),
+        "built in 2008, so no lead disclosure"
+    );
+    assert!(key("equipment").is_some(), "the home's equipment");
+    assert!(
+        key("household").is_some(),
+        "occupants and emergency contact"
+    );
+    let body = doc["body"].as_str().unwrap();
+    assert!(body.contains("UTILITY AGREEMENT"), "{body}");
+    assert!(body.contains("Biscuit (dog, Labrador, 62 lb)"), "{body}");
+    assert!(body.contains("Electricity | Tenant"), "{body}");
+    assert!(body.contains("Trash and recycling | Landlord"), "{body}");
+    assert!(body.contains("Emergency contact: Arun Nair"), "{body}");
 }

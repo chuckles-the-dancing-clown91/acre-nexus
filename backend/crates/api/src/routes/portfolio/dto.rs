@@ -29,6 +29,11 @@ pub struct PortfolioSummary {
     /// viewer holds `calendar:read`.
     pub upcoming_reminders: Option<i64>,
     pub overdue_reminders: Option<i64>,
+    /// The kinds of property in the viewer's reach (`single_family`,
+    /// `multi_family`, `campground` …), which decide what the console offers.
+    pub kinds: Vec<String>,
+    /// Any of those properties belongs to an LLC run as a foundation.
+    pub foundation: bool,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

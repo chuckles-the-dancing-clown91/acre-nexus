@@ -62,6 +62,8 @@ pub struct Model {
     pub partner_job_id: Option<String>,
     pub partner_status: Option<String>,
     pub partner_synced_at: Option<DateTimeWithTimeZone>,
+    /// Whether the in-house crew can log time on this work order.
+    pub track_time: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

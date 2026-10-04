@@ -470,3 +470,9 @@ pub const VOUCHER_SET: &str = "voucher.set";
 pub const INCOME_CERTIFY: &str = "income.certify";
 /// A housing authority's payment (HAP) was received.
 pub const HAP_RECEIVED: &str = "hap.received";
+/// A utility meter was added to a property or unit.
+pub const METER_CREATE: &str = "meter.create";
+/// A meter's details changed or it was retired.
+pub const METER_UPDATE: &str = "meter.update";
+/// A meter reading was recorded.
+pub const METER_READING: &str = "meter.reading";

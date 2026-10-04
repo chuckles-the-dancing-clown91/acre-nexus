@@ -208,6 +208,7 @@ pub async fn create_my_ticket(
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(&db)
     .await?;
@@ -392,6 +393,7 @@ pub async fn add_my_comment(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(ticket.id),
+        task_id: Set(None),
         author_user_id: Set(Some(user.user_id)),
         kind: Set("comment".to_string()),
         visibility: Set("public".into()),

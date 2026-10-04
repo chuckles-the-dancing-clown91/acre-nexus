@@ -37,6 +37,33 @@ come from the roles assigned to the user.
 Each persona has a **default role** granted automatically when a member is
 created with it. Personas and their catalogs are seeded but extensible.
 
+## The console navigation
+
+The sidebar is organised by the job someone is doing, and shows only what their
+permissions open (`frontend/src/components/shell/nav.ts`):
+
+| Section | What's in it |
+|---|---|
+| Work | My day, Service desk, Plan the day, Schedule, Job kits, Turnovers, Needs attention, Calendar |
+| Properties | Properties, Portfolio map, Site maps, Campgrounds, Onboard, Workflows, LLCs |
+| Leasing | Leads, Applications, Showings, Listings, Tenants, Tenant history, Foundation, Fee schedule |
+| Money | Payments, Accounting, Payables, Related parties, Payouts, Expenses, Reports |
+| People | My time, Team, Timesheets, Back office |
+| Contacts | Owners & CRM, Entities, Messages, Texts |
+| Deals | Acquisitions |
+| Workspace setup, Admin | Branding, Domains, Integrations, Go live, Import & export, API tokens, Members, Billing, Modules, Settings, Audit trail, Security. Folded until opened. |
+
+A page that isn't placed in a section still appears, at the end of its module's
+section, so a new module never goes missing.
+
+**Field crew** (the Maintenance role: maintenance access and none of leasing,
+listings, money, contacts or team management) get a trimmed view. Their home
+is **My day** instead of the dashboard, and the sidebar offers only Work,
+Properties (the ones they're assigned) and My time. The built-in Maintenance
+role no longer holds `lease:read` (migration 081 removes it from existing
+workspaces), so the leases pages are closed to them on the server too, not just
+hidden. Roles a workspace built for itself are not changed.
+
 ## Permissions
 
 Permissions are `resource:action` strings, resolved per user at login and
@@ -96,6 +123,19 @@ Client admins (tenant-scoped, `/members`):
 | `morgan@northwind.com` | Back-office | Northwind |
 | `lee@northwind.com` | Landlord | Northwind |
 | `priya@cascade.com` | Workspace Owner | Cascade |
+| `sam@northwind.com` | Property manager | Northwind (two buildings) |
+| `casey@northwind.com` | Leasing agent | Northwind (Maple Court, Birchwood) |
+| `rosa@northwind.com` | Maintenance | Northwind (field crew view) |
+| `hannah@hearthside.com` | Workspace Owner | Hearthside Homes (houses only) |
+| `theo@hearthside.com` | Property manager | Hearthside Homes |
+| `quinn@pinecrest.com` | Workspace Owner | Pinecrest Outdoors (campgrounds) |
+| `marco@pinecrest.com` | Property manager | Pinecrest Outdoors |
+| `jules@pinecrest.com` | Maintenance | Pinecrest Outdoors (field crew view) |
+
+Each company sees only the pages its property types need: Hearthside has no
+site maps or campgrounds, Pinecrest has no leasing pages, Northwind has the
+apartment set. The demo top-up in `seed.rs` is idempotent, so an existing dev
+database gains the new companies on the next boot.
 
 ## Workspaces & switching (multi-membership users)
 

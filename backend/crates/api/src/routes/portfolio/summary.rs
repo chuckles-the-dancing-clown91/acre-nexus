@@ -154,7 +154,25 @@ pub async fn summary(
             (None, None)
         };
 
+    let mut kinds: Vec<String> = props
+        .iter()
+        .map(|p| crate::property_kind::effective_kind(&p.property_type, p.units as i64).to_string())
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    let llc_ids: Vec<uuid::Uuid> = props.iter().filter_map(|p| p.llc_id).collect();
+    let foundation = !llc_ids.is_empty()
+        && entity::prelude::Llc::find()
+            .filter(entity::llc::Column::TenantId.eq(scope.tenant_id))
+            .filter(entity::llc::Column::Id.is_in(llc_ids))
+            .filter(entity::llc::Column::Foundation.eq(true))
+            .one(&db)
+            .await?
+            .is_some();
+
     Ok(Json(PortfolioSummary {
+        kinds,
+        foundation,
         properties: count,
         units,
         occupied_units: occ,

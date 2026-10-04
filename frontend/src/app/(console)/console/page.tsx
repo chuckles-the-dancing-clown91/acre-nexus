@@ -14,7 +14,9 @@ import {
   Wrench,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { isFieldCrew } from "@/components/shell/nav";
 import {
   useFinanceSeries,
   usePortfolioSummary,
@@ -63,6 +65,7 @@ function healthAura(s: PortfolioSummary): AuraTone | null {
 
 export default function DashboardPage() {
   const { user, can } = useAuth();
+  const router = useRouter();
   const scoped = useHasTenantScope();
   // Field roles and owners see only their properties; company-wide money and
   // onboarding aren't theirs.
@@ -86,8 +89,15 @@ export default function DashboardPage() {
     return () => setAura(null);
   }, [summary.data, setAura]);
 
+  // Field crew start on their day, not a portfolio dashboard.
+  const field = isFieldCrew(can);
+  useEffect(() => {
+    if (user && scoped && field) router.replace("/console/my-day");
+  }, [user, scoped, field, router]);
+
   if (!user) return null;
   if (!scoped) return <StaffTenantPicker />;
+  if (field) return null;
 
   const s = summary.data;
   const firstName = user.name.split(" ")[0];

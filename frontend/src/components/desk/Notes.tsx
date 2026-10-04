@@ -235,7 +235,7 @@ export function Media({
   file,
   className,
 }: {
-  file: TicketFile;
+  file: Pick<TicketFile, "filename" | "mime_type" | "kind" | "url">;
   className?: string;
 }) {
   if (!file.url) return null;

@@ -206,6 +206,8 @@ pub struct PublicSignView {
     /// The full document text (exactly what is being signed). Omitted when the
     /// envelope was voided.
     pub document_body: Option<String>,
+    /// The same document as articles and addenda, for a proper layout.
+    pub document_sections: Option<Vec<crate::leasedoc::Section>>,
     /// SHA-256 of the document body — shown for integrity transparency.
     pub body_hash: String,
     pub message: Option<String>,

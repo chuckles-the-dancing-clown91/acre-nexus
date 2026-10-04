@@ -11,7 +11,9 @@ use crate::rbac::Permission;
 use crate::state::AppState;
 use crate::tenancy::TenantScope;
 use chrono::Utc;
-use entity::prelude::{Lease, LeaseCharge, Property, Theme, Unit, Vehicle};
+use entity::prelude::{
+    Asset, Lease, LeaseCharge, Property, ResidentProfile, Theme, Unit, User, Vehicle,
+};
 use rocket::serde::json::Json;
 use rocket::{post, State};
 use sea_orm::{
@@ -53,14 +55,54 @@ pub(crate) async fn generate_for_lease(
         .map(|t| t.legal_templates)
         .unwrap_or_else(|| serde_json::json!({}));
 
-    let body = leasedoc::render(
-        &templates,
+    // The resident's profile, when they have an account in this company.
+    let resident = match lease.tenant_email.as_deref().filter(|e| !e.is_empty()) {
+        Some(email) => {
+            let account = User::find()
+                .filter(entity::user::Column::Email.eq(email.to_lowercase()))
+                .filter(entity::user::Column::TenantId.eq(tenant_id))
+                .one(db)
+                .await?;
+            match account {
+                Some(a) => ResidentProfile::find_by_id(a.id)
+                    .one(db)
+                    .await?
+                    .map(|r| crate::resident::Extras::from_model(&r)),
+                None => None,
+            }
+        }
+        None => None,
+    };
+    let utilities =
+        crate::utilities::terms(db, tenant_id, lease.property_id, lease.unit_id).await?;
+    // A unit's own equipment, plus the house's when the property is one home.
+    let single = crate::property_kind::unit_mode(&property.property_type)
+        == crate::property_kind::UnitMode::Single;
+    let mut equipment = Asset::find()
+        .filter(entity::asset::Column::TenantId.eq(tenant_id))
+        .filter(entity::asset::Column::PropertyId.eq(lease.property_id))
+        .filter(entity::asset::Column::Status.eq("active"))
+        .order_by_asc(entity::asset::Column::Name)
+        .all(db)
+        .await?;
+    equipment.retain(|a| match a.unit_id {
+        Some(u) => Some(u) == lease.unit_id,
+        None => single,
+    });
+
+    let built = leasedoc::build(&leasedoc::LeaseInput {
+        templates: &templates,
         lease,
-        &property,
-        unit.as_ref(),
-        &charges,
-        &vehicles,
-    );
+        property: &property,
+        unit: unit.as_ref(),
+        charges: &charges,
+        vehicles: &vehicles,
+        resident: resident.as_ref(),
+        utilities: &utilities,
+        equipment: &equipment,
+    });
+    let body = built.body;
+    let sections = serde_json::to_value(&built.sections).ok();
 
     let now = Utc::now();
     let saved = entity::lease_document::ActiveModel {
@@ -80,6 +122,7 @@ pub(crate) async fn generate_for_lease(
         signed_hash: Set(None),
         signed_ip: Set(None),
         created_at: Set(now.into()),
+        sections: Set(sections),
     }
     .insert(db)
     .await?;

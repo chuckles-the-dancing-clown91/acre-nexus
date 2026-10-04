@@ -338,3 +338,21 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Print only the lease agreement when it is on the page. */
+@media print {
+  body:has(#lease-print) * {
+    visibility: hidden;
+  }
+  body:has(#lease-print) #lease-print,
+  body:has(#lease-print) #lease-print * {
+    visibility: visible;
+  }
+  body:has(#lease-print) #lease-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    box-shadow: none;
+  }
+}

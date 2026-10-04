@@ -34,6 +34,9 @@ pub struct Model {
     /// The signer's IP address, for the e-signature audit trail.
     pub signed_ip: Option<String>,
     pub created_at: DateTimeWithTimeZone,
+    /// The lease laid out as articles and addenda (`leasedoc::Section`), when
+    /// it was generated that way; `body` is the signable text either way.
+    pub sections: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

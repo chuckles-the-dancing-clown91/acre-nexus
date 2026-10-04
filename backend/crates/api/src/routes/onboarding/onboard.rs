@@ -34,6 +34,32 @@ pub async fn onboard(
         .ok_or_else(|| ApiError::BadRequest(format!("unknown strategy: {}", b.strategy)))?
         .to_string();
 
+    let property_type = crate::property_kind::parse_for_save(&b.property_type)?;
+    let mode = crate::property_kind::unit_mode(&property_type);
+    if b.unit_list.len() > 500 {
+        return Err(ApiError::BadRequest("at most 500 units at a time".into()));
+    }
+    if !b.unit_list.is_empty() {
+        if let Some(why) = crate::property_kind::bar_to_adding_unit(&property_type, 0)
+            .filter(|_| !property_type.is_empty())
+        {
+            return Err(ApiError::BadRequest(why));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for u in &b.unit_list {
+            let n = u.unit_number.trim().to_lowercase();
+            if n.is_empty() || !seen.insert(n) {
+                return Err(ApiError::BadRequest(
+                    "every unit needs its own number".into(),
+                ));
+            }
+        }
+        if mode == crate::property_kind::UnitMode::Single && b.unit_list.len() > 1 {
+            return Err(ApiError::BadRequest(
+                "a house is one unit, so give it one layout".into(),
+            ));
+        }
+    }
     let pid = Uuid::new_v4();
     let now = Utc::now();
     // The whole request runs inside one RLS-scoped transaction (see `crate::db`).
@@ -53,7 +79,7 @@ pub async fn onboard(
         status: Set(b.status.clone().unwrap_or_else(|| "Onboarding".into())),
         year_built: Set(b.year_built.unwrap_or(0)),
         manager: Set(b.manager.clone().unwrap_or_default()),
-        property_type: Set(b.property_type.clone()),
+        property_type: Set(property_type.clone()),
         strategy: Set(b.strategy.clone()),
         workflow_stage: Set(stage.clone()),
         purchase_price_cents: Set(b.purchase_price_cents),
@@ -68,6 +94,43 @@ pub async fn onboard(
     }
     .insert(&db)
     .await?;
+
+    // ---- units: a house is its one unit, a building gets the list ----
+    let mut units_created = 0usize;
+    if !property_type.is_empty() && mode == crate::property_kind::UnitMode::Single {
+        let home = crate::property_kind::ensure_home_unit(&db, scope.tenant_id, pid).await?;
+        units_created = 1;
+        if let Some(l) = b.unit_list.first() {
+            let mut am: entity::unit::ActiveModel = home.into();
+            am.floor = Set(l.floor);
+            am.beds = Set(l.beds);
+            am.baths = Set(l.baths);
+            am.sqft = Set(l.sqft);
+            am.market_rent_cents = Set(l.market_rent_cents);
+            am.update(&db).await?;
+        }
+    } else {
+        for l in &b.unit_list {
+            entity::unit::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                tenant_id: Set(scope.tenant_id),
+                property_id: Set(pid),
+                unit_number: Set(l.unit_number.trim().to_string()),
+                beds: Set(l.beds),
+                baths: Set(l.baths),
+                sqft: Set(l.sqft),
+                market_rent_cents: Set(l.market_rent_cents),
+                status: Set("vacant".into()),
+                floor: Set(l.floor),
+                notes: Set(None),
+                created_at: Set(now.into()),
+                updated_at: Set(now.into()),
+            }
+            .insert(&db)
+            .await?;
+            units_created += 1;
+        }
+    }
 
     // ---- financing (+ lender entities created on the fly) ----
     let mut lenders_created = 0usize;
@@ -208,6 +271,7 @@ pub async fn onboard(
         mortgages_created: b.mortgages.len(),
         lenders_created,
         assignments_created,
+        units_created,
         enrich_job_id,
     }))
 }

@@ -56,6 +56,9 @@ impl PlatformModule for MaintenanceModule {
             maintenance::get_ticket::get_ticket,
             maintenance::update_ticket::update_ticket,
             maintenance::add_comment::add_comment,
+            maintenance::feed::feed,
+            maintenance::feed::time,
+            maintenance::feed::log_time,
             // renter portal: the resident's own maintenance requests
             maintenance::portal::my_tickets,
             maintenance::portal::create_my_ticket,

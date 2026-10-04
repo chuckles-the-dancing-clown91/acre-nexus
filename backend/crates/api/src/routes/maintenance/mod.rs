@@ -8,6 +8,7 @@ pub mod create_ticket;
 pub mod dayplan;
 pub mod desk;
 pub mod dto;
+pub mod feed;
 pub mod get_ticket;
 pub mod inventory;
 pub mod issues;

@@ -64,6 +64,8 @@ pub struct TicketDto {
     pub partner_job_id: Option<String>,
     pub partner_status: Option<String>,
     pub partner_synced_at: Option<String>,
+    /// Whether the in-house crew can log time on this work order.
+    pub track_time: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -73,6 +75,7 @@ impl From<entity::maintenance_ticket::Model> for TicketDto {
         let now = chrono::Utc::now();
         let to_utc = |ts: &Option<chrono::DateTime<chrono::FixedOffset>>| ts.map(|v| v.to_utc());
         TicketDto {
+            track_time: t.track_time,
             partner_counterparty_id: t.partner_counterparty_id,
             partner_job_id: t.partner_job_id.clone(),
             partner_status: t.partner_status.clone(),
@@ -144,6 +147,8 @@ pub struct TicketCommentDto {
     /// What recorded it: a button (`on_my_way`, `task_done`, …), or
     /// `resident_comment` when the resident wrote it in the portal.
     pub action: Option<String>,
+    /// The task this note is about, if it's about one.
+    pub task_id: Option<Uuid>,
     pub created_at: String,
 }
 
@@ -160,6 +165,7 @@ impl From<entity::ticket_comment::Model> for TicketCommentDto {
             body: c.body,
             document_ids: serde_json::from_value(c.document_ids).unwrap_or_default(),
             action: c.action,
+            task_id: c.task_id,
             created_at: c.created_at.to_rfc3339(),
         }
     }
@@ -357,6 +363,18 @@ pub struct UpdateTicketReq {
     /// When the insurance rule is on and this vendor has no current liability
     /// cover, the reason to send them anyway (audited).
     pub coi_override_reason: Option<String>,
+    /// What the person moving the status wants on the feed with it.
+    pub status_note: Option<String>,
+    /// For `scheduled`: the day the work is set for (sets the due date).
+    pub scheduled_for: Option<String>,
+    /// To resolve with tasks still open: why they can stay open.
+    pub open_tasks_reason: Option<String>,
+    /// Turn time tracking on or off for this work order.
+    pub track_time: Option<bool>,
+    /// A button already wrote its own line, so skip the status line.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub quiet: bool,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -367,6 +385,8 @@ pub struct AddCommentReq {
     /// Photos or files already uploaded to this work order, shown with the note.
     #[serde(default)]
     pub document_ids: Vec<Uuid>,
+    /// Make the note about one task, so it shows on that task.
+    pub task_id: Option<Uuid>,
 }
 
 /// The Maintenance tab for a property: open work orders split from resolved

@@ -33,6 +33,7 @@ import type {
   CreateOwnershipInput,
   CreateTicketInput,
   CreateUnitInput,
+  UpdateUnitInput,
   EnrichmentRun,
   EnrichResponse,
   Lease,
@@ -587,6 +588,17 @@ export const api = {
   // ---- rentals: units ----
   units: (propertyId: string) =>
     request<Unit[]>(`/properties/${propertyId}/units`, { auth: true }),
+  updateUnit: (id: string, body: UpdateUnitInput) =>
+    request<Unit>(`/units/${id}`, { method: "PATCH", auth: true, body }),
+  updateProperty: (
+    id: string,
+    body: { property_type?: string; name?: string }
+  ) =>
+    request<Property>(`/properties/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body,
+    }),
   createUnit: (propertyId: string, body: CreateUnitInput) =>
     request<Unit>(`/properties/${propertyId}/units`, {
       method: "POST",
@@ -1448,6 +1460,27 @@ export const api = {
       method: "PUT",
       auth: true,
       body: { value },
+    }),
+
+  // ---- resident profile: pets, work, rental history, ID card ----
+  myResident: () => request<MyResident>("/my/resident", { auth: true }),
+  saveMyResident: (body: ResidentExtras) =>
+    request<MyResident>("/my/resident", { method: "PUT", auth: true, body }),
+  residentProfile: (email: string) =>
+    request<ResidentDetail>(
+      `/residents/profile?email=${encodeURIComponent(email)}`,
+      { auth: true }
+    ),
+  saveResident: (body: {
+    email: string;
+    profile?: ProfileInput;
+    extras?: ResidentExtras;
+    staff_notes?: string;
+  }) =>
+    request<ResidentDetail>("/residents/profile", {
+      method: "PUT",
+      auth: true,
+      body,
     }),
 
   tenantHistory: () =>
@@ -3169,6 +3202,23 @@ export interface LeaseDocDto {
   signed_at: string | null;
   signed_by: string | null;
   signed_hash: string | null;
+  /** The lease as articles and addenda, when generated that way. */
+  sections: LeaseSection[] | null;
+}
+
+export type LeaseBlock =
+  | { type: "p"; text: string }
+  | { type: "note"; text: string }
+  | { type: "facts"; rows: [string, string][] }
+  | { type: "table"; head: string[]; rows: string[][] }
+  | { type: "list"; items: string[] };
+
+export interface LeaseSection {
+  key: string;
+  title: string;
+  /** article | addendum */
+  kind: "article" | "addendum";
+  blocks: LeaseBlock[];
 }
 
 // ---- e-signature envelopes ----
@@ -3309,6 +3359,7 @@ export interface PublicSignView {
   envelope_status: string;
   document_title: string;
   document_body: string | null;
+  document_sections: LeaseSection[] | null;
   body_hash: string;
   message: string | null;
   signer: EsignSigner;
@@ -4078,4 +4129,104 @@ export interface LeaseDeposit {
   deposit_label: string | null;
   deposit_paid: boolean;
   disposition: DepositDisposition | null;
+}
+
+export interface ResidentPet {
+  name: string;
+  kind: string;
+  breed?: string | null;
+  weight_lb?: number | null;
+  color?: string | null;
+  age_years?: number | null;
+  service_animal?: boolean;
+  vaccinated_through?: string | null;
+  notes?: string | null;
+}
+
+export interface ResidentOccupant {
+  name: string;
+  relation?: string | null;
+  age?: number | null;
+}
+
+export interface PriorRental {
+  address: string;
+  landlord_name?: string | null;
+  landlord_phone?: string | null;
+  rent_cents?: number | null;
+  from?: string | null;
+  to?: string | null;
+  reason_for_leaving?: string | null;
+}
+
+/** What the resident (or their property manager) edits. */
+export interface ResidentExtras {
+  employer: string | null;
+  job_title: string | null;
+  employer_phone: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
+  occupants: ResidentOccupant[];
+  pets: ResidentPet[];
+  prior_rentals: PriorRental[];
+}
+
+export interface IdCard {
+  name: string;
+  email: string;
+  phone: string | null;
+  photo_url: string | null;
+  code: string;
+  company: string;
+  standing: "active" | "none";
+  residence: {
+    property: string;
+    address: string;
+    unit: string | null;
+    lease_start: string;
+    lease_end: string | null;
+  } | null;
+  resident_since: string | null;
+  emergency_contact: string | null;
+  pets: string[];
+  screening_cleared: boolean;
+}
+
+export interface ApplyPrefill {
+  name: string;
+  email: string;
+  phone: string | null;
+  current_address: string | null;
+  annual_income_cents: number | null;
+  employer: string | null;
+  job_title: string | null;
+  is_military: boolean;
+  has_pet: boolean;
+  pets: ResidentPet[];
+  vehicles: number;
+  occupants: number;
+  prior_rentals: number;
+  emergency_contact: string | null;
+  missing: string[];
+}
+
+export interface MyResident {
+  extras: ResidentExtras;
+  card: IdCard;
+  prefill: ApplyPrefill;
+}
+
+export interface ResidentDetail {
+  name: string;
+  email: string;
+  phone: string | null;
+  user_id: string | null;
+  profile: ProfileDto | null;
+  extras: ResidentExtras;
+  staff_notes: string | null;
+  vehicles: VehicleProfile[];
+  tenancies: (TenancySummary & { unit_number: string | null })[];
+  applications: Application[];
+  card: IdCard | null;
 }

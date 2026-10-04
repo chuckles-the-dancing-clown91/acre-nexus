@@ -20,6 +20,11 @@ const DEMO_PASSWORD: &str = "password";
 /// on every boot so they stay current; the heavier demo data is only created
 /// when the database is empty.
 pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
+    run_base(db).await?;
+    top_up(db).await
+}
+
+async fn run_base(db: &DatabaseConnection) -> anyhow::Result<()> {
     ensure_catalogs(db).await?;
 
     // Never populate demo tenants + shared-password (`password`) logins in
@@ -911,6 +916,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(db)
     .await?;
@@ -922,6 +928,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
+        task_id: Set(None),
         author_user_id: Set(Some(jordan)),
         kind: Set("comment".into()),
         visibility: Set("public".into()),
@@ -941,6 +948,7 @@ pub async fn run(db: &DatabaseConnection) -> anyhow::Result<()> {
         id: Set(Uuid::new_v4()),
         tenant_id: Set(northwind),
         ticket_id: Set(demo_ticket),
+        task_id: Set(None),
         author_user_id: Set(Some(jordan)),
         kind: Set("comment".into()),
         visibility: Set("internal".into()),
@@ -2024,6 +2032,8 @@ async fn seed_unit(
         sqft: Set(None),
         market_rent_cents: Set(Some(rent_cents)),
         status: Set("occupied".into()),
+        floor: Set(None),
+        notes: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
     }
@@ -2301,6 +2311,7 @@ async fn seed_ticket(
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(db)
     .await?;
@@ -3357,5 +3368,832 @@ async fn seed_back_office(
     }
     .insert(db)
     .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Demo top-up: more companies, each with its own people and property types, so
+// the sample logins show different consoles. Idempotent (keyed by tenant slug
+// and user email), so an existing dev database picks it up on the next boot.
+// ---------------------------------------------------------------------------
+
+async fn top_up(db: &DatabaseConnection) -> anyhow::Result<()> {
+    if crate::config::is_production() {
+        return Ok(());
+    }
+    let Some(northwind) = Tenant::find()
+        .filter(entity::tenant::Column::Slug.eq("northwind"))
+        .one(db)
+        .await?
+        .map(|t| t.id)
+    else {
+        return Ok(());
+    };
+    let mut role_ids = std::collections::HashMap::new();
+    for sr in SYSTEM_ROLES {
+        if let Some(r) = Role::find()
+            .filter(entity::role::Column::Key.eq(sr.key))
+            .filter(entity::role::Column::TenantId.is_null())
+            .one(db)
+            .await?
+        {
+            role_ids.insert(sr.key, r.id);
+        }
+    }
+    let pw = hash_password(DEMO_PASSWORD)?;
+    let cascade = Tenant::find()
+        .filter(entity::tenant::Column::Slug.eq("cascade"))
+        .one(db)
+        .await?
+        .map(|t| t.id);
+
+    fill_unit_rows(db, northwind).await?;
+    if let Some(c) = cascade {
+        fill_unit_rows(db, c).await?;
+    }
+    northwind_leasing_agent(db, &role_ids, northwind, &pw).await?;
+    hearthside(db, &role_ids, &pw).await?;
+    pinecrest(db, &role_ids, &pw).await?;
+    demo_residents(db, &role_ids, &pw).await?;
+    Ok(())
+}
+
+async fn user_exists(db: &DatabaseConnection, email: &str) -> anyhow::Result<bool> {
+    Ok(User::find()
+        .filter(entity::user::Column::Email.eq(email))
+        .one(db)
+        .await?
+        .is_some())
+}
+
+async fn tenant_exists(db: &DatabaseConnection, slug: &str) -> anyhow::Result<bool> {
+    Ok(Tenant::find()
+        .filter(entity::tenant::Column::Slug.eq(slug))
+        .one(db)
+        .await?
+        .is_some())
+}
+
+async fn assign_to(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    subject_type: &str,
+    subject_id: Uuid,
+    rel: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::assignment::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        subject_type: Set(subject_type.into()),
+        subject_id: Set(subject_id),
+        user_id: Set(user_id),
+        relationship: Set(rel.into()),
+        role_id: Set(None),
+        is_primary: Set(true),
+        title: Set(None),
+        notes: Set(None),
+        assigned_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn set_property_type(
+    db: &DatabaseConnection,
+    property_id: Uuid,
+    kind: &str,
+) -> anyhow::Result<()> {
+    if let Some(p) = Property::find_by_id(property_id).one(db).await? {
+        let mut am: entity::property::ActiveModel = p.into();
+        am.property_type = Set(kind.into());
+        am.update(db).await?;
+    }
+    Ok(())
+}
+
+/// A building's `units` count is a number; give each one a unit record so it
+/// can hold its own appliances, meters and lease.
+async fn fill_unit_rows(db: &DatabaseConnection, tenant_id: Uuid) -> anyhow::Result<()> {
+    let props = Property::find()
+        .filter(entity::property::Column::TenantId.eq(tenant_id))
+        .filter(entity::property::Column::PropertyType.eq("multi_family"))
+        .all(db)
+        .await?;
+    for p in props {
+        let have: Vec<String> = Unit::find()
+            .filter(entity::unit::Column::PropertyId.eq(p.id))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|u| u.unit_number.to_lowercase())
+            .collect();
+        if have.len() as i32 >= p.units {
+            continue;
+        }
+        let per_rent = if p.units > 0 {
+            p.monthly_rent_cents / p.units as i64
+        } else {
+            0
+        };
+        let mut n = 0;
+        let mut made = have.len() as i32;
+        while made < p.units {
+            n += 1;
+            let number = format!("{}{:02}", 1 + (n - 1) / 6, 1 + (n - 1) % 6);
+            if have.contains(&number.to_lowercase()) {
+                continue;
+            }
+            let id = seed_unit(db, tenant_id, p.id, &number, 1 + (n % 3), 1.0, per_rent).await?;
+            if made >= p.occupied_units {
+                if let Some(u) = Unit::find_by_id(id).one(db).await? {
+                    let mut am: entity::unit::ActiveModel = u.into();
+                    am.status = Set("vacant".into());
+                    am.update(db).await?;
+                }
+            }
+            made += 1;
+        }
+    }
+    Ok(())
+}
+
+async fn northwind_leasing_agent(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    northwind: Uuid,
+    pw: &str,
+) -> anyhow::Result<()> {
+    if user_exists(db, "casey@northwind.com").await? {
+        return Ok(());
+    }
+    let casey = seed_user(
+        db,
+        Some(northwind),
+        "casey@northwind.com",
+        "Casey Brooks",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        casey,
+        "tenant",
+        Some(northwind),
+        "leasing_agent",
+        Some("Leasing agent"),
+    )
+    .await?;
+    seed_profile(db, casey, "Casey", "Brooks").await?;
+    for name in ["The Maple Court", "Birchwood Lofts"] {
+        if let Some(p) = Property::find()
+            .filter(entity::property::Column::TenantId.eq(northwind))
+            .filter(entity::property::Column::Name.eq(name))
+            .one(db)
+            .await?
+        {
+            assign_to(db, northwind, casey, "property", p.id, "leasing_agent").await?;
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_meter(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    unit_id: Option<Uuid>,
+    kind: &str,
+    label: &str,
+    provider: &str,
+    paid_by: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::meter::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        unit_id: Set(unit_id),
+        kind: Set(kind.into()),
+        label: Set(label.into()),
+        meter_number: Set(None),
+        location: Set(None),
+        provider: Set(Some(provider.into())),
+        unit_of_measure: Set(None),
+        paid_by: Set(paid_by.into()),
+        billing_note: Set(None),
+        status: Set("active".into()),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+async fn seed_appliance(
+    db: &DatabaseConnection,
+    tenant_id: Uuid,
+    property_id: Uuid,
+    unit_id: Option<Uuid>,
+    kind: &str,
+    name: &str,
+    make: &str,
+) -> anyhow::Result<()> {
+    let now = Utc::now();
+    entity::asset::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(tenant_id),
+        property_id: Set(property_id),
+        unit_id: Set(unit_id),
+        kind: Set(kind.into()),
+        name: Set(name.into()),
+        make: Set(Some(make.into())),
+        model: Set(None),
+        serial_number: Set(None),
+        install_date: Set(None),
+        warranty_expires: Set(None),
+        location: Set(None),
+        purchased_on: Set(None),
+        purchase_price_cents: Set(None),
+        expected_life_years: Set(None),
+        warranty_provider: Set(None),
+        warranty_notes: Set(None),
+        notes: Set(None),
+        status: Set("active".into()),
+        created_by: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+    }
+    .insert(db)
+    .await?;
+    Ok(())
+}
+
+/// A small single-family company: houses only, so no site maps or campgrounds.
+async fn hearthside(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    pw: &str,
+) -> anyhow::Result<()> {
+    if tenant_exists(db, "hearthside").await? {
+        return Ok(());
+    }
+    let t = seed_tenant(db, "hearthside", "Hearthside Homes", "starter").await?;
+    seed_theme(db, t, "Hearthside Homes", "#B4532A").await?;
+    seed_onboarding(db, t, "live").await?;
+    let hannah = seed_user(
+        db,
+        Some(t),
+        "hannah@hearthside.com",
+        "Hannah Reyes",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        hannah,
+        "tenant",
+        Some(t),
+        "tenant_owner",
+        Some("Owner"),
+    )
+    .await?;
+    seed_profile(db, hannah, "Hannah", "Reyes").await?;
+    let theo = seed_user(db, Some(t), "theo@hearthside.com", "Theo Grant", pw, false).await?;
+    seed_membership(
+        db,
+        role_ids,
+        theo,
+        "tenant",
+        Some(t),
+        "property_manager",
+        Some("Property manager"),
+    )
+    .await?;
+    seed_profile(db, theo, "Theo", "Grant").await?;
+
+    let llc = seed_llc(db, t, "Hearth Rentals LLC", "81-4402217", "TX").await?;
+    let homes = [
+        (
+            "14 Willow Bend",
+            "Austin, TX",
+            "single_family",
+            215_000_i64,
+            "Priya Nair",
+            "priya.nair@example.com",
+        ),
+        (
+            "902 Cedar Row",
+            "Round Rock, TX",
+            "townhome",
+            184_000,
+            "Marcus Webb",
+            "marcus.webb@example.com",
+        ),
+        (
+            "37 Lantern Way",
+            "Cedar Park, TX",
+            "single_family",
+            248_000,
+            "Elena Soto",
+            "elena.soto@example.com",
+        ),
+    ];
+    for (i, (addr, city, kind, rent, tenant, email)) in homes.iter().enumerate() {
+        let pid = seed_property(
+            db,
+            t,
+            llc,
+            PropSpec {
+                name: addr,
+                address: addr,
+                city,
+                units: 1,
+                occupied: 1,
+                rent_cents: *rent,
+                status: "Stabilized",
+                year: if i == 2 { 1965 } else { 2008 + i as i32 * 4 },
+                manager: "Theo Grant",
+            },
+        )
+        .await?;
+        set_property_type(db, pid, kind).await?;
+        let unit = crate::property_kind::ensure_home_unit(db, t, pid)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+        let mut am: entity::unit::ActiveModel = unit.clone().into();
+        am.beds = Set(Some(3));
+        am.baths = Set(Some(2.0));
+        am.market_rent_cents = Set(Some(*rent));
+        am.update(db).await?;
+        seed_lease(
+            db,
+            t,
+            pid,
+            unit.id,
+            tenant,
+            email,
+            *rent,
+            "2026-01-01",
+            "active",
+            "current",
+            0,
+        )
+        .await?;
+        seed_meter(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "electric",
+            "Electric",
+            "Austin Energy",
+            "tenant",
+        )
+        .await?;
+        seed_meter(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "water",
+            "Water",
+            "City of Austin",
+            "tenant",
+        )
+        .await?;
+        seed_meter(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "trash",
+            "Trash",
+            "City of Austin",
+            "landlord",
+        )
+        .await?;
+        seed_appliance(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "hvac",
+            "Central AC and furnace",
+            "Carrier",
+        )
+        .await?;
+        seed_appliance(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "appliance",
+            "Refrigerator",
+            "Whirlpool",
+        )
+        .await?;
+        seed_appliance(
+            db,
+            t,
+            pid,
+            Some(unit.id),
+            "appliance",
+            "Water heater",
+            "Rheem",
+        )
+        .await?;
+        assign_to(db, t, theo, "property", pid, "property_manager").await?;
+    }
+    Ok(())
+}
+
+/// A campground and RV park company: sites on a published map, bookings open.
+async fn pinecrest(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    pw: &str,
+) -> anyhow::Result<()> {
+    if tenant_exists(db, "pinecrest").await? {
+        return Ok(());
+    }
+    let t = seed_tenant(db, "pinecrest", "Pinecrest Outdoors", "starter").await?;
+    seed_theme(db, t, "Pinecrest Outdoors", "#2F6B3C").await?;
+    seed_onboarding(db, t, "live").await?;
+    let quinn = seed_user(
+        db,
+        Some(t),
+        "quinn@pinecrest.com",
+        "Quinn Harper",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        quinn,
+        "tenant",
+        Some(t),
+        "tenant_owner",
+        Some("Owner"),
+    )
+    .await?;
+    seed_profile(db, quinn, "Quinn", "Harper").await?;
+    let marco = seed_user(db, Some(t), "marco@pinecrest.com", "Marco Vidal", pw, false).await?;
+    seed_membership(
+        db,
+        role_ids,
+        marco,
+        "tenant",
+        Some(t),
+        "property_manager",
+        Some("Park manager"),
+    )
+    .await?;
+    seed_profile(db, marco, "Marco", "Vidal").await?;
+    let jules = seed_user(
+        db,
+        Some(t),
+        "jules@pinecrest.com",
+        "Jules Carter",
+        pw,
+        false,
+    )
+    .await?;
+    seed_membership(
+        db,
+        role_ids,
+        jules,
+        "tenant",
+        Some(t),
+        "maintenance",
+        Some("Grounds crew"),
+    )
+    .await?;
+    seed_profile(db, jules, "Jules", "Carter").await?;
+
+    let llc = seed_llc(db, t, "Pinecrest Outdoors LLC", "92-1180344", "OR").await?;
+    let spots = [
+        (
+            "Pinecrest Campground",
+            "4100 Forest Rd",
+            "Sisters, OR",
+            "campground",
+            "Pinecrest Campground",
+            45.0,
+        ),
+        (
+            "Lakeside RV Park",
+            "12 Lakeshore Loop",
+            "Bend, OR",
+            "rv_park",
+            "Lakeside RV Park",
+            44.1,
+        ),
+    ];
+    for (name, addr, city, kind, map_name, lat) in spots {
+        let pid = seed_property(
+            db,
+            t,
+            llc,
+            PropSpec {
+                name,
+                address: addr,
+                city,
+                units: 0,
+                occupied: 0,
+                rent_cents: 0,
+                status: "Open",
+                year: 2012,
+                manager: "Marco Vidal",
+            },
+        )
+        .await?;
+        set_property_type(db, pid, kind).await?;
+        assign_to(db, t, marco, "property", pid, "property_manager").await?;
+        assign_to(db, t, jules, "property", pid, "maintenance").await?;
+        seed_meter(
+            db,
+            t,
+            pid,
+            None,
+            "electric",
+            "Park power",
+            "Central Electric",
+            "landlord",
+        )
+        .await?;
+        seed_meter(db, t, pid, None, "water", "Park water", "Well", "landlord").await?;
+        seed_appliance(
+            db,
+            t,
+            pid,
+            None,
+            "plumbing",
+            "Bath house water heater",
+            "Rheem",
+        )
+        .await?;
+
+        let now = Utc::now();
+        let map_id = Uuid::new_v4();
+        entity::site_map::ActiveModel {
+            id: Set(map_id),
+            tenant_id: Set(t),
+            property_id: Set(pid),
+            name: Set(map_name.into()),
+            kind: Set(kind.into()),
+            base_layer: Set("grid".into()),
+            center_lng: Set(Some(-121.5)),
+            center_lat: Set(Some(lat)),
+            zoom: Set(17.0),
+            plan_document_id: Set(None),
+            plan_corners: Set(None),
+            published: Set(true),
+            notes: Set(None),
+            created_by: Set(None),
+            created_at: Set(now.into()),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+        let sites: [(&str, &str, i64, i64); 6] = [
+            ("A1", "rv", 5500, 33000),
+            ("A2", "rv", 5500, 33000),
+            ("A3", "rv", 6500, 38000),
+            ("T1", "tent", 2800, 16000),
+            ("T2", "tent", 2800, 16000),
+            ("C1", "cabin", 12000, 70000),
+        ];
+        for (i, (sname, stype, night, week)) in sites.iter().enumerate() {
+            entity::site_feature::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                tenant_id: Set(t),
+                map_id: Set(map_id),
+                kind: Set("site".into()),
+                name: Set(Some((*sname).into())),
+                geometry: Set(json!({ "type": "Point", "coordinates": [-121.5 + i as f64 * 0.0006, lat + (i % 2) as f64 * 0.0004] })),
+                unit_id: Set(None),
+                attrs: Set(json!({ "site_type": stype, "max_guests": 6, "max_length_ft": 40, "rate_cents_night": night, "rate_cents_week": week })),
+                position: Set(i as i32),
+                created_at: Set(now.into()),
+                updated_at: Set(now.into()),
+            }
+            .insert(db)
+            .await?;
+        }
+        entity::campground_config::ActiveModel {
+            map_id: Set(map_id),
+            tenant_id: Set(t),
+            booking_open: Set(true),
+            deposit_pct: Set(25),
+            check_in_time: Set("14:00".into()),
+            check_out_time: Set("11:00".into()),
+            max_nights: Set(30),
+            addons: Set(json!([{ "key": "firewood", "label": "Firewood bundle", "price_cents": 800, "per": "stay" }])),
+            policies: Set(Some("Quiet hours 10 PM to 7 AM. Pets on a leash.".into())),
+            updated_at: Set(now.into()),
+        }
+        .insert(db)
+        .await?;
+        for (sname, s, e, adj, min) in [
+            ("Summer", "06-15", "09-05", 20, 2),
+            ("Winter", "11-15", "02-28", -15, 1),
+        ] {
+            entity::campground_season::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                tenant_id: Set(t),
+                map_id: Set(map_id),
+                name: Set(sname.into()),
+                start_md: Set(s.into()),
+                end_md: Set(e.into()),
+                adjust_pct: Set(adj),
+                min_nights: Set(min),
+                created_at: Set(now.into()),
+            }
+            .insert(db)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Residents with a portal login and a filled-in profile: pets, work, a prior
+/// rental or two, an emergency contact. Skipped for anyone who already has one.
+async fn demo_residents(
+    db: &DatabaseConnection,
+    role_ids: &std::collections::HashMap<&'static str, Uuid>,
+    pw: &str,
+) -> anyhow::Result<()> {
+    use crate::resident::{Extras, Occupant, Pet, PriorRental};
+    let people: Vec<(&str, &str, &str, &str, &str, i64, Extras)> = vec![
+        (
+            "northwind",
+            "taylor@example.com",
+            "Taylor",
+            "Brooks",
+            "(503) 555-0142",
+            7_800_000,
+            Extras {
+                employer: Some("Providence Health".into()),
+                job_title: Some("Nurse".into()),
+                employer_phone: Some("(503) 555-0100".into()),
+                emergency_contact_name: Some("Morgan Brooks".into()),
+                emergency_contact_phone: Some("(503) 555-0177".into()),
+                emergency_contact_relation: Some("Sister".into()),
+                occupants: vec![],
+                pets: vec![Pet {
+                    name: "Miso".into(),
+                    kind: "cat".into(),
+                    breed: Some("Tabby".into()),
+                    weight_lb: Some(11.0),
+                    vaccinated_through: Some("2027-03-01".into()),
+                    ..Default::default()
+                }],
+                prior_rentals: vec![PriorRental {
+                    address: "410 NE Alberta St, Portland, OR".into(),
+                    landlord_name: Some("Alberta Court Apartments".into()),
+                    landlord_phone: Some("(503) 555-0123".into()),
+                    rent_cents: Some(139_500),
+                    from: Some("2022-06-01".into()),
+                    to: Some("2024-05-31".into()),
+                    reason_for_leaving: Some("Closer to work".into()),
+                }],
+            },
+        ),
+        (
+            "hearthside",
+            "priya.nair@example.com",
+            "Priya",
+            "Nair",
+            "(512) 555-0191",
+            9_600_000,
+            Extras {
+                employer: Some("Dell Technologies".into()),
+                job_title: Some("Product manager".into()),
+                emergency_contact_name: Some("Arun Nair".into()),
+                emergency_contact_phone: Some("(512) 555-0102".into()),
+                emergency_contact_relation: Some("Brother".into()),
+                occupants: vec![Occupant {
+                    name: "Dev Nair".into(),
+                    relation: Some("Son".into()),
+                    age: Some(9),
+                }],
+                pets: vec![Pet {
+                    name: "Biscuit".into(),
+                    kind: "dog".into(),
+                    breed: Some("Labrador".into()),
+                    weight_lb: Some(62.0),
+                    vaccinated_through: Some("2027-01-15".into()),
+                    ..Default::default()
+                }],
+                prior_rentals: vec![PriorRental {
+                    address: "88 Barton Springs Rd, Austin, TX".into(),
+                    landlord_name: Some("Springs Property Mgmt".into()),
+                    rent_cents: Some(189_000),
+                    from: Some("2021-08-01".into()),
+                    to: Some("2025-12-31".into()),
+                    reason_for_leaving: Some("Needed a yard".into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        ),
+        (
+            "hearthside",
+            "marcus.webb@example.com",
+            "Marcus",
+            "Webb",
+            "(512) 555-0166",
+            8_200_000,
+            Extras {
+                employer: Some("City of Round Rock".into()),
+                job_title: Some("Civil engineer".into()),
+                emergency_contact_name: Some("Dana Webb".into()),
+                emergency_contact_phone: Some("(512) 555-0140".into()),
+                emergency_contact_relation: Some("Spouse".into()),
+                occupants: vec![Occupant {
+                    name: "Dana Webb".into(),
+                    relation: Some("Spouse".into()),
+                    age: Some(34),
+                }],
+                ..Default::default()
+            },
+        ),
+        (
+            "hearthside",
+            "elena.soto@example.com",
+            "Elena",
+            "Soto",
+            "(512) 555-0155",
+            7_100_000,
+            Extras {
+                employer: Some("Cedar Park ISD".into()),
+                job_title: Some("Teacher".into()),
+                emergency_contact_name: Some("Rosa Soto".into()),
+                emergency_contact_phone: Some("(512) 555-0188".into()),
+                emergency_contact_relation: Some("Mother".into()),
+                ..Default::default()
+            },
+        ),
+    ];
+    for (slug, email, first, last, phone, income, extras) in people {
+        let Some(t) = Tenant::find()
+            .filter(entity::tenant::Column::Slug.eq(slug))
+            .one(db)
+            .await?
+            .map(|t| t.id)
+        else {
+            continue;
+        };
+        let uid = match User::find()
+            .filter(entity::user::Column::Email.eq(email))
+            .one(db)
+            .await?
+        {
+            Some(u) => u.id,
+            None => {
+                let id =
+                    seed_user(db, Some(t), email, &format!("{first} {last}"), pw, false).await?;
+                seed_membership(
+                    db,
+                    role_ids,
+                    id,
+                    "tenant",
+                    Some(t),
+                    "renter",
+                    Some("Resident"),
+                )
+                .await?;
+                seed_profile(db, id, first, last).await?;
+                id
+            }
+        };
+        if ResidentProfile::find_by_id(uid).one(db).await?.is_some() {
+            continue;
+        }
+        if let Some(p) = UserProfile::find_by_id(uid).one(db).await? {
+            let mut am: entity::user_profile::ActiveModel = p.into();
+            am.phone = Set(Some(phone.into()));
+            am.annual_income_cents = Set(Some(income));
+            am.has_pet = Set(!extras.pets.is_empty());
+            am.pet_details = Set(crate::resident::pet_details(&extras.pets));
+            am.update(db).await?;
+        }
+        crate::resident::save(db, t, uid, uid, extras, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    }
     Ok(())
 }

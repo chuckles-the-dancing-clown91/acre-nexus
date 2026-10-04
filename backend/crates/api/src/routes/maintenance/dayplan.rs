@@ -1250,6 +1250,7 @@ mod tests {
                 partner_synced_at: None,
                 created_at: now.into(),
                 updated_at: now.into(),
+                track_time: true,
             },
             fix: Some(Fix { lat, lng: -122.6 }),
             minutes,

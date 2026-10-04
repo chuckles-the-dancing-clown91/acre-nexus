@@ -509,6 +509,7 @@ pub async fn open_ticket(
         partner_synced_at: Set(None),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
+        track_time: Set(true),
     }
     .insert(db)
     .await?;

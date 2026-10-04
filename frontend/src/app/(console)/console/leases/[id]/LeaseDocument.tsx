@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FileSignature, FileText, Printer, RefreshCw } from "lucide-react";
 import { api, ApiError, type LeaseDocDto } from "@/lib/api";
 import { logError } from "@/lib/log";
+import { LeaseAgreement } from "@/components/lease/LeaseAgreement";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
@@ -61,7 +62,11 @@ export function LeaseDocument({
               </Badge>
             )}
             {d && (
-              <Button size="sm" variant="secondary" onClick={() => printDoc(d)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => (d.sections ? window.print() : printDoc(d))}
+              >
                 <Printer />
                 Print or save PDF
               </Button>
@@ -107,9 +112,20 @@ export function LeaseDocument({
         )}
         {d && (
           <>
-            <pre className="max-h-96 overflow-auto rounded-xl border border-line bg-fill/40 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">
-              {d.body}
-            </pre>
+            {d.sections ? (
+              <div className="max-h-[75dvh] overflow-auto rounded-xl bg-stone-200/70 p-3 sm:p-6">
+                <LeaseAgreement
+                  title={d.title}
+                  sections={d.sections}
+                  signedBy={d.signed_by}
+                  signedAt={d.signed_at}
+                />
+              </div>
+            ) : (
+              <pre className="max-h-96 overflow-auto rounded-xl border border-line bg-fill/40 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg-2">
+                {d.body}
+              </pre>
+            )}
             {d.status === "signed" ? (
               <div className="text-[13px] text-good">
                 Signed by {d.signed_by} on {d.signed_at?.slice(0, 10)}.

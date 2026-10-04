@@ -338,6 +338,7 @@ pub async fn add_finding(
         id: Set(Uuid::new_v4()),
         tenant_id: Set(scope.tenant_id),
         ticket_id: Set(ticket.id),
+        task_id: Set(None),
         author_user_id: Set(Some(user.user_id)),
         kind: Set("finding".into()),
         visibility: Set(visibility.into()),
