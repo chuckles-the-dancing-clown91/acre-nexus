@@ -83,6 +83,7 @@ mod m20240101_000075_backup_runs;
 mod m20240101_000076_contact_language;
 mod m20240101_000077_detail_year_built;
 mod m20240101_000078_vendor_portal;
+mod m20240101_000079_campground;
 
 pub struct Migrator;
 
@@ -168,6 +169,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000076_contact_language::Migration),
             Box::new(m20240101_000077_detail_year_built::Migration),
             Box::new(m20240101_000078_vendor_portal::Migration),
+            Box::new(m20240101_000079_campground::Migration),
         ]
     }
 }

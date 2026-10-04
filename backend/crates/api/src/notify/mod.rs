@@ -354,6 +354,43 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
         sms: "Text from {sender}: {preview}",
     },
     DefaultTemplate {
+        key: "stay_requested",
+        subject: "We got your request: {site}, {check_in} to {check_out}",
+        body: "Hi {name},\n\nThanks for asking to stay at {campground}. We're holding {site} for \
+               {check_in} to {check_out} and will confirm shortly.\n\nTotal {total}, with a \
+               {deposit} deposit. See or cancel your request here:\n{link}\n\n— {company}",
+        sms: "{company}: we're holding {site} at {campground} for {check_in} to {check_out}. {link}",
+    },
+    DefaultTemplate {
+        key: "stay_confirmed",
+        subject: "Confirmed: {site} at {campground}, {check_in} to {check_out}",
+        body: "Hi {name},\n\nYou're booked at {campground}: {site}, {check_in} to {check_out}. \
+               Total {total}, deposit {deposit}.\n\n{link}\n\nSee you soon.\n\n— {company}",
+        sms: "{company}: you're booked, {site} at {campground}, {check_in} to {check_out}.",
+    },
+    DefaultTemplate {
+        key: "stay_cancelled",
+        subject: "Cancelled: {site} at {campground}, {check_in}",
+        body: "Hi {name},\n\nYour stay at {campground} ({site}, {check_in} to {check_out}) is \
+               cancelled. Questions about a deposit? Just reply.\n\n— {company}",
+        sms: "{company}: your stay at {campground} on {check_in} is cancelled.",
+    },
+    DefaultTemplate {
+        key: "stay_request_staff",
+        subject: "Stay request: {guest}, {site}, {check_in}",
+        body: "Hi {recipient},\n\n{guest} asked for {site} at {campground}, {check_in} to \
+               {check_out}. The site is held; confirm or cancel it from the campground's front \
+               desk.\n\n— {company}",
+        sms: "Stay request: {guest}, {site} at {campground}, {check_in}.",
+    },
+    DefaultTemplate {
+        key: "stay_cancelled_staff",
+        subject: "Guest cancelled: {guest}, {site}, {check_in}",
+        body: "Hi {recipient},\n\n{guest} cancelled their stay at {campground} ({site}, from \
+               {check_in}). The site is free again.\n\n— {company}",
+        sms: "{guest} cancelled {site} at {campground} from {check_in}.",
+    },
+    DefaultTemplate {
         key: "text_missed_call",
         subject: "Missed call from {sender}",
         body: "Hi {recipient},\n\nNobody picked up when {sender} called. The conversation \

@@ -230,6 +230,10 @@ pub const SMS_THREAD_UPDATE: &str = "sms.thread_update";
 pub const LANGUAGE_SET: &str = "language.set";
 /// A vendor was given a vendor-portal login.
 pub const VENDOR_PORTAL_INVITE: &str = "vendor.portal_invite";
+/// A campground stay was booked by staff.
+pub const STAY_CREATE: &str = "stay.create";
+/// A stay was confirmed, checked in or out, cancelled, cleaned or paid.
+pub const STAY_UPDATE: &str = "stay.update";
 /// Staff triggered a test delivery (provider test or own-device push test).
 pub const NOTIFICATION_TEST: &str = "notification.test";
 /// Inbox entries marked read (self-service; count in metadata).

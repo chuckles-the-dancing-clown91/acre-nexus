@@ -23,6 +23,7 @@ pub mod backoffice;
 pub mod banking;
 pub mod billing;
 pub mod business;
+pub mod campground;
 pub mod cap_table;
 pub mod crm;
 pub mod deals;

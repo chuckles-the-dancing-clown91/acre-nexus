@@ -20,7 +20,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 5 | Site maps: apartment layouts and campgrounds | ☑ |
 | 6 | Tenant home search | ◐ |
 | 7 | House onboarding with autofill | ☑ |
-| 8 | Campground reservations (follows the map) | ☐ |
+| 8 | Campground reservations (follows the map) | ☑ |
 | 9 | Go-live hardening: limits, job history, backups, end-to-end tests | ◐ |
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
 | 11 | Vendor portal and compliance (W-9, COI, 1099) | ☑ |
@@ -254,7 +254,9 @@ live provider; parcel, tax, valuation, schools and utilities are simulated.
   engine as turnover (area 3).
 - One-click "new property in a new LLC" (already modelled).
 
-## 8. Campground reservations ☐
+## 8. Campground reservations ☑
+
+Shipped: see [CAMPGROUNDS.md](CAMPGROUNDS.md).
 
 The map makes sites bookable; this makes them rentable. Availability calendar per
 site, stays (check-in/out, nights, guests, vehicle), nightly/weekly/monthly rate
@@ -291,7 +293,13 @@ turnover steps for a site (area 3), and housekeeping. Depends on area 5.
   baths and square feet are proposed and applied only when ticked, with an audit
   entry. Left: year built and lot from a live parcel provider, utilities and
   schools, and proposing a rent from comparables.
-- **8 Campground reservations** ☐. Follows the map.
+- **8 Campground reservations** ☑. Any published campground or RV park map
+  takes bookings: nightly, weekly and monthly rates from the site, seasons that
+  move the price and set a minimum stay, add-ons, a deposit, a guest booking page
+  with request and a stay link (cancel before arrival), a front desk (requests,
+  arriving, leaving, in house, to clean, payments) and a two-week calendar.
+  Double booking is blocked per site. Left: card payment of the deposit online,
+  booking from the drawn map itself, and site turns on the step engine.
 
 ---
 

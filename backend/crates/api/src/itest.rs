@@ -153,6 +153,7 @@ async fn integration_suite() {
     spanish_messages(&c).await;
     onboarding_checklist(&c).await;
     vendor_portal_flow(&c).await;
+    campground_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -9594,6 +9595,248 @@ async fn vendor_portal_flow(c: &Ctx) {
     let (st, _) = get_json(c, "/properties", &tok).await;
     assert_eq!(st, Status::Forbidden);
     let (st, _) = get_json(c, "/vendor-portal/me", &staff).await;
+    assert_eq!(st, Status::Forbidden);
+}
+
+/// Campground reservations: a published campground map with two sites, a
+/// season and add-ons; staff and a guest book; the same nights can't be
+/// taken twice; a stay goes from request to cleaned; the guest cancels by
+/// link; nothing public answers until booking is open.
+async fn campground_flow(c: &Ctx) {
+    use rocket::http::{ContentType, Method};
+    let nw = tenant_id(c, "northwind").await;
+    let pid = property_ids(c, nw).await[0];
+    let staff = mint(c, Some(nw), false, &["property:read", "property:write"]);
+    let (st, map) = post_json(
+        c,
+        "/site-maps",
+        &staff,
+        serde_json::json!({ "property_id": pid, "name": "Pine Hollow", "kind": "campground", "base_layer": "grid", "center_lng": -122.6, "center_lat": 45.5, "zoom": 17 }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{map}");
+    let mid = map["id"].as_str().unwrap().to_string();
+    let (st, saved) = send_json(
+        c,
+        Method::Put,
+        &format!("/site-maps/{mid}/features"),
+        &staff,
+        serde_json::json!({ "features": [
+            { "kind": "site", "name": "A1", "geometry": { "type": "Point", "coordinates": [-122.6, 45.5] },
+              "attrs": { "site_type": "rv", "max_length_ft": 35, "max_guests": 6, "rate_cents_night": 4500, "rate_cents_week": 25000 } },
+            { "kind": "site", "name": "T1", "geometry": { "type": "Point", "coordinates": [-122.6005, 45.5005] },
+              "attrs": { "site_type": "tent", "max_guests": 4, "rate_cents_night": 2500 } }
+        ] }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{saved}");
+    let (_, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/site-maps/{mid}"),
+        &staff,
+        serde_json::json!({ "published": true }),
+    )
+    .await;
+
+    let (st, camp) = get_json(c, &format!("/campgrounds/{mid}"), &staff).await;
+    assert_eq!(st, Status::Ok, "{camp}");
+    let a1 = camp["sites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "A1")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let t1 = camp["sites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "T1")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Not bookable by the public until it's opened.
+    let resp = c
+        .client
+        .get(format!("/public/campgrounds/{mid}?tenant=northwind"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::NotFound);
+    let (st, cfg) = send_json(
+        c,
+        Method::Put,
+        &format!("/campgrounds/{mid}/config"),
+        &staff,
+        serde_json::json!({ "booking_open": true, "deposit_pct": 20, "check_in_time": "14:00", "check_out_time": "11:00", "max_nights": 60,
+            "addons": [{ "key": "firewood", "label": "Firewood", "price_cents": 800, "per": "stay" }], "policies": "Quiet hours 10 PM to 7 AM." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{cfg}");
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/seasons"), &staff, serde_json::json!({ "name": "Peak", "start_md": "01-01", "end_md": "12-31", "adjust_pct": 10, "min_nights": 2 })).await;
+    assert_eq!(st, Status::Ok);
+
+    let day = |n: i64| {
+        (chrono::Utc::now() + chrono::Duration::days(n))
+            .date_naive()
+            .to_string()
+    };
+    let (st, q) = post_json(c, &format!("/campgrounds/{mid}/quote"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(13), "addons": [["firewood", 1]] })).await;
+    assert_eq!(st, Status::Ok, "{q}");
+    assert_eq!(q["base_cents"], 13500);
+    assert_eq!(q["stay_cents"], 14850);
+    assert_eq!(q["total_cents"], 15650);
+    assert_eq!(q["deposit_cents"], 3130);
+    let (st, short) = post_json(
+        c,
+        &format!("/campgrounds/{mid}/quote"),
+        &staff,
+        serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(11) }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{short}");
+
+    // Staff book A1; the same nights can't be taken again; a rig too long is refused.
+    let (st, stay) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(10), "check_out": day(13), "guest_name": "Dana Ortiz", "email": "dana@example.com", "guests": 2, "rig_length_ft": 30 })).await;
+    assert_eq!(st, Status::Ok, "{stay}");
+    assert_eq!(stay["status"], "confirmed");
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(12), "check_out": day(14), "guest_name": "Late Larry" })).await;
+    assert_eq!(st, Status::Conflict);
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(13), "check_out": day(15), "guest_name": "Big Rig", "rig_length_ft": 45 })).await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, back) = post_json(c, &format!("/campgrounds/{mid}/stays"), &staff, serde_json::json!({ "site_id": a1, "check_in": day(13), "check_out": day(15), "guest_name": "Next Nadia" })).await;
+    assert_eq!(
+        st,
+        Status::Ok,
+        "the check-out day is free for the next guest: {back}"
+    );
+
+    // The public sees T1 free and A1 taken for those nights, and requests T1.
+    let resp = c
+        .client
+        .get(format!(
+            "/public/campgrounds/{mid}?tenant=northwind&from={}&to={}",
+            day(10),
+            day(12)
+        ))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let pubc: serde_json::Value = resp.into_json().await.unwrap();
+    let free = |name: &str| {
+        pubc["sites"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["site"]["name"] == name)
+            .unwrap()["free"]
+            .clone()
+    };
+    assert_eq!(free("A1"), false);
+    assert_eq!(free("T1"), true);
+    let resp = c
+        .client
+        .post(format!("/public/campgrounds/{mid}/stays?tenant=northwind"))
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "site_id": t1, "check_in": day(10), "check_out": day(12), "guest_name": "Sam Lee", "email": "sam@example.com", "guests": 2, "addons": [["firewood", 2]] }).to_string())
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let req: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(req["stay"]["status"], "held");
+    let link = req["link"].as_str().unwrap().to_string();
+    let token = link.rsplit('/').next().unwrap().to_string();
+    let resp = c
+        .client
+        .get(format!("/public/stays/{token}"))
+        .dispatch()
+        .await;
+    let g: serde_json::Value = resp.into_json().await.unwrap();
+    assert_eq!(g["can_cancel"], true);
+    assert_eq!(g["stay"]["site_name"], "T1");
+
+    // The front desk: the request shows; confirm, pay, check in, out, clean.
+    let (_, b) = get_json(
+        c,
+        &format!("/campgrounds/{mid}/board?date={}", day(10)),
+        &staff,
+    )
+    .await;
+    assert!(b["requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["guest_name"] == "Sam Lee"));
+    assert!(b["arriving"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["guest_name"] == "Dana Ortiz"));
+    let sid = stay["id"].as_str().unwrap();
+    for (action, extra) in [
+        ("check_in", serde_json::json!({})),
+        ("payment", serde_json::json!({ "amount_cents": 15650 })),
+        ("check_out", serde_json::json!({})),
+        ("cleaned", serde_json::json!({})),
+    ] {
+        let mut body = extra.clone();
+        body["action"] = serde_json::json!(action);
+        let (st, r) = send_json(c, Method::Patch, &format!("/stays/{sid}"), &staff, body).await;
+        assert_eq!(st, Status::Ok, "{action}: {r}");
+    }
+    let (st, done) = send_json(
+        c,
+        Method::Patch,
+        &format!("/stays/{sid}"),
+        &staff,
+        serde_json::json!({ "action": "check_in" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict, "{done}");
+    let row = entity::prelude::Stay::find_by_id(uuid::Uuid::parse_str(sid).unwrap())
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            row.status.as_str(),
+            row.paid_cents,
+            row.cleaned_at.is_some()
+        ),
+        ("checked_out", 15650, true)
+    );
+
+    // The guest cancels their request by link; T1 is free again.
+    let resp = c
+        .client
+        .post(format!("/public/stays/{token}/cancel"))
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    let (_, avail) = get_json(
+        c,
+        &format!(
+            "/campgrounds/{mid}/availability?from={}&to={}",
+            day(10),
+            day(12)
+        ),
+        &staff,
+    )
+    .await;
+    let t1row = avail
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["site"]["name"] == "T1")
+        .unwrap();
+    assert_eq!(t1row["free"], true);
+    let reader = mint(c, Some(nw), false, &["property:read"]);
+    let (st, _) = post_json(c, &format!("/campgrounds/{mid}/stays"), &reader, serde_json::json!({ "site_id": t1, "check_in": day(20), "check_out": day(22), "guest_name": "X" })).await;
     assert_eq!(st, Status::Forbidden);
 }
 

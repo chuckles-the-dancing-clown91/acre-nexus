@@ -86,6 +86,12 @@ export const MODULES: ModuleDef[] = [
         permission: "property:read",
       },
       {
+        href: "/console/campground",
+        label: "Campgrounds",
+        icon: "tent",
+        permission: "property:read",
+      },
+      {
         href: "/console/workflows",
         label: "Workflows",
         icon: "workflow",

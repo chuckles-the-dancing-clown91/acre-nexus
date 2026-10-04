@@ -29,6 +29,7 @@ mod auth;
 mod autofill;
 mod bankfeed;
 mod billing;
+mod campground;
 mod config;
 mod cors;
 mod db;
