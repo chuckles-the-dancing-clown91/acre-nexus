@@ -352,6 +352,13 @@ const DEFAULT_TEMPLATES: &[DefaultTemplate] = &[
                in the console.\n\n— {company}",
         sms: "Text from {sender}: {preview}",
     },
+    DefaultTemplate {
+        key: "text_missed_call",
+        subject: "Missed call from {sender}",
+        body: "Hi {recipient},\n\nNobody picked up when {sender} called. The conversation \
+               is in the Texts inbox; call or text them back from there.\n\n— {company}",
+        sms: "Missed call from {sender}.",
+    },
     // ---- Password links (set your password / forgot password) ----
     DefaultTemplate {
         key: "account_invite",

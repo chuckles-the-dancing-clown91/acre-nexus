@@ -25,7 +25,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 10 | Reminders that run themselves, for residents and managers | ☑ |
 | 11 | Vendor portal and compliance (W-9, COI, 1099) | ◐ |
 | 12 | Owner portal and spend approvals | ☑ |
-| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ◐ |
+| 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☑ |
 | 14 | Listing media, map search, saved searches and listing feeds | ◐ |
 | 15 | Operations analytics and the portfolio map | ☑ |
 | 16 | Spanish for everything a resident sees | ☐ |
@@ -391,7 +391,10 @@ orders, documents. There is no approval threshold on spending.
   text reply, with an emergency override for staff (audited).
 - Monthly statement email with the PDF, from the existing report.
 
-## 13. Texts, round 2 ◐
+## 13. Texts, round 2 ☑
+
+Shipped: linking an unknown number to a resident, prospect or vendor, and
+missed-call text-back ([`TEXTS.md`](TEXTS.md)).
 
 **Today.** Two-way texts, STOP/START and a shared inbox are shipped. Fix plan
 F14–F17 added rating by text, text to work order links, saved replies, assigning

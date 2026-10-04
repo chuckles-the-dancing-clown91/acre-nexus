@@ -148,6 +148,7 @@ async fn integration_suite() {
     routes_and_shopping(&c).await;
     follow_ups_go_out(&c).await;
     analytics_and_map(&c).await;
+    texts_round_two(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -8866,6 +8867,187 @@ async fn analytics_and_map(c: &Ctx) {
     let reader = mint(c, Some(nw), false, &["property:read"]);
     let (st, _) = get_json(c, "/analytics/operations", &reader).await;
     assert_eq!(st, Status::Forbidden);
+}
+
+/// Texts, round two: a prospect's number names the conversation; a missed
+/// call is filed and texted back once per window (not after STOP, not when
+/// turned off); staff link an unknown number to a vendor or to nobody.
+async fn texts_round_two(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(
+        c,
+        Some(nw),
+        false,
+        &[
+            "message:read",
+            "message:manage",
+            "application:read",
+            "application:write",
+            "entity:read",
+            "entity:manage",
+        ],
+    );
+    // A prospect texts: the conversation is theirs.
+    let (st, lead) = post_json(
+        c,
+        "/leads",
+        &staff,
+        serde_json::json!({ "name": "Nadia Okafor", "email": "nadia@example.com", "phone": "(503) 555-0177", "source": "website" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{lead}");
+    let (st, t) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0177", "body": "Is the 2 bed still available?" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{t}");
+    assert_eq!(t["thread"]["display_name"], "Nadia Okafor", "{t}");
+    assert_eq!(t["thread"]["lead_id"], lead["id"]);
+
+    // A stranger calls and nobody answers: filed, texted back, once.
+    let (st, call) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0188" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{call}");
+    assert_eq!(call["texted_back"], true, "{call}");
+    let msgs = call["thread"]["messages"].as_array().unwrap();
+    assert!(msgs
+        .iter()
+        .any(|m| m["body"] == "Missed call" && m["direction"] == "in"));
+    let back = msgs
+        .iter()
+        .find(|m| m["direction"] == "out")
+        .expect("the text-back is filed");
+    assert!(
+        back["body"].as_str().unwrap().contains("Northwind"),
+        "{back}"
+    );
+    let tid = call["thread"]["thread"]["id"].as_str().unwrap().to_string();
+    let queued = entity::prelude::BackgroundJob::find()
+        .filter(entity::background_job::Column::TenantId.eq(nw))
+        .filter(entity::background_job::Column::Kind.eq("auto_sms"))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .any(|j| j.payload["trigger"] == "missed_call" && j.payload["to"] == "+15035550188");
+    assert!(queued, "the text-back is queued");
+    let (_, again) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0188" }),
+    )
+    .await;
+    assert_eq!(again["texted_back"], false, "once per window");
+    assert!(again["thread"]["thread"]["unread_count"].as_i64().unwrap() >= 2);
+
+    // Someone who texted STOP isn't texted back.
+    let (_, _) = post_json(
+        c,
+        "/texts/simulate",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0199", "body": "STOP" }),
+    )
+    .await;
+    let (_, stopped) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0199" }),
+    )
+    .await;
+    assert_eq!(stopped["texted_back"], false);
+
+    // Turned off: filed, no text.
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::TEXTS_MISSED_CALL_REPLY_ON,
+        serde_json::json!(false),
+    )
+    .await
+    .unwrap();
+    let (_, off) = post_json(
+        c,
+        "/texts/simulate-call",
+        &staff,
+        serde_json::json!({ "phone": "503-555-0166" }),
+    )
+    .await;
+    assert_eq!(off["texted_back"], false);
+    assert!(off["thread"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["body"] == "Missed call"));
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::TEXTS_MISSED_CALL_REPLY_ON,
+        serde_json::json!(true),
+    )
+    .await
+    .unwrap();
+
+    // Staff say whose number it is.
+    let (st, vendor) = post_json(
+        c,
+        "/entities",
+        &staff,
+        serde_json::json!({ "kind": "contractor", "name": "Ruiz Roofing", "email": "ruiz@roof.example" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{vendor}");
+    let (st, linked) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "vendor", "id": vendor["id"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{linked}");
+    assert_eq!(linked["counterparty_id"], vendor["id"]);
+    assert_eq!(linked["display_name"], "Ruiz Roofing");
+    let (st, renamed) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "none" }, "display_name": "Unknown roofer" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{renamed}");
+    assert!(renamed["counterparty_id"].is_null());
+    assert_eq!(renamed["display_name"], "Unknown roofer");
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "landlord", "id": vendor["id"] } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, _) = send_json(
+        c,
+        Method::Patch,
+        &format!("/texts/{tid}"),
+        &staff,
+        serde_json::json!({ "link": { "kind": "resident", "id": uuid::Uuid::new_v4() } }),
+    )
+    .await;
+    assert_eq!(st, Status::NotFound);
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until

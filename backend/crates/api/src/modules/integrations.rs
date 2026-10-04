@@ -98,6 +98,8 @@ impl PlatformModule for IntegrationsModule {
             // two-way texts: Twilio inbound + delivery status (signature-verified)
             texts::twilio::inbound,
             texts::twilio::status,
+            texts::twilio::voice,
+            texts::twilio::voice_after,
             // document service
             documents::upload::upload,
             documents::list::list,

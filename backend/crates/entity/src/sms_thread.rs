@@ -26,6 +26,10 @@ pub struct Model {
     pub assigned_user_id: Option<Uuid>,
     /// Separate consent for marketing texts (STOP still wins over it).
     pub marketing_opt_in_at: Option<DateTimeWithTimeZone>,
+    /// A prospect this number belongs to, linked by hand or matched.
+    pub lead_id: Option<Uuid>,
+    /// A vendor (counterparty) this number belongs to.
+    pub counterparty_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }
