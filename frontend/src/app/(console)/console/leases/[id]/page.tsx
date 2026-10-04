@@ -4,6 +4,7 @@
 // payment ledger), the document and its signatures, renewals, inspections, the
 // deposit, and stored files. Reads need lease:read; changes need lease:manage.
 
+import { LeaseLanguage } from "@/components/language/LanguagePicker";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -146,6 +147,9 @@ function LeaseView() {
               {l.application_id && <Badge tone="info">from application</Badge>}
               {l.has_pet && <Badge tone="warn">pet</Badge>}
               {l.is_military && <Badge tone="info">military</Badge>}
+              <span className="ml-auto">
+                <LeaseLanguage leaseId={l.id} canEdit={can("lease:manage")} />
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-fg-2">
               <span>{l.tenant_email ?? "No email"}</span>

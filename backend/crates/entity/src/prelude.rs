@@ -16,6 +16,7 @@ pub use super::bank_txn::Entity as BankTxn;
 pub use super::business_profile::Entity as BusinessProfile;
 pub use super::capital_call::Entity as CapitalCall;
 pub use super::capital_call_line::Entity as CapitalCallLine;
+pub use super::contact_language::Entity as ContactLanguage;
 pub use super::counterparty::Entity as Counterparty;
 pub use super::counterparty_note::Entity as CounterpartyNote;
 pub use super::crm_note::Entity as CrmNote;

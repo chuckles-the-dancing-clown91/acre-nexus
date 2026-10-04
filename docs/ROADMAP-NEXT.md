@@ -28,7 +28,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 13 | Texts, round 2: text to work order, ratings by text, team inbox | ☑ |
 | 14 | Listing media, map search, saved searches and listing feeds | ◐ |
 | 15 | Operations analytics and the portfolio map | ☑ |
-| 16 | Spanish for everything a resident sees | ☐ |
+| 16 | Spanish for everything a resident sees | ◐ |
 | 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
 
 The concrete fixes, sized and in build order, are in [`FIX-PLAN.md`](FIX-PLAN.md).
@@ -453,7 +453,12 @@ broke. None of it is summarised. The portfolio map (#57) is not built.
   work, with the site maps one click away.
 - A saved-view report builder only after these show which questions repeat.
 
-## 16. Spanish for everything a resident sees ☐
+## 16. Spanish for everything a resident sees ◐
+
+Shipped: a language per person and Spanish versions of the 32 messages
+residents, applicants and prospects get ([`NOTIFICATIONS.md`](NOTIFICATIONS.md),
+"Spanish"). Left: the portal screens, the public site, and lease and notice
+PDFs.
 
 **Today.** No i18n at all; only the Spanish STOP words are handled.
 

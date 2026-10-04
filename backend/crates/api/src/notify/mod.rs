@@ -20,6 +20,7 @@
 //! `{ "template": …, "to": … }` payload contract is unchanged.
 
 pub mod delivery;
+mod es;
 pub mod webpush;
 
 use crate::leasedoc::interpolate;
@@ -728,9 +729,23 @@ fn render(
     channel: &str,
     template_key: &str,
     vars: &HashMap<&str, String>,
+    lang: &str,
 ) -> Option<Rendered> {
-    let default = DEFAULT_TEMPLATES.iter().find(|t| t.key == template_key);
-    let over = overrides.get(template_key);
+    let en_default = DEFAULT_TEMPLATES.iter().find(|t| t.key == template_key);
+    let en_over = overrides.get(template_key);
+    // Spanish: the workspace's `<key>.es` override, then the built-in Spanish
+    // version, then English for anything neither has.
+    let (over, default) = if lang == "es" {
+        let es_over = overrides.get(format!("{template_key}.es"));
+        let es_default = es::ES_TEMPLATES.iter().find(|t| t.key == template_key);
+        if es_over.is_some() || es_default.is_some() {
+            (es_over, es_default.or(en_default))
+        } else {
+            (en_over, en_default)
+        }
+    } else {
+        (en_over, en_default)
+    };
 
     let str_field = |name: &str| -> Option<String> {
         over.and_then(|o| o.get(name))
@@ -1013,7 +1028,18 @@ pub async fn handle_job(
     );
     let vars: HashMap<&str, String> = pairs.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
 
-    let Some(rendered) = render(&overrides, channel, template, &vars) else {
+    // The recipient's language: the job's own, else what's on file for the
+    // address (a push or in-app message goes by the user's email).
+    let lang = match job
+        .payload
+        .get("lang")
+        .and_then(|v| v.as_str())
+        .and_then(crate::language::parse)
+    {
+        Some(l) => l,
+        None => crate::language::for_contact(db, job.tenant_id, &to).await,
+    };
+    let Some(rendered) = render(&overrides, channel, template, &vars, lang) else {
         return JobOutcome::failed(format!(
             "unknown notification template '{template}' (no platform default, no tenant override)"
         ));
@@ -1251,7 +1277,8 @@ pub async fn in_app(
     let (company, overrides) = tenant_context(db, tenant_id).await;
     let pairs = build_vars(&user.email, &company, template, vars_json.as_object());
     let vars: HashMap<&str, String> = pairs.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-    let rendered = render(&overrides, "in_app", template, &vars)?;
+    let lang = crate::language::for_contact(db, tenant_id, &user.email).await;
+    let rendered = render(&overrides, "in_app", template, &vars, lang)?;
 
     let idem =
         owner.map(|(otype, oid)| format!("in_app:{template}:{otype}:{oid}:{trigger}:{}", user.id));
@@ -1505,7 +1532,14 @@ mod tests {
     #[test]
     fn renders_platform_default_email() {
         let pairs = vars();
-        let r = render(&json!({}), "email", "application_approved", &map(&pairs)).unwrap();
+        let r = render(
+            &json!({}),
+            "email",
+            "application_approved",
+            &map(&pairs),
+            "en",
+        )
+        .unwrap();
         assert_eq!(
             r.subject.as_deref(),
             Some("Your application with Northwind Property Group has been approved")
@@ -1517,7 +1551,14 @@ mod tests {
     #[test]
     fn renders_sms_variant() {
         let pairs = vars();
-        let r = render(&json!({}), "sms", "application_approved", &map(&pairs)).unwrap();
+        let r = render(
+            &json!({}),
+            "sms",
+            "application_approved",
+            &map(&pairs),
+            "en",
+        )
+        .unwrap();
         assert!(r.subject.is_none());
         assert!(r.body.starts_with("Northwind Property Group: good news"));
     }
@@ -1526,7 +1567,14 @@ mod tests {
     fn push_and_in_app_get_title_plus_short_body() {
         let pairs = vars();
         for channel in ["push", "in_app"] {
-            let r = render(&json!({}), channel, "application_submitted", &map(&pairs)).unwrap();
+            let r = render(
+                &json!({}),
+                channel,
+                "application_submitted",
+                &map(&pairs),
+                "en",
+            )
+            .unwrap();
             assert_eq!(
                 r.subject.as_deref(),
                 Some("New application from Casey Jones")
@@ -1541,7 +1589,7 @@ mod tests {
     #[test]
     fn chat_uses_short_body_without_subject() {
         let pairs = vars();
-        let r = render(&json!({}), "chat", "test_notification", &map(&pairs)).unwrap();
+        let r = render(&json!({}), "chat", "test_notification", &map(&pairs), "en").unwrap();
         assert!(r.subject.is_none());
         assert!(r.body.contains("test notification"));
     }
@@ -1561,7 +1609,7 @@ mod tests {
                 "https://app.example.com/sign/tok123?tenant=northwind".into(),
             ),
         ];
-        let r = render(&json!({}), "email", "esign_request", &map(&pairs)).unwrap();
+        let r = render(&json!({}), "email", "esign_request", &map(&pairs), "en").unwrap();
         assert_eq!(
             r.subject.as_deref(),
             Some("Signature requested: Residential Lease Agreement")
@@ -1571,7 +1619,7 @@ mod tests {
             .body
             .contains("https://app.example.com/sign/tok123?tenant=northwind"));
 
-        let sms = render(&json!({}), "sms", "esign_request", &map(&pairs)).unwrap();
+        let sms = render(&json!({}), "sms", "esign_request", &map(&pairs), "en").unwrap();
         assert!(sms.subject.is_none());
         assert!(sms
             .body
@@ -1587,7 +1635,7 @@ mod tests {
             "esign_voided",
         ] {
             assert!(
-                render(&json!({}), "email", key, &map(&pairs)).is_some(),
+                render(&json!({}), "email", key, &map(&pairs), "en").is_some(),
                 "template {key} missing"
             );
         }
@@ -1599,7 +1647,14 @@ mod tests {
         let overrides = json!({
             "application_approved": { "subject": "Welcome home, {recipient}!" }
         });
-        let r = render(&overrides, "email", "application_approved", &map(&pairs)).unwrap();
+        let r = render(
+            &overrides,
+            "email",
+            "application_approved",
+            &map(&pairs),
+            "en",
+        )
+        .unwrap();
         // Overridden subject, default body.
         assert_eq!(
             r.subject.as_deref(),
@@ -1609,16 +1664,16 @@ mod tests {
 
         // A bare-string override replaces the body wholesale.
         let plain = json!({ "application_approved": "Custom body for {recipient}." });
-        let r = render(&plain, "email", "application_approved", &map(&pairs)).unwrap();
+        let r = render(&plain, "email", "application_approved", &map(&pairs), "en").unwrap();
         assert_eq!(r.body, "Custom body for taylor@example.com.");
     }
 
     #[test]
     fn unknown_template_is_none_unless_overridden() {
         let empty: HashMap<&str, String> = HashMap::new();
-        assert!(render(&json!({}), "email", "no_such_template", &empty).is_none());
+        assert!(render(&json!({}), "email", "no_such_template", &empty, "en").is_none());
         let overrides = json!({ "no_such_template": "Hello!" });
-        assert!(render(&overrides, "email", "no_such_template", &empty).is_some());
+        assert!(render(&overrides, "email", "no_such_template", &empty, "en").is_some());
     }
 
     #[test]
@@ -1663,5 +1718,69 @@ mod tests {
         }
         assert!(PROVIDER_CHANNELS.iter().any(|(c, _)| *c == "email"));
         assert!(PROVIDER_CHANNELS.iter().all(|(c, _)| *c != "push"));
+    }
+
+    fn placeholders(t: &str) -> std::collections::BTreeSet<String> {
+        let mut out = std::collections::BTreeSet::new();
+        let mut rest = t;
+        while let Some(a) = rest.find('{') {
+            let Some(b) = rest[a..].find('}') else { break };
+            out.insert(rest[a + 1..a + b].to_string());
+            rest = &rest[a + b + 1..];
+        }
+        out
+    }
+
+    #[test]
+    fn spanish_templates_match_the_english_ones() {
+        for es in es::ES_TEMPLATES {
+            let en = DEFAULT_TEMPLATES
+                .iter()
+                .find(|t| t.key == es.key)
+                .unwrap_or_else(|| panic!("{} has no English original", es.key));
+            for (field, a, b) in [
+                ("subject", en.subject, es.subject),
+                ("body", en.body, es.body),
+                ("sms", en.sms, es.sms),
+            ] {
+                assert_eq!(
+                    placeholders(a),
+                    placeholders(b),
+                    "{}.{field}: the Spanish version must use the same placeholders",
+                    es.key
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn renders_in_the_recipients_language() {
+        let pairs = vec![
+            ("recipient".to_string(), "Ana".to_string()),
+            ("company".to_string(), "Northwind".to_string()),
+            ("amount".to_string(), "$1,850".to_string()),
+            ("due_date".to_string(), "2026-11-01".to_string()),
+            ("pay_url".to_string(), "https://x/pay".to_string()),
+        ];
+        let es = render(&json!({}), "email", "rent_due", &map(&pairs), "es").unwrap();
+        assert!(es
+            .subject
+            .unwrap()
+            .starts_with("El alquiler de $1,850 vence"));
+        assert!(es.body.contains("Hola Ana"));
+        let sms = render(&json!({}), "sms", "rent_due", &map(&pairs), "es").unwrap();
+        assert!(sms.body.contains("Pagar: https://x/pay"));
+        // No Spanish version: English.
+        let staff = render(&json!({}), "email", "manager_digest", &map(&pairs), "es");
+        let en = render(&json!({}), "email", "manager_digest", &map(&pairs), "en");
+        assert_eq!(staff.map(|r| r.body), en.map(|r| r.body));
+        // The workspace's Spanish override wins over the built-in Spanish.
+        let overrides = json!({ "rent_due.es": { "sms": "Renta {amount}, {due_date}" } });
+        let o = render(&overrides, "sms", "rent_due", &map(&pairs), "es").unwrap();
+        assert_eq!(o.body, "Renta $1,850, 2026-11-01");
+        // An English override doesn't leak into the Spanish message.
+        let en_only = json!({ "rent_due": { "sms": "Rent now" } });
+        let e = render(&en_only, "sms", "rent_due", &map(&pairs), "es").unwrap();
+        assert!(e.body.starts_with("Northwind: el alquiler"));
     }
 }

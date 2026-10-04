@@ -30,6 +30,8 @@ pub struct TourReq {
     pub consent: bool,
     /// A honeypot: real visitors never fill it in.
     pub website: Option<String>,
+    /// The language they read (`en` | `es`).
+    pub language: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -87,6 +89,17 @@ pub async fn request_tour(
     let name =
         clean(Some(b.name), 120).ok_or_else(|| ApiError::BadRequest("name is required".into()))?;
     let email = b.email.trim().to_lowercase();
+    if let Some(lang) = b.language.as_deref().and_then(crate::language::parse) {
+        if plausible_email(&email) {
+            crate::language::set(
+                &db,
+                tenant.tenant_id,
+                &[Some(&email), b.phone.as_deref()],
+                lang,
+            )
+            .await?;
+        }
+    }
     if !plausible_email(&email) {
         return Err(ApiError::BadRequest("enter a valid email".into()));
     }

@@ -183,5 +183,10 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         // Self-service profile (renter portal / any signed-in user)
         iam::self_profile::my_profile,
         iam::self_profile::update_my_profile,
+        // The language messages to a resident use
+        crate::language::lease_language,
+        crate::language::set_lease_language,
+        crate::language::my_language,
+        crate::language::set_my_language,
     ]
 }

@@ -319,10 +319,14 @@ pub async fn record_missed_call(
     let body = cfg::get_string(db, tenant_id, cfg::TEXTS_MISSED_CALL_REPLY)
         .await
         .replace("{company}", &company);
-    let body = if body.trim().is_empty() {
-        format!("Sorry we missed your call. This is {company}. Text us here and we'll get right back to you.")
-    } else {
+    const DEFAULT_EN: &str = "Sorry we missed your call. This is {company}. Text us here and we'll get right back to you.";
+    let customized = !body.trim().is_empty() && body != DEFAULT_EN.replace("{company}", &company);
+    let body = if customized {
         body
+    } else if crate::language::for_contact(db, tenant_id, &phone).await == "es" {
+        format!("Perdón, no pudimos atender su llamada. Somos {company}. Escríbanos aquí y le respondemos enseguida.")
+    } else {
+        DEFAULT_EN.replace("{company}", &company)
     };
     let Some(out) = record_outbound(
         db,

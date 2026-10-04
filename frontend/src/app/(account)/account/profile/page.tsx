@@ -4,6 +4,7 @@
 // from (contact, pets, military, income, ID, vehicles), plus how they sign
 // in (password, two-step codes) and push notifications on this device.
 
+import { MyLanguage } from "@/components/language/LanguagePicker";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -72,6 +73,15 @@ export default function ProfilePage() {
         </>
       )}
 
+      <Panel>
+        <PanelHeader
+          title="Messages in"
+          description="Reminders, receipts and updates from us. Mensajes en español."
+        />
+        <div className="px-5 pb-5">
+          <MyLanguage />
+        </div>
+      </Panel>
       <PasswordPanel />
       <TwoStepPanel />
       <PushPanel />

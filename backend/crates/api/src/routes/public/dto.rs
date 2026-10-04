@@ -122,6 +122,8 @@ pub struct ApplyReq {
     /// eviction history (FCRA §604(b)). Required unless a recent approval is
     /// being reused.
     pub screening_consent: Option<bool>,
+    /// The language they read (`en` | `es`); messages to them use it.
+    pub language: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]

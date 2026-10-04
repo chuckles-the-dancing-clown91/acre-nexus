@@ -47,6 +47,7 @@ mod guards;
 mod helpdesk;
 mod imports;
 mod kit_catalog;
+mod language;
 mod leasedoc;
 mod listing_sync;
 mod mail;

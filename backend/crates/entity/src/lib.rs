@@ -33,6 +33,7 @@ pub mod bank_txn;
 pub mod business_profile;
 pub mod capital_call;
 pub mod capital_call_line;
+pub mod contact_language;
 pub mod counterparty;
 pub mod counterparty_note;
 pub mod crm_note;

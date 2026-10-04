@@ -150,6 +150,7 @@ async fn integration_suite() {
     analytics_and_map(&c).await;
     texts_round_two(&c).await;
     go_live_page(&c).await;
+    spanish_messages(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -9117,6 +9118,192 @@ async fn go_live_page(c: &Ctx) {
     let reader = mint(c, Some(nw), false, &["property:read"]);
     let (st, _) = get_json(c, "/go-live", &reader).await;
     assert_eq!(st, Status::Forbidden);
+}
+
+/// Spanish for residents: staff set a resident's language on the lease, the
+/// resident sets their own from the portal, an applicant picks it on the
+/// public form, and messages to each come out in Spanish (English for anyone
+/// else, and for messages with no Spanish version).
+async fn spanish_messages(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+    let nw = tenant_id(c, "northwind").await;
+    let staff = mint(c, Some(nw), false, &["lease:read", "lease:manage"]);
+    let leases = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(nw))
+        .filter(entity::lease::Column::TenantEmail.is_not_null())
+        .order_by_asc(entity::lease::Column::CreatedAt)
+        .all(&c.db)
+        .await
+        .unwrap();
+    let (es_lease, en_lease) = (&leases[0], &leases[1]);
+    let (st, set) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &staff,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{set}");
+    assert_eq!(set["language"], "es");
+    let (_, got) = get_json(c, &format!("/leases/{}/language", es_lease.id), &staff).await;
+    assert_eq!(got["language"], "es");
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &staff,
+        serde_json::json!({ "language": "fr" }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let reader = mint(c, Some(nw), false, &["lease:read"]);
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/leases/{}/language", es_lease.id),
+        &reader,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+
+    // Render a real rent reminder to each.
+    async fn rendered(
+        c: &Ctx,
+        tenant: uuid::Uuid,
+        to: &str,
+        template: &str,
+    ) -> entity::notification::Model {
+        let job_id = crate::scheduler::enqueue(
+            &c.db,
+            tenant,
+            "auto_email",
+            serde_json::json!({
+                "template": template,
+                "to": to,
+                "vars": { "amount": "$1,850", "due_date": "2026-11-01", "pay_url": "https://x/pay" },
+                "trigger": format!("es-test:{}", uuid::Uuid::new_v4()),
+            }),
+            0,
+        )
+        .await
+        .unwrap();
+        let job = entity::prelude::BackgroundJob::find_by_id(job_id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let _ = crate::notify::handle_job(&c.db, &job).await;
+        entity::prelude::Notification::find()
+            .filter(entity::notification::Column::BackgroundJobId.eq(job_id))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .expect("rendered and filed")
+    }
+    let es = rendered(c, nw, es_lease.tenant_email.as_deref().unwrap(), "rent_due").await;
+    assert!(
+        es.subject
+            .as_deref()
+            .unwrap()
+            .starts_with("El alquiler de $1,850 vence"),
+        "{:?}",
+        es.subject
+    );
+    assert!(es.body.as_deref().unwrap().contains("Pague en línea"));
+    let en = rendered(c, nw, en_lease.tenant_email.as_deref().unwrap(), "rent_due").await;
+    assert!(
+        en.subject
+            .as_deref()
+            .unwrap()
+            .starts_with("Rent of $1,850 is due"),
+        "{:?}",
+        en.subject
+    );
+    // No Spanish version of a staff message: English, even to a Spanish reader.
+    let staffish = rendered(
+        c,
+        nw,
+        es_lease.tenant_email.as_deref().unwrap(),
+        "test_notification",
+    )
+    .await;
+    assert!(!staffish.body.as_deref().unwrap_or("").contains("Hola"));
+
+    // The resident chooses for themselves.
+    let taylor = entity::prelude::User::find()
+        .filter(entity::user::Column::Email.eq("taylor@example.com"))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let res =
+        crate::auth::issue_access_token(&c.config, taylor.id, Some(nw), false, vec![]).unwrap();
+    let (st, mine) = send_json(
+        c,
+        Method::Put,
+        "/my/language",
+        &res,
+        serde_json::json!({ "language": "es" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{mine}");
+    assert!(mine["addresses"].as_u64().unwrap() >= 1);
+    let (_, mine) = get_json(c, "/my/language", &res).await;
+    assert_eq!(mine["language"], "es");
+    let t = rendered(c, nw, "taylor@example.com", "payment_receipt").await;
+    assert!(
+        t.subject.as_deref().unwrap().starts_with("Pago recibido"),
+        "{:?}",
+        t.subject
+    );
+    let (_, _) = send_json(
+        c,
+        Method::Put,
+        "/my/language",
+        &res,
+        serde_json::json!({ "language": "en" }),
+    )
+    .await;
+    let t = rendered(c, nw, "taylor@example.com", "payment_receipt").await;
+    assert!(t
+        .subject
+        .as_deref()
+        .unwrap()
+        .starts_with("Payment received"));
+
+    // An applicant picks Spanish on the public form.
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "lucia@example.com").await,
+        "en"
+    );
+    let resp = c
+        .client
+        .post("/public/applications?tenant=northwind")
+        .header(rocket::http::ContentType::JSON)
+        .body(
+            serde_json::json!({
+                "applicant_name": "Lucía Romero",
+                "email": "Lucia@Example.com",
+                "phone": "503-555-0144",
+                "screening_consent": true,
+                "language": "es-MX",
+            })
+            .to_string(),
+        )
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok, "{:?}", resp.into_string().await);
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "lucia@example.com").await,
+        "es"
+    );
+    assert_eq!(
+        crate::language::for_contact(&c.db, nw, "+15035550144").await,
+        "es"
+    );
 }
 
 /// Owner approvals: work over the owner's limit can't go to a vendor until
