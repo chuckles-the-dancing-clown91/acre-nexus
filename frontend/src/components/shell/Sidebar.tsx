@@ -93,7 +93,9 @@ function Group({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const folded = useUiStore((s) => !!s.collapsedGroups[group.key]);
+  const folded = useUiStore(
+    (s) => s.collapsedGroups[group.key] ?? !!group.defaultFolded
+  );
   const toggleGroup = useUiStore((s) => s.toggleGroup);
   const holdsActive = group.items.some((i) => i.href === activeHref);
   // A folded group still opens when it holds the page you're on.
@@ -106,7 +108,7 @@ function Group({
       ) : (
         <button
           type="button"
-          onClick={() => toggleGroup(group.key)}
+          onClick={() => toggleGroup(group.key, folded)}
           aria-expanded={open}
           className="eyebrow flex w-full items-center justify-between rounded-md px-2.5 pb-1.5 transition hover:text-fg-2"
         >

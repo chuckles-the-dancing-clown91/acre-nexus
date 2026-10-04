@@ -291,7 +291,6 @@ pub const SYSTEM_ROLES: &[SystemRole] = &[
         description: "View properties and manage work orders.",
         permissions: &[
             PropertyRead,
-            LeaseRead,
             MaintenanceRead,
             MaintenanceManage,
             CalendarRead,

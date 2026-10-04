@@ -25,7 +25,8 @@ interface UiState {
 
   /** Nav group keys the user has folded away. */
   collapsedGroups: Record<string, boolean>;
-  toggleGroup: (key: string) => void;
+  /** Flip a group from how it's showing now (`folded`). */
+  toggleGroup: (key: string, folded: boolean) => void;
 
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -50,12 +51,9 @@ export const useUiStore = create<UiState>()(
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
       collapsedGroups: {},
-      toggleGroup: (key) =>
+      toggleGroup: (key, folded) =>
         set((s) => ({
-          collapsedGroups: {
-            ...s.collapsedGroups,
-            [key]: !s.collapsedGroups[key],
-          },
+          collapsedGroups: { ...s.collapsedGroups, [key]: !folded },
         })),
 
       paletteOpen: false,
