@@ -337,8 +337,8 @@ export default function AddPropertyPage() {
             {kind.mode === "single" && (
               <div className="space-y-3">
                 <p className="text-[13px] text-fg-3">
-                  This is one {kind.noun}, so it&apos;s set up as a single unit. Say
-                  what&apos;s in it.
+                  This is one {kind.noun}, so it&apos;s set up as a single unit.
+                  Say what&apos;s in it.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-4">
                   <F label="Bedrooms">
@@ -436,8 +436,8 @@ export default function AddPropertyPage() {
             )}
             {kind.mode === "sites" && (
               <p className="text-[13px] text-fg-2">
-                A {kind.noun} has sites, not units. After it&apos;s added you draw
-                each site on its site map, set rates, and open booking from
+                A {kind.noun} has sites, not units. After it&apos;s added you
+                draw each site on its site map, set rates, and open booking from
                 Campgrounds.
               </p>
             )}
