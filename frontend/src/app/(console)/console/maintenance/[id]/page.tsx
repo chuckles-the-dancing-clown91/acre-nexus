@@ -4,19 +4,36 @@
 // tasks (with vendors for contractor work), parts, notes and photos, and
 // expenses with receipts.
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowLeft, HardHat, MapPin, Wrench } from "lucide-react";
-import { toast } from "sonner";
+import {
+  ArrowLeft,
+  ArrowRightLeft,
+  Camera,
+  ClipboardPlus,
+  Clock,
+  HardHat,
+  MapPin,
+  MessageSquare,
+  Plus,
+  Receipt,
+  Wrench,
+} from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { desk, dollars, money, tradeLabel } from "@/lib/servicedesk";
+import { STATUS_WORDS } from "@/lib/ticketFlow";
 import { Expenses } from "@/components/desk/Expenses";
 import { Assign } from "@/components/desk/Assign";
-import { Media, Notes } from "@/components/desk/Notes";
+import {
+  ActionWizard,
+  type WizardAction,
+} from "@/components/desk/ActionWizard";
+import { Feed } from "@/components/desk/Feed";
+import { TimePanel } from "@/components/desk/TimePanel";
 import { Parts } from "@/components/desk/Parts";
 import { OwnerApprovalPanel } from "@/components/desk/OwnerApproval";
 import { Schedule } from "@/components/desk/Schedule";
@@ -27,15 +44,6 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
-
-const STATUSES = [
-  "open",
-  "triage",
-  "scheduled",
-  "in_progress",
-  "resolved",
-  "closed",
-];
 
 const rise = (i: number) => ({
   initial: { opacity: 0, y: 8 },
@@ -87,8 +95,26 @@ export default function WorkOrderPage() {
     enabled: ok,
   });
 
+  const [wizard, setWizard] = useState<{
+    action?: WizardAction;
+    taskId?: string;
+  } | null>(null);
+  const units = useQuery({
+    queryKey: ["properties", ticket.data?.property_id, "units"],
+    queryFn: () => api.units(ticket.data!.property_id),
+    enabled: ok && !!ticket.data?.unit_id,
+  });
+
   const refresh = useCallback(() => {
-    for (const k of ["ticket", "tasks", "costs", "files", "expenses"]) {
+    for (const k of [
+      "ticket",
+      "tasks",
+      "costs",
+      "files",
+      "expenses",
+      "feed",
+      "time",
+    ]) {
       void qc.invalidateQueries({ queryKey: [k, id] });
     }
     void qc.invalidateQueries({ queryKey: ["tickets"] });
@@ -127,20 +153,9 @@ export default function WorkOrderPage() {
 
   const t = ticket.data;
   const c = costs.data;
-  const photos = (files.data ?? []).filter(
-    (f) => (f.kind === "photo" || f.kind === "video") && f.url
-  );
   const uncovered = c?.trades_needed.filter((n) => !n.covered) ?? [];
 
-  async function setStatus(status: string) {
-    try {
-      await api.updateTicket(id, { status });
-      toast.success(`Marked ${status.replace("_", " ")}`);
-      refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't change it");
-    }
-  }
+  const unit = units.data?.find((u) => u.id === t?.unit_id);
 
   return (
     <div className="space-y-6">
@@ -189,6 +204,14 @@ export default function WorkOrderPage() {
                     {property.data.name}
                   </Link>
                 )}
+                {unit && (
+                  <Link
+                    href={`/console/properties/${t.property_id}/units/${unit.id}`}
+                    className="hover:text-fg"
+                  >
+                    Unit {unit.unit_number}
+                  </Link>
+                )}
                 {t.location && <span>{t.location}</span>}
                 {t.reporter && <span>From {t.reporter}</span>}
                 <span>
@@ -202,45 +225,67 @@ export default function WorkOrderPage() {
         </div>
         {t && (
           <div className="flex shrink-0 items-center gap-2">
-            {manage ? (
-              <select
-                value={STATUSES.includes(t.status) ? t.status : ""}
-                onChange={(e) => setStatus(e.target.value)}
-                aria-label="Status"
-                className="rounded-xl border border-line bg-surface px-3 py-2 text-[13px] text-fg"
+            <Badge tone={statusTone(t.status)} className="h-8 px-3 text-[13px]">
+              {STATUS_WORDS[t.status] ?? t.status.replace("_", " ")}
+            </Badge>
+            {manage && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setWizard({ action: "status" })}
               >
-                {!STATUSES.includes(t.status) && (
-                  <option value="">{t.status.replace("_", " ")}</option>
-                )}
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Badge tone={statusTone(t.status)}>
-                {t.status.replace("_", " ")}
-              </Badge>
+                <ArrowRightLeft />
+                Change status
+              </Button>
             )}
           </div>
         )}
       </motion.header>
 
-      {t && (
-        <motion.div {...rise(1)}>
-          <Assign ticket={t} manage={manage} onChange={refresh} />
-        </motion.div>
-      )}
-
-      {t && (
-        <motion.div {...rise(1)}>
-          <Schedule ticket={t} manage={manage} onChange={refresh} />
-          <OwnerApprovalPanel
-            ticketId={id}
-            manage={manage}
-            onChange={refresh}
-          />
+      {t && manage && (
+        <motion.div {...rise(1)} className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setWizard({ action: "note" })}>
+            <MessageSquare />
+            Add note
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setWizard({ action: "media" })}
+          >
+            <Camera />
+            Photo or video
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setWizard({ action: "expense" })}
+          >
+            <Receipt />
+            Expense
+          </Button>
+          {t.track_time !== false && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setWizard({ action: "time" })}
+            >
+              <Clock />
+              Time
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setWizard({ action: "task" })}
+          >
+            <ClipboardPlus />
+            Task
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setWizard({})}>
+            <Plus />
+            More
+          </Button>
         </motion.div>
       )}
 
@@ -249,54 +294,6 @@ export default function WorkOrderPage() {
           <TicketActions ticketId={id} status={t.status} onChange={refresh} />
         </motion.div>
       )}
-
-      {t?.description && (
-        <motion.div {...rise(1)}>
-          <Panel className="p-4 text-[13px] whitespace-pre-wrap text-fg-2">
-            {t.description}
-          </Panel>
-        </motion.div>
-      )}
-
-      <motion.section
-        {...rise(2)}
-        className="grid grid-cols-2 gap-3 xl:grid-cols-4"
-      >
-        <Figure
-          label="Estimate"
-          value={c ? c.est_total_label : "—"}
-          hint={
-            c
-              ? `${dollars(c.est_labor_cents)} labor · ${dollars(c.est_parts_cents)} parts`
-              : ""
-          }
-        />
-        <Figure
-          label="Spent"
-          value={c ? money(c.actual_total_cents) : "—"}
-          hint={
-            c
-              ? `${money(c.expenses_cents)} expenses · ${c.receipts} ${c.receipts === 1 ? "receipt" : "receipts"}`
-              : ""
-          }
-        />
-        <Figure
-          label="Against estimate"
-          value={c ? c.variance_label : "—"}
-          tone={
-            c && c.variance_cents > 0 && c.est_total_cents > 0 ? "bad" : "good"
-          }
-        />
-        <Figure
-          label="Tasks"
-          value={c ? `${c.tasks_done}/${c.tasks_total}` : "—"}
-          hint={
-            c && c.tasks_total
-              ? `${Math.round((c.tasks_done * 100) / c.tasks_total)}% done`
-              : "No tasks yet"
-          }
-        />
-      </motion.section>
 
       {uncovered.length > 0 && (
         <Panel className="flex flex-wrap items-center gap-3 border-warn/30 p-4 text-[13px]">
@@ -308,14 +305,17 @@ export default function WorkOrderPage() {
               {n.open_tasks === 1 ? "task" : "tasks"}
             </Badge>
           ))}
-          <span className="text-fg-3">
-            Use the send button on a task to pick a vendor.
-          </span>
+          <span className="text-fg-3">Open a task to send it to a vendor.</span>
         </Panel>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="space-y-4">
+          {t?.description && (
+            <Panel className="p-4 text-[13px] whitespace-pre-wrap text-fg-2">
+              {t.description}
+            </Panel>
+          )}
           {tasks.data ? (
             <TaskList
               ticketId={id}
@@ -323,9 +323,98 @@ export default function WorkOrderPage() {
               tasks={tasks.data}
               manage={manage}
               onChange={refresh}
+              onNote={(taskId) => setWizard({ action: "note", taskId })}
             />
           ) : (
             <Skeleton className="h-64 rounded-2xl" />
+          )}
+
+          <Panel>
+            <PanelHeader
+              title="Feed"
+              description="Everything that's happened, newest first."
+              action={
+                manage && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setWizard({})}
+                  >
+                    <Plus />
+                    Add
+                  </Button>
+                )
+              }
+            />
+            <div className="p-5 pt-3">
+              <Feed
+                ticketId={id}
+                onOpenTask={(taskId) => setWizard({ action: "note", taskId })}
+              />
+            </div>
+          </Panel>
+        </div>
+
+        <div className="space-y-4">
+          {t && (
+            <motion.div {...rise(1)} className="space-y-4">
+              <Assign ticket={t} manage={manage} onChange={refresh} />
+              <Schedule ticket={t} manage={manage} onChange={refresh} />
+              <OwnerApprovalPanel
+                ticketId={id}
+                manage={manage}
+                onChange={refresh}
+              />
+            </motion.div>
+          )}
+
+          <section className="grid grid-cols-2 gap-3">
+            <Figure
+              label="Estimate"
+              value={c ? c.est_total_label : "—"}
+              hint={
+                c
+                  ? `${dollars(c.est_labor_cents)} labor · ${dollars(c.est_parts_cents)} parts`
+                  : ""
+              }
+            />
+            <Figure
+              label="Spent"
+              value={c ? money(c.actual_total_cents) : "—"}
+              hint={
+                c
+                  ? `${money(c.expenses_cents)} expenses · ${c.receipts} ${c.receipts === 1 ? "receipt" : "receipts"}`
+                  : ""
+              }
+            />
+            <Figure
+              label="Against estimate"
+              value={c ? c.variance_label : "—"}
+              tone={
+                c && c.variance_cents > 0 && c.est_total_cents > 0
+                  ? "bad"
+                  : "good"
+              }
+            />
+            <Figure
+              label="Tasks"
+              value={c ? `${c.tasks_done}/${c.tasks_total}` : "—"}
+              hint={
+                c && c.tasks_total
+                  ? `${Math.round((c.tasks_done * 100) / c.tasks_total)}% done`
+                  : "No tasks yet"
+              }
+            />
+          </section>
+
+          {t && (
+            <TimePanel
+              ticketId={id}
+              tracking={t.track_time !== false}
+              manage={manage}
+              onLog={() => setWizard({ action: "time" })}
+              onChange={refresh}
+            />
           )}
 
           {t && <Parts parts={t.parts} manage={manage} onChange={refresh} />}
@@ -340,32 +429,19 @@ export default function WorkOrderPage() {
             />
           )}
         </div>
-
-        <div className="space-y-4">
-          {photos.length > 0 && (
-            <Panel>
-              <PanelHeader
-                title="Photos and video"
-                description={`${photos.length} on this work order`}
-              />
-              <div className="grid grid-cols-3 gap-2 p-5 sm:grid-cols-4">
-                {photos.map((p) => (
-                  <Media key={p.id} file={p} className="aspect-square w-full" />
-                ))}
-              </div>
-            </Panel>
-          )}
-          {t && files.data && (
-            <Notes
-              ticketId={id}
-              comments={t.comments}
-              files={files.data}
-              manage={manage}
-              onChange={refresh}
-            />
-          )}
-        </div>
       </div>
+
+      {wizard && t && (
+        <ActionWizard
+          ticket={t}
+          tasks={tasks.data ?? []}
+          initial={wizard.action}
+          taskId={wizard.taskId}
+          trackTime={t.track_time !== false}
+          onClose={() => setWizard(null)}
+          onDone={refresh}
+        />
+      )}
     </div>
   );
 }

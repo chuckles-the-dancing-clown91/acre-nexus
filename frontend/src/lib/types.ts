@@ -867,6 +867,8 @@ export interface MaintenanceTicket {
   partner_job_id: string | null;
   partner_status: string | null;
   partner_synced_at: string | null;
+  /** Whether the crew can log time on this work order. */
+  track_time?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -921,6 +923,8 @@ export interface TicketComment {
   /** The action button or event behind the note (`on_my_way`, `task_done`,
    * `resident_comment`, ...); null for a typed note. */
   action?: string | null;
+  /** The task the note is about, if it's about one. */
+  task_id?: string | null;
   created_at: string;
 }
 
@@ -1116,6 +1120,14 @@ export interface UpdateTicketInput {
   follow_up_note?: string;
   due_date?: string;
   cost_cents?: number;
+  /** What to put on the feed with a status move. */
+  status_note?: string;
+  /** For `scheduled`: the day the work is set for. */
+  scheduled_for?: string;
+  /** To resolve with tasks still open: why they can stay open. */
+  open_tasks_reason?: string;
+  /** Whether the crew can log time on this work order. */
+  track_time?: boolean;
 }
 
 // ---- Title: ownership + liens ----------------------------------------------

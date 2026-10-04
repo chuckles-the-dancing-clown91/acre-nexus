@@ -237,3 +237,46 @@ Alpha vendors keep the partner link. The catalog sync now also creates a
 system role added since a database was seeded, which is how existing
 workspaces get the vendor role.
 
+
+
+## The work order page: feed, status flow and time
+
+**Feed.** Everything that happens on a work order lands in one stream, newest
+first (`GET /tickets/<id>/feed`): notes, status moves, one-press updates, photos
+and video, expenses (with receipts), time logged, tasks finished, and what
+vendors said. Staff only notes carry a lock; resident replies are marked.
+Opening a task shows the same stream narrowed to that task
+(`?task_id=`), and a note can be about a task (`task_id` on a comment).
+
+**Add to it.** The buttons under the title (Add note, Photo or video, Expense,
+Time, Task, More) and "Change status" open a small wizard: pick what you're
+adding, fill in the few things it needs, and it goes on the feed. Tasks are
+clickable: the box ticks one done, the row opens it with its details, vendor
+answers and notes. "Pick for a vendor" turns the boxes into a selection for
+sending several tasks to a vendor together, so each row only ever has one box.
+
+**Status flow** (`ticket_flow.rs`, mirrored in `lib/ticketFlow.ts`). Each move
+follows a rule and writes its own line on the feed, with whatever the person
+wrote:
+
+| Move | Rule | Feed line |
+|---|---|---|
+| to Triage | | Looked at and sorted. |
+| to Scheduled | a date (sets the due date) | Scheduled for 2026-10-06. |
+| to In progress | | Work started. / Back on it. |
+| to On hold | what it waits on, a follow-up date and a note | the follow-up note |
+| to Resolved | every task done or skipped, or a reason they can stay open; stops running clocks | Resolved: 4 of 4 tasks done, 3.5h, $182.50 spent. |
+| to Closed | from Resolved | Closed. |
+| to Cancelled | a reason | Cancelled: reason |
+| reopening a Resolved, Closed or Cancelled one | a reason | Reopened as in progress: reason |
+
+A vendor who says they're done counts as the task done. The one-press buttons
+write their own line, so they don't add a second.
+
+**Time.** The crew logs hours on a work order by clock (Start the clock) or by
+logging time afterwards (`POST /tickets/<id>/time`, which counts as time that
+just ended at the person's pay and bill rates). Hours feed the job's cost.
+Time tracking is on by default for new work orders, set under Settings, Team
+and payroll ("Track crew time on work orders"), and each work order can switch
+it off (`track_time`); the clock and logging refuse a work order that has it
+off, and switching it off stops any running clock.

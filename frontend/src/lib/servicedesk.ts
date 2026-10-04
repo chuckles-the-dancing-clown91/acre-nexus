@@ -246,6 +246,56 @@ export interface TicketAction {
   needs_note: boolean;
 }
 
+/** One thing that happened on a work order. */
+export interface FeedItem {
+  id: string;
+  at: string;
+  kind:
+    | "note"
+    | "resident"
+    | "status"
+    | "action"
+    | "photo"
+    | "video"
+    | "file"
+    | "expense"
+    | "time"
+    | "task"
+    | "vendor";
+  actor: string | null;
+  title: string;
+  body: string | null;
+  visibility: "public" | "internal";
+  amount_cents: number | null;
+  minutes: number | null;
+  running: boolean;
+  task_id: string | null;
+  task_title: string | null;
+  files: {
+    id: string;
+    filename: string;
+    kind: "photo" | "video" | "receipt" | "document";
+    mime_type: string;
+    url: string | null;
+  }[];
+}
+
+export interface TicketTime {
+  tracking: boolean;
+  total_minutes: number;
+  entries: {
+    id: string;
+    user_id: string;
+    user_name: string;
+    started_at: string;
+    ended_at: string | null;
+    minutes: number;
+    running: boolean;
+    notes: string | null;
+  }[];
+  my_running: string | null;
+}
+
 /** Where to buy a part: its own link if it has one, else store searches. */
 export function partLinks(p: {
   name: string;
@@ -586,8 +636,20 @@ export const desk = {
       body: string;
       visibility: "public" | "internal";
       document_ids?: string[];
+      task_id?: string;
     }
   ) => post<unknown>(`/tickets/${ticketId}/comments`, body),
+  feed: (ticketId: string, taskId?: string) =>
+    request<FeedItem[]>(
+      `/tickets/${ticketId}/feed${taskId ? `?task_id=${taskId}` : ""}`,
+      { auth: true }
+    ),
+  time: (ticketId: string) =>
+    request<TicketTime>(`/tickets/${ticketId}/time`, { auth: true }),
+  logTime: (
+    ticketId: string,
+    body: { minutes?: number; notes?: string; user_id?: string }
+  ) => post<TicketTime>(`/tickets/${ticketId}/time`, body),
   /** Register a file on the work order, then PUT the bytes to the signed URL. */
   upload: async (
     ticketId: string,
