@@ -154,6 +154,7 @@ async fn integration_suite() {
     onboarding_checklist(&c).await;
     vendor_portal_flow(&c).await;
     campground_flow(&c).await;
+    family_plan_flow(&c).await;
     property_story_and_timeline(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
@@ -739,6 +740,8 @@ async fn create_llc(c: &Ctx, tenant: Uuid) -> Uuid {
         entity_type: Set("llc".into()),
         registered_agent: Set(None),
         status: Set("active".into()),
+        foundation: Set(false),
+        fee_basis: Set("percent".into()),
         created_at: Set(chrono::Utc::now().into()),
     }
     .insert(&c.db)
@@ -10429,4 +10432,336 @@ async fn appointments_flow(c: &Ctx) {
     );
     let (st, _) = get_json(c, &format!("/appointments/{aid3}"), &outsider).await;
     assert_eq!(st, Status::NotFound);
+}
+
+/// Area 17: a bill from the family's own maintenance company waits for a
+/// market-rate note and a decision by someone who isn't a party; foundation
+/// mode splits rent with a voucher, certifies income, and charges at cost.
+async fn family_plan_flow(c: &Ctx) {
+    use rocket::http::Method;
+    use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
+    let nw = tenant_id(c, "northwind").await;
+    let mint_as = |uid: Uuid, perms: &[&str]| {
+        crate::auth::issue_access_token(
+            &c.config,
+            uid,
+            Some(nw),
+            false,
+            perms.iter().map(|s| s.to_string()).collect(),
+        )
+        .unwrap()
+    };
+    let all = [
+        "payable:read",
+        "payable:manage",
+        "payable:approve",
+        "entity:manage",
+        "tenant:manage",
+        "lease:read",
+        "lease:manage",
+    ];
+    let (clerk_id, family_id, trustee_id) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    let clerk = mint_as(clerk_id, &all);
+    let family = mint_as(family_id, &all);
+    let trustee = mint_as(trustee_id, &all);
+
+    // An active lease on a property an LLC holds: that LLC pays, and goes
+    // foundation later.
+    let lease = entity::prelude::Lease::find()
+        .filter(entity::lease::Column::TenantId.eq(nw))
+        .filter(entity::lease::Column::Status.eq("active"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let mut picked = None;
+    for l in lease {
+        let p = Property::find_by_id(l.property_id)
+            .one(&c.db)
+            .await
+            .unwrap()
+            .unwrap();
+        if let Some(llc) = p.llc_id {
+            picked = Some((l, llc));
+            break;
+        }
+    }
+    let (lease, payer) = picked.expect("a lease on an LLC's property");
+
+    // The family's maintenance company, owned by a family member who is a user.
+    let (st, maint) = post_json(
+        c,
+        "/llcs",
+        &clerk,
+        serde_json::json!({ "name": "Family Maintenance LLC" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{maint}");
+    let maint_id: Uuid = maint["id"].as_str().unwrap().parse().unwrap();
+    let owner = entity::owner::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(nw),
+        kind: Set("individual".into()),
+        name: Set("Pat Family".into()),
+        email: Set(None),
+        phone: Set(None),
+        notes: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        user_id: Set(Some(family_id)),
+        approval_limit_cents: Set(None),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+    entity::entity_ownership::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        tenant_id: Set(nw),
+        entity_id: Set(maint_id),
+        owner_id: Set(owner.id),
+        ownership_bps: Set(10_000),
+        role: Set("member".into()),
+        created_at: Set(chrono::Utc::now().into()),
+    }
+    .insert(&c.db)
+    .await
+    .unwrap();
+
+    // The vendor record for that company, marked related.
+    let (st, v) = post_json(
+        c,
+        "/entities",
+        &clerk,
+        serde_json::json!({ "kind": "contractor", "name": "Family Maintenance" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    let vid = v["id"].as_str().unwrap().to_string();
+    let (st, v) = send_json(
+        c,
+        Method::Put,
+        &format!("/entities/{vid}/related"),
+        &clerk,
+        serde_json::json!({ "related_llc_id": maint_id }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["related_llc_id"], maint_id.to_string());
+
+    // A bill from it is flagged the moment it's raised.
+    let (st, bill) = post_json(c, "/payables", &clerk, serde_json::json!({ "counterparty_id": vid, "entity_id": payer, "amount_cents": 90_000, "memo": "Water heater swap" })).await;
+    assert_eq!(st, Status::Ok, "{bill}");
+    let bid = bill["id"].as_str().unwrap().to_string();
+    let (_, open) = get_json(c, "/related-party?status=open", &clerk).await;
+    let review = open
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["subject_id"] == bid)
+        .expect("bill review")
+        .clone();
+    let rid = review["id"].as_str().unwrap().to_string();
+    assert_eq!(review["parties"][0]["name"], "Pat Family");
+    assert_eq!(review["amount_cents"], 90_000);
+
+    let (st, _) = post_json(
+        c,
+        &format!("/payables/{bid}/submit"),
+        &clerk,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
+    // Not approvable while the review is open.
+    let (st, err) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &trustee,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest, "{err}");
+
+    // The family member can't decide it; the clerk who raised it can't either.
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &family,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &clerk,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    // The trustee needs the market-rate note first.
+    let (st, _) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &trustee,
+        serde_json::json!({ "approve": true }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    let (st, r) = send_json(c, Method::Patch, &format!("/related-party/{rid}"), &clerk, serde_json::json!({ "market_cents": 110_000, "market_note": "Two outside quotes: $1,100 and $1,250." })).await;
+    assert_eq!(st, Status::Ok, "{r}");
+    let (st, r) = post_json(
+        c,
+        &format!("/related-party/{rid}/decide"),
+        &trustee,
+        serde_json::json!({ "approve": true, "note": "Below market." }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{r}");
+    assert_eq!(r["status"], "approved");
+
+    // A party still can't approve the bill; the trustee can.
+    let (st, _) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &family,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Forbidden);
+    let (st, b) = post_json(
+        c,
+        &format!("/payables/{bid}/approve"),
+        &trustee,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{b}");
+    assert_eq!(b["status"], "approved");
+
+    // A lease to a relative, flagged by hand.
+    let (st, f) = post_json(c, "/related-party", &clerk, serde_json::json!({ "subject_type": "lease", "subject_id": lease.id, "entity_id": payer, "summary": "Lease to a cousin", "amount_cents": lease.rent_cents, "party_owner_ids": [owner.id] })).await;
+    assert_eq!(st, Status::Ok, "{f}");
+    let (st, _) = post_json(
+        c,
+        "/related-party",
+        &clerk,
+        serde_json::json!({ "subject_type": "lease", "subject_id": lease.id, "summary": "Again" }),
+    )
+    .await;
+    assert_eq!(st, Status::Conflict);
+
+    // ---- foundation mode ----
+    let (st, l) = send_json(
+        c,
+        Method::Put,
+        &format!("/llcs/{payer}/foundation"),
+        &clerk,
+        serde_json::json!({ "foundation": true, "fee_basis": "at_cost" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{l}");
+    assert_eq!(l["fee_basis"], "at_cost");
+
+    let lid = lease.id;
+    let (st, _) = send_json(c, Method::Put, &format!("/leases/{lid}/voucher"), &clerk, serde_json::json!({ "authority": "County Housing Authority", "hap_cents": lease.rent_cents + 1, "starts_on": "2020-01-01" })).await;
+    assert_eq!(st, Status::BadRequest);
+    let hap = lease.rent_cents - 30_000;
+    let (st, a) = send_json(c, Method::Put, &format!("/leases/{lid}/voucher"), &clerk, serde_json::json!({ "authority": "County Housing Authority", "contract_number": "HAP-2207", "hap_cents": hap, "starts_on": "2020-01-01" })).await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["foundation"], true);
+    assert_eq!(a["resident_share_cents"], 30_000);
+    assert_eq!(a["certification"], "missing");
+
+    // 60% of an $80,000 AMI is $48,000: $45,000 qualifies.
+    let (st, a) = post_json(c, &format!("/leases/{lid}/income-certifications"), &clerk, serde_json::json!({ "effective_on": "2031-01-01", "household_size": 3, "annual_income_cents": 4_500_000, "ami_cents": 8_000_000, "limit_pct": 60 })).await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert_eq!(a["certifications"][0]["qualified"], true);
+    assert_eq!(a["certifications"][0]["expires_on"], "2032-01-01");
+    assert_eq!(a["certifications"][0]["limit_cents"], 4_800_000);
+    let (_, rows) = get_json(c, "/foundation/compliance", &clerk).await;
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["lease_id"] == lid.to_string())
+        .expect("compliance row")
+        .clone();
+    assert_eq!(row["authority"], "County Housing Authority");
+
+    // The rent run splits the month: the resident's share and the HAP.
+    crate::billing::raise_rent_receivables(
+        &c.db,
+        nw,
+        chrono::NaiveDate::from_ymd_opt(2031, 3, 15).unwrap(),
+    )
+    .await
+    .unwrap();
+    let rows = entity::prelude::LeasePayment::find()
+        .filter(entity::lease_payment::Column::LeaseId.eq(lid))
+        .filter(entity::lease_payment::Column::DueDate.like("2031-03-%"))
+        .all(&c.db)
+        .await
+        .unwrap();
+    let rent: i64 = rows
+        .iter()
+        .filter(|p| p.kind == "rent")
+        .map(|p| p.amount_cents)
+        .sum();
+    let haps: Vec<_> = rows.iter().filter(|p| p.kind == "hap").collect();
+    assert_eq!(haps.len(), 1, "{rows:?}");
+    assert_eq!(haps[0].amount_cents, hap);
+    assert!(rent >= 30_000, "resident share {rent}");
+    let (st, a) = post_json(
+        c,
+        &format!("/lease-payments/{}/hap-received", haps[0].id),
+        &clerk,
+        serde_json::json!({ "paid_date": "2031-03-05" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{a}");
+    assert!(a["hap_due"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|h| h["payment_id"] != haps[0].id.to_string()));
+    let (st, _) = post_json(
+        c,
+        &format!("/lease-payments/{}/hap-received", haps[0].id),
+        &clerk,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+
+    // At cost: two hours on the property at $30 an hour, plus burden.
+    c.db.execute(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DbBackend::Postgres,
+        "INSERT INTO time_entry (id, tenant_id, user_id, kind, property_id, started_at, ended_at, pay_rate_cents) \
+         VALUES ($1, $2, $3, 'work_order', $4, '2031-03-10T17:00:00Z', '2031-03-10T19:00:00Z', 3000)",
+        [Uuid::new_v4().into(), nw.into(), Uuid::new_v4().into(), lease.property_id.into()],
+    ))
+    .await
+    .unwrap();
+    let s = crate::routes::reports::owner_statement::build(
+        &c.db,
+        nw,
+        payer,
+        "2031-03-01",
+        "2031-03-31",
+    )
+    .await
+    .unwrap();
+    assert_eq!(s.mgmt_fee_basis, "at_cost");
+    assert!(s.mgmt_fee_cents >= 6_000, "fee {}", s.mgmt_fee_cents);
+    assert!(s.rent_collected_cents >= hap);
+
+    // Put it back so later scenarios see a plain LLC.
+    let (st, _) = send_json(
+        c,
+        Method::Put,
+        &format!("/llcs/{payer}/foundation"),
+        &clerk,
+        serde_json::json!({ "foundation": false, "fee_basis": "percent" }),
+    )
+    .await;
+    assert_eq!(st, Status::Ok);
 }

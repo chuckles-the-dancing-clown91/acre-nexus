@@ -31,6 +31,7 @@ pub mod documents;
 pub mod domains;
 pub mod entities;
 pub mod esign;
+pub mod family;
 pub mod fees;
 pub mod geo;
 pub mod go_live;

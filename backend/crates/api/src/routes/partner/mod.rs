@@ -329,6 +329,8 @@ mod tests {
             partner_status: None,
             partner_error: None,
             alpha_invited_at: None,
+            related_llc_id: None,
+            related_owner_id: None,
             created_at: chrono::Utc::now().into(),
             updated_at: chrono::Utc::now().into(),
         };

@@ -2440,6 +2440,14 @@ export interface FlipDeal {
   source: string | null;
   broker_id: string | null;
   notes: string | null;
+  /** Raw land: acreage, zoning, utilities and road, price per acre. */
+  acres?: number | null;
+  zoning?: string | null;
+  water_access?: string | null;
+  power_access?: string | null;
+  road_access?: string | null;
+  price_per_acre_cents?: number | null;
+  price_per_acre_label?: string | null;
   asking_price_cents: number | null;
   asking_price_label: string | null;
   offer_price_cents: number | null;
@@ -2509,6 +2517,11 @@ export interface CreateDealInput {
 /** Deal patch + underwriting assumptions. Every field optional. */
 export interface UpdateDealInput {
   name?: string;
+  acres?: number;
+  zoning?: string;
+  water_access?: string;
+  power_access?: string;
+  road_access?: string;
   address?: string;
   city?: string;
   strategy?: string;
@@ -2540,6 +2553,11 @@ export interface UpdateDealInput {
 export type UnderwriteInput = Omit<
   UpdateDealInput,
   | "name"
+  | "acres"
+  | "zoning"
+  | "water_access"
+  | "power_access"
+  | "road_access"
   | "address"
   | "city"
   | "strategy"
@@ -3359,6 +3377,9 @@ export interface LegalEntity {
   entity_type: string;
   registered_agent: string | null;
   status: string;
+  /** Foundation mode: income certifications, vouchers, at-cost fee. */
+  foundation?: boolean;
+  fee_basis?: "percent" | "at_cost";
 }
 
 /** A stage in a strategy's workflow template. */

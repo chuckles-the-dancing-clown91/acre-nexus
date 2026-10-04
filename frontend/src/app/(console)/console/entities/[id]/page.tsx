@@ -29,6 +29,7 @@ import { humanize } from "../kinds";
 import { Compliance } from "./Compliance";
 import { PartnerLink } from "./PartnerLink";
 import { PortalInvite } from "./PortalInvite";
+import { RelatedParty } from "./RelatedParty";
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -179,6 +180,7 @@ export default function EntityPage() {
             </dl>
           </Panel>
           {linkable && <PartnerLink counterpartyId={d.id} manage={manage} />}
+          <RelatedParty key={d.updated_at} cp={d} manage={manage} />
         </div>
 
         <div className="space-y-4">

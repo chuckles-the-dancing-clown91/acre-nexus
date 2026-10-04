@@ -54,6 +54,19 @@ impl PlatformModule for AccountingModule {
 
     fn api(&self) -> (Vec<Route>, OpenApi) {
         openapi_get_routes_spec![
+            // family plan: related parties, foundation mode (area 17)
+            crate::routes::family::list_reviews,
+            crate::routes::family::flag,
+            crate::routes::family::note,
+            crate::routes::family::decide,
+            crate::routes::family::set_related,
+            crate::routes::family::set_foundation,
+            crate::routes::family::assistance,
+            crate::routes::family::set_voucher,
+            crate::routes::family::delete_voucher,
+            crate::routes::family::certify,
+            crate::routes::family::compliance,
+            crate::routes::family::hap_received,
             // ledger: chart of accounts, journal, reports
             accounting::accounts::list_accounts,
             accounting::accounts::create_account,

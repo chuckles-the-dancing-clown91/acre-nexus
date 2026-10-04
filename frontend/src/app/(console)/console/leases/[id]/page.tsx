@@ -23,6 +23,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 import type { LeaseDetail } from "@/lib/types";
 import { NoAccess, paymentTone } from "../_ui/shared";
+import { Assistance } from "./Assistance";
 import { Charges } from "./Charges";
 import { Deposit } from "./Deposit";
 import { Esign } from "./Esign";
@@ -39,6 +40,7 @@ const TABS = [
   { key: "inspections", label: "Inspections" },
   { key: "deposit", label: "Deposit" },
   { key: "files", label: "Files" },
+  { key: "assistance", label: "Assistance" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -289,6 +291,7 @@ function LeaseView() {
         <Inspections leaseId={id} manage={manage} />
       )}
       {l && tab === "deposit" && <Deposit leaseId={id} manage={manage} />}
+      {l && tab === "assistance" && <Assistance leaseId={id} manage={manage} />}
       {l && tab === "files" && (
         <Files
           ownerType="lease"

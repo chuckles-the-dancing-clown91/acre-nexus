@@ -47,6 +47,20 @@ pub fn compute_amounts(
     }
 }
 
+/// The same, with the fee already worked out (at-cost fees aren't a percent).
+pub fn amounts_with_fee(
+    rent_collected_cents: i64,
+    expenses_cents: i64,
+    mgmt_fee_cents: i64,
+) -> PayoutComputation {
+    PayoutComputation {
+        rent_collected_cents,
+        expenses_cents,
+        mgmt_fee_cents,
+        net_cents: rent_collected_cents - expenses_cents - mgmt_fee_cents,
+    }
+}
+
 /// Itemized cash-basis activity for an entity over a period: rent actually
 /// collected (settled, non-deposit payments on its properties) and operating
 /// expenses posted to its ledger — management fees excluded — broken out by
@@ -140,9 +154,16 @@ pub async fn compute_payout(
     created_by: Option<Uuid>,
 ) -> ApiResult<entity::owner_payout::Model> {
     let act = gather_period(db, tenant_id, entity_id, period_start, period_end).await?;
-    let mgmt_fee_bps =
-        crate::settings::get_i64(db, tenant_id, crate::settings::PAYOUT_MGMT_FEE_BPS).await;
-    let amounts = compute_amounts(act.rent_collected_cents, act.expenses_cents, mgmt_fee_bps);
+    let (fee, _) = crate::family::mgmt_fee(
+        db,
+        tenant_id,
+        entity_id,
+        period_start,
+        period_end,
+        act.rent_collected_cents,
+    )
+    .await?;
+    let amounts = amounts_with_fee(act.rent_collected_cents, act.expenses_cents, fee);
 
     let now = Utc::now();
     let payout = entity::owner_payout::ActiveModel {

@@ -40,6 +40,7 @@ mod embed;
 mod enrichment;
 mod error;
 mod esign;
+mod family;
 mod finance;
 mod followups;
 mod geo;

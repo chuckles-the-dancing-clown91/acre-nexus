@@ -37,6 +37,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { F, input } from "@/components/property/bits";
 import { cn } from "@/lib/utils";
 import { Documents } from "../_parts/Documents";
+import { Land } from "../_parts/Land";
 import {
   DEFAULT_CHECKLIST,
   formFromDeal,
@@ -210,6 +211,13 @@ export default function DealPage() {
 
       <Underwriting
         key={d.updated_at}
+        deal={d}
+        write={write}
+        onSaved={refresh}
+      />
+
+      <Land
+        key={`land-${d.updated_at}`}
         deal={d}
         write={write}
         onSaved={refresh}

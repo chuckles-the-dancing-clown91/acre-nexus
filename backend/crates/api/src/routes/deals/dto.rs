@@ -174,12 +174,30 @@ pub struct DealDto {
     pub selling_costs_bps: Option<i32>,
     pub hold_years: Option<i32>,
 
+    // Raw land.
+    pub acres: Option<f64>,
+    pub zoning: Option<String>,
+    pub water_access: Option<String>,
+    pub power_access: Option<String>,
+    pub road_access: Option<String>,
+    /// Offer (else asking) price per acre.
+    pub price_per_acre_cents: Option<i64>,
+    pub price_per_acre_label: Option<String>,
+
     pub checklist: Vec<ChecklistItemDto>,
     pub converted_property_id: Option<Uuid>,
     pub created_at: String,
     pub updated_at: String,
     /// Underwriting computed from the deal's stored assumptions.
     pub underwriting: UnderwritingDto,
+}
+
+/// Price per acre, rounded to the cent; none without a price or acreage.
+pub fn price_per_acre(price_cents: Option<i64>, acres: Option<f64>) -> Option<i64> {
+    match (price_cents, acres) {
+        (Some(p), Some(a)) if a > 0.0 => Some((p as f64 / a).round() as i64),
+        _ => None,
+    }
 }
 
 /// Parse the deal's `checklist` JSON column into typed items (tolerating a
@@ -195,6 +213,7 @@ impl DealDto {
         let assumptions = resolve_assumptions(d, None);
         let underwriting = UnderwritingDto::from(underwrite(&assumptions));
         let money = |c: Option<i64>| c.map(usd);
+        let per_acre = price_per_acre(d.offer_price_cents.or(d.asking_price_cents), d.acres);
         DealDto {
             id: d.id,
             name: d.name.clone(),
@@ -231,6 +250,13 @@ impl DealDto {
             exit_cap_rate_bps: d.exit_cap_rate_bps,
             selling_costs_bps: d.selling_costs_bps,
             hold_years: d.hold_years,
+            acres: d.acres,
+            zoning: d.zoning.clone(),
+            water_access: d.water_access.clone(),
+            power_access: d.power_access.clone(),
+            road_access: d.road_access.clone(),
+            price_per_acre_cents: per_acre,
+            price_per_acre_label: money(per_acre),
             checklist: parse_checklist(&d.checklist),
             converted_property_id: d.converted_property_id,
             created_at: d.created_at.to_rfc3339(),
@@ -300,6 +326,16 @@ pub struct CreateDealReq {
     pub rehab_budget_cents: Option<i64>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub acres: Option<f64>,
+    #[serde(default)]
+    pub zoning: Option<String>,
+    #[serde(default)]
+    pub water_access: Option<String>,
+    #[serde(default)]
+    pub power_access: Option<String>,
+    #[serde(default)]
+    pub road_access: Option<String>,
 }
 
 /// PATCH request — every field optional; assumption knobs update the stored
@@ -308,6 +344,11 @@ pub struct CreateDealReq {
 #[derive(Deserialize, schemars::JsonSchema, Default)]
 pub struct UpdateDealReq {
     pub name: Option<String>,
+    pub acres: Option<f64>,
+    pub zoning: Option<String>,
+    pub water_access: Option<String>,
+    pub power_access: Option<String>,
+    pub road_access: Option<String>,
     pub address: Option<String>,
     pub city: Option<String>,
     pub strategy: Option<String>,

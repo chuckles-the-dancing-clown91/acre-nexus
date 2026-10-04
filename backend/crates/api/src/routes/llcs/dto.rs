@@ -12,6 +12,10 @@ pub struct LlcResp {
     pub entity_type: String,
     pub registered_agent: Option<String>,
     pub status: String,
+    /// Foundation mode: income certifications, vouchers, at-cost fee.
+    pub foundation: bool,
+    /// `percent` | `at_cost`.
+    pub fee_basis: String,
 }
 
 impl From<entity::llc::Model> for LlcResp {
@@ -24,6 +28,8 @@ impl From<entity::llc::Model> for LlcResp {
             entity_type: l.entity_type,
             registered_agent: l.registered_agent,
             status: l.status,
+            foundation: l.foundation,
+            fee_basis: l.fee_basis,
         }
     }
 }

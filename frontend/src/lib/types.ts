@@ -458,6 +458,10 @@ export interface Counterparty {
   /** Linked partner system (`alpha`), when this vendor runs one. */
   partner_kind: string | null;
   partner_status: string | null;
+  /** One of the family's own entities (a related party). */
+  related_llc_id?: string | null;
+  /** A family member, by owner record (a related party). */
+  related_owner_id?: string | null;
   created_at: string;
   updated_at: string;
 }

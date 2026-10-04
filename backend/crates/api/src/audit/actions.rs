@@ -454,3 +454,19 @@ pub const IMPORT_COMMIT: &str = "import.commit";
 pub const IMPORT_UNDO: &str = "import.undo";
 pub const DATA_EXPORT: &str = "data.export";
 pub const SYNDICATION_SAVE: &str = "syndication.save";
+/// A related-party transaction was flagged for review (auto or by hand).
+pub const RELATED_PARTY_FLAG: &str = "related_party.flag";
+/// Its market-rate note changed.
+pub const RELATED_PARTY_NOTE: &str = "related_party.note";
+/// Someone who isn't a party approved or rejected it.
+pub const RELATED_PARTY_DECIDE: &str = "related_party.decide";
+/// A counterparty was linked to (or unlinked from) a family entity or owner.
+pub const COUNTERPARTY_RELATED: &str = "counterparty.related";
+/// An LLC's foundation mode or fee basis changed.
+pub const LLC_FOUNDATION: &str = "llc.foundation";
+/// A lease's housing voucher was set or removed.
+pub const VOUCHER_SET: &str = "voucher.set";
+/// A household's income was certified.
+pub const INCOME_CERTIFY: &str = "income.certify";
+/// A housing authority's payment (HAP) was received.
+pub const HAP_RECEIVED: &str = "hap.received";

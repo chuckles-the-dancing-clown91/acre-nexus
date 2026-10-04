@@ -18,6 +18,7 @@ import { fieldClass, Input } from "@/components/ui/input";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui/misc";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { F } from "@/components/property/bits";
+import { Foundation } from "./Foundation";
 import { Team } from "./Team";
 
 const OWNER_KINDS = ["individual", "company", "firm"];
@@ -78,7 +79,16 @@ export default function LlcPage() {
           <CapTableCard entityId={id} />
           <AccountsCard entityId={id} />
         </div>
-        <Team entityId={id} />
+        <div className="space-y-4">
+          {entity && (
+            <Foundation
+              key={`${entity.foundation}-${entity.fee_basis}`}
+              entity={entity}
+              manage={can("tenant:manage")}
+            />
+          )}
+          <Team entityId={id} />
+        </div>
       </div>
     </div>
   );

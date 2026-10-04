@@ -24,6 +24,10 @@ pub struct Model {
     pub registered_agent: Option<String>,
     /// `active` | `dissolved` | `pending`.
     pub status: String,
+    /// Foundation mode: income certifications, vouchers, at-cost fee.
+    pub foundation: bool,
+    /// Management fee basis: `percent` | `at_cost`.
+    pub fee_basis: String,
     pub created_at: DateTimeWithTimeZone,
 }
 

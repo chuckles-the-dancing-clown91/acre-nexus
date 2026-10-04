@@ -39,6 +39,8 @@ pub async fn create_payable(
         user.user_id,
     )
     .await?;
+    // Flag it now, so the review is waiting before anyone tries to approve.
+    crate::family::ensure_bill_review(&db, scope.tenant_id, &bill, Some(user.user_id)).await?;
     let entities = crate::payouts::entity_names(&db, scope.tenant_id).await?;
     let vendors = crate::payables::vendor_names(&db, scope.tenant_id).await?;
     let entity_name = entities.get(&bill.entity_id).cloned();

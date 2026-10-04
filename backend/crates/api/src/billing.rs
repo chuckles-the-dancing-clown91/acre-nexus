@@ -23,8 +23,8 @@
 use crate::modules::JobOutcome;
 use chrono::{Datelike, NaiveDate, Utc};
 use entity::prelude::{
-    BackgroundJob, BankAccount, FinancialSnapshot, Lease, LeaseCharge, LeasePayment, PaymentMethod,
-    Property, PropertyValuation, Tenant,
+    BackgroundJob, BankAccount, FinancialSnapshot, HousingVoucher, Lease, LeaseCharge,
+    LeasePayment, PaymentMethod, Property, PropertyValuation, Tenant,
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
@@ -131,7 +131,7 @@ pub(crate) fn monthly_amount(rent_cents: i64, charges: &[entity::lease_charge::M
 }
 
 /// Step 1: raise this month's rent receivable for every active lease.
-async fn raise_rent_receivables(
+pub(crate) async fn raise_rent_receivables(
     db: &impl ConnectionTrait,
     tenant_id: Uuid,
     today: NaiveDate,
@@ -159,7 +159,10 @@ async fn raise_rent_receivables(
         let existing = LeasePayment::find()
             .filter(entity::lease_payment::Column::TenantId.eq(tenant_id))
             .filter(entity::lease_payment::Column::LeaseId.eq(lease.id))
-            .filter(entity::lease_payment::Column::Kind.eq(crate::payments::KIND_RENT))
+            .filter(
+                entity::lease_payment::Column::Kind
+                    .is_in([crate::payments::KIND_RENT, crate::payments::KIND_HAP]),
+            )
             .filter(entity::lease_payment::Column::DueDate.eq(due_str.clone()))
             .one(db)
             .await?;
@@ -175,29 +178,67 @@ async fn raise_rent_receivables(
         if amount <= 0 {
             continue;
         }
+        // A housing voucher pays its part (the HAP) as its own receivable, so
+        // the resident's share is what they owe and late fees only see that.
+        let hap = HousingVoucher::find()
+            .filter(entity::housing_voucher::Column::TenantId.eq(tenant_id))
+            .filter(entity::housing_voucher::Column::LeaseId.eq(lease.id))
+            .one(db)
+            .await?
+            .filter(|v| crate::family::voucher_covers(v, due))
+            .map(|v| v.hap_cents)
+            .unwrap_or(0);
+        let (share, hap) = crate::family::split_hap(amount, hap);
+        let entity_id =
+            crate::payments::entity_for_property(db, tenant_id, lease.property_id).await;
         let now = Utc::now();
-        let payment = entity::lease_payment::ActiveModel {
-            id: Set(Uuid::new_v4()),
-            tenant_id: Set(tenant_id),
-            lease_id: Set(lease.id),
-            due_date: Set(due_str.clone()),
-            amount_cents: Set(amount),
-            paid_date: Set(None),
-            status: Set("due".into()),
-            method: Set(None),
-            created_at: Set(now.into()),
-            kind: Set(crate::payments::KIND_RENT.into()),
-            method_id: Set(None),
-            provider: Set(None),
-            external_id: Set(None),
-            failure_reason: Set(None),
-            receipt_number: Set(None),
-            ledger_txn_id: Set(None),
+        for (kind, cents) in [
+            (crate::payments::KIND_RENT, share),
+            (crate::payments::KIND_HAP, hap),
+        ] {
+            if cents <= 0 {
+                continue;
+            }
+            let payment = entity::lease_payment::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                tenant_id: Set(tenant_id),
+                lease_id: Set(lease.id),
+                due_date: Set(due_str.clone()),
+                amount_cents: Set(cents),
+                paid_date: Set(None),
+                status: Set("due".into()),
+                method: Set(None),
+                created_at: Set(now.into()),
+                kind: Set(kind.into()),
+                method_id: Set(None),
+                provider: Set(None),
+                external_id: Set(None),
+                failure_reason: Set(None),
+                receipt_number: Set(None),
+                ledger_txn_id: Set(None),
+            }
+            .insert(db)
+            .await?;
+            // Each receivable accrues on the entity's books.
+            if let Some(entity_id) = entity_id {
+                if let Err(e) = crate::accounting::post_rent_due(
+                    db,
+                    tenant_id,
+                    entity_id,
+                    Some(lease.property_id),
+                    lease.id,
+                    &due_str,
+                    cents,
+                    payment.id,
+                )
+                .await
+                {
+                    tracing::error!("billing: rent accrual post failed: {e}");
+                }
+            }
         }
-        .insert(db)
-        .await?;
 
-        // The receivable joins the lease's outstanding balance…
+        // The month joins the lease's outstanding balance.
         let mut lam: entity::lease::ActiveModel = lease.clone().into();
         lam.balance_cents = Set(lease.balance_cents + amount);
         if lease.payment_status == "current" {
@@ -205,26 +246,6 @@ async fn raise_rent_receivables(
         }
         lam.updated_at = Set(now.into());
         lam.update(db).await?;
-
-        // …and accrues on the entity's books.
-        if let Some(entity_id) =
-            crate::payments::entity_for_property(db, tenant_id, lease.property_id).await
-        {
-            if let Err(e) = crate::accounting::post_rent_due(
-                db,
-                tenant_id,
-                entity_id,
-                Some(lease.property_id),
-                lease.id,
-                &due_str,
-                amount,
-                payment.id,
-            )
-            .await
-            {
-                tracing::error!("billing: rent accrual post failed: {e}");
-            }
-        }
         raised += 1;
     }
     Ok(raised)

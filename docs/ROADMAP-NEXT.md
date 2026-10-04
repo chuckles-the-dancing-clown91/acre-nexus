@@ -29,7 +29,7 @@ server-rendered public site for search (`docs/SEO.md`).
 | 14 | Listing media, map search, saved searches and listing feeds | ◐ |
 | 15 | Operations analytics and the portfolio map | ☑ |
 | 16 | Spanish for everything a resident sees | ◐ |
-| 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☐ |
+| 17 | Family-plan features: related-party guard, Foundation mode, raw land | ☑ |
 
 The concrete fixes, sized and in build order, are in [`FIX-PLAN.md`](FIX-PLAN.md).
 
@@ -481,9 +481,13 @@ per language with English fallback, the resident portal and public site translat
 lease and notice PDFs per language. Staff screens stay English. Start with the
 templates that send most (rent, maintenance, renewals).
 
-## 17. Family-plan features ☐
+## 17. Family-plan features ☑
 
-From the partnership letter; none started.
+Shipped: see [FAMILY-PLAN.md](FAMILY-PLAN.md). Left: flagging leases and
+deals automatically (they're flagged by hand today), the HUD income-limit
+table instead of typing AMI, and a HAP contract file per voucher.
+
+From the partnership letter:
 - **Related-party guard**: flag transactions between the family's entities; each
   needs a market-rate note and an approver who isn't a party to it.
 - **Foundation mode**: income-limit certifications, voucher (HAP) payments split

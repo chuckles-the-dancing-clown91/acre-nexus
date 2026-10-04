@@ -180,6 +180,12 @@ export const MODULES: ModuleDef[] = [
         icon: "bill",
         permission: "payable:read",
       },
+      {
+        href: "/console/related-party",
+        label: "Related parties",
+        icon: "scale",
+        permission: "payable:read",
+      },
     ],
   },
   {
@@ -265,6 +271,12 @@ export const MODULES: ModuleDef[] = [
         href: "/console/tenant-history",
         label: "Tenant history",
         icon: "history",
+        permission: "lease:read",
+      },
+      {
+        href: "/console/foundation",
+        label: "Foundation",
+        icon: "hand-heart",
         permission: "lease:read",
       },
     ],
