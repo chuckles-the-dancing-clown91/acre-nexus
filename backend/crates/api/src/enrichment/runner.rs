@@ -79,7 +79,7 @@ pub fn city_state(raw_city: &str, raw_state: &str, matched: Option<&str>) -> (St
     let mut city = raw_city.trim().to_string();
     let mut state = crate::geo::state_code(raw_state);
     if let Some((c, rest)) = raw_city.split_once(',') {
-        let code = crate::geo::state_code(rest.trim().split_whitespace().next().unwrap_or(""));
+        let code = crate::geo::state_code(rest.split_whitespace().next().unwrap_or(""));
         if code.len() == 2 {
             city = c.trim().to_string();
             if state.len() != 2 {

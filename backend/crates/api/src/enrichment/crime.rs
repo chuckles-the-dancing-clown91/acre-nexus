@@ -291,10 +291,13 @@ async fn get(client: &reqwest::Client, url: &str, key: &str) -> Result<Value, En
         .map_err(|e| err(format!("FBI CDE returned invalid JSON: {e}")))
 }
 
+/// A state's agency listing and when it was fetched.
+type AgencyCache = Mutex<HashMap<String, (Instant, Vec<Agency>)>>;
+
 /// The by-state agency listings, kept for an hour: they barely change and the
 /// demo key allows few calls.
-fn agency_cache() -> &'static Mutex<HashMap<String, (Instant, Vec<Agency>)>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, Vec<Agency>)>>> = OnceLock::new();
+fn agency_cache() -> &'static AgencyCache {
+    static CACHE: OnceLock<AgencyCache> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
