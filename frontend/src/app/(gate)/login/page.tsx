@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -8,11 +9,15 @@ import { ArrowLeft, ArrowRight, CircleAlert, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/resident";
 import { api, isMfaChallenge, type MfaChallenge } from "@/lib/api";
+import { demoAccountsEnabled, socialButtons } from "@/lib/signin";
 import { AuthFrame } from "@/components/gate/AuthFrame";
 import { MfaForm } from "@/components/gate/MfaForm";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { useTheme } from "@/theme/ThemeProvider";
+
+/** Seeded demo logins — listed only in builds with NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=1. */
+const SHOW_DEMO_ACCOUNTS = demoAccountsEnabled();
 
 const DEMO_GROUPS = [
   {
@@ -84,12 +89,6 @@ const DEMO_GROUPS = [
   },
 ];
 
-const PROVIDERS = [
-  { key: "google", label: "Google" },
-  { key: "microsoft", label: "Microsoft" },
-  { key: "apple", label: "Apple" },
-];
-
 type Step =
   | { kind: "password" }
   | { kind: "mfa"; challenge: MfaChallenge }
@@ -113,6 +112,15 @@ export default function LoginPage() {
   const [sandboxEmail, setSandboxEmail] = useState("new.renter@example.com");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Only the social providers the server says will work (none on a production
+  // server without live provider credentials).
+  const providers = useQuery({
+    queryKey: ["auth", "oauth-providers"],
+    queryFn: () => api.oauthProviders(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const socials = socialButtons(providers.data?.providers);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -284,66 +292,77 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="my-6 flex items-center gap-3 text-xs text-fg-4">
-              <span className="h-px flex-1 bg-line" />
-              or
-              <span className="h-px flex-1 bg-line" />
-            </div>
+            {socials.length > 0 && (
+              <>
+                <div className="my-6 flex items-center gap-3 text-xs text-fg-4">
+                  <span className="h-px flex-1 bg-line" />
+                  or
+                  <span className="h-px flex-1 bg-line" />
+                </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {PROVIDERS.map((p) => (
-                <Button
-                  key={p.key}
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => social(p.key)}
+                <div
+                  className="grid gap-2"
+                  style={{
+                    gridTemplateColumns: `repeat(${socials.length}, minmax(0, 1fr))`,
+                  }}
                 >
-                  {p.label}
-                </Button>
-              ))}
-            </div>
-
-            <details className="group mt-6 rounded-xl border border-line bg-fill/50 open:bg-fill">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-xs font-medium text-fg-3 select-none">
-                Demo accounts
-                <span className="text-fg-4 transition group-open:rotate-90">
-                  ›
-                </span>
-              </summary>
-              <div className="max-h-80 space-y-1 overflow-y-auto px-1.5 pb-1.5">
-                {DEMO_GROUPS.flatMap((g) => [
-                  <p
-                    key={g.company}
-                    className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-fg-4"
-                  >
-                    {g.company}
-                  </p>,
-                  ...g.accounts.map((a) => (
-                    <button
-                      key={a.email}
-                      type="button"
-                      onClick={() => {
-                        setEmail(a.email);
-                        setPassword("password");
-                      }}
-                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-fill-2"
+                  {socials.map((p) => (
+                    <Button
+                      key={p.key}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => social(p.key)}
                     >
-                      <span>
-                        <span className="block text-[13px] font-medium text-fg">
-                          {a.name}
+                      {p.label}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {SHOW_DEMO_ACCOUNTS && (
+              <details className="group mt-6 rounded-xl border border-line bg-fill/50 open:bg-fill">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-xs font-medium text-fg-3 select-none">
+                  Demo accounts
+                  <span className="text-fg-4 transition group-open:rotate-90">
+                    ›
+                  </span>
+                </summary>
+                <div className="max-h-80 space-y-1 overflow-y-auto px-1.5 pb-1.5">
+                  {DEMO_GROUPS.flatMap((g) => [
+                    <p
+                      key={g.company}
+                      className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-fg-4"
+                    >
+                      {g.company}
+                    </p>,
+                    ...g.accounts.map((a) => (
+                      <button
+                        key={a.email}
+                        type="button"
+                        onClick={() => {
+                          setEmail(a.email);
+                          setPassword("password");
+                        }}
+                        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-fill-2"
+                      >
+                        <span>
+                          <span className="block text-[13px] font-medium text-fg">
+                            {a.name}
+                          </span>
+                          <span className="block text-xs text-fg-3">
+                            {a.role}
+                          </span>
                         </span>
-                        <span className="block text-xs text-fg-3">
-                          {a.role}
+                        <span className="font-mono text-[11px] text-fg-4">
+                          {a.email}
                         </span>
-                      </span>
-                      <span className="font-mono text-[11px] text-fg-4">
-                        {a.email}
-                      </span>
-                    </button>
-                  )),
-                ])}
-              </div>
-            </details>
+                      </button>
+                    )),
+                  ])}
+                </div>
+              </details>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

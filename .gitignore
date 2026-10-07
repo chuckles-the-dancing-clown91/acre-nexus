@@ -29,3 +29,8 @@
 /backend/data/
 /backend/crates/api/data/
 **/data/objects/
+
+# Local database-setup output: per-machine connection strings with passwords and
+# the setup report. Never commit these (they were once tracked — rotate them).
+/backend/scripts/secrets/
+**/postgres-setup-report-*.md

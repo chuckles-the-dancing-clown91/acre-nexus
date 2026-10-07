@@ -115,6 +115,7 @@ async fn integration_suite() {
     site_maps_apartment_and_campground(&c).await;
     public_search_tours_and_autofill(&c).await;
     alpha_single_sign_on(&c).await;
+    social_sign_in_is_gated(&c).await;
     embed_settings(&c).await;
     seo_site_info(&c).await;
     batch_a_limits_jobs_and_reminders(&c).await;
@@ -3763,6 +3764,230 @@ async fn public_search_tours_and_autofill(c: &Ctx) {
 
 /// Alpha single sign-on: off by default, a signed assertion signs the right
 /// person in once, and everything else is refused the same way.
+async fn oauth_json(
+    r: rocket::local::asynchronous::LocalResponse<'_>,
+) -> (Status, serde_json::Value) {
+    let st = r.status();
+    (
+        st,
+        r.into_json::<serde_json::Value>().await.unwrap_or_default(),
+    )
+}
+
+async fn oauth_start(
+    client: &Client,
+    body: serde_json::Value,
+    token: Option<String>,
+) -> (Status, serde_json::Value) {
+    let mut req = client
+        .post("/auth/oauth/google/start")
+        .header(ContentType::JSON)
+        .body(body.to_string());
+    if let Some(t) = token {
+        req = req.header(bearer(&t));
+    }
+    oauth_json(req.dispatch().await).await
+}
+
+/// Walk the (dev) sandbox's consent step for `email`: returns (code, state).
+async fn oauth_consent(dev: &Client, authorize_url: String, email: String) -> (String, String) {
+    let path = &authorize_url[authorize_url.find("/auth/oauth/").unwrap()..];
+    let r = dev
+        .get(format!("{path}&email={}", email.replace('@', "%40")))
+        .dispatch()
+        .await;
+    assert_eq!(r.status(), Status::SeeOther, "sandbox consent redirects");
+    let loc = r.headers().get_one("Location").unwrap().to_string();
+    let q = |k: &str| {
+        loc.split(&format!("{k}="))
+            .nth(1)
+            .and_then(|v| v.split('&').next())
+            .unwrap()
+            .to_string()
+    };
+    (q("code"), q("state"))
+}
+
+async fn oauth_callback(
+    client: &Client,
+    code: String,
+    state: String,
+) -> (Status, serde_json::Value) {
+    let r = client
+        .post("/auth/oauth/google/callback")
+        .header(ContentType::JSON)
+        .body(serde_json::json!({ "code": code, "state": state }).to_string())
+        .dispatch()
+        .await;
+    oauth_json(r).await
+}
+
+/// Social sign-in (OAuth) refusals: on a production deployment the sandbox
+/// provider (which signs in as any typed email) is unavailable end to end; on
+/// a dev one it works, but a first sign-in is never attached to an existing
+/// account by email, and an unknown person is only signed up when the
+/// workspace allows it.
+async fn social_sign_in_is_gated(c: &Ctx) {
+    let client_for = |sandbox_auth: bool| {
+        let state = AppState {
+            db: c.db.clone(),
+            config: Config {
+                sandbox_auth,
+                ..c.config.clone()
+            },
+        };
+        async move {
+            Client::tracked(crate::build_rocket(state))
+                .await
+                .expect("build an OAuth test client")
+        }
+    };
+    let prod = &client_for(false).await;
+    let dev = &client_for(true).await;
+    let login = serde_json::json!({ "intent": "login", "tenant": "northwind" });
+    let json = oauth_json;
+    let start = oauth_start;
+    let callback = oauth_callback;
+    let consent = |url: String, email: String| oauth_consent(dev, url, email);
+
+    // ---- Production: nothing offered, every step refused. ----
+    let (st, p) = json(prod.get("/auth/oauth/providers").dispatch().await).await;
+    assert_eq!(st, Status::Ok, "{p}");
+    assert!(
+        p["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|x| x["sandbox"] == false),
+        "production never offers the sandbox: {p}"
+    );
+    let (st, body) = start(prod, login.clone(), None).await;
+    assert_eq!(st, Status::Forbidden, "{body}");
+
+    // A flow begun on a dev deployment (same signing key) still can't finish on
+    // production: neither the consent step nor the sandbox code is accepted.
+    let (st, s) = start(dev, login.clone(), None).await;
+    assert_eq!(st, Status::Ok, "{s}");
+    assert_eq!(s["sandbox"], true);
+    let url = s["authorize_url"].as_str().unwrap().to_string();
+    let path = &url[url.find("/auth/oauth/").unwrap()..];
+    let r = prod
+        .get(format!("{path}&email=avery%40acrehq.com"))
+        .dispatch()
+        .await;
+    assert_eq!(
+        r.status(),
+        Status::NotFound,
+        "no sandbox consent on production"
+    );
+    let (code, state) = consent(url.clone(), "avery@acrehq.com".into()).await;
+    let (st, body) = callback(prod, code.clone(), state.clone()).await;
+    assert_eq!(
+        st,
+        Status::Forbidden,
+        "production refuses a sandbox code: {body}"
+    );
+
+    // ---- Dev: the sandbox is offered … ----
+    let (st, p) = json(dev.get("/auth/oauth/providers").dispatch().await).await;
+    assert_eq!(st, Status::Ok);
+    assert_eq!(p["providers"].as_array().unwrap().len(), 3, "{p}");
+
+    // … but typing the platform admin's email does not sign in as them.
+    let (st, body) = callback(dev, code, state).await;
+    assert_eq!(st, Status::Forbidden, "no auto-link by email: {body}");
+    let linked =
+        c.db.query_one(Statement::from_string(
+            DbBackend::Postgres,
+            "select count(*)::bigint from federated_identity f \
+             join app_user u on u.id = f.user_id where u.email = 'avery@acrehq.com'",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get_by_index::<i64>(0)
+        .unwrap();
+    assert_eq!(linked, 0, "nothing was linked to the admin");
+
+    // An unknown person isn't signed up while open signup is off (the default).
+    let nw = tenant_id(c, "northwind").await;
+    let newbie = format!("new.{}@example.com", Uuid::new_v4().simple());
+    let (_, s) = start(dev, login.clone(), None).await;
+    let (code, state) = consent(s["authorize_url"].as_str().unwrap().into(), newbie.clone()).await;
+    let (st, body) = callback(dev, code, state).await;
+    assert_eq!(
+        st,
+        Status::Forbidden,
+        "open signup is off by default: {body}"
+    );
+
+    // With the workspace's open signup on, they are.
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::AUTH_SOCIAL_SIGNUP,
+        serde_json::json!(true),
+    )
+    .await
+    .unwrap();
+    let (_, s) = start(dev, login.clone(), None).await;
+    let (code, state) = consent(s["authorize_url"].as_str().unwrap().into(), newbie.clone()).await;
+    let (st, body) = callback(dev, code, state).await;
+    assert_eq!(st, Status::Ok, "{body}");
+    assert_eq!(body["outcome"], "session", "{body}");
+    crate::settings::set_value(
+        &c.db,
+        nw,
+        crate::settings::AUTH_SOCIAL_SIGNUP,
+        serde_json::json!(false),
+    )
+    .await
+    .unwrap();
+
+    // An existing account links the provider explicitly while signed in, and
+    // can then sign in with it.
+    let r = c
+        .client
+        .post("/auth/login")
+        .header(ContentType::JSON)
+        .body(r#"{"email":"jordan@northwind.com","password":"password"}"#)
+        .dispatch()
+        .await;
+    assert_eq!(r.status(), Status::Ok);
+    let jordan: Tokens = r.into_json().await.unwrap();
+    let (st, s) = start(
+        dev,
+        serde_json::json!({ "intent": "link" }),
+        Some(jordan.access_token.clone()),
+    )
+    .await;
+    assert_eq!(st, Status::Ok, "{s}");
+    let (code, state) = consent(
+        s["authorize_url"].as_str().unwrap().into(),
+        "jordan@northwind.com".into(),
+    )
+    .await;
+    let (st, body) = callback(dev, code, state).await;
+    assert_eq!(st, Status::Ok, "{body}");
+    assert_eq!(body["outcome"], "linked", "{body}");
+    let (_, s) = start(dev, login.clone(), None).await;
+    let (code, state) = consent(
+        s["authorize_url"].as_str().unwrap().into(),
+        "jordan@northwind.com".into(),
+    )
+    .await;
+    let (st, body) = callback(dev, code, state).await;
+    assert_eq!(st, Status::Ok, "{body}");
+    assert_ne!(
+        body["outcome"], "linked",
+        "a linked identity signs in: {body}"
+    );
+    assert!(
+        body["outcome"] == "session" || body["outcome"] == "mfa",
+        "{body}"
+    );
+}
+
 async fn alpha_single_sign_on(c: &Ctx) {
     use rocket::http::Method;
     let nw = tenant_id(c, "northwind").await;

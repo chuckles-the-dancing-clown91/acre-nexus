@@ -175,6 +175,11 @@ pub const HELPDESK_SCAN_INTERVAL_SECS: &str = "helpdesk.scan_interval_secs";
 /// Auto-open a make-ready ticket when a move-out inspection completes.
 pub const HELPDESK_AUTO_TURNOVER: &str = "helpdesk.auto_turnover";
 
+/// Let someone with no account sign themselves up (as a renter) the first time
+/// they use "Sign in with Google / Microsoft / Apple". Off by default: only
+/// people who already have an account (and linked the provider) can use it.
+pub const AUTH_SOCIAL_SIGNUP: &str = "auth.social_signup";
+
 // ---- Team, time & costing (the back office) ----
 /// IANA time zone that decides which workday an hour belongs to.
 pub const WORKFORCE_TIMEZONE: &str = "workforce.timezone";
@@ -1043,6 +1048,16 @@ pub const CATALOG: &[SettingDef] = &[
         group: "Team & payroll",
         kind: SettingKind::Text,
         default: || json!(""),
+    },
+    SettingDef {
+        key: AUTH_SOCIAL_SIGNUP,
+        label: "Sign up with Google, Microsoft or Apple",
+        description: "Let someone without an account create one (as a renter) the first time \
+                      they sign in with Google, Microsoft or Apple. Off: only people who \
+                      already have an account, and have linked that sign-in, can use it.",
+        group: "Sign-in",
+        kind: SettingKind::Bool,
+        default: || json!(false),
     },
 ];
 

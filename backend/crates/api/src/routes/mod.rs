@@ -117,6 +117,7 @@ pub fn core_api() -> (Vec<Route>, OpenApi) {
         auth::workspaces::workspaces,
         auth::switch_workspace::switch_workspace,
         // federated login (OAuth/OIDC) — sandbox-first
+        auth::oauth::providers,
         auth::oauth::start,
         auth::oauth::sandbox,
         auth::oauth::callback,

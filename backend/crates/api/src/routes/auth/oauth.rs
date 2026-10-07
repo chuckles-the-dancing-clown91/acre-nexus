@@ -1,10 +1,18 @@
-//! **Federated login endpoints** (issue #63): start a social-login flow, handle
-//! the provider callback (resolving or provisioning the user + linking the
-//! identity, then minting a session or MFA challenge), and the hermetic sandbox
-//! provider's authorize step. The OAuth engine is [`crate::oauth`].
+//! **Federated login endpoints** (issue #63): list the sign-in providers this
+//! deployment offers, start a social-login flow, handle the provider callback
+//! (resolving the user by an already-linked identity — or, when the workspace
+//! allows open signup, provisioning a new one — then minting a session or MFA
+//! challenge), and the sandbox provider's authorize step (non-production only).
+//! The OAuth engine is [`crate::oauth`].
+//!
+//! A first social sign-in is **never** attached to an existing account by
+//! matching email: the account owner links the provider explicitly while signed
+//! in (`intent=link`). Otherwise anyone controlling a provider account with a
+//! staff member's address — or, on a sandbox, typing it — would become them.
 
 use super::dto::{
-    MfaChallengeResp, OauthCallbackReq, OauthCallbackResp, OauthStartReq, OauthStartResp,
+    MfaChallengeResp, OauthCallbackReq, OauthCallbackResp, OauthProvider, OauthProvidersResp,
+    OauthStartReq, OauthStartResp,
 };
 use super::helpers::{auth_outcome, AuthOutcome};
 use crate::auth::AuthUser;
@@ -21,6 +29,26 @@ use rocket::serde::json::Json;
 use rocket::{get, post, State};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
+
+/// `GET /auth/oauth/providers` — the social sign-in providers this deployment
+/// actually offers (live ones with credentials configured, plus the sandbox
+/// ones on a non-production deployment). The login page shows only these.
+#[rocket_okapi::openapi(tag = "Auth")]
+#[get("/auth/oauth/providers")]
+pub async fn providers(
+    state: &State<AppState>,
+    db: crate::db::RequestDb,
+) -> ApiResult<Json<OauthProvidersResp>> {
+    let providers = oauth::available(&state.config, &db)
+        .await
+        .into_iter()
+        .map(|(key, mode)| OauthProvider {
+            key: key.to_string(),
+            sandbox: mode == oauth::Mode::Sandbox,
+        })
+        .collect();
+    Ok(Json(OauthProvidersResp { providers }))
+}
 
 /// `POST /auth/oauth/<provider>/start` — begin a social login (or, with
 /// `intent=link`, attach a provider to the signed-in account).
@@ -87,7 +115,9 @@ pub async fn start(
 
 /// `GET /auth/oauth/<provider>/sandbox?state&email` — the hermetic sandbox
 /// provider's "consent": mint a code for the simulated account and redirect
-/// back to the app callback. Only reachable when the provider isn't live.
+/// back to the app callback. Only reachable on an explicitly non-production
+/// deployment (`APP_ENV=development|…`) for a provider that isn't live; 404
+/// otherwise.
 #[rocket_okapi::openapi(tag = "Auth")]
 #[get("/auth/oauth/<provider>/sandbox?<state>&<email>")]
 pub async fn sandbox(
@@ -96,11 +126,6 @@ pub async fn sandbox(
     state: &str,
     email: Option<&str>,
 ) -> ApiResult<Redirect> {
-    if oauth::is_live(provider) {
-        return Err(ApiError::BadRequest(
-            "the sandbox provider is disabled (this provider is live)".into(),
-        ));
-    }
     let url = oauth::sandbox_redirect(&app_state.config, provider, state, email)?;
     Ok(Redirect::to(url))
 }
@@ -170,20 +195,35 @@ async fn complete(
             .await?
             .ok_or(ApiError::Unauthorized)?,
         None => {
-            // No linked identity yet — attach to an existing account with the
-            // same (provider-verified) email, or provision a fresh one.
-            match User::find()
+            // No linked identity yet. Never attach it to an existing account by
+            // matching email — the owner links it while signed in instead.
+            let taken = User::find()
                 .filter(entity::user::Column::Email.eq(identity.email.to_lowercase()))
                 .one(db)
                 .await?
-            {
-                Some(u) => {
-                    create_link(db, u.id, &identity).await?;
-                    audit(db, u.id, crate::audit::actions::AUTH_OAUTH_LINK, None).await;
-                    u
-                }
-                None => provision_user(state, db, &identity, flow.tenant_id).await?,
+                .is_some();
+            if taken {
+                return Err(ApiError::Forbidden(format!(
+                    "this {} account isn't linked to an account here — sign in with \
+                     your email and password",
+                    identity.provider
+                )));
             }
+            // A brand-new person: only when the workspace allows open signup.
+            let tenant_id = flow
+                .tenant_id
+                .ok_or_else(|| ApiError::BadRequest("a workspace is required to sign up".into()))?;
+            if !identity.email_verified
+                || !crate::settings::get_bool(db, tenant_id, crate::settings::AUTH_SOCIAL_SIGNUP)
+                    .await
+            {
+                return Err(ApiError::Forbidden(format!(
+                    "no account is linked to this {} sign-in — ask your administrator \
+                     for an invitation",
+                    identity.provider
+                )));
+            }
+            provision_user(state, db, &identity, Some(tenant_id)).await?
         }
     };
 
@@ -225,7 +265,8 @@ async fn complete(
     }
 }
 
-/// Provision a brand-new user from a first-time social login: an `app_user`
+/// Provision a brand-new user from a first-time social login (only when the
+/// workspace's `auth.social_signup` setting allows it): an `app_user`
 /// (with an unusable random password — they authenticate via the provider), a
 /// renter `membership` in the workspace, a pending `user_profile`, and the
 /// federated-identity link.

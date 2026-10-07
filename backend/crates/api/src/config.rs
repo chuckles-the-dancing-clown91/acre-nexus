@@ -22,6 +22,12 @@ pub struct Config {
     pub refresh_ttl_secs: i64,
     /// Whether to run migrations + seed on boot (handy in dev).
     pub auto_migrate: bool,
+    /// Whether the **sandbox sign-in provider** (simulated Google / Microsoft /
+    /// Apple that accepts any email) may be used. True only when `APP_ENV`
+    /// explicitly names a non-production deployment (see
+    /// [`app_env_is_non_production`]); unset or anything else — including
+    /// `production` — is treated as production and the sandbox is refused.
+    pub sandbox_auth: bool,
 }
 
 static GLOBAL: OnceLock<Config> = OnceLock::new();
@@ -76,6 +82,7 @@ impl Config {
                 env::var("AUTO_MIGRATE").ok().as_deref(),
                 production,
             ),
+            sandbox_auth: app_env_is_non_production(env::var("APP_ENV").ok().as_deref()),
         }
     }
 
@@ -94,6 +101,19 @@ pub(crate) fn is_production() -> bool {
         env::var("APP_ENV").ok().as_deref(),
         Some("production") | Some("prod")
     )
+}
+
+/// `APP_ENV` values that **explicitly** declare a non-production deployment.
+/// Only these unlock development conveniences that would be an account-takeover
+/// hole on a real deployment (the sandbox sign-in provider). Anything else —
+/// unset, empty, `production`, `staging`, a typo — is treated as production.
+const NON_PRODUCTION_APP_ENVS: &[&str] = &["development", "dev", "local", "test", "testing", "ci"];
+
+/// Whether `APP_ENV` (passed in for testability) explicitly declares a
+/// non-production deployment. Fails safe: an unset value is **not** non-production.
+pub(crate) fn app_env_is_non_production(var: Option<&str>) -> bool {
+    var.map(|v| v.trim().to_ascii_lowercase())
+        .is_some_and(|v| NON_PRODUCTION_APP_ENVS.contains(&v.as_str()))
 }
 
 /// Resolve the JWT signing secret. In production an explicit secret is
@@ -327,6 +347,35 @@ mod tests {
     }
 
     // ---- #23: auto-migrate defaults off in production ----
+
+    #[test]
+    fn sandbox_auth_needs_an_explicit_non_production_app_env() {
+        for v in [
+            "development",
+            "dev",
+            "local",
+            "test",
+            "testing",
+            "ci",
+            " Development ",
+        ] {
+            assert!(app_env_is_non_production(Some(v)), "{v} is non-production");
+        }
+        // Unset, empty, production and anything unrecognised fail safe.
+        for v in [
+            None,
+            Some(""),
+            Some("production"),
+            Some("prod"),
+            Some("staging"),
+            Some("demo"),
+        ] {
+            assert!(
+                !app_env_is_non_production(v),
+                "{v:?} must count as production"
+            );
+        }
+    }
 
     #[test]
     fn auto_migrate_defaults_on_in_dev_off_in_prod() {

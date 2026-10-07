@@ -48,6 +48,13 @@ startup — it refuses to boot on an insecure config rather than degrade silentl
   (Set `AUTO_MIGRATE=1` explicitly only if you deliberately want boot-time
   migrations in a given prod environment.)
 
+**The sandbox sign-in provider is opt-in by environment, not opt-out.** The
+simulated Google / Microsoft / Apple provider (which signs in as any typed
+email) runs only when `APP_ENV` is explicitly `development`, `dev`, `local`,
+`test`, `testing` or `ci`. Unset, `production`, `staging` or any other value
+disables it, so only providers live in `LIVE_PROVIDERS` (with credentials) are
+offered. See [docs/IAM.md](../docs/IAM.md).
+
 **Key rotation.** `PII_ENC_KEY` and `SECRETS_ENC_KEY` are independent AES-256-GCM
 keys (distinct domains, so a leaked provider credential and a leaked SSN have
 separate blast radii). Rotating either today is a manual, coordinated step:
