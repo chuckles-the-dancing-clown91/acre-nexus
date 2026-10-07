@@ -168,22 +168,46 @@ SSO/SAML/SCIM tracked in #12.
 A `federated_identity` row links a provider account (`provider` + `subject`,
 globally unique) to an `app_user`, so a social login maps onto the existing
 identity model without disturbing it — login identity (`app_user`) stays
-separate from `user_profile`. **Sandbox-first and credential-gated**, exactly
-like every other integration (`crate::oauth` honors the `LIVE_PROVIDERS` gate):
-unless a provider is named there (with `oauth.<provider>.client_id` /
-`client_secret` in the secrets vault), a hermetic **sandbox provider** runs — no
-network, deterministic — so CI and demos work offline. The authorization-code
-flow (with PKCE) is carried across the redirect by a **signed state token**.
+separate from `user_profile`. Credential-gated like every other integration
+(`crate::oauth` honors the `LIVE_PROVIDERS` gate): a provider is **live** when
+`LIVE_PROVIDERS` names it and `oauth.<provider>.client_id` / `client_secret` are
+in the secrets vault. The authorization-code flow (with PKCE and a `nonce`) is
+carried across the redirect by a **signed state token**.
+
+**The sandbox provider is non-production only.** A provider that isn't live
+falls back to a hermetic sandbox (no network, deterministic) that signs in as
+*whatever email it is handed* — fine for CI and demos, an account takeover on a
+real deployment. It is therefore available **only** when `APP_ENV` explicitly
+names a non-production deployment (`development`, `dev`, `local`, `test`,
+`testing` or `ci`). With `APP_ENV` unset, `production`, `staging` or anything
+else, a non-live provider is simply unavailable: `GET /auth/oauth/providers`
+omits it, `start` answers 403, the sandbox consent route answers 404, and a
+sandbox code presented to `callback` is refused (403).
+
+**Live ID tokens are verified**, not just decoded: signature against the
+provider's published JWKS (cached for an hour, refetched once on an unknown
+`kid`; `RS256`/`ES256` only), `iss` (Google `https://accounts.google.com`,
+Apple `https://appleid.apple.com`, Microsoft
+`https://login.microsoftonline.com/{tid}/v2.0` matching the token's `tid`),
+`aud` = our client id, `exp`, `iat` (not in the future, not older than the
+flow), the `nonce` we sent, and a verified email (`email_verified`; for
+Microsoft, which doesn't send it, the optional `xms_edov` claim — configure it
+on the app registration or Microsoft sign-in is refused).
+
+**No account is ever taken over by email.** The first time a provider account
+signs in, it must already be linked to the user — the user links it while
+signed in (`intent=link`). A callback whose email belongs to an existing account
+that hasn't linked this provider is refused (403) — staff, platform admins and
+residents alike. A person with **no** account is only signed up when the
+workspace turns on `auth.social_signup` ("Sign up with Google, Microsoft or
+Apple", default **off**).
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/auth/oauth/<provider>/start` | `intent=login` (needs a `tenant` slug to provision into) or `intent=link` (authenticated — attaches the provider to the signed-in user). Returns the provider `authorize_url` + a `sandbox` flag. |
-| GET | `/auth/oauth/<provider>/sandbox?state&email` | The sandbox provider's "consent" — redirects back to the app callback with a signed code (disabled when the provider is live). |
-| POST | `/auth/oauth/<provider>/callback` | Completes the flow: resolves the linked user, else auto-links a matching (provider-verified) email, else **provisions** a fresh `app_user` + renter `membership` + pending `user_profile`. Returns a `session`, an `mfa` challenge, or (link intent) a `linked` confirmation. |
-
-A first-time social login lands with a valid session **and** a workspace
-membership (renter persona, `renter` role); an existing account can link a
-provider and thereafter "Log in with" it.
+| GET | `/auth/oauth/providers` | Public. The providers this deployment actually offers: `{ providers: [{ key, sandbox }] }` — live ones with credentials, plus sandbox ones on a non-production deployment. The login page shows a button only for these. |
+| POST | `/auth/oauth/<provider>/start` | `intent=login` (needs a `tenant` slug) or `intent=link` (authenticated — attaches the provider to the signed-in user). Returns the provider `authorize_url` + a `sandbox` flag. 403 when the provider isn't available here. |
+| GET | `/auth/oauth/<provider>/sandbox?state&email` | The sandbox provider's "consent" — redirects back to the app callback with a signed code. 404 unless the deployment is non-production and the provider isn't live. |
+| POST | `/auth/oauth/<provider>/callback` | Completes the flow: resolves the **linked** user; else, for a new person and only with `auth.social_signup` on, **provisions** an `app_user` + renter `membership` + pending `user_profile`. Returns a `session`, an `mfa` challenge, or (link intent) a `linked` confirmation. |
 
 ### TOTP MFA (authenticator app)
 

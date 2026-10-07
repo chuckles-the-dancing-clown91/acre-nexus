@@ -25,11 +25,19 @@ refuses to boot otherwise — see [`backend/README.md`](../backend/README.md#pro
 
 | Var | Purpose |
 |---|---|
-| `APP_ENV=production` | Enables fail-closed key handling + AUTO_MIGRATE-off |
+| `APP_ENV=production` | Enables fail-closed key handling + AUTO_MIGRATE-off. Only an explicit `development`/`dev`/`local`/`test`/`testing`/`ci` value enables the sandbox sign-in provider, so unset is production-safe too |
 | `JWT_SECRET` | ≥32 chars, not the dev default (`openssl rand -hex 32`) |
 | `PII_ENC_KEY` | 64 hex chars (`openssl rand -hex 32`) |
 | `SECRETS_ENC_KEY` | 64 hex chars, independent of `PII_ENC_KEY` |
 | `DATABASE_URL` | Points at the **`acre_app`** role (below), not the owner |
+
+Social sign-in (Google / Microsoft / Apple) is offered only for providers named
+in `LIVE_PROVIDERS` whose `oauth.<provider>.client_id` / `client_secret` are in
+the secrets vault; with none, the login page shows no social buttons (see
+[IAM](IAM.md#log-in-with-google--microsoft--apple-oauth-20--oidc)).
+
+The frontend lists the seeded demo accounts on the login page only when built
+with `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=1`; production builds leave it unset.
 
 Leave `AUTO_MIGRATE` **unset** in prod (it defaults off): the app must not
 migrate or seed on boot. Manage all of the above as platform secrets, never in

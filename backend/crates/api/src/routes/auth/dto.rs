@@ -176,6 +176,21 @@ pub struct OauthStartResp {
     pub sandbox: bool,
 }
 
+/// A social sign-in provider this deployment offers.
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct OauthProvider {
+    /// `google` | `microsoft` | `apple`.
+    pub key: String,
+    /// True for the simulated provider (non-production deployments only).
+    pub sandbox: bool,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub struct OauthProvidersResp {
+    /// Only the providers that will actually work here; empty when none do.
+    pub providers: Vec<OauthProvider>,
+}
+
 #[derive(Deserialize, schemars::JsonSchema)]
 pub struct OauthCallbackReq {
     pub code: String,

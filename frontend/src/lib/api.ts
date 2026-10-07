@@ -211,6 +211,14 @@ export function isMfaChallenge(r: LoginResult): r is MfaChallenge {
   return (r as MfaChallenge).mfa_required === true;
 }
 
+/** A social sign-in provider the server actually offers. */
+export interface OauthProvider {
+  /** `google` | `microsoft` | `apple` */
+  key: string;
+  /** True for the simulated provider (non-production servers only). */
+  sandbox: boolean;
+}
+
 export interface OauthStartResult {
   authorize_url: string;
   /** True when the hermetic sandbox provider is in use (no live credentials). */
@@ -436,6 +444,9 @@ export const api = {
     }),
 
   // ---- federated login (OAuth/OIDC) ----
+  /** The social sign-in providers this server offers (empty when none work). */
+  oauthProviders: () =>
+    request<{ providers: OauthProvider[] }>("/auth/oauth/providers"),
   /**
    * Begin a social-login flow. `intent: "link"` (default `"login"`) attaches the
    * provider to the signed-in account and requires auth; `"login"` provisions or

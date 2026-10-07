@@ -78,6 +78,7 @@ mod tests {
             access_ttl_secs: 900,
             refresh_ttl_secs: 1000,
             auto_migrate: false,
+            sandbox_auth: false,
         }
     }
 
