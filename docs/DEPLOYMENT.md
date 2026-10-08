@@ -36,6 +36,13 @@ in `LIVE_PROVIDERS` whose `oauth.<provider>.client_id` / `client_secret` are in
 the secrets vault; with none, the login page shows no social buttons (see
 [IAM](IAM.md#log-in-with-google--microsoft--apple-oauth-20--oidc)).
 
+Optional, for the Solnyxus product link ([Tenancy](TENANCY.md#provisioning-from-solnyxus-the-product-link)):
+`SOLNYXUS_PLATFORM_KEY` (the key Solnyxus presents; unset → its key-guarded
+routes answer `503 not_configured`) and `APP_COMMIT` (the deployed commit, shown
+by `/.well-known/solnyxus/health` and `version`). `PUBLIC_APP_URL` must be the
+public web address — the set-password and sign-in links handed to Solnyxus are
+built from it.
+
 The frontend lists the seeded demo accounts on the login page only when built
 with `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS=1`; production builds leave it unset.
 

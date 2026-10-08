@@ -58,6 +58,18 @@ pub async fn issue(
     user_id: Uuid,
     purpose: &str,
 ) -> Result<(String, entity::password_token::Model), DbErr> {
+    issue_valid_for(db, user_id, purpose, lifetime(purpose)).await
+}
+
+/// [`issue`] with a shorter life than the purpose's own — capped at it, so a
+/// caller can only ever narrow a link's window.
+pub async fn issue_valid_for(
+    db: &impl ConnectionTrait,
+    user_id: Uuid,
+    purpose: &str,
+    valid_for: Duration,
+) -> Result<(String, entity::password_token::Model), DbErr> {
+    let valid_for = valid_for.min(lifetime(purpose));
     let now = Utc::now();
     // Retire older unused links of this purpose so only the newest one works.
     let open = PasswordToken::find()
@@ -78,7 +90,7 @@ pub async fn issue(
         user_id: Set(user_id),
         purpose: Set(purpose.to_string()),
         token_hash: Set(hash_secret(&token)),
-        expires_at: Set((now + lifetime(purpose)).into()),
+        expires_at: Set((now + valid_for).into()),
         used_at: Set(None),
         created_at: Set(now.into()),
     }

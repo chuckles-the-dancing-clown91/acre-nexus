@@ -10,7 +10,13 @@ pub fn should_skip(method: &str, path: &str) -> bool {
     if method.eq_ignore_ascii_case("OPTIONS") {
         return true;
     }
-    const SKIP_EXACT: &[&str] = &["/health", "/metrics", "/openapi.json", "/favicon.ico"];
+    const SKIP_EXACT: &[&str] = &[
+        "/health",
+        crate::routes::solnyxus::HEALTH_PATH,
+        "/metrics",
+        "/openapi.json",
+        "/favicon.ico",
+    ];
     const SKIP_PREFIX: &[&str] = &["/swagger-ui", "/rapidoc"];
     SKIP_EXACT.contains(&path) || SKIP_PREFIX.iter().any(|p| path.starts_with(p))
 }
@@ -23,6 +29,8 @@ mod tests {
     fn skips_infra_and_preflight() {
         assert!(should_skip("OPTIONS", "/properties"));
         assert!(should_skip("GET", "/health"));
+        assert!(should_skip("GET", "/.well-known/solnyxus/health"));
+        assert!(!should_skip("POST", "/.well-known/solnyxus/tenants"));
         assert!(should_skip("GET", "/openapi.json"));
         assert!(should_skip("GET", "/swagger-ui/index.html"));
         assert!(should_skip("GET", "/rapidoc/"));

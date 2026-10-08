@@ -76,6 +76,7 @@ pub mod residents;
 pub mod search;
 pub mod settings;
 pub mod sitemaps;
+pub mod solnyxus;
 pub mod sso;
 pub mod syndication;
 pub mod team;
