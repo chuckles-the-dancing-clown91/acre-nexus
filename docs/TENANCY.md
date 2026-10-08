@@ -143,6 +143,44 @@ computes + persists the snapshot; `POST /onboarding/workflow/advance` re-checks
 and audits. Provisioning a firm (`POST /platform/provision`) creates the tenant
 shell, default theme, reserved `{slug}.acrenexus.com` subdomain, the firm owner
 (membership + `tenant_owner` role at tenant scope), and this workflow row.
+That work lives in `provisioning.rs` and is shared with Solnyxus (below).
+
+## Provisioning from Solnyxus (the product link)
+
+Solnyxus — the platform that hosts, monitors and sells Vantedge — signs firms
+up and creates their workspaces through the **product link**. The contract is
+the platform's: `daedalus-it/docs/platform/provisioning.md` §3 (and
+`docs/platform/client-software.md` for the wider link). Vantedge is a `tenant`
+product, so it implements these three, on the API root
+(`routes/solnyxus.rs`):
+
+| Route | Auth | Does |
+|---|---|---|
+| `GET /.well-known/solnyxus/health` | public | `status` `ok`/`down` (a real `SELECT 1`; `503` when down), `product`, `version`, `commit`, `startedAt`; with the key also `checks` |
+| `GET /.well-known/solnyxus/version` | key | `product`, `version`, `commit`, `builtAt`, `migrations` (`latest`, `pending`) |
+| `POST /.well-known/solnyxus/tenants` | key | creates the workspace (`active`), its owner and its branding → `201`; the same slug + owner email again → `200` `created:false` with the same ids; another owner's slug → `409 slug_taken` |
+
+- **Key**: `Authorization: Bearer <SOLNYXUS_PLATFORM_KEY>`, compared in
+  constant time. Unset → `503 not_configured`; missing or wrong → `401
+  unauthorized`; a bad field → `400 invalid` with the field in `detail`.
+- **Plane**: `tenants` runs in one transaction with no tenant GUC — the
+  platform plane staff provisioning uses — so nothing is left behind on failure.
+- **Owner**: a new login is created `invited` (no password crosses the wire);
+  an existing login (an owner of another workspace) keeps its password and
+  gains a membership. Either way: `tenant_owner` at tenant scope.
+- **`setPasswordUrl`**: the app's own one-time link (`password_links`, the
+  `/set-password` page) — an invite while the owner has no password, else a
+  reset — capped at 72 hours. Solnyxus emails it; Vantedge doesn't.
+  **`loginUrl`** is `PUBLIC_APP_URL/login` (sign-in is by email).
+- **Plan**: `starter` | `growth` | `enterprise` (case-insensitive); absent or
+  unknown → `starter`.
+- **Branding**: `companyName`, `logoUrl`, `primaryColor`, `accentColor` → the
+  theme; `companyName`, `email`, `phone`, `website` → the business profile,
+  `tagline` → its description. Empty fields are left as they are.
+- **Deploy**: set `SOLNYXUS_PLATFORM_KEY` (and `APP_COMMIT`) in the API's
+  environment. nginx serves the API under `/api/` with the prefix stripped, so
+  the host also needs `location ^~ /.well-known/solnyxus/` proxied to the API
+  *without* stripping (the platform's `vantedge.https.tpl`).
 
 ## System settings (`setting`)
 
@@ -241,7 +279,7 @@ working with no tenant context.
 - **A — entity model:** `migration/m20240101_000010_tenancy_entities.rs`;
   entities `owner`, `entity_ownership`, `bank_account`, `portfolio`; `rbac/scope.rs`.
 - **B — platform plane:** `m..._000011_platform_plane.rs`; `routes/platform/{impersonate,impersonations,staff}.rs`.
-- **C — provisioning:** `routes/platform/provision.rs`; scoped `routes/iam/assign_role.rs`.
+- **C — provisioning:** `provisioning.rs` (shared), `routes/platform/provision.rs`, `routes/solnyxus.rs`; scoped `routes/iam/assign_role.rs`.
 - **D — routing:** `m..._000012_domains_onboarding.rs`; `routes/domains/*`; `modules/domains.rs`.
 - **E — portfolio/banking/onboarding:** `routes/{portfolios,cap_table,banking}/*`; `accounting.rs`; `routes/onboarding/{state,workflow}.rs`.
 - **F — scoped RBAC + UX:** `tenancy/resolve.rs`; `frontend` console `domains` + `onboarding` pages.

@@ -175,6 +175,15 @@ CI runs the same suite on every push and pull request.
 
 ## Documentation
 
+> **Platform docs live in the Solnyxus repository.** How Vantedge is deployed,
+> monitored, billed and linked to Alpha and to Solnyxus (`daedalus-it/docs/clients/vantedge/`,
+> `docs/platform/client-software.md`), and the Google Workspace port plan that
+> used to be `docs/SOLNYXUS-INTEGRATION.md`, are there. The module docs below
+> stay here. Vantedge's side of the Solnyxus product link (health, version and
+> creating workspaces under `/.well-known/solnyxus/`) is described in
+> [`docs/TENANCY.md`](docs/TENANCY.md#provisioning-from-solnyxus-the-product-link);
+> the contract it implements is `daedalus-it/docs/platform/provisioning.md`.
+
 | Doc | Topic |
 | --- | --- |
 | [`docs/PRODUCT.md`](docs/PRODUCT.md) | Product vision and personas |

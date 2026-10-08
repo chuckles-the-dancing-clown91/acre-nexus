@@ -115,6 +115,7 @@ impl RateLimiter {
 /// Paths that are never rate-limited (monitoring + docs + preflight).
 fn is_exempt(path: &str) -> bool {
     path == "/health"
+        || path == crate::routes::solnyxus::HEALTH_PATH
         || path == "/metrics"
         || path == "/openapi.json"
         || path == REJECT_PATH
@@ -129,6 +130,8 @@ fn is_auth(path: &str) -> bool {
         || path == "/auth/password/forgot"
         || path == "/auth/password/set"
         || path.starts_with("/auth/password/link/")
+        // Key-guarded and rare: a guessing surface, not traffic.
+        || path == "/.well-known/solnyxus/tenants"
 }
 
 /// Attribute a request to a caller: its API key if present, else its client IP,
@@ -301,6 +304,9 @@ mod tests {
     #[test]
     fn exempt_and_auth_path_classification() {
         assert!(is_exempt("/health"));
+        assert!(is_exempt("/.well-known/solnyxus/health"));
+        assert!(!is_exempt("/.well-known/solnyxus/tenants"));
+        assert!(is_auth("/.well-known/solnyxus/tenants"));
         assert!(is_exempt("/swagger-ui/index.html"));
         assert!(!is_exempt("/properties"));
         assert!(is_auth("/auth/login"));

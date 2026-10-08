@@ -15,6 +15,7 @@ struct Started(Instant);
 fn is_chatter(method: &str, path: &str) -> bool {
     method == "OPTIONS"
         || path == "/health"
+        || path == crate::routes::solnyxus::HEALTH_PATH
         || path == "/metrics"
         || path == "/notifications/unread_count"
 }

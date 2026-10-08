@@ -9,7 +9,7 @@ exists today, what's missing, the design and the order. Legend: ☐ planned ·
 
 Also shipped since round 1 was written, outside the eight areas: Alpha ↔ Vantedge
 single sign-on, embeddable website widgets (`docs/SSO-AND-EMBEDS.md`), and a
-server-rendered public site for search (`docs/SEO.md`).
+server-rendered public site for search (the public site was removed in `b07dd59`; its SEO plan returns with it).
 
 | # | Area | Status |
 |---|------|--------|

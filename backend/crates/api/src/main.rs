@@ -77,6 +77,7 @@ mod portals;
 mod process;
 mod property_kind;
 mod providers;
+mod provisioning;
 mod ratelimit;
 mod rbac;
 mod reminders;
@@ -288,6 +289,18 @@ pub(crate) fn build_rocket(state: AppState) -> rocket::Rocket<rocket::Build> {
 
     // Prometheus metrics scrape endpoint (#32) — plain text, unauthenticated.
     app = app.mount("/", routes![metrics::endpoint]);
+
+    // The Solnyxus product link (health, version, tenant provisioning), on
+    // its own fixed path and outside the OpenAPI document.
+    routes::solnyxus::mark_started();
+    app = app.mount(
+        routes::solnyxus::BASE,
+        routes![
+            routes::solnyxus::health,
+            routes::solnyxus::version,
+            routes::solnyxus::tenants,
+        ],
+    );
 
     app.mount("/", routes![cors::preflight]).mount(
         "/",

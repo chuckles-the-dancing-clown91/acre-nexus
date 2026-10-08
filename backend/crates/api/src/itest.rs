@@ -162,6 +162,7 @@ async fn integration_suite() {
     appliance_profile_flow(&c).await;
     resident_profile_flow(&c).await;
     property_story_and_timeline(&c).await;
+    solnyxus_product_link(&c).await;
     rbac_permission_gates_are_enforced(&c).await;
     vendor_api_key_scope_is_enforced(&c).await;
 
@@ -11743,4 +11744,299 @@ async fn appliance_profile_flow(c: &Ctx) {
     assert!(list.as_array().unwrap().iter().all(|x| x["id"] != far_id));
     let (st, _) = get_json(c, &format!("/assets/{far_id}/care"), &rosa).await;
     assert_eq!(st, Status::NotFound, "equipment outside her properties");
+}
+
+/// The Solnyxus product link (`/.well-known/solnyxus/…`): the key's three
+/// answers (missing config, refused, accepted) in the contract's error shape,
+/// the health and version shapes, and `POST tenants` — a workspace with its
+/// owner (`tenant_owner`, invited, a working one-time link) and branding; a
+/// repeat answered `200` with the same ids; another owner's slug refused; and
+/// an existing login made owner of a second workspace with its password intact.
+async fn solnyxus_product_link(c: &Ctx) {
+    const KEY: &str = "itest-solnyxus-platform-key-0123456789";
+    async fn call(
+        c: &Ctx,
+        get: bool,
+        path: &str,
+        key: Option<&str>,
+        body: serde_json::Value,
+    ) -> (Status, serde_json::Value) {
+        let path = format!("/.well-known/solnyxus/{path}");
+        let mut req = if get {
+            c.client.get(path)
+        } else {
+            c.client
+                .post(path)
+                .header(ContentType::JSON)
+                .body(body.to_string())
+        };
+        if let Some(k) = key {
+            req = req.header(bearer(k));
+        }
+        let resp = req.dispatch().await;
+        let status = resp.status();
+        let val = resp
+            .into_json::<serde_json::Value>()
+            .await
+            .unwrap_or(serde_json::Value::Null);
+        (status, val)
+    }
+    let none = serde_json::Value::Null;
+    let token_of = |url: &serde_json::Value| -> String {
+        let url = url.as_str().expect("a setPasswordUrl");
+        assert!(url.contains("/set-password?token="), "{url}");
+        url.rsplit_once("token=").unwrap().1.to_string()
+    };
+
+    // ---- no key configured: health still answers (without checks); the rest 503 ----
+    std::env::remove_var("SOLNYXUS_PLATFORM_KEY");
+    let (st, h) = call(c, true, "health", Some(KEY), none.clone()).await;
+    assert_eq!(st, Status::Ok, "{h}");
+    assert_eq!(h["status"], "ok");
+    assert_eq!(h["product"], "vantedge");
+    assert_eq!(h["version"], env!("CARGO_PKG_VERSION"));
+    assert!(h["commit"].is_string() && h["startedAt"].is_string(), "{h}");
+    assert!(
+        h.get("checks").is_none(),
+        "checks only with a valid key: {h}"
+    );
+    let (st, v) = call(c, true, "version", Some(KEY), none.clone()).await;
+    assert_eq!(st, Status::ServiceUnavailable);
+    assert_eq!(v["error"], "not_configured");
+    assert!(v["detail"].is_string());
+    let (st, v) = call(c, false, "tenants", Some(KEY), serde_json::json!({})).await;
+    assert_eq!(
+        (st, v["error"].as_str()),
+        (Status::ServiceUnavailable, Some("not_configured"))
+    );
+
+    // ---- configured: missing / wrong key → 401 ----
+    std::env::set_var("SOLNYXUS_PLATFORM_KEY", KEY);
+    for key in [None, Some("wrong-key"), Some("")] {
+        let (st, v) = call(c, true, "version", key, none.clone()).await;
+        assert_eq!(st, Status::Unauthorized, "{key:?}");
+        assert_eq!(v["error"], "unauthorized");
+        let (st, v) = call(c, false, "tenants", key, serde_json::json!({})).await;
+        assert_eq!(
+            (st, v["error"].as_str()),
+            (Status::Unauthorized, Some("unauthorized"))
+        );
+    }
+    let (_, h) = call(c, true, "health", Some("wrong-key"), none.clone()).await;
+    assert!(h.get("checks").is_none());
+
+    // ---- health with the key carries the database check; version ----
+    let (st, h) = call(c, true, "health", Some(KEY), none.clone()).await;
+    assert_eq!(st, Status::Ok, "{h}");
+    assert_eq!(h["checks"][0]["name"], "database");
+    assert_eq!(h["checks"][0]["ok"], true);
+    assert_eq!(h["checks"][0]["detail"], "");
+    let (st, v) = call(c, true, "version", Some(KEY), none.clone()).await;
+    assert_eq!(st, Status::Ok, "{v}");
+    assert_eq!(v["product"], "vantedge");
+    assert_eq!(v["version"], env!("CARGO_PKG_VERSION"));
+    assert!(v["commit"].is_string(), "{v}");
+    assert_eq!(v["migrations"]["pending"], 0, "{v}");
+
+    // ---- invalid bodies name the field ----
+    let (st, v) = call(
+        c,
+        false,
+        "tenants",
+        Some(KEY),
+        serde_json::json!({ "name": "X" }),
+    )
+    .await;
+    assert_eq!(
+        (st, v["error"].as_str()),
+        (Status::BadRequest, Some("invalid"))
+    );
+    assert!(v["detail"].as_str().unwrap().contains("slug"), "{v}");
+    let (st, v) = call(
+        c,
+        false,
+        "tenants",
+        Some(KEY),
+        serde_json::json!({ "slug": "ok", "name": "X", "owner": { "email": "a@b.co" },
+                            "branding": { "primaryColor": "teal" } }),
+    )
+    .await;
+    assert_eq!(st, Status::BadRequest);
+    assert!(
+        v["detail"]
+            .as_str()
+            .unwrap()
+            .contains("branding.primaryColor"),
+        "{v}"
+    );
+
+    // ---- create: workspace + owner + branding ----
+    let run = &Uuid::new_v4().simple().to_string()[..10];
+    let slug = format!("acme-{run}");
+    let email = format!("dana.{run}@example.com");
+    let body = serde_json::json!({
+        "slug": slug,
+        "name": "Acme Property Group",
+        "plan": "Growth",
+        "owner": { "email": email.to_uppercase(), "name": "Dana Ortiz" },
+        "branding": {
+            "companyName": "Acme Homes", "tagline": "Clean, fast",
+            "primaryColor": "#0F766E", "accentColor": "#F59E0B",
+            "logoUrl": "https://cdn.example.com/acme.png",
+            "email": "hello@acme.example", "phone": "+1 555 0100",
+            "website": "https://acme.example"
+        }
+    });
+    let (st, made) = call(c, false, "tenants", Some(KEY), body.clone()).await;
+    assert_eq!(st, Status::Created, "{made}");
+    assert_eq!(made["created"], true);
+    assert_eq!(made["slug"], slug.as_str());
+    assert!(
+        made["loginUrl"].as_str().unwrap().ends_with("/login"),
+        "{made}"
+    );
+    let tid: Uuid = made["tenantId"].as_str().unwrap().parse().unwrap();
+    let owner: Uuid = made["ownerId"].as_str().unwrap().parse().unwrap();
+
+    let t = Tenant::find_by_id(tid).one(&c.db).await.unwrap().unwrap();
+    assert_eq!(
+        (
+            t.slug.as_str(),
+            t.name.as_str(),
+            t.plan.as_str(),
+            t.status.as_str()
+        ),
+        (slug.as_str(), "Acme Property Group", "growth", "active")
+    );
+    let u = entity::prelude::User::find_by_id(owner)
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (u.email.as_str(), u.name.as_str()),
+        (email.as_str(), "Dana Ortiz")
+    );
+    assert_eq!(u.status, "invited", "no password until the owner picks one");
+    assert!(crate::provisioning::is_owner(&c.db, tid, owner)
+        .await
+        .unwrap());
+    let theme = entity::prelude::Theme::find()
+        .filter(entity::theme::Column::TenantId.eq(tid))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(theme.company_name, "Acme Homes");
+    assert_eq!(theme.primary_color, "#0F766E");
+    assert_eq!(theme.accent_color, "#F59E0B");
+    assert_eq!(
+        theme.logo_url.as_deref(),
+        Some("https://cdn.example.com/acme.png")
+    );
+    let bp = entity::prelude::BusinessProfile::find()
+        .filter(entity::business_profile::Column::TenantId.eq(tid))
+        .one(&c.db)
+        .await
+        .unwrap()
+        .expect("a business profile");
+    assert_eq!(bp.business_name.as_deref(), Some("Acme Homes"));
+    assert_eq!(bp.email.as_deref(), Some("hello@acme.example"));
+    assert_eq!(bp.phone.as_deref(), Some("+1 555 0100"));
+    assert_eq!(bp.website.as_deref(), Some("https://acme.example"));
+    assert_eq!(bp.description.as_deref(), Some("Clean, fast"));
+    assert!(
+        bp.show_reviews,
+        "the profile's other settings keep their defaults"
+    );
+
+    // The link is the app's own one-time invite, valid at most 72 hours, and
+    // it gets the owner signed in.
+    let token = token_of(&made["setPasswordUrl"]);
+    let row = crate::password_links::find_valid(&c.db, &token)
+        .await
+        .unwrap()
+        .expect("a live link");
+    assert_eq!(row.purpose, "invite");
+    assert!(row.expires_at <= chrono::Utc::now() + chrono::Duration::hours(72));
+    assert!(row.expires_at > chrono::Utc::now() + chrono::Duration::hours(71));
+    let resp = c
+        .client
+        .post("/auth/password/set")
+        .header(ContentType::JSON)
+        .body(
+            serde_json::json!({ "token": token, "password": "a harbour full of boats" })
+                .to_string(),
+        )
+        .dispatch()
+        .await;
+    assert_eq!(resp.status(), Status::Ok);
+    assert_eq!(
+        login_status(c, &email, "a harbour full of boats").await,
+        Status::Ok
+    );
+
+    // ---- the same slug + owner again: 200, same ids, a fresh (reset) link ----
+    let (st, again) = call(c, false, "tenants", Some(KEY), body.clone()).await;
+    assert_eq!(st, Status::Ok, "{again}");
+    assert_eq!(again["created"], false);
+    assert_eq!(again["tenantId"], made["tenantId"]);
+    assert_eq!(again["ownerId"], made["ownerId"]);
+    let fresh = token_of(&again["setPasswordUrl"]);
+    assert_ne!(fresh, token);
+    let row = crate::password_links::find_valid(&c.db, &fresh)
+        .await
+        .unwrap()
+        .expect("a live link");
+    assert_eq!(row.purpose, "reset", "the owner already has a password");
+    let count = Tenant::find()
+        .filter(entity::tenant::Column::Slug.eq(slug.clone()))
+        .all(&c.db)
+        .await
+        .unwrap()
+        .len();
+    assert_eq!(count, 1);
+
+    // ---- the slug with someone else as owner: 409 ----
+    let mut other = body.clone();
+    other["owner"]["email"] = serde_json::json!(format!("eve.{run}@example.com"));
+    let (st, v) = call(c, false, "tenants", Some(KEY), other).await;
+    assert_eq!(st, Status::Conflict, "{v}");
+    assert_eq!(v["error"], "slug_taken");
+    assert!(
+        entity::prelude::User::find()
+            .filter(entity::user::Column::Email.eq(format!("eve.{run}@example.com")))
+            .one(&c.db)
+            .await
+            .unwrap()
+            .is_none(),
+        "a refused request leaves nothing behind"
+    );
+
+    // ---- an existing login owning a second workspace; unknown plan → starter ----
+    let slug2 = format!("acme-two-{run}");
+    let (st, second) = call(
+        c,
+        false,
+        "tenants",
+        Some(KEY),
+        serde_json::json!({ "slug": slug2, "name": "Acme Two", "plan": "platinum",
+                            "owner": { "email": email } }),
+    )
+    .await;
+    assert_eq!(st, Status::Created, "{second}");
+    assert_eq!(second["ownerId"], made["ownerId"]);
+    let tid2: Uuid = second["tenantId"].as_str().unwrap().parse().unwrap();
+    let t2 = Tenant::find_by_id(tid2).one(&c.db).await.unwrap().unwrap();
+    assert_eq!(t2.plan, "starter");
+    assert!(crate::provisioning::is_owner(&c.db, tid2, owner)
+        .await
+        .unwrap());
+    assert_eq!(
+        login_status(c, &email, "a harbour full of boats").await,
+        Status::Ok,
+        "an existing owner's password is left alone"
+    );
+
+    std::env::remove_var("SOLNYXUS_PLATFORM_KEY");
 }
